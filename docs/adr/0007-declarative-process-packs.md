@@ -1,5 +1,5 @@
 ---
-status: accepted  # policies and sources.json: proposed
+status: accepted  # policies: accepted, not implemented; sources.json: proposed
 ---
 
 # Keep all domain knowledge in declarative process packs
@@ -33,21 +33,27 @@ and configuration at runtime, and those changes must never be lost by reloading 
     and the default cannot require a human. No decision name is hardcoded.
   - `symbols`: `[{name, type, description}]`; `rules`: `[{text, kind, decision}]`;
     optional `users` with roles.
-  - `policies` (**proposed**): `exported_decision` (`engine` | `final`),
+  - `policies` (accepted, not implemented yet): `exported_decision` (`engine`: the
+    process output; `final`: the manager's final decision when there is one),
     `unresolved_review` (`block` | a decision type), `unresolved_escalation` (`keep`).
-    Invoice pack: `engine`, `block`, `keep` (ADR 0009).
+    Invoice pack: `engine` (the challenge reference expects the process output), `block`,
+    `keep` (ADR 0009).
+    `users` roles: `manager` (resolves escalations, approves rule and process changes) and
+    `operator`. Code still says `responsable`/`operador` until the rename lands.
   - `sources.json` (**proposed**): connectors per source, credentials by `.env` name only.
 - **Loader contract:** validate the whole pack first and reject it whole if invalid;
   idempotent; adds what is missing; a rule whose text changed enters as a new **draft**;
-  active rules are never modified or removed by a load.
+  active rules are never modified or removed by a load. Changes to decision types, symbols
+  or the description go into a new draft process version, never into the active one
+  (ADR 0015).
 - **Export** returns the current process (and agent configuration) as pack JSON so a change
   made in the app can be committed.
 
 ## Consequences
 - New process = new pack; a new kind of source is the only code to write.
-- The loader today still overwrites decision types, symbols and the description with the
-  file's values (`session.merge`). That contradicts "loading never overrides runtime
-  decisions" once those become editable in the app; they should be versioned like rules.
+- **Known gap:** the loader today still overwrites decision types, symbols and the
+  description with the file's values (`session.merge`). That contradicts "loading never
+  overrides runtime decisions"; ADR 0015 versions them with the whole process.
 - Export and `make load PROCESS=<pack>` are not implemented yet.
 
 ## Evidence
@@ -60,4 +66,4 @@ and configuration at runtime, and those changes must never be lost by reloading 
 - `make setup` loads the invoice pack; `gastos-viaje.json` loads with the same code.
 
 ## Related
-ADR 0001, 0003, 0009, 0011. Plan P11, P12, P19; `docs/process-packs.md`.
+ADR 0001, 0003, 0009, 0011, 0014, 0015. Plan P11, P12, P19; `docs/process-packs.md`.

@@ -23,6 +23,11 @@ and a shadow backfill that never overwrites history.
   - Cons: slow, costs tokens, non-deterministic, and depends on a live ERP.
 - **Append-only history plus replay over stored symbols (chosen).**
 
+Terminology (glossary in the README): a **rule finding** is the result of one rule on one
+instance (`fires`, `reason`); an **audit finding** is a past decision that a newer process
+version would decide differently. This ADR stores the first per decision and produces the
+second; the table named `hallazgos` stores audit findings.
+
 ## Decision
 - **Files** are identified by the SHA-256 of their content and never modified. A modified
   file is a new file. Each load of a source is stored apart; the current one is the latest
@@ -39,7 +44,8 @@ and a shadow backfill that never overwrites history.
   person). Findings are notices; the past is never edited, and acting on them
   (claim money back, pay what is owed) happens outside the system.
 - **Rule versions** are linear: one active rule set per process; going back activates an
-  earlier version and is itself recorded. Processes do not share rules or history.
+  earlier version and is itself recorded. Processes do not share rules or history. ADR 0015
+  extends this to a snapshot of the whole process version.
 
 ## Consequences
 - The audit is fast, free and deterministic, but only as good as the stored symbols: a new
@@ -52,11 +58,11 @@ and a shadow backfill that never overwrites history.
 
 ## Evidence
 - `ingesta/model.py`: `Fichero` keyed by hash ("a modified file is a new file").
-- `decisiones/model.py`: `Decision` append-only, `Hallazgo` never changes the past.
+- `decisiones/model.py`: `Decision` append-only, `Hallazgo` (table `hallazgos`) stores audit findings and never changes the past.
 - `decisiones/auditoria.py` (`comprobar`, `registrar_hallazgos`) and
   `reglas/service._aplicar` (conflicts refuse the change); 5 tests in
   `decisiones/tests/test_auditoria.py`.
 - `decisiones/service.resolver`: a person's decision is a new row, never an edit.
 
 ## Related
-ADR 0001, 0004, 0009, 0010. Plan P2, P13, P14, P15, P16; PR #16.
+ADR 0001, 0004, 0009, 0010, 0015. Plan P2, P13, P14, P15, P16; PR #16.
