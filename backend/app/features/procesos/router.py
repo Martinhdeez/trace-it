@@ -2,6 +2,7 @@ from fastapi import APIRouter, status
 
 from app.core.database import Session
 from app.features.procesos import service
+from app.features.procesos.definicion import Carga, Definicion, cargar_definicion
 from app.features.procesos.schemas import ProcesoDetalle, ProcesoIn, ProcesoOut, SimboloIO
 
 router = APIRouter(prefix="/procesos", tags=["procesos"])
@@ -21,6 +22,17 @@ async def list_procesos(session: Session) -> list[ProcesoOut]:
 )
 async def create_proceso(body: ProcesoIn, session: Session) -> ProcesoDetalle:
     return await service.crear(session, body)
+
+
+@router.post(
+    "/definicion",
+    operation_id="loadDefinicion",
+    summary="Create or update a whole process from its JSON definition (idempotent)",
+    description="Same format as the files under `procesos/`. New rules enter as drafts; "
+    "rules whose text already exists, and users whose email exists, are left as they are.",
+)
+async def load_definicion(body: Definicion, session: Session) -> Carga:
+    return await cargar_definicion(session, body)
 
 
 @router.get("/{proceso_id}", operation_id="getProceso", summary="A process with its setup")
