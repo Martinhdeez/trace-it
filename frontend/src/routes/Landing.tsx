@@ -1,13 +1,14 @@
-import type { ReactNode } from 'react'
 import { Link } from 'react-router'
-import { motion, useReducedMotion } from 'motion/react'
 import { ArrowRight } from 'lucide-react'
 import mark from '../assets/trace-mark.png'
 import { cn } from '../lib/cn'
 import { paths } from '../lib/paths'
 
-const ease = [0.23, 1, 0.32, 1] as const
-
+/**
+ * Nothing here fades in on scroll. A section that only appears once an observer
+ * fires is a section that can fail to appear, and this page has to survive a
+ * ten-minute demo in front of a jury.
+ */
 export function Landing() {
   return (
     <div className="bg-canvas">
@@ -58,21 +59,6 @@ function Header() {
   )
 }
 
-function Reveal({ children, delay = 0 }: { children: ReactNode; delay?: number }) {
-  const reduce = useReducedMotion()
-  if (reduce) return <>{children}</>
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-60px' }}
-      transition={{ duration: 0.5, ease, delay }}
-    >
-      {children}
-    </motion.div>
-  )
-}
-
 function Opening() {
   return (
     <section className="mx-auto max-w-[1080px] px-6 pb-14 pt-20">
@@ -107,9 +93,7 @@ function Opening() {
           </div>
         </div>
 
-        <Reveal delay={0.1}>
-          <DecisionCard />
-        </Reveal>
+        <DecisionCard />
       </div>
     </section>
   )
@@ -224,18 +208,14 @@ function Chain() {
         <ol className="mt-10">
           {STEPS.map((step, index) => (
             <li key={step.title} className="border-t border-hairline last:border-b">
-              <Reveal delay={index * 0.04}>
-                <div className="grid gap-x-6 gap-y-1 py-5 sm:grid-cols-[3rem_minmax(0,22ch)_minmax(0,1fr)_8rem]">
-                  <span className="font-mono text-[12px] tabular-nums text-faint">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <h3 className="text-[15px] font-medium tracking-[-0.02em]">{step.title}</h3>
-                  <p className="text-[14px] leading-6 text-muted">{step.detail}</p>
-                  <span className="font-mono text-[11px] text-faint sm:text-right">
-                    {step.note}
-                  </span>
-                </div>
-              </Reveal>
+              <div className="grid gap-x-6 gap-y-1 py-5 md:grid-cols-[3rem_minmax(0,20ch)_minmax(0,1fr)_7rem]">
+                <span className="font-mono text-[12px] tabular-nums text-faint">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <h3 className="text-[15px] font-medium tracking-[-0.02em]">{step.title}</h3>
+                <p className="max-w-[62ch] text-[14px] leading-6 text-muted">{step.detail}</p>
+                <span className="font-mono text-[11px] text-faint md:text-right">{step.note}</span>
+              </div>
             </li>
           ))}
         </ol>
@@ -300,7 +280,8 @@ function TwoAgents() {
 
 function CodePane({ role, model, code }: { role: string; model: string; code: string }) {
   return (
-    <div>
+    // `min-w-0` so the code scrolls inside its column instead of widening it.
+    <div className="min-w-0">
       <div className="flex items-baseline justify-between px-5 pb-2 pt-4">
         <span className="font-mono text-[11px] text-ink">{role}</span>
         <span className="font-mono text-[10.5px] text-faint">{model}</span>
@@ -403,7 +384,7 @@ function NotAboutInvoices() {
 
 function Pack({ title, body, note }: { title: string; body: string; note: string }) {
   return (
-    <div className="overflow-hidden rounded-[18px] bg-white ring-1 ring-black/[0.06]">
+    <div className="min-w-0 overflow-hidden rounded-[18px] bg-white ring-1 ring-black/[0.06]">
       <div className="border-b border-hairline px-4 py-2.5">
         <span className="font-mono text-[11.5px]">{title}</span>
       </div>
@@ -457,13 +438,11 @@ function SectionHead({
   lead: string
 }) {
   return (
-    <Reveal>
-      <div className="max-w-[62ch]">
+    <div className="max-w-[62ch]">
         <p className="font-mono text-[11px] tracking-[0.14em] text-faint">{kicker}</p>
         <h2 className="mt-3 text-[32px] font-medium leading-[1.06] tracking-[-0.04em]">{title}</h2>
-        <p className="mt-3 text-[15px] leading-7 text-muted">{lead}</p>
-      </div>
-    </Reveal>
+      <p className="mt-3 text-[15px] leading-7 text-muted">{lead}</p>
+    </div>
   )
 }
 
