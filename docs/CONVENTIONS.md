@@ -140,6 +140,19 @@ def evaluate(instance: dict, sources: dict[str, list[dict]], others: list[dict])
 
 `instance` maps symbol name to value. `sources` maps source name to its rows. `others` holds the other instances of the process, each with its symbols plus the key `_instance` (its name).
 
+### Symbols
+
+An instance's symbols have two shapes, and `backend/app/features/ingestion/symbols.py` is the only place that converts between them.
+
+| Where | Shape | Example |
+|---|---|---|
+| Stored: `instances.symbols`, the instance API | `{name: {"value": <json>, "origin": <str>}}` | `{"total": {"value": 3012.89, "origin": "text"}}` |
+| Rule code: `instance` and each entry of `others` | `{name: value}` | `{"total": 3012.89}` |
+
+- Whatever writes `Instance.symbols` (ingestion, tests, a future endpoint) writes the stored shape. The model refuses anything else with a `ValueError`; an endpoint must turn that into a 422.
+- `origin` keeps each value's provenance for the trace (ADR 0008, 0010). Rule code never sees it.
+- The engine run, the impact check and the compiler's history check pass `flatten_symbols(instance.symbols)` to rule code.
+
 ### API
 
 | Before | Now |
