@@ -4,6 +4,7 @@ from fastapi.responses import PlainTextResponse
 from app.core.database import Session
 from app.features.decisiones import service
 from app.features.decisiones.schemas import (
+    HallazgoOut,
     InstanciaDetalle,
     InstanciaOut,
     ResolverIn,
@@ -76,3 +77,12 @@ async def export_outcomes(proceso_id: int, session: Session) -> PlainTextRespons
     return PlainTextResponse(
         await service.exportar(session, proceso_id), media_type="application/x-ndjson"
     )
+
+
+@router.get(
+    "/procesos/{proceso_id}/hallazgos",
+    operation_id="listHallazgos",
+    summary="Past decisions a later rule says were wrong",
+)
+async def list_hallazgos(proceso_id: int, session: Session) -> list[HallazgoOut]:
+    return await service.listar_hallazgos(session, proceso_id)

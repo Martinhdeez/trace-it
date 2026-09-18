@@ -8,11 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError, NotFoundError
 from app.features.agentes import sandbox
-from app.features.decisiones.model import Decision
+from app.features.decisiones.model import Decision, Hallazgo
 from app.features.decisiones.motor import decidir
 from app.features.decisiones.schemas import (
     DecisionOut,
     EventoOut,
+    HallazgoOut,
     InstanciaDetalle,
     InstanciaOut,
     ResolverIn,
@@ -264,3 +265,16 @@ async def exportar(session: AsyncSession, proceso_id: int) -> str:
         )
         for i in instancias
     )
+
+
+async def listar_hallazgos(session: AsyncSession, proceso_id: int) -> list[HallazgoOut]:
+    """Past decisions a later rule says were wrong. A notice, never a correction (P14)."""
+    await obtener_proceso(session, proceso_id)
+    filas = await session.scalars(
+        select(Hallazgo)
+        .join(Decision, Hallazgo.decision_id == Decision.id)
+        .join(Instancia, Decision.instancia_id == Instancia.id)
+        .where(Instancia.proceso_id == proceso_id)
+        .order_by(Hallazgo.id)
+    )
+    return [HallazgoOut.model_validate(f, from_attributes=True) for f in filas]
