@@ -26,6 +26,10 @@ def fake_sandbox(code: str, instance: dict, sources: dict, others: list) -> dict
     return {"fires": fires, "reason": code if fires else ""}
 
 
+def fake_batch(code: str, cases: list) -> list:
+    return [fake_sandbox(code, *case) for case in cases]
+
+
 async def create_draft(process_id: int) -> int:
     async with session_factory() as session:
         rule = Rule(
@@ -52,7 +56,7 @@ async def prepare(api: AsyncClient) -> tuple[int, dict[str, str]]:
 
 
 async def test_impact_is_visible_before_activating(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "run", fake_sandbox)
+    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, _ = await prepare(api)
@@ -79,7 +83,7 @@ async def test_impact_is_visible_before_activating(monkeypatch: pytest.MonkeyPat
 async def test_activating_records_findings_and_leaves_the_past_alone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sandbox, "run", fake_sandbox)
+    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await prepare(api)
@@ -105,7 +109,7 @@ async def test_activating_records_findings_and_leaves_the_past_alone(
 
 async def test_a_human_decision_blocks_the_rule(monkeypatch: pytest.MonkeyPatch) -> None:
     """The rules do not overrule a person, and a person does not silently veto a rule."""
-    monkeypatch.setattr(sandbox, "run", fake_sandbox)
+    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await prepare(api)
@@ -131,7 +135,7 @@ async def test_a_human_decision_blocks_the_rule(monkeypatch: pytest.MonkeyPatch)
 
 
 async def test_retiring_is_checked_like_activating(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "run", fake_sandbox)
+    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await prepare(api)
@@ -152,7 +156,7 @@ async def test_retiring_is_checked_like_activating(monkeypatch: pytest.MonkeyPat
 
 async def test_an_escalated_case_gives_no_finding(monkeypatch: pytest.MonkeyPatch) -> None:
     """An instance sitting in the human queue was never acted on, so nothing went wrong."""
-    monkeypatch.setattr(sandbox, "run", fake_sandbox)
+    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await prepare(api)

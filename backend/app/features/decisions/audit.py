@@ -6,13 +6,14 @@ decision (P14). Adding a rule and retiring one are the same question, asked of a
 proposed set.
 """
 
+import asyncio
 from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.agents import sandbox
-from app.features.decisions.engine import decide
+from app.features.decisions.engine import decide_batch
 from app.features.decisions.model import ENGINE, Finding
 from app.features.decisions.service import (
     _current_sources,
@@ -40,7 +41,7 @@ class Impact:
 
     unchanged: int
     changes: list[Change]  # the engine decided it, and would now decide otherwise
-    conflicts: list[Change]  # a person decided it, and the rules would now contradict them
+    conflicts: list[Change]  # a person decided it and the rules disagree, or they cannot decide
 
     @property
     def has_conflicts(self) -> bool:
@@ -78,23 +79,19 @@ async def check(session: AsyncSession, process_id: int, proposed: list[Rule]) ->
     latest = await _latest_decisions(session, instances)
     symbols = {i.id: {**i.symbols, "_instance": i.name} for i in instances if i.symbols is not None}
 
+    decided = [i for i in instances if latest.get(i.id) is not None and i.symbols is not None]
+    cases = [
+        (i.symbols, sources, [s for iid, s in symbols.items() if iid != i.id]) for i in decided
+    ]  # nothing decided yet, or nothing to decide it with, is skipped
+    verdicts = await asyncio.to_thread(
+        decide_batch, proposed, outcomes.priorities, outcomes.default, cases, sandbox.run_batch
+    )
+
     unchanged = 0
     changes: list[Change] = []
     conflicts: list[Change] = []
-    for instance in instances:
-        previous = latest.get(instance.id)
-        if previous is None or instance.symbols is None:
-            continue  # nothing decided yet, or nothing to decide it with
-        verdict = decide(
-            proposed,
-            outcomes.priorities,
-            outcomes.default,
-            outcomes.escalate,
-            instance.symbols,
-            sources,
-            [s for iid, s in symbols.items() if iid != instance.id],
-            sandbox.run,
-        )
+    for instance, verdict in zip(decided, verdicts, strict=True):
+        previous = latest[instance.id]
         if verdict.decision == previous.decision:
             unchanged += 1
             continue
@@ -102,14 +99,16 @@ async def check(session: AsyncSession, process_id: int, proposed: list[Rule]) ->
             instance_id=instance.id,
             name=instance.name,
             before=previous.decision,
-            after=verdict.decision,
+            after=verdict.decision or "REVIEW",
             previous_author=previous.author,
             reason=verdict.reason,
             decision_id=previous.id,
         )
         # A person's decision is not overruled by a rule, and a rule is not silently
-        # dropped because a person disagreed: the manager resolves it (P15).
-        (conflicts if previous.author != ENGINE else changes).append(change)
+        # dropped because a person disagreed: the manager resolves it (P15). A proposal that
+        # cannot decide an instance (REVIEW) blocks activation the same way.
+        blocking = previous.author != ENGINE or verdict.decision is None
+        (conflicts if blocking else changes).append(change)
 
     return Impact(unchanged=unchanged, changes=changes, conflicts=conflicts)
 
