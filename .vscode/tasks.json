@@ -1,0 +1,71 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "stack: up",
+      "detail": "Postgres + FastAPI en http://127.0.0.1:8000 (docs en /docs)",
+      "type": "shell",
+      "command": "docker compose up --build -d && docker compose logs -f backend",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*Creating|Building|Starting.*",
+          "endsPattern": ".*(Application startup complete|Uvicorn running).*"
+        }
+      },
+      "presentation": { "panel": "dedicated", "group": "trace" }
+    },
+    {
+      "label": "stack: down",
+      "type": "shell",
+      "command": "docker compose down",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "db: up",
+      "detail": "Solo Postgres, para correr el backend a mano con uv",
+      "type": "shell",
+      "command": "docker compose up db -d",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "erp: run",
+      "detail": "ERP de 2009 del reto en http://127.0.0.1:8009",
+      "type": "shell",
+      "command": "make erp",
+      "options": { "cwd": "${workspaceFolder}/.context/500-sombras-de-alberto" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "panel": "dedicated", "group": "trace" }
+    },
+    {
+      "label": "frontend: install",
+      "type": "shell",
+      "command": "npm install",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "frontend: check",
+      "detail": "Tipos y lint del frontend",
+      "type": "shell",
+      "command": "npx tsc -b && npm run lint",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "group": "test",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "backend: test",
+      "type": "shell",
+      "command": "uv run ruff check . && uv run pytest",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}
