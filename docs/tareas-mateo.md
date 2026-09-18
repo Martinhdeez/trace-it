@@ -1,0 +1,56 @@
+# Tareas de Mateo: motor de decisiones y ciclo de vida de las reglas
+
+## Antes de empezar
+- Parte de `dev` una vez unido el PR del esqueleto (`feat/esqueleto-backend`): `git switch dev && git pull`.
+- Lee `docs/guia-equipo.md` (git y estructura) y de `docs/plano-aplicacion.md`: 3.6, 3.7, 3.8, P3, P7, P14, P15, P18, P19, P21.
+
+## Tu zona
+`backend/app/features/reglas/`, `features/decisiones/`, `features/procesos/`, `features/usuarios/`.
+No tocas `features/agentes/` (Martín) ni `features/ingesta/`, `extraccion/`, `fuentes/` (Álvaro).
+
+## Contrato que usas de Martín
+```python
+agentes.sandbox.ejecutar(codigo, instancia, fuentes, otras) -> {"salta": bool, "motivo": str}
+```
+Lanza excepción ante cualquier error. Hasta que esté hecho, en tus tests usa un ejecutor falso (una función que recibe el código y devuelve el resultado).
+
+## Tareas (en orden, cada una en su rama y su PR a `dev`)
+
+### 1. `feat/motor` — `features/decisiones/motor.py`
+Función pura, sin base de datos ni LLM:
+```python
+decidir(reglas, prioridades: dict[str, int], por_defecto: str,
+        instancia: dict, fuentes: dict, otras: list[dict], ejecutar) -> Veredicto
+```
+- Ejecuta **todas** las reglas activas, cada una con `codigo_a` y `codigo_b`.
+- Si las dos versiones discrepan o alguna falla: `REVISION` con motivo. Nunca decide sin esa regla.
+- Si no salta ninguna: `por_defecto`. Si saltan varias: gana la de mayor prioridad.
+- El veredicto incluye el resultado de cada regla (id, hash, salta, motivo) y el hash del conjunto de reglas.
+- Tests: ninguna salta; varias saltan y gana la prioridad; discrepancia A/B a `REVISION`; excepción a `REVISION`.
+
+### 2. `feat/decisiones-api` — servicio y endpoints
+- `POST /procesos/{id}/ejecutar`: para cada instancia `PENDIENTE` con símbolos, llama al motor con las fuentes vigentes (última carga por nombre). Guarda una fila en `decisiones` (autor `motor`) o pasa la instancia a `REVISION`. Devuelve el recuento por decisión.
+- `GET /procesos/{id}/instancias?estado=` y `GET /instancias/{id}`. El detalle incluye símbolos, el histórico de decisiones con el resultado de cada regla y los eventos.
+- `GET /procesos/{id}/cola?tipo=ESCALAR|REVISION`.
+- `POST /instancias/{id}/resolver` con `{decision, motivo}`: decisión nueva con autor = usuario actual. El histórico solo añade filas, nunca edita.
+- `GET /procesos/{id}/exportar`: `outcomes.jsonl`, una línea `{"file_id", "result"}` por instancia. Devuelve 409 si queda alguna instancia `PENDIENTE` o en `REVISION`.
+
+### 3. `feat/auditoria` — `features/decisiones/auditoria.py` + comprobación al activar
+- `comprobar(session, proceso_id, regla_nueva)` vuelve a ejecutar las reglas activas + la nueva sobre los símbolos guardados de todas las instancias decididas. No relee PDFs ni llama al ERP.
+- Clasifica cada instancia en tres grupos:
+  - sin cambio;
+  - cambio (una decisión del motor que cambiaría);
+  - conflicto (contradice una decisión validada por una persona).
+- Para PAGAR o NO_PAGAR que cambiarían, genera hallazgos (`pagada_indebidamente`, `no_pagada_debiendo`). Nunca modifica el pasado.
+- `reglas.service.activar` lo usa: si hay conflictos, 409 y la regla no entra.
+- `GET /procesos/{id}/hallazgos`.
+
+### 4. `feat/seed-facturas` — script que crea el proceso "Pago de facturas"
+Tipos ESCALAR(3), NO_PAGAR(2), PAGAR(1, por defecto) y su lista de símbolos. Martín pasa la lista a partir del borrador de reglas de la norma v3.
+
+## Criterio de hecho en cada PR
+- `uv run ruff check .` y `uv run pytest` en verde.
+- Endpoints visibles en `/docs`.
+- Otra persona lo revisa antes del squash merge.
+
+Si cambias un modelo compartido (`reglas`, `decisiones`, `instancias`), genera la migración con `alembic revision --autogenerate` y avisa en el grupo.
