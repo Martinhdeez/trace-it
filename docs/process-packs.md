@@ -62,7 +62,7 @@ Optional pointers to sample data (e.g. the challenge PDFs folder and Excel file)
 | `POST /processes/definition` | Same as `load`, from the API or the UI |
 | Export endpoint *(planned)* | Returns the current process (and agent config) as pack JSON, so changes made in the app can be committed |
 
-For the challenge: `make demo PROCESS=invoice-payment`. When batch 2 and norma v4 arrive, the manager adds the new rules in the app, exports the pack and commits it.
+For the challenge: `make demo PROCESS=invoice-payment`. When batch 2 and policy v4 arrive, the manager adds the new rules in the app, exports the pack and commits it.
 
 ## Loader rules (the contract)
 1. **Idempotent.** Loading the same pack twice changes nothing.

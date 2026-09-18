@@ -1,341 +1,341 @@
-# trace-it: plano de la aplicación
+# trace-it: application blueprint
 
-**Estado:** borrador vivo. Se itera hasta tener el plano completo.
-**Marcadores:** [DECIDIDO] acordado por el equipo · [PROPUESTA] sugerencia pendiente de validar · [ABIERTO] sin decidir · [DESCARTADO] valorado y rechazado · [PENDIENTE] sección por escribir.
+**Status:** living draft. We iterate until the blueprint is complete.
+**Markers:** [DECIDED] agreed by the team · [PROPOSED] suggestion pending validation · [OPEN] undecided · [DISCARDED] considered and rejected · [PENDING] section still to write.
 
-## 1. Visión
+## 1. Vision
 
-trace-it automatiza procesos de decisión de cualquier tipo. Un proceso de decisión tiene siempre la misma forma:
+trace-it automates decision processes of any kind. A decision process always has the same shape:
 
-1. **Entradas y fuentes de verdad:** los casos a decidir (documentos, registros) y los datos de referencia contra los que se validan (hojas de cálculo, sistemas externos).
-2. **Reglas deterministas** que hay que cumplir, escritas en texto.
-3. **Una decisión final** entre los tipos de decisión que define el proceso, algunos de los cuales pueden requerir a una persona.
+1. **Inputs and sources of truth:** the cases to decide (documents, records) and the reference data they are checked against (spreadsheets, external systems).
+2. **Deterministic rules** that must hold, written as text.
+3. **A final decision** among the decision types the process defines, some of which may require a human.
 
-Los agentes generan, a partir del texto de cada regla, funciones deterministas que la aplican. Deciden esas funciones, nunca un LLM, y solo entre los tipos de decisión configurados en ese proceso. Todo lo propio de un proceso (fuentes, símbolos, reglas, tipos de decisión) son datos, no código. [DECIDIDO]
+From the text of each rule, agents generate deterministic functions that apply it. Those functions decide, never an LLM, and only among the decision types configured for that process. Everything specific to a process (sources, symbols, rules, decision types) is data, not code. [DECIDED]
 
-**Primer proceso: pago de facturas (el reto "500 Sombras de Alberto").** Se decide si pagar cada factura de Alberto:
-1. Entradas: PDFs de facturas; fuentes: el Excel de proveedores y pedidos, y el ERP.
-2. Reglas: la norma de pagos.
-3. Tipos de decisión: PAGAR, NO_PAGAR o ESCALAR (esta última requiere a una persona).
+**First process: invoice payment (the "500 Sombras de Alberto" challenge).** It decides whether to pay each of Alberto's invoices:
+1. Inputs: invoice PDFs; sources: the supplier and order workbook, and the ERP.
+2. Rules: the payment policy.
+3. Decision types: PAGAR, NO_PAGAR or ESCALAR (the last one requires a human).
 
-Es el proceso que enseñamos en la demo y con el que se genera la entrega del reto, pero es una instancia del producto, no su definición. [DECIDIDO]
+It is the process we show in the demo and the one that produces the challenge submission, but it is an instance of the product, not its definition. [DECIDED]
 
-La aplicación mejora con el uso. Cada decisión humana sobre un caso no cubierto por las reglas se convierte en una regla nueva. Así el sistema es cada vez más autónomo y necesita menos a las personas. [DECIDIDO]
+The application improves with use. Every human decision on a case the rules do not cover becomes a new rule. The system grows more autonomous and needs people less over time. [DECIDED]
 
-## 2. Conceptos
+## 2. Concepts
 
-| Concepto | Qué es | Ejemplo en el proceso de facturas |
+| Concept | What it is | Example in the invoice process |
 |---|---|---|
-| Proceso | Definición completa: fuentes, símbolos, reglas y tipos de decisión | "Pago de facturas" |
-| Fuente de verdad | Datos de referencia contra los que se valida. Cada carga se guarda aparte; la vigente es la última por nombre | Excel de proveedores y pedidos, ERP |
-| Instancia | Cada caso que el proceso decide. Tiene un nombre y un fichero de origen | Una factura PDF |
-| Estado de la instancia | `PENDIENTE` (sin decidir), `REVISION` (estado interno: extracción o reglas discrepan; no es una decisión) o `DECIDIDA` | |
-| Símbolo | Dato con nombre que usan las reglas | `nif`, `iban`, `pedido`, `importe`, `estado_erp` |
-| Regla | Condición determinista sobre los símbolos y las fuentes. Es un requisito o una prohibición (P19); si salta, produce el tipo de decisión que tiene asignado y un motivo | "IBAN de la factura ≠ IBAN del maestro" |
-| Tipo de decisión | Salidas posibles del proceso. Las define cada proceso, con su prioridad, cuál es la de por defecto y cuáles requieren a una persona (`requiere_persona`) | PAGAR, NO_PAGAR, ESCALAR (esta última con `requiere_persona`) |
-| Decisión | Resultado registrado para una instancia, con el resultado de cada regla. Solo se añaden filas; la vigente es la última | |
-| Hallazgo | Decisión pasada que una regla nueva dice que fue errónea. Solo avisa, no cambia el pasado (P14) | Factura pagada indebidamente |
-| Responsable | Usuario con rol `responsable`: resuelve los casos que requieren persona y activa reglas. El resto de usuarios son `operador` | Alberto |
+| Process | Complete definition: sources, symbols, rules and decision types | "Invoice payment" |
+| Source of truth | Reference data used for checks. Each load is stored separately; the current one is the latest by name | Supplier and order workbook, ERP |
+| Instance | Each case the process decides. It has a name and a source file | An invoice PDF |
+| Instance status | `PENDING` (undecided), `REVIEW` (internal state: extraction or rules disagree; not a decision) or `DECIDED` | |
+| Symbol | Named datum the rules use | `issuer_nif`, `iban`, `purchase_order`, `total`, ERP status |
+| Rule | Deterministic condition over the symbols and the sources. It is a requirement or a prohibition (P19); when it fires, it produces its assigned decision type and a reason | "Invoice IBAN ≠ master IBAN" |
+| Decision type | Possible outputs of the process. Each process defines them, with their priority, which one is the default and which ones require a human (`requires_human`) | PAGAR, NO_PAGAR, ESCALAR (the last with `requires_human`) |
+| Decision | Result recorded for an instance, with the result of each rule. Rows are only appended; the current one is the latest | |
+| Finding | Past decision that a new rule says was wrong. It only warns; it does not change the past (P14) | Invoice paid when it should not have been |
+| Manager | User with the `manager` role: resolves the cases that require a human and activates rules. All other users are `operator` | Alberto |
 
-## 3. Ciclo de vida de un proceso
+## 3. Life cycle of a process
 
-### 3.1 Crear el proceso [DECIDIDO]
-1. El usuario sube todos los datos relevantes: documentos, hojas de cálculo, acceso a sistemas.
-2. Opcionalmente añade texto en lenguaje natural para lo que no esté en los datos.
-3. El sistema deriva de todo ello:
-   - los **símbolos** necesarios,
-   - las **reglas**,
-   - los **tipos de decisión**.
+### 3.1 Create the process [DECIDED]
+1. The user uploads all relevant data: documents, spreadsheets, access to systems.
+2. Optionally, they add natural-language text for whatever the data does not cover.
+3. From all of that, the system derives:
+   - the required **symbols**,
+   - the **rules**,
+   - the **decision types**.
 
-### 3.2 Compilar las reglas a código [DECIDIDO]
-Decidir tiene que ser totalmente determinista, y las reglas tienen que poder cambiar sin romper el sistema. Por eso las reglas no se interpretan en ejecución: se convierten en código.
+### 3.2 Compile the rules to code [DECIDED]
+Deciding must be fully deterministic, and rules must be able to change without breaking the system. So rules are not interpreted at runtime: they are turned into code.
 
-Hay dos agentes distintos:
-- **Agente compilador.** Lee una regla y escribe el código determinista que la aplica. Se dispara automáticamente cada vez que se añade o cambia una regla: la interfaz encadena "crear regla" y "compilar" (`POST /reglas/{id}/compilar`) y muestra el progreso, porque compilar tarda 30-60 s por las llamadas a los LLM. [DECIDIDO]
-- **Decisor (motor).** Para cada instancia, ejecuta el código de todas las reglas activas y resuelve uno de los tipos de decisión del proceso (P19). Se ciñe al resultado del código y no usa LLM (ver P7).
+There are two different agents:
+- **Compiler agent.** Reads a rule and writes the deterministic code that applies it. It runs automatically every time a rule is added or changed: the interface chains "create rule" and "compile" (`POST /rules/{rule_id}/compile`) and shows progress, because compiling takes 30-60 s due to the LLM calls. [DECIDED]
+- **Decider (engine).** For each instance, runs the code of every active rule and resolves one of the process's decision types (P19). It sticks to the code's output and uses no LLM (see P7).
 
-Así la misma instancia con las mismas reglas da siempre el mismo resultado.
+The same instance with the same rules therefore always gives the same result.
 
-Contrato del código de una regla [DECIDIDO, detalle en P18]:
-- Es una función pura: recibe los símbolos de la instancia, las fuentes y las demás instancias, y devuelve si la regla salta y un código de motivo. La decisión no la devuelve el código: la fija la regla.
-- No tiene red, disco, reloj ni aleatoriedad. La fecha de corte entra como símbolo.
-- Se guarda junto al texto de la regla del que sale, con un hash de texto y código.
+Rule code contract [DECIDED, details in P18]:
+- It is a pure function: it receives the instance's symbols, the sources and the other instances, and returns whether the rule fires and a reason code. The code does not return the decision: the rule sets it.
+- No network, disk, clock or randomness. The cut-off date comes in as a symbol.
+- It is stored next to the rule text it comes from, with a hash of text and code.
 
-Validación antes de activar código nuevo [DECIDIDO, detalle en P9 y P21]:
-1. Dos agentes generan, cada uno, código y casos de prueba a partir del texto de la regla.
-2. Los dos códigos deben pasar todos los casos y coincidir en todo el histórico.
-3. Se ejecuta contra el histórico y se muestra qué decisiones cambian (ver P2).
-4. El responsable aprueba. Solo entonces la regla pasa a activa.
+Validation before activating new code [DECIDED, details in P9 and P21]:
+1. Two agents each generate code and test cases from the rule text.
+2. Both codes must pass every case and agree on the whole history.
+3. It runs against the history and shows which decisions change (see P2).
+4. The manager approves. Only then does the rule become active.
 
-Si la validación falla, la regla anterior sigue activa y el proceso no se para.
+If validation fails, the previous rule stays active and the process does not stop.
 
-### 3.3 Ejecutar
-Para cada instancia, el sistema extrae los símbolos, ejecuta el código de las reglas activas y decide. Si no salta ninguna regla, se aplica el tipo por defecto del proceso. La instancia va a la cola del responsable si la decisión es de un tipo con `requiere_persona` o si queda en `REVISION` (P21). [PENDIENTE: detalle; ver `.artifacts/specs/2026-09-18-reglas-sistema.md` para extracción, ERP y resiliencia]
+### 3.3 Run
+For each instance, the system extracts the symbols, runs the code of the active rules and decides. If no rule fires, the process's default type applies. The instance goes to the manager's queue if the decision is of a type with `requires_human` or if it ends up in `REVIEW` (P21). [PENDING: details; see `.artifacts/specs/2026-09-18-reglas-sistema.md` for extraction, ERP and resilience]
 
-### 3.4 Escalado asistido [DECIDIDO]
-Una instancia está escalada cuando su decisión es de un tipo con `requiere_persona` o cuando está en `REVISION`. El responsable ve:
-- el caso y por qué se escaló,
-- **la decisión que tomaría el agente y su razonamiento**,
-- **la regla nueva que propone el agente** para resolver solo los casos similares futuros.
+### 3.4 Assisted escalation [DECIDED]
+An instance is escalated when its decision is of a type with `requires_human` or when it is in `REVIEW`. The manager sees:
+- the case and why it was escalated,
+- **the decision the agent would take and its reasoning**,
+- **the new rule the agent proposes** to resolve only similar future cases.
 
-El responsable tiene dos opciones:
-- **Aceptar:** toma la misma decisión que el agente y añade la regla propuesta.
-- **Rechazar:** toma su propia decisión y escribe su propia regla.
+The manager has two options:
+- **Accept:** takes the same decision as the agent and adds the proposed rule.
+- **Reject:** takes their own decision and writes their own rule.
 
-En los dos casos entra una regla nueva en el proceso. Por eso el proceso aprende de forma continua.
+Either way a new rule enters the process. That is why the process learns continuously.
 
-### 3.5 Autocorrección por revisión [DECIDIDO]
-El responsable puede revisar cualquier instancia ya decidida, no solo las escaladas. Si encuentra un error, explica por qué ocurrió. El proceso se corrige a sí mismo a partir de esa explicación.
-[PROPUESTA] Usar el mismo mecanismo que el escalado: el agente convierte la explicación en un cambio de regla y el responsable lo aprueba.
+### 3.5 Self-correction through review [DECIDED]
+The manager can review any decided instance, not only the escalated ones. If they find a mistake, they explain why it happened. The process corrects itself from that explanation.
+[PROPOSED] Use the same mechanism as escalation: the agent turns the explanation into a rule change and the manager approves it.
 
-### 3.6 Registro de decisiones y comprobación de reglas nuevas [DECIDIDO]
-Se aplican todas las reglas a cada instancia, con funciones deterministas. Todas las decisiones quedan registradas. Cuando entra una regla nueva, se vuelve a ejecutar sobre las decisiones pasadas para comprobar si con ella todo sigue bien.
+### 3.6 Decision log and checking new rules [DECIDED]
+Every rule is applied to every instance, with deterministic functions. Every decision is recorded. When a new rule comes in, it is re-run over past decisions to check that everything still holds.
 
-[PROPUESTA] Qué guarda cada decisión:
-- Instancia: identificador y hash del fichero.
-- **Símbolos usados**, con el valor exacto y su origen (texto del fichero o fuente de la que sale; si es un sistema externo, con la fecha de la consulta).
-- Versión del conjunto de reglas y resultado de cada regla (se cumple o no, código de motivo).
-- Decisión final y quién la tomó: motor o responsable.
-- Si un humano la validó o la corrigió: decisión correcta y motivo.
+[PROPOSED] What each decision stores:
+- Instance: identifier and file hash.
+- **Symbols used**, with the exact value and its origin (text of the file or the source it comes from; for an external system, with the query date).
+- Version of the rule set and the result of each rule (holds or not, reason code).
+- Final decision and who took it: engine or manager.
+- Whether a human validated or corrected it: correct decision and reason.
 
-Guardar los símbolos permite repetir la decisión sin volver a leer el fichero ni consultar sistemas externos. Así la comprobación es rápida, gratis y siempre da lo mismo.
+Storing the symbols makes it possible to repeat the decision without re-reading the file or querying external systems. So the check is fast, free and always gives the same answer.
 
-[PROPUESTA] Resultado de la comprobación de una regla nueva, por instancia:
-- **Sin cambio:** la decisión es la misma.
-- **Conflicto:** cambia una decisión que un humano ya validó. Bloquea la activación hasta que el responsable la resuelva (P15).
-- **Cambio por revisar:** cambia una decisión que nadie validó. Se muestra al responsable antes de activar.
+[PROPOSED] Result of checking a new rule, per instance:
+- **Unchanged:** the decision is the same.
+- **Conflict:** changes a decision a human already validated. Blocks activation until the manager resolves it (P15).
+- **Change to review:** changes a decision nobody validated. Shown to the manager before activation.
 
-### 3.7 Auditoría retroactiva [DECIDIDO]
-Hay un histórico de todas las decisiones, tomadas por el motor o por personas. Cada vez que se añade una regla, se revisa el histórico para ver si alguna decisión pasada fue incorrecta según la regla nueva. En el proceso de facturas, por ejemplo:
-- una factura pagada que no tocaba pagar,
-- una factura no pagada que sí había que pagar.
+### 3.7 Retroactive audit [DECIDED]
+There is a history of every decision, taken by the engine or by people. Every time a rule is added, the history is reviewed to see whether any past decision was wrong according to the new rule. In the invoice process, for example:
+- an invoice that was paid and should not have been,
+- an invoice that was not paid and should have been.
 
-### 3.8 Procesos y versionado de reglas [DECIDIDO]
-- **Proceso:** es como una carpeta que contiene unas reglas. Dentro se pueden añadir y quitar reglas.
-- Cada proceso tiene **su propio histórico de decisiones** y **su propio versionado de reglas**. Se puede volver a una versión anterior o avanzar a una posterior, como un git simplificado.
-- Si se quieren aplicar reglas totalmente distintas, se crea un **proceso independiente**.
-- Al ejecutar, se elige qué proceso aplicar. Los procesos no comparten reglas ni histórico.
+### 3.8 Processes and rule versioning [DECIDED]
+- **Process:** like a folder that contains rules. Rules can be added and removed inside it.
+- Each process has **its own decision history** and **its own rule versioning**. You can go back to an earlier version or forward to a later one, like a simplified git.
+- To apply completely different rules, create an **independent process**.
+- When running, you choose which process to apply. Processes share neither rules nor history.
 
-Detalle en P11 a P16.
+Details in P11 to P16.
 
-## 4. Preguntas abiertas (con recomendación)
+## 4. Open questions (with recommendation)
 
-**P1. ¿Qué forma tiene una regla nueva?** [DECIDIDO]
-La regla se escribe en texto. La aplicación genera por debajo el código que la aplica, de forma automática. Ver P8.
+**P1. What shape does a new rule take?** [DECIDED]
+The rule is written as text. The application generates the code that applies it underneath, automatically. See P8.
 
-**P2. ¿Una regla nueva se aplica también al pasado?** [DECIDIDO]
-Sí, como comprobación: antes de activarla se ejecuta contra todas las decisiones registradas (ver 3.6). El responsable confirma viendo el impacto.
+**P2. Does a new rule also apply to the past?** [DECIDED]
+Yes, as a check: before activating it, it runs against every recorded decision (see 3.6). The manager confirms after seeing the impact.
 
-**P3. ¿Qué pasa si dos reglas chocan?** [DECIDIDO]
-- **En ejecución:** si saltan varias reglas con decisiones distintas, gana el tipo de decisión de mayor prioridad del proceso (P19). No se escala.
-- **Al añadir una regla:** si choca con otra regla activa, se avisa y la regla no entra hasta que el responsable lo resuelva (P21), por ejemplo reescribiendo una de las dos.
+**P3. What happens when two rules clash?** [DECIDED]
+- **At runtime:** if several rules fire with different decisions, the process's highest-priority decision type wins (P19). It does not escalate.
+- **When adding a rule:** if it clashes with another active rule, the system warns and the rule does not go in until the manager resolves it (P21), for example by rewriting one of the two.
 
-**P4. Decisiones que requieren persona y el filtro del reto.** [DECIDIDO]
-- Un tipo con `requiere_persona` (ESCALAR en facturas) es una salida válida del proceso: una regla puede darla como solución correcta. La resolución posterior del responsable se guarda aparte y no cambia esa salida.
-- Se sabe con qué reglas se tomó cada decisión, así que el aprendizaje posterior no altera lo ya decidido.
-- El versionado completo es de la iteración 2.
-- La aplicación exporta, por instancia, su nombre y su decisión. `outcomes.jsonl` (`{"file_id", "result"}`) es solo el formato de esa exportación que pide el reto, no un concepto de la aplicación. [DECIDIDO]
-- [PROPUESTA] En la iteración 1, cada decisión guarda el hash del código de cada regla aplicada. Es barato y, en la iteración 2, permite asociar las decisiones antiguas a su versión.
+**P4. Decisions that require a human, and the challenge filter.** [DECIDED]
+- A type with `requires_human` (ESCALAR for invoices) is a valid process output: a rule may give it as the correct answer. The manager's later resolution is stored separately and does not change that output.
+- We know which rules each decision was taken with, so later learning does not alter what was already decided.
+- Full versioning belongs to iteration 2.
+- The application exports, per instance, its name and its decision. `outcomes.jsonl` (`{"file_id", "result"}`) is only the format the challenge asks for that export, not an application concept. [DECIDED]
+- [PROPOSED] In iteration 1, each decision stores the code hash of every rule applied. It is cheap and, in iteration 2, lets us link old decisions to their version.
 
-**P5. ¿Quién valida el proceso generado al crearlo?** [ABIERTO]
-Recomendación: el usuario revisa los símbolos, las reglas y los tipos de decisión extraídos antes de la primera ejecución. Cada regla muestra de dónde sale (hoja de un Excel, frase del texto). Si un error de lectura pasa aquí, se repite en todas las instancias.
+**P5. Who validates the generated process when it is created?** [OPEN]
+Recommendation: the user reviews the extracted symbols, rules and decision types before the first run. Each rule shows where it comes from (a workbook sheet, a sentence of the text). A reading error that slips through here repeats in every instance.
 
-**P6. ¿Cómo se representan los símbolos que requieren sistemas externos?** [ABIERTO]
-Recomendación: cada fuente de verdad es un conector con un contrato fijo (qué datos da y cómo falla). El ERP del reto es el primer conector. Esto es lo que permite reutilizar el sistema en otros procesos.
+**P6. How are symbols that need external systems represented?** [OPEN]
+Recommendation: each source of truth is a connector with a fixed contract (what data it gives and how it fails). The challenge ERP is the first connector. This is what makes the system reusable for other processes.
 
-**P7. ¿El agente decisor es un LLM?** [DECIDIDO: no]
-Si un LLM eligiera qué regla aplicar, la elección no sería determinista y podría saltarse una regla que sí aplicaba.
-Decisión:
-- Se ejecuta **siempre el código de todas las reglas activas** sobre cada instancia; nadie elige cuáles.
-- Los resultados se combinan con la prioridad de los tipos de decisión del proceso (P19). En facturas: ESCALAR > NO_PAGAR > PAGAR.
-- El "agente decisor" es ese motor, sin LLM.
-- El LLM solo interviene después: explica la decisión y, si la instancia se escala, propone decisión y regla (3.4).
+**P7. Is the decider agent an LLM?** [DECIDED: no]
+If an LLM chose which rule to apply, the choice would not be deterministic and it could skip a rule that did apply.
+Decision:
+- **The code of every active rule always runs** on each instance; nobody picks which.
+- Results are combined by the priority of the process's decision types (P19). For invoices: ESCALAR > NO_PAGAR > PAGAR.
+- The "decider agent" is that engine, without an LLM.
+- The LLM only steps in afterwards: it explains the decision and, if the instance is escalated, proposes a decision and a rule (3.4).
 
-**P8. ¿Código libre o lenguaje de reglas?** [DECIDIDO: código libre]
-- El agente compilador genera **código Python** para cada regla, de forma totalmente automática.
-- Motivo: las reglas cambian todo el tiempo (se añaden, se quitan, se modifican) y la aplicación debe seguir funcionando sin que nadie toque su código. Además debe servir para cualquier proceso, no solo para el de facturas. Un catálogo cerrado de primitivas obligaría a programar cada tipo de regla nuevo.
-- Se descarta el catálogo de primitivas (reglas como datos) por ese motivo.
+**P8. Free code or a rule language?** [DECIDED: free code]
+- The compiler agent generates **Python code** for each rule, fully automatically.
+- Reason: rules change all the time (added, removed, modified) and the application must keep working without anyone touching its code. It must also serve any process, not just invoices. A closed catalogue of primitives would force us to program every new kind of rule.
+- The primitives catalogue (rules as data) is discarded for that reason.
 
-[DECIDIDO] Ejecución segura del código generado (lo ha escrito un LLM; implementada en `features/agentes/sandbox.py`):
-- Comprobación estática antes de aceptarlo: solo imports permitidos (`decimal`, `datetime`, `re`, `math`, `unicodedata`) y nada de `open`, `exec`, `eval`, `__import__` ni acceso a red.
-- Ejecución en un proceso aparte, con tiempo máximo, sin red y sin disco.
-- La función devuelve un resultado con forma fija: `{salta, motivo}` (P18). Si devuelve otra cosa, falla o se pasa de tiempo, la instancia pasa a `REVISION` con el motivo (P21). Nunca se decide sin esa regla.
+[DECIDED] Safe execution of generated code (an LLM wrote it; implemented in `features/agents/sandbox.py`):
+- Static check before accepting it: only allowed imports (`decimal`, `datetime`, `re`, `math`, `unicodedata`) and no `open`, `exec`, `eval`, `__import__` or network access.
+- Execution in a separate process, with a time limit, no network and no disk.
+- The function returns a fixed-shape result: `{fires, reason}` (P18). If it returns anything else, fails or times out, the instance goes to `REVIEW` with the reason (P21). We never decide without that rule.
 
-**P9. ¿Cómo se sabe que el código generado es correcto?** [DECIDIDO]
-1. Dos agentes independientes (a ser posible, modelos distintos). Cada uno escribe, solo a partir del texto de la regla, su código y sus tests: código A + tests A, código B + tests B. Ninguno ve lo del otro.
-2. **Todos los tests se pasan por los dos códigos**: el cruce (A con tests B, B con tests A) detecta diferencias de interpretación; los tests propios detectan errores de programación.
-3. Los dos códigos deben coincidir en todas las instancias del histórico.
-4. El responsable revisa el impacto y activa.
-5. En producción se ejecutan los dos códigos. Si no coinciden en una instancia, la instancia pasa a `REVISION` con el motivo (P21).
+**P9. How do we know the generated code is correct?** [DECIDED]
+1. Two independent agents (different models where possible). Each writes, from the rule text alone, its code and its tests: code A + tests A, code B + tests B. Neither sees the other's work.
+2. **Every test runs against both codes**: the cross (A with tests B, B with tests A) catches differences in interpretation; each agent's own tests catch programming errors.
+3. Both codes must agree on every instance in the history.
+4. The manager reviews the impact and activates.
+5. In production both codes run. If they disagree on an instance, the instance goes to `REVIEW` with the reason (P21).
 
-Si un test falla, no se sabe quién tiene razón (código o test). Lo resuelve el responsable, normalmente aclarando el texto de la regla y recompilando. Coste: dos compilaciones por cambio de regla, no por instancia.
-Límite: si los dos agentes malinterpretan igual un texto ambiguo, pasa. Lo cubre la revisión del impacto (paso 4).
+If a test fails, we do not know who is right (code or test). The manager resolves it, usually by clarifying the rule text and recompiling. Cost: two compilations per rule change, not per instance.
+Limit: if both agents misread an ambiguous text the same way, it gets through. The impact review (step 4) covers it.
 
-**P10. ¿Y si la regla nueva usa un símbolo que no se guardó?** [ABIERTO]
-Por ejemplo, en facturas, una regla nueva sobre el "recargo financiero" necesita un campo que antes no se extraía.
-Ya se guarda siempre el texto completo de cada fichero (F2, `ficheros.texto`). Recomendación: si falta un símbolo, se extrae del texto guardado (sin volver a leer escaneos) y se registra como símbolo nuevo antes de comprobar la regla. Si el dato viene de un sistema externo, se usa la carga guardada de esa fuente, no el sistema en vivo.
+**P10. What if a new rule uses a symbol that was not stored?** [OPEN]
+For example, for invoices, a new rule about the "financial surcharge" needs a field that was not extracted before.
+The full text of each file is always stored already (F2, `files.text`). Recommendation: if a symbol is missing, extract it from the stored text (without re-reading scans) and record it as a new symbol before checking the rule. If the datum comes from an external system, use the stored load of that source, not the live system.
 
-**P11. ¿Cómo se llama la unidad?** [DECIDIDO]
-**Proceso.** No existe "proyecto". Ver 3.8.
+**P11. What do we call the unit?** [DECIDED]
+**Process.** There is no "project". See 3.8.
 
-**P12. ¿Cuándo se crea un proceso nuevo y cuándo una versión nueva?** [DECIDIDO]
-- **Versión nueva:** se añaden, quitan o cambian reglas dentro del mismo proceso. Ejemplo en facturas: norma v3 → norma v4.
-- **Proceso nuevo:** reglas totalmente distintas. Proceso independiente, con su propio histórico.
-- [PROPUESTA] Un proceso nuevo puede crearse copiando las reglas de otro, pero su histórico empieza vacío.
+**P12. When do we create a new process and when a new version?** [DECIDED]
+- **New version:** rules are added, removed or changed within the same process. Invoice example: policy v3 → policy v4.
+- **New process:** completely different rules. An independent process, with its own history.
+- [PROPOSED] A new process can be created by copying another one's rules, but its history starts empty.
 
-**P13. ¿Qué es una versión y cómo se "vuelve atrás"?** [DECIDIDO]
-- El versionado es lineal: un registro de los cambios de reglas del proceso.
-- Cada cambio crea una versión nueva e inmutable con la foto completa de las reglas, quién la hizo, el motivo y la instancia que la provocó, si la hay.
-- "Volver atrás" activa una versión anterior. No borra nada y queda registrado como un paso más.
-- Solo hay una versión activa por proceso. Las instancias nuevas se deciden con ella.
+**P13. What is a version and how do we "go back"?** [DECIDED]
+- Versioning is linear: a log of the process's rule changes.
+- Each change creates a new immutable version with the full snapshot of the rules, who made it, the reason and the instance that triggered it, if any.
+- "Going back" activates an earlier version. It deletes nothing and is recorded as one more step.
+- There is only one active version per process. New instances are decided with it.
 
-**P14. ¿Qué hace la auditoría retroactiva con una decisión pasada que ahora sale distinta?** [DECIDIDO]
-**Nunca cambia el pasado.** Solo avisa: genera información sobre decisiones pasadas erróneas (hallazgos); en facturas, por ejemplo, "pagada indebidamente" o "no pagada debiendo pagarse". Con eso la empresa decide qué hacer (en facturas, reclamar el dinero o pagar lo pendiente). La gestión de ese aviso queda fuera del sistema.
+**P14. What does the retroactive audit do with a past decision that now comes out differently?** [DECIDED]
+**It never changes the past.** It only warns: it produces information about wrong past decisions (findings); for invoices, for example, "paid when it should not have been" or "not paid when it should have been". With that, the company decides what to do (for invoices, claim the money back or pay what is owed). Handling that warning is outside the system.
 
-**P15. Si la regla nueva contradice una decisión que validó una persona, ¿quién gana?** [DECIDIDO]
-Ninguno de los dos automáticamente. Se marca como conflicto y lo resuelve el responsable.
+**P15. If the new rule contradicts a decision a person validated, who wins?** [DECIDED]
+Neither, automatically. It is marked as a conflict and the manager resolves it.
 
-**P16. ¿Se versionan también los datos (ficheros, fuentes)?** [DECIDIDO: no]
-- Los ficheros ingeridos no tienen versiones: se guardan tal cual y no cambian. Lo que cambia son las decisiones sobre ellos.
-- Cada decisión del histórico queda asociada a los ficheros con los que se tomó.
-- Si un fichero se modifica, se trata como un fichero nuevo. Se identifica por su hash de contenido.
-- [PROPUESTA] Un sistema externo (el ERP en facturas) no es un fichero, sino un sistema vivo. Cada descarga se guarda como una carga más de la fuente, con su fecha, igual que un fichero nuevo. Así la regla anterior también le aplica.
+**P16. Are data (files, sources) versioned too?** [DECIDED: no]
+- Ingested files have no versions: they are stored as-is and do not change. What changes are the decisions about them.
+- Each decision in the history is linked to the files it was taken with.
+- If a file is modified, it is treated as a new file. It is identified by its content hash.
+- [PROPOSED] An external system (the ERP for invoices) is not a file but a live system. Each download is stored as one more load of the source, with its date, just like a new file. So the previous rule applies to it too.
 
-**P17. ¿Comparar dos versiones cualesquiera?** [DESCARTADO]
-No hace falta como funcionalidad propia: basta con ejecutar una versión y luego otra.
+**P17. Compare any two versions?** [DISCARDED]
+Not needed as a feature of its own: just run one version and then the other.
 
-**P18. Datos que recibe la función de una regla.** [DECIDIDO]
-Firma única para todas las reglas y todos los procesos:
+**P18. Data the rule function receives.** [DECIDED]
+One signature for every rule and every process:
 ```python
-def evaluar(instancia: dict, fuentes: dict[str, list[dict]], otras: list[dict]) -> dict:
-    # devuelve {"salta": bool, "motivo": str}
+def evaluate(instance: dict, sources: dict[str, list[dict]], others: list[dict]) -> dict:
+    # returns {"fires": bool, "reason": str}
 ```
-- `instancia`: símbolos de la instancia.
-- `fuentes`: última carga de cada fuente, por nombre (en facturas: proveedores, pedidos, foto local del ERP).
-- `otras`: símbolos del resto de instancias del proceso, para reglas sobre varias instancias (en facturas: "pedido duplicado").
-Función pura: sin red, sin disco, sin reloj.
-La decisión no la devuelve el código: la fija la regla en su definición (campo `decision`), que la aprueba una persona. El código solo dice si salta y por qué.
+- `instance`: the instance's symbols.
+- `sources`: latest load of each source, by name (for invoices: suppliers, orders, local ERP snapshot).
+- `others`: symbols of the process's other instances, for rules across instances (for invoices: "duplicate order").
+Pure function: no network, no disk, no clock.
+The code does not return the decision: the rule sets it in its definition (field `decision`), which a person approves. The code only says whether it fires and why.
 
-**P19. Tipos de regla y combinación.** [DECIDIDO]
-Se ejecutan todas las reglas sobre cada instancia. Hay dos tipos:
-- **Requisito:** algo que tiene que cumplirse. Si no se cumple, la regla salta. Ejemplo en facturas: "el IBAN coincide con el del maestro".
-- **Prohibición:** algo que no debe darse. Si se da, la regla salta. Ejemplo en facturas: "el ERP dice PAGADA".
-Cada regla declara qué decisión produce cuando salta. Si no salta ninguna: la decisión por defecto del proceso. Si saltan varias: gana la de mayor prioridad.
+**P19. Rule types and combination.** [DECIDED]
+Every rule runs on each instance. There are two types:
+- **Requirement:** something that must hold. If it does not, the rule fires. Invoice example: "the IBAN matches the master IBAN".
+- **Prohibition:** something that must not happen. If it does, the rule fires. Invoice example: "the ERP says PAGADA".
+Each rule declares which decision it produces when it fires. If none fires: the process's default decision. If several fire: the highest priority wins.
 
-**Tipos de decisión configurables por proceso [DECIDIDO].** Ningún nombre de decisión está fijo en el código. Cada proceso define sus tipos con:
-- `prioridad`: gana la mayor si saltan varias reglas;
-- `por_defecto`: exactamente uno, se aplica si no salta ninguna;
-- `requiere_persona`: las instancias con esa decisión van a la cola del responsable y el asistente propone cómo resolverlas.
-En el proceso de facturas: ESCALAR (3, requiere persona) > NO_PAGAR (2) > PAGAR (1, por defecto).
+**Decision types configurable per process [DECIDED].** No decision name is fixed in code. Each process defines its types with:
+- `priority`: the highest wins when several rules fire;
+- `is_default`: exactly one, applied when none fires;
+- `requires_human`: instances with that decision go to the manager's queue and the assistant proposes how to resolve them.
+In the invoice process: ESCALAR (3, requires a human) > NO_PAGAR (2) > PAGAR (1, default).
 
-**P20. Extracción de símbolos.** [DECIDIDO]
-- Cada proceso define su lista de símbolos (nombre, tipo, descripción).
-- Un LLM la rellena con salida estructurada: sobre el texto del fichero, o sobre la imagen si es un escaneo. Sin parsers por plantilla.
-- Dos extracciones independientes (proveedores de LLM distintos) deben coincidir. Además, validadores fijos donde apliquen (en facturas: IBAN mod-97, letra del NIF, base + IVA = total).
-- Si no coinciden o un validador falla: estado `REVISION` (P21). El fallo de un validador nunca se devuelve al modelo para que lo corrija: aprendería a dar un valor que cuadre en vez del que pone el documento.
-- Cada fichero se extrae una sola vez (por su hash) y los símbolos se guardan; repetir decisiones o auditorías no vuelve a llamar al LLM.
+**P20. Symbol extraction.** [DECIDED]
+- Each process defines its list of symbols (name, type, description).
+- An LLM fills it with structured output: from the file text, or from the image for a scan. No per-template parsers.
+- Two independent extractions (different LLM providers) must agree. On top of that, fixed validators where they apply (for invoices: IBAN mod-97, NIF check letter, base + VAT = total).
+- If they disagree or a validator fails: status `REVIEW` (P21). A validator failure is never fed back to the model to fix: it would learn to give a value that adds up instead of the one on the document.
+- Each file is extracted only once (by its hash) and the symbols are stored; repeating decisions or audits does not call the LLM again.
 
-**P21. Discrepancias.** [DECIDIDO]
-- **Al añadir una regla:** si los dos códigos discrepan, o chocan con otra regla o con una decisión validada, el sistema lo detecta, avisa al usuario y la regla **no entra** hasta que se resuelva.
-- **En ejecución:** si las dos extracciones no coinciden, o los dos códigos de una regla ya aceptada discrepan o fallan en una instancia, la instancia pasa a `REVISION`. `REVISION` es un estado interno de la instancia, no una decisión: no es un tipo de decisión del proceso (en facturas, no es ESCALAR). No se puede exportar mientras quede alguna instancia `PENDIENTE` o en `REVISION`.
+**P21. Discrepancies.** [DECIDED]
+- **When adding a rule:** if the two codes disagree, or clash with another rule or with a validated decision, the system detects it, warns the user, and the rule **does not go in** until it is resolved.
+- **At runtime:** if the two extractions disagree, or the two codes of an already accepted rule disagree or fail on an instance, the instance goes to `REVIEW`. `REVIEW` is an internal instance state, not a decision: it is not one of the process's decision types (for invoices, it is not ESCALAR). Export is blocked while any instance is `PENDING` or in `REVIEW`.
 
-**P22. Proveedores de LLM.** [DECIDIDO]
-- El sistema no depende de ningún proveedor. Cualquier API (Anthropic, OpenAI, Gemini, local...) se puede usar.
-- Cada papel tiene su propia configuración, cambiable en ejecución: `compilador_a`, `compilador_b`, `extractor_1`, `extractor_2`, `asistente` (y `corrector` en la iteración 2). Cada uno elige una cadena de modelos (el primero y sus sustitutos si falla un proveedor), sus ajustes, reintentos, límite de peticiones y prompt.
-- [DECIDIDO] Implementación: PydanticAI (P23). La configuración sale de presets en el repo y se guarda en la base de datos como versiones que solo se añaden (`config_agente`); cada llamada usa la versión activa de su papel y la anota en la traza. Detalle en `docs/agents-plan.md`.
-- Por defecto, los papeles emparejados (`_a`/`_b`, `_1`/`_2`) usan proveedores distintos, también en sus modelos de sustitución, para que no se equivoquen igual.
+**P22. LLM providers.** [DECIDED]
+- The system depends on no provider. Any API (Anthropic, OpenAI, Gemini, local...) can be used.
+- Each role has its own configuration, changeable at runtime: `compiler_a`, `compiler_b`, `extractor_1`, `extractor_2`, `assistant` (and `corrector` in iteration 2). Each picks a model chain (the first model and its fallbacks if a provider fails), its settings, retries, request limit and prompt.
+- [DECIDED] Implementation: PydanticAI (P23). Configuration comes from presets in the repo and is stored in the database as append-only versions (`agent_config`); every call uses the active version of its role and records it in the trace. Details in `docs/agents-plan.md`.
+- By default, paired roles (`_a`/`_b`, `_1`/`_2`) use different providers, in their fallback models too, so they do not make the same mistakes.
 
-**P23. Framework de agentes: PydanticAI.** [DECIDIDO]
+**P23. Agent framework: PydanticAI.** [DECIDED]
 
-*Contexto.* Los agentes (compilador A y B, asistente, extractores y, en la iteración 2, el corrector) llamaban a los LLM con un cliente propio sobre LiteLLM: salida estructurada validada a mano, un bucle de reparación escrito para cada agente, sin cambio de proveedor si uno cae y tests que parchean el cliente. Queríamos lo mismo en todos los agentes: salida tipada, reintentos acotados con el error devuelto al modelo, cadena de modelos de reserva, límites de uso, coste por llamada y tests sin red. Todo sin atarnos a un proveedor (P22) y sin mover el control del flujo fuera de nuestro código: la máquina de estados de instancias y reglas, la cola del responsable y la idempotencia ya viven en Postgres.
+*Context.* The agents (compilers A and B, assistant, extractors and, in iteration 2, the corrector) called the LLMs through our own client on top of LiteLLM: structured output validated by hand, a repair loop written for each agent, no provider switch when one goes down, and tests that patch the client. We wanted the same things in every agent: typed output, bounded retries with the error sent back to the model, a fallback model chain, usage limits, cost per call and tests without network. All of it without tying ourselves to a provider (P22) and without moving flow control out of our code: the instance and rule state machines, the manager's queue and idempotency already live in Postgres.
 
-*Alternativas.*
+*Alternatives.*
 
-| Opción | Por qué no |
+| Option | Why not |
 |---|---|
-| LiteLLM a pelo (lo que había) | Da una interfaz común, pero todo lo demás (validar la salida, reintentar con el error, cadena de reserva, límites, tests) hay que escribirlo en cada agente. Ya teníamos dos bucles de reparación distintos |
-| LangGraph | Su valor es el grafo con estado y persistencia propios. Duplicaría lo que ya está en Postgres y sacaría el control del flujo de nuestro código |
-| Claude Agent SDK / OpenAI Agents SDK | Cada uno pensado para su proveedor; choca con P22 y con que los papeles emparejados usen proveedores distintos |
-| CrewAI | Modela equipos de agentes con roles y tareas que se coordinan solos. Nuestros agentes no conversan entre sí: el flujo lo fija el código y el LLM nunca decide (P7) |
-| **PydanticAI** | Elegido |
+| Plain LiteLLM (what we had) | Gives a common interface, but everything else (output validation, retry with the error, fallback chain, limits, tests) must be written in each agent. We already had two different repair loops |
+| LangGraph | Its value is a graph with its own state and persistence. It would duplicate what is already in Postgres and take flow control out of our code |
+| Claude Agent SDK / OpenAI Agents SDK | Each is built for its own provider; clashes with P22 and with paired roles using different providers |
+| CrewAI | Models teams of agents with roles and tasks that coordinate themselves. Our agents do not talk to each other: the code fixes the flow and the LLM never decides (P7) |
+| **PydanticAI** | Chosen |
 
-*Decisión.* Todos los agentes se escriben con PydanticAI v2 (`pydantic-ai-slim`, extras `openai`, `anthropic`, `google`):
-- un `Agent` por tipo de agente, con `output_type` tipado;
-- `output_validator` + `ModelRetry` donde el error ayuda al modelo a corregirse: el compilador (sandbox y sus propios tests) y el asistente (decisión dentro de los tipos del proceso). Nunca en la extracción (P20);
-- `FallbackModel` con la cadena de modelos de cada papel, `UsageLimits` y `timeout` por petición;
-- la configuración de cada papel vive en presets del repo (`agentes/presets/*.json`) y en versiones que solo se añaden en `config_agente`, editables en ejecución y sin reinicio;
-- cada ejecución deja un evento en `eventos` con la versión de configuración, el modelo que respondió, el hash del prompt, tokens, coste, latencia y reintentos;
-- tests con `FunctionModel`/`TestModel` y `agent.override`, sin llamadas reales.
-No se usan sus grafos, su ejecución durable ni sus tools con aprobación humana: el flujo, el estado y la aprobación ya están en nuestro código y en Postgres.
+*Decision.* Every agent is written with PydanticAI v2 (`pydantic-ai-slim`, extras `openai`, `anthropic`, `google`):
+- one `Agent` per agent type, with a typed `output_type`;
+- `output_validator` + `ModelRetry` where the error helps the model correct itself: the compiler (sandbox and its own tests) and the assistant (decision within the process's types). Never in extraction (P20);
+- `FallbackModel` with each role's model chain, `UsageLimits` and a per-request `timeout`;
+- each role's configuration lives in repo presets (`agents/presets/*.json`) and in append-only versions in `agent_config`, editable at runtime without a restart;
+- every run leaves an event in `events` with the configuration version, the model that answered, the prompt hash, tokens, cost, latency and retries;
+- tests with `FunctionModel`/`TestModel` and `agent.override`, without real calls.
+We do not use its graphs, its durable execution or its tools with human approval: flow, state and approval already live in our code and in Postgres.
 
-*Consecuencias.*
-- Desaparecen `features/llm/cliente.py`, `config_llm` y los endpoints `/llm/config`, sustituidos por `config_agente` y `/agentes/.../config` (el frontend cambia de endpoint).
-- Los nombres de modelo pasan del formato de LiteLLM (`anthropic/claude-opus-5`) al de PydanticAI (`anthropic:claude-opus-5`). La clave de Gemini se llama `GOOGLE_API_KEY`.
-- Se puede comparar configuraciones con datos: cada resultado apunta a la versión exacta que lo produjo.
-- Nueva dependencia con cambios frecuentes: se fija la versión (`>=2.45,<3` y `uv.lock`) y la documentación local está en `.context/pydantic-ai/` para no programar contra APIs viejas.
-- Riesgo: si todos los modelos de una cadena fallan, el agente falla en cerrado (la regla no se activa, la instancia queda en `REVISION`), nunca decide.
+*Consequences.*
+- `features/llm/client.py`, `llm_config` and the `/llm/config` endpoints go away, replaced by `agent_config` and `/agents/.../config` (the frontend changes endpoint).
+- Model names move from the LiteLLM format (`anthropic/claude-opus-5`) to the PydanticAI one (`anthropic:claude-opus-5`). The Gemini key is called `GOOGLE_API_KEY`.
+- Configurations can be compared with data: every result points to the exact version that produced it.
+- New, fast-changing dependency: the version is pinned (`>=2.45,<3` and `uv.lock`) and the local docs live in `.context/pydantic-ai/` so we do not code against old APIs.
+- Risk: if every model in a chain fails, the agent fails closed (the rule is not activated, the instance stays in `REVIEW`); it never decides.
 
-*Evidencia.* Las APIs usadas están comprobadas en la documentación local de PydanticAI v2 (referencias por sección en `docs/agents-plan.md` §12). Las comparativas con LangGraph, CrewAI y los SDK de Claude y OpenAI están en esa misma documentación y las escribe Pydantic, así que se leen con su sesgo; la razón de fondo para descartarlas es nuestra arquitectura (P7, P22 y el estado en Postgres), no esas tablas. Las cifras de coste y latencia por etapa saldrán de `GET /procesos/{id}/metricas` sobre `eventos` (plan, §7.4).
+*Evidence.* The APIs used are checked against the local PydanticAI v2 docs (references by section in `docs/agents-plan.md` §12). The comparisons with LangGraph, CrewAI and the Claude and OpenAI SDKs are in those same docs and Pydantic writes them, so they are read with that bias in mind; the underlying reason for discarding them is our architecture (P7, P22 and state in Postgres), not those tables. Cost and latency figures per stage will come from `GET /processes/{process_id}/metrics` over `events` (plan, §7.4).
 
-## 5. Funcionalidades de la primera iteración [PROPUESTA; corte de F11 DECIDIDO]
-Objetivo de la iteración 1 (sábado ~14:00): `outcomes.jsonl` del lote 1 correcto y todo el ciclo de reglas funcionando de punta a punta en un proceso.
+## 5. First-iteration features [PROPOSED; F11 cut DECIDED]
+Goal of iteration 1 (Saturday ~14:00): a correct `outcomes.jsonl` for batch 1 and the whole rule cycle working end to end in one process.
 
-| # | Funcionalidad | Qué hace | Entra en v1 |
+| # | Feature | What it does | In v1 |
 |---|---|---|---|
-| F1 | Procesos | Crear, listar y seleccionar procesos. Cada uno con sus reglas, versiones e histórico | Sí |
-| F2 | Ingesta | Subir ficheros. Se identifican por hash; se guardan tal cual con el texto completo extraído (texto del PDF u OCR/visión para escaneos) | Sí |
-| F3 | Conectores | Hojas de cálculo y sistemas externos (en facturas: Excel de maestros y ERP, con API tolerante a fallos). Cada carga o descarga se guarda aparte | Sí |
-| F4 | Extracción de símbolos | Saca de cada instancia los símbolos que usan las reglas, con su origen | Sí |
-| F5 | Reglas y compilador | Alta de una regla en texto; dos agentes generan código y tests; tests cruzados, coincidencia sobre el histórico; se activa si no hay discrepancias (P9, P21) | Sí |
-| F6 | Motor | Ejecuta todas las reglas activas sobre cada instancia, aplica la prioridad de los tipos de decisión y registra la decisión. Sin LLM | Sí |
-| F7 | Histórico y auditoría | Registro de todas las decisiones. Al activar una versión, se reejecuta sobre el histórico: cambios, conflictos y hallazgos | Sí |
-| F8 | Escalado asistido | Cola del responsable (tipos con `requiere_persona` y `REVISION`). El agente sugiere decisión, razonamiento y regla; el responsable acepta o escribe la suya | Sí |
-| F9 | Versionado | Lista lineal de versiones; activar una anterior | Iteración 2 [DECIDIDO] |
-| F10 | Exportar | Descargar nombre y decisión de cada instancia. En facturas, en el formato del reto (`outcomes.jsonl`) | Sí |
-| F11 | Crear proceso desde datos | A partir de todos los datos subidos y texto libre, deriva símbolos, reglas y tipos de decisión | Iteración 2 |
-| F12 | Autocorrección por revisión | El responsable marca un error en una decisión y explica por qué; el agente propone el cambio de regla | Iteración 2 |
+| F1 | Processes | Create, list and select processes. Each with its rules, versions and history | Yes |
+| F2 | Ingestion | Upload files. Identified by hash; stored as-is with the full extracted text (PDF text, or OCR/vision for scans) | Yes |
+| F3 | Connectors | Spreadsheets and external systems (for invoices: master workbook and ERP, with a fault-tolerant API). Each load or download is stored separately | Yes |
+| F4 | Symbol extraction | Pulls from each instance the symbols the rules use, with their origin | Yes |
+| F5 | Rules and compiler | Add a rule as text; two agents generate code and tests; cross-tests, agreement on the history; activated if there are no discrepancies (P9, P21) | Yes |
+| F6 | Engine | Runs every active rule on each instance, applies decision-type priority and records the decision. No LLM | Yes |
+| F7 | History and audit | Log of every decision. Activating a version re-runs it over the history: changes, conflicts and findings | Yes |
+| F8 | Assisted escalation | Manager's queue (types with `requires_human` and `REVIEW`). The agent suggests a decision, reasoning and rule; the manager accepts or writes their own | Yes |
+| F9 | Versioning | Linear list of versions; activate an earlier one | Iteration 2 [DECIDED] |
+| F10 | Export | Download each instance's name and decision. For invoices, in the challenge format (`outcomes.jsonl`) | Yes |
+| F11 | Create process from data | From all uploaded data and free text, derives symbols, rules and decision types | Iteration 2 |
+| F12 | Self-correction through review | The manager flags a mistake in a decision and explains why; the agent proposes the rule change | Iteration 2 |
 
-Motivo del corte: F11 es lo más difícil de dejar fiable y no hace falta para pasar el filtro. En v1, las reglas de la norma v3 se dan de alta una a una por F5. Así el mismo flujo del producto genera la entrega.
+Reason for the cut: F11 is the hardest to make reliable and is not needed to pass the filter. In v1, the rules of policy v3 are added one by one through F5. That way the product's own flow produces the submission.
 
-## 6. Arquitectura [PROPUESTA]
+## 6. Architecture [PROPOSED]
 
-**Stack [DECIDIDO]:** backend en Python con FastAPI; base de datos PostgreSQL. Frontend a elegir por Carlos.
+**Stack [DECIDED]:** Python backend with FastAPI; PostgreSQL database. Frontend chosen by Carlos.
 
-### 6.1 Componentes
-| Componente | Responsabilidad | ¿Usa LLM? |
+### 6.1 Components
+| Component | Responsibility | Uses an LLM? |
 |---|---|---|
-| Almacén | PostgreSQL: usuarios, procesos, tipos de decisión, símbolos, fuentes, ficheros, instancias, extracciones, reglas, decisiones, hallazgos, eventos, configuración de los agentes por versiones (`config_agente`); versiones de reglas: iteración 2 | No |
-| Ingesta | Hash, guardado del fichero, extracción de texto | Solo para escaneos (visión) |
-| Conectores | Hojas de cálculo y sistemas externos. El cliente de un sistema externo gestiona autenticación, reintentos, límite de peticiones y cortes (en facturas: el ERP) | No |
-| Extractor de símbolos | Texto de la instancia + fuentes a símbolos con origen | Sí (doble extracción, P20) |
-| Compilador | Regla en texto a código + pruebas | Sí |
-| Motor | Ejecuta el código de todas las reglas y decide | **No** |
-| Auditor | Reejecuta una versión sobre el histórico y clasifica las diferencias | No |
-| Asistente de escalado | Sugiere decisión, razonamiento y regla para un escalado | Sí |
-| API + web | Interfaz del responsable | No |
+| Store | PostgreSQL: users, processes, decision types, symbols, sources, files, instances, extractions, rules, decisions, findings, events, versioned agent configuration (`agent_config`); rule versions: iteration 2 | No |
+| Ingestion | Hash, file storage, text extraction | Only for scans (vision) |
+| Connectors | Spreadsheets and external systems. An external system's client handles authentication, retries, rate limits and outages (for invoices: the ERP) | No |
+| Symbol extractor | Instance text + sources to symbols with origin | Yes (double extraction, P20) |
+| Compiler | Rule text to code + tests | Yes |
+| Engine | Runs the code of every rule and decides | **No** |
+| Auditor | Re-runs a version over the history and classifies the differences | No |
+| Escalation assistant | Suggests a decision, reasoning and rule for an escalation | Yes |
+| API + web | Manager's interface | No |
 
-Principio: el LLM nunca está en el camino de la decisión. Solo escribe código de reglas, extrae símbolos y sugiere al responsable.
+Principle: the LLM is never on the decision path. It only writes rule code, extracts symbols and makes suggestions to the manager.
 
-**Capa de agentes [DECIDIDO, P23].** Los componentes que usan LLM (extractor, compilador, asistente) son agentes de PydanticAI sobre una infraestructura común (`features/llm/`): el modelo de cada llamada se construye desde la versión activa de su papel en `config_agente` (cadena de modelos de reserva, ajustes, reintentos, límites y prompt), y cada ejecución deja un evento en `eventos` con esa versión, el modelo que respondió, tokens, coste y latencia. Cada resultado de un LLM (símbolos por fichero, código por regla) se calcula una vez y se guarda; decidir y auditar no vuelven a llamar al LLM. Plan de ejecución: `docs/agents-plan.md`.
+**Agent layer [DECIDED, P23].** The components that use an LLM (extractor, compiler, assistant) are PydanticAI agents on shared infrastructure (`features/llm/`): the model for each call is built from the active version of its role in `agent_config` (fallback model chain, settings, retries, limits and prompt), and every run leaves an event in `events` with that version, the model that answered, tokens, cost and latency. Each LLM result (symbols per file, code per rule) is computed once and stored; deciding and auditing do not call the LLM again. Execution plan: `docs/agents-plan.md`.
 
-### 6.2 Flujo de una instancia
-1. Ingesta: fichero → hash → texto completo guardado.
-2. Extracción: texto + fuentes → símbolos con origen.
-3. Motor: símbolos + código de la versión activa → resultado de cada regla → decisión.
-4. Registro: decisión con símbolos, versión y resultados de cada regla.
-5. Si la decisión es de un tipo con `requiere_persona`, o la instancia queda en `REVISION` → cola del responsable con la sugerencia del asistente.
+### 6.2 Flow of an instance
+1. Ingestion: file → hash → full text stored.
+2. Extraction: text + sources → symbols with origin.
+3. Engine: symbols + code of the active version → result of each rule → decision.
+4. Record: decision with symbols, version and the result of each rule.
+5. If the decision is of a type with `requires_human`, or the instance ends up in `REVIEW` → manager's queue with the assistant's suggestion.
 
-### 6.3 Flujo de un cambio de regla
-1. Texto de la regla (escrita por el responsable o propuesta por el asistente).
-2. El compilador genera código y pruebas.
-3. El código pasa sus pruebas y todas las decisiones validadas por humanos.
-4. El auditor reejecuta sobre el histórico: sin cambio, cambio por revisar, conflicto y hallazgos.
-5. El responsable aprueba → versión nueva activa.
+### 6.3 Flow of a rule change
+1. Rule text (written by the manager or proposed by the assistant).
+2. The compiler generates code and tests.
+3. The code passes its tests and every human-validated decision.
+4. The auditor re-runs over the history: unchanged, change to review, conflict and findings.
+5. The manager approves → new active version.
 
-## 7. Pendiente [PENDIENTE]
-- Interfaz del responsable (pantallas).
-- Trazabilidad: formato de eventos y cómo se consulta "por qué se decidió X".
-- Encaje con la rúbrica y lista de ADRs.
+## 7. Pending [PENDING]
+- Manager's interface (screens).
+- Traceability: event format and how to query "why was X decided".
+- Fit with the rubric and list of ADRs.
 - Frontend.
 
-El reparto del trabajo está en `docs/mvp-plan.md` y `docs/team-guide.md`.
+The division of work is in `docs/mvp-plan.md` and `docs/team-guide.md`.

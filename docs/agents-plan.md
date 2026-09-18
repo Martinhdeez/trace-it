@@ -1,103 +1,103 @@
-# trace-it: plan de los agentes sobre PydanticAI
+# trace-it: plan for the agents on PydanticAI
 
-**Estado:** plan de ejecución. Solo documentación: aún no hay código de este plan.
-**Decisión de fondo:** P23 en `docs/application-blueprint.md`.
-**Fuente de las APIs:** la documentación local de PydanticAI v2 en `.context/pydantic-ai/` (ver "Referencias"). Todo nombre de clase o función de este documento está comprobado ahí. Lo que no aparece en la documentación está en "APIs sin confirmar".
+**Status:** execution plan. Documentation only: no code from this plan exists yet.
+**Underlying decision:** P23 in `docs/application-blueprint.md`.
+**API source:** the local PydanticAI v2 docs in `.context/pydantic-ai/` (see "References"). Every class or function name in this document is checked there. Whatever the docs do not cover is listed in "Unconfirmed APIs".
 
-## 0. Decisiones previas (no se reabren)
+## 0. Prior decisions (not reopened)
 
-- PydanticAI sustituye al cliente directo de LiteLLM (`features/llm/cliente.py`) en todos los agentes. LangGraph descartado: la máquina de estados, la cola humana y la idempotencia ya viven en Postgres. Sin dependencia de proveedor (P22).
-- Agentes: compilador A y B (ciegos entre sí, P9), asistente de escalado, extractor(es) de símbolos (de Álvaro, sobre la misma infraestructura) y corrector (iteración 2, con tools).
-- El LLM nunca decide en el flujo: el motor solo ejecuta código compilado (P7).
-- Compilador: su `output_validator` ejecuta `sandbox.comprobar` y los tests **propios** con `sandbox.ejecutar_lote`, y lanza `ModelRetry` con los fallos. Reintentos acotados. Los tests cruzados y el histórico siguen fuera de los agentes, en la función pura `validar`.
-- Asistente: su `output_validator` rechaza con `ModelRetry` una decisión que no es un tipo del proceso.
-- Extracción: los validadores (IBAN mod-97, letra del NIF, base + IVA = total), ligados a tipos de símbolo y no a nombres de campos de factura, **no** lanzan `ModelRetry`: si fallan, la instancia pasa a `REVISION`. Dos extracciones independientes deben coincidir.
-- Configuración por papel: presets en ficheros del repo y versiones en la base de datos, editables en ejecución, sin reinicio y sin perder nunca un experimento (sección 4). Prompts versionados en el repo, con sobrescritura opcional por versión. Claves de API solo en `.env`.
-- Trazabilidad: cada ejecución de un agente registra en `eventos` la versión de configuración usada (`config_agente.id`), el papel, el modelo que respondió de verdad, el hash del prompt efectivo, tokens, coste, latencia, reintentos y resultado.
+- PydanticAI replaces the direct LiteLLM client (`features/llm/client.py`) in every agent. LangGraph discarded: the state machine, the human queue and idempotency already live in Postgres. No provider lock-in (P22).
+- Agents: compilers A and B (blind to each other, P9), escalation assistant, symbol extractor(s) (Álvaro's, on the same infrastructure) and corrector (iteration 2, with tools).
+- The LLM never decides in the flow: the engine only runs compiled code (P7).
+- Compiler: its `output_validator` runs `sandbox.check` and its **own** tests with `sandbox.run_batch`, and raises `ModelRetry` with the failures. Bounded retries. Cross-tests and the history stay outside the agents, in the pure function `validate`.
+- Assistant: its `output_validator` rejects with `ModelRetry` a decision that is not one of the process's types.
+- Extraction: the validators (IBAN mod-97, NIF check letter, base + VAT = total), tied to symbol types and not to invoice field names, do **not** raise `ModelRetry`: if they fail, the instance goes to `REVIEW`. Two independent extractions must agree.
+- Configuration per role: presets in repo files and versions in the database, editable at runtime, without a restart and without ever losing an experiment (section 4). Prompts versioned in the repo, with an optional override per version. API keys only in `.env`.
+- Traceability: every agent run records in `events` the configuration version used (`agent_config.id`), the role, the model that actually answered, the hash of the effective prompt, tokens, cost, latency, retries and result.
 
-## 1. Qué cambia y qué no
+## 1. What changes and what does not
 
-| Pieza | Hoy | Después |
+| Piece | Today | After |
 |---|---|---|
-| Llamada al LLM | `cliente.completar(session, papel, mensajes, formato)` sobre `litellm.acompletion` | `Agent.run(...)` de PydanticAI, con el modelo construido en cada llamada desde la versión activa del papel |
-| Salida estructurada | JSON validado a mano (`model_validate_json`) | `output_type=` del agente |
-| Bucle de reparación | Bucle propio con mensajes `assistant`/`user` (`MAX_REPARACIONES`) | `@agente.output_validator` + `ModelRetry` + `retries={'output': N}` |
-| Proveedor caído | Error 502 | `FallbackModel` pasa al siguiente modelo de la cadena; si fallan todos, error y traza |
-| Coste | `litellm.completion_cost` | `result.usage.cost` (`Decimal` o `None`, calculado con genai-prices) |
-| Configuración | `config_llm`: un modelo por papel, se sobrescribe | `config_agente`: versiones por papel, solo se añaden; presets en `agentes/presets/*.json` |
-| Tests | `monkeypatch` de `cliente.completar` | `agente.override(model=FunctionModel(...))` y `models.ALLOW_MODEL_REQUESTS = False` |
+| LLM call | `client.complete(session, role, messages, format)` on top of `litellm.acompletion` | PydanticAI `Agent.run(...)`, with the model built on every call from the role's active version |
+| Structured output | JSON validated by hand (`model_validate_json`) | the agent's `output_type=` |
+| Repair loop | Our own loop with `assistant`/`user` messages (`MAX_REPAIRS`) | `@agent.output_validator` + `ModelRetry` + `retries={'output': N}` |
+| Provider down | 502 error | `FallbackModel` moves to the next model in the chain; if all fail, error and trace |
+| Cost | `litellm.completion_cost` | `result.usage.cost` (`Decimal` or `None`, computed with genai-prices) |
+| Configuration | `llm_config`: one model per role, overwritten | `agent_config`: versions per role, append-only; presets in `agents/presets/*.json` |
+| Tests | `monkeypatch` of `client.complete` | `agent.override(model=FunctionModel(...))` and `models.ALLOW_MODEL_REQUESTS = False` |
 
-No cambia: `sandbox.py`, la función pura `validar`, el motor, la cola del responsable y el contrato de `reglas.service.compilar`.
+Unchanged: `sandbox.py`, the pure function `validate`, the engine, the manager's queue and the contract of `rules.service.compile_rule`.
 
-## 2. Arquitectura objetivo
+## 2. Target architecture
 
-### 2.1 Árbol de ficheros
+### 2.1 File tree
 
 ```
 backend/app/
-  conftest.py                  # models.ALLOW_MODEL_REQUESTS = False para toda la suite
+  conftest.py                  # models.ALLOW_MODEL_REQUESTS = False for the whole suite
   features/
-    llm/                       # runtime genérico, sin conocer papeles ni tablas
-      fabrica.py               # dict de config -> Model (FallbackModel), ModelSettings, UsageLimits
-      ejecutar.py              # ejecutar(): run acotado + evento en `eventos` + errores
-      tests/test_fabrica.py
-      tests/test_ejecutar.py
-      (cliente.py, model.py, router.py, schemas.py: se borran en la tarea 8)
-    agentes/
-      model.py                 # ConfigAgente (tabla config_agente), PAPELES
-      config.py                # versión activa, crear versión, activar, presets, exportar, prompt efectivo
-      schemas.py               # Config, ConfigVersionIn/Out, SugerenciaOut
-      router.py                # /agentes/config..., /agentes/presets/..., sugerencia
+    llm/                       # generic runtime, unaware of roles or tables
+      factory.py               # config dict -> Model (FallbackModel), ModelSettings, UsageLimits
+      run.py                   # run(): bounded run + event in `events` + errors
+      tests/test_factory.py
+      tests/test_run.py
+      (client.py, model.py, router.py, schemas.py: deleted in task 8)
+    agents/
+      model.py                 # AgentConfig (table agent_config), ROLES
+      config.py                # active version, create version, activate, presets, export, effective prompt
+      schemas.py               # Config, ConfigVersionIn/Out, SuggestionOut
+      router.py                # /agents/config..., /agents/presets/..., suggestion
       presets/
-        calidad.json           # preset por defecto (make setup)
-        barato.json
-        rapido.json
+        quality.json           # default preset (make setup)
+        cheap.json
+        fast.json
       prompts/
-        compilador.md
-        asistente.md
-        extractor.md           # lo mantiene Álvaro
-        corrector.md           # iteración 2
-      compilador.py            # Agent + output_validator (sandbox); validar() sin cambios
-      asistente.py             # Agent + output_validator (tipos del proceso)
-      corrector.py             # iteración 2: Agent con tools de solo lectura
-      sandbox.py               # sin cambios
+        compiler.md
+        assistant.md
+        extractor.md           # maintained by Álvaro
+        corrector.md           # iteration 2
+      compiler.py              # Agent + output_validator (sandbox); validate() unchanged
+      assistant.py             # Agent + output_validator (process types)
+      corrector.py             # iteration 2: Agent with read-only tools
+      sandbox.py               # unchanged
       tests/
-    extraccion/                # Álvaro
-      extractor.py             # Agent de extracción sobre features/llm
-      validadores.py           # puros, por tipo de símbolo
-      service.py               # dos extracciones, comparación, REVISION
+    extraction/                # Álvaro
+      extractor.py             # extraction Agent on top of features/llm
+      validators.py            # pure, per symbol type
+      service.py               # two extractions, comparison, REVIEW
       tests/
 ```
 
-Capas: `llm/` es el runtime y no importa nada de `agentes/`; recibe la configuración ya resuelta. `agentes/` guarda la configuración y define los agentes. `extraccion/` usa `agentes.config` (su `model.py`/servicio, permitido por la guía) y `llm.ejecutar`.
+Layers: `llm/` is the runtime and imports nothing from `agents/`; it receives the configuration already resolved. `agents/` stores the configuration and defines the agents. `extraction/` uses `agents.config` (its `model.py`/service, allowed by the guide) and `llm.run`.
 
-Cada agente es un `Agent` de nivel de módulo, sin modelo fijo (`Agent(None, ...)` está permitido si el modelo se pasa en cada `run`). Las dependencias (`deps_type`) son dataclasses definidas en el módulo de cada agente, solo donde hacen falta (asistente y corrector); no hay un fichero `deps.py` común porque no hay nada que compartir.
+Each agent is a module-level `Agent` with no fixed model (`Agent(None, ...)` is allowed if the model is passed on every `run`). Dependencies (`deps_type`) are dataclasses defined in each agent's module, only where needed (assistant and corrector); there is no shared `deps.py` because there is nothing to share.
 
-### 2.2 Flujo de la configuración
+### 2.2 Configuration flow
 
 ```
-  REPO (git)                  POSTGRES                        EJECUCION                    TRAZA
+  REPO (git)                  POSTGRES                        RUNTIME                      TRACE
  +----------------------+    +----------------------------+    +------------------------+    +-------------------------+
- | agentes/presets/     | 1  | config_agente              | 3  | en cada llamada:       |    | eventos, paso "agente": |
- |   *.json             |--->|  (solo se anade)           |--->|  version activa        |--->|  config_agente_id       |
- |   modelos, ajustes,  |    |  id, papel, version,       |    |  -> FallbackModel      |    |  papel, version         |
- |   reintentos, limite,|    |  config JSON, prompt?,     |    |  -> ModelSettings      |    |  prompt_hash, modelo    |
- |   prompt .md         |    |  autor, nota, creada,      |    |  -> UsageLimits        |    |  tokens, coste          |
- | agentes/prompts/*.md |    |  activa (1 por papel)      |    |  -> prompt + hash      |    |  latencia, reintentos   |
+ | agents/presets/      | 1  | agent_config               | 3  | on every call:         |    | events, step "agent":   |
+ |   *.json             |--->|  (append-only)             |--->|  active version        |--->|  agent_config_id        |
+ |   models, settings,  |    |  id, role, version,        |    |  -> FallbackModel      |    |  role, version          |
+ |   retries, limit,    |    |  config JSON, prompt?,     |    |  -> ModelSettings      |    |  prompt_hash, model     |
+ |   prompt .md         |    |  author, note, created_at, |    |  -> UsageLimits        |    |  tokens, cost           |
+ | agents/prompts/*.md  |    |  is_active (1 per role)    |    |  -> prompt + hash      |    |  latency, retries       |
  +----------------------+    +----------------------------+    +------------------------+    +-------------------------+
             ^                    ^            |
-            |                  2 | nueva version / activar (responsable, en caliente)
-            +------- 4 exportar -------------+
+            |                  2 | new version / activate (manager, live)
+            +------- 4 export ---------------+
 ```
 
-1. `make setup` (o `POST /agentes/presets/{nombre}/aplicar`) carga un preset como versiones nuevas.
-2. En ejecución, el responsable crea versiones nuevas y activa cualquiera, también una antigua (vuelta atrás).
-3. Cada llamada lee la versión activa y construye el modelo: un cambio vale desde la llamada siguiente, sin reiniciar.
-4. Un experimento bueno se exporta como JSON de preset y se sube al repo.
+1. `make setup` (or `POST /agents/presets/{name}/apply`) loads a preset as new versions.
+2. At runtime, the manager creates new versions and activates any of them, including an old one (rollback).
+3. Every call reads the active version and builds the model: a change applies from the next call on, without a restart.
+4. A good experiment is exported as preset JSON and committed to the repo.
 
-### 2.3 Infraestructura común (`features/llm/`)
+### 2.3 Shared infrastructure (`features/llm/`)
 
-**`fabrica.py`** (esbozo; nombres de PydanticAI comprobados):
+**`factory.py`** (sketch; PydanticAI names checked):
 
 ```python
 from functools import cache
@@ -106,430 +106,430 @@ from pydantic_ai.models import Model, infer_model
 from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
 from pydantic_ai.models.fallback import FallbackModel
 
-@cache  # un limitador por proveedor, compartido por todos los papeles
-def _limitador(proveedor: str) -> ConcurrencyLimiter:
-    return ConcurrencyLimiter(max_running=settings.llm_concurrencia, name=proveedor)
+@cache  # one limiter per provider, shared by every role
+def _limiter(provider: str) -> ConcurrencyLimiter:
+    return ConcurrencyLimiter(max_running=settings.llm_concurrency, name=provider)
 
-@cache  # un Model (y su cliente HTTP) por nombre, reutilizado
-def _modelo(nombre: str, cachear: bool) -> Model:
-    proveedor, _, id_modelo = nombre.partition(":")
-    if cachear and proveedor == "anthropic":
-        base = AnthropicModel(id_modelo, settings=AnthropicModelSettings(
+@cache  # one Model (and its HTTP client) per name, reused
+def _model(name: str, cached: bool) -> Model:
+    provider, _, model_id = name.partition(":")
+    if cached and provider == "anthropic":
+        base = AnthropicModel(model_id, settings=AnthropicModelSettings(
             anthropic_cache_instructions=True, anthropic_cache_tool_definitions=True))
     else:
-        base = infer_model(nombre)
-    return ConcurrencyLimitedModel(base, limiter=_limitador(proveedor))
+        base = infer_model(name)
+    return ConcurrencyLimitedModel(base, limiter=_limiter(provider))
 
-def modelo(config: dict) -> Model:
-    primero, *resto = [_modelo(n, config.get("cache", False)) for n in config["modelos"]]
-    return FallbackModel(primero, *resto) if resto else primero
+def model(config: dict) -> Model:
+    first, *rest = [_model(n, config.get("cache", False)) for n in config["models"]]
+    return FallbackModel(first, *rest) if rest else first
 
-def ajustes(config: dict) -> ModelSettings:
-    return ModelSettings(**config["ajustes"])  # temperature, max_tokens, timeout...
+def model_settings(config: dict) -> ModelSettings:
+    return ModelSettings(**config["settings"])  # temperature, max_tokens, timeout...
 
-def limites(config: dict) -> UsageLimits:
-    return UsageLimits(request_limit=config["limite_peticiones"])
+def limits(config: dict) -> UsageLimits:
+    return UsageLimits(request_limit=config["request_limit"])
 ```
 
-- Los nombres de modelo van en el formato de PydanticAI, `proveedor:modelo` (`anthropic:claude-opus-5`, `openai:gpt-5`, `google:gemini-3-flash-preview`). En v2, `openai:` usa la Responses API; `openai-chat:` fuerza Chat Completions.
-- La caché es por nombre y no por versión: cambiar la configuración cambia qué nombres se piden, no hay que invalidar nada. Los `Model` viven lo que el proceso (el provider es dueño de su cliente HTTP).
-- `ConcurrencyLimitedModel` + un `ConcurrencyLimiter` por proveedor: como mucho `TRACE_LLM_CONCURRENCIA` peticiones a la vez a cada proveedor (por defecto 8), sumando todos los papeles. Es lo que deja lanzar las 540 extracciones con un `gather` sin pasarse de los límites de peticiones.
-- `cache: true` en la config activa la caché de prompts de Anthropic en los modelos `anthropic:` de la cadena, como ajuste del propio modelo (la forma documentada de dar ajustes distintos a cada modelo de un `FallbackModel`). Los demás modelos no lo ven.
-- `infer_model` comprueba las variables de entorno del proveedor. Se usa también para validar una versión antes de guardarla.
+- Model names use the PydanticAI format, `provider:model` (`anthropic:claude-opus-5`, `openai:gpt-5`, `google:gemini-3-flash-preview`). In v2, `openai:` uses the Responses API; `openai-chat:` forces Chat Completions.
+- The cache is keyed by name, not by version: changing the configuration changes which names are requested, so nothing needs invalidating. `Model`s live as long as the process (the provider owns its HTTP client).
+- `ConcurrencyLimitedModel` + one `ConcurrencyLimiter` per provider: at most `TRACE_LLM_CONCURRENCY` concurrent requests to each provider (default 8), across all roles. This is what lets us launch the 540 extractions with one `gather` without exceeding rate limits.
+- `cache: true` in the config turns on Anthropic prompt caching for the `anthropic:` models in the chain, as a setting of the model itself (the documented way to give different settings to each model of a `FallbackModel`). The other models do not see it.
+- `infer_model` checks the provider's environment variables. It is also used to validate a version before storing it.
 
-**`ejecutar.py`**: la única forma de llamar a un agente.
+**`run.py`**: the only way to call an agent.
 
 ```python
 @dataclass(frozen=True)
-class ConfigActiva:          # lo que `agentes.config` resuelve para un papel
-    id: int                  # config_agente.id
-    papel: str
+class ActiveConfig:          # what `agents.config` resolves for a role
+    id: int                  # agent_config.id
+    role: str
     version: int
-    config: dict             # modelos, ajustes, reintentos, limite_peticiones, prompt
-    prompt: str              # texto efectivo: sobrescritura de la versión o fichero del repo
-    prompt_hash: str         # sha256 del texto efectivo, 12 primeros caracteres
+    config: dict             # models, settings, retries, request_limit, prompt
+    prompt: str              # effective text: the version's override or the repo file
+    prompt_hash: str         # sha256 of the effective text, first 12 characters
 
-async def ejecutar(session, agente, activa: ConfigActiva, entrada, *, deps=None,
-                   output_type=None, instancia_id=None, datos=None) -> AgentRunResult:
-    # 1. agente.run(entrada, model=modelo(c), instructions=activa.prompt, deps=deps,
-    #               output_type=..., model_settings=ajustes(c), usage_limits=limites(c),
-    #               retries={"output": c["reintentos"]})
-    #    dentro de asyncio.timeout(ajustes.timeout * limite_peticiones)
-    # 2. registrar(session, "agente", ...) con el resultado o el error
-    # 3. errores de PydanticAI y TimeoutError -> AgenteError (TraceError, 502)
+async def run(session, agent, active: ActiveConfig, user_input, *, deps=None,
+              output_type=None, instance_id=None, data=None) -> AgentRunResult:
+    # 1. agent.run(user_input, model=model(c), instructions=active.prompt, deps=deps,
+    #              output_type=..., model_settings=model_settings(c), usage_limits=limits(c),
+    #              retries={"output": c["retries"]})
+    #    inside asyncio.timeout(settings.timeout * request_limit)
+    # 2. record(session, "agent", ...) with the result or the error
+    # 3. PydanticAI errors and TimeoutError -> AgentError (TraceError, 502)
 ```
 
-- El prompt del papel entra como `instructions=` del `run` (el parámetro existe en `Agent.run`). Así el prompt es dato de la versión y no del código.
-- `registrar` solo hace `session.add`, sin E/S: dos `ejecutar` concurrentes sobre la misma sesión (compilador A y B) no chocan si la versión activa se leyó antes del `asyncio.gather`, como hoy `_leer` precarga `ConfigLLM`.
-- Se captura: `AgentRunError` (base de `UnexpectedModelBehavior`, `UsageLimitExceeded`, `ModelAPIError`), `FallbackExceptionGroup` (base `ExceptionGroup`) y `TimeoutError`. Todo lo demás es un fallo nuestro y se propaga.
+- The role's prompt goes in as the `run`'s `instructions=` (the parameter exists on `Agent.run`). The prompt is therefore version data, not code.
+- `record` only does `session.add`, with no I/O: two concurrent `run`s on the same session (compilers A and B) do not clash if the active version was read before the `asyncio.gather`, just as `_read` preloads `LLMConfig` today.
+- Caught: `AgentRunError` (base of `UnexpectedModelBehavior`, `UsageLimitExceeded`, `ModelAPIError`), `FallbackExceptionGroup` (base `ExceptionGroup`) and `TimeoutError`. Anything else is our bug and propagates.
 
-Evento por ejecución (`eventos.paso = "agente"`):
+Event per run (`events.step = "agent"`):
 
-| Campo | De dónde sale |
+| Field | Where it comes from |
 |---|---|
-| `datos.config_agente_id`, `datos.papel`, `datos.version` | `ConfigActiva` |
-| `datos.prompt_hash` | hash del prompt efectivo |
-| `datos.modelo`, `datos.proveedor` | `result.response.model_name`, `result.response.provider_name` (el que respondió de verdad, tras el fallback) |
-| `datos.peticiones`, `datos.tokens_entrada`, `datos.tokens_salida` | `result.usage.requests`, `.input_tokens`, `.output_tokens` |
-| `datos.reintentos` | número de `RetryPromptPart` en `result.all_messages()` |
-| `datos.resultado`, `datos.error` | `ok` o `error` con el tipo y el mensaje (500 caracteres) |
-| `coste` | `result.usage.cost` (`None` si genai-prices no conoce el modelo) |
-| `latencia_ms`, `instancia_id` | medido alrededor del `run`; el que pase quien llama |
-| resto de `datos` | lo que añade quien llama (`regla_id`...) |
+| `data.agent_config_id`, `data.role`, `data.version` | `ActiveConfig` |
+| `data.prompt_hash` | hash of the effective prompt |
+| `data.model`, `data.provider` | `result.response.model_name`, `result.response.provider_name` (the one that actually answered, after fallback) |
+| `data.requests`, `data.input_tokens`, `data.output_tokens` | `result.usage.requests`, `.input_tokens`, `.output_tokens` |
+| `data.retries` | number of `RetryPromptPart` in `result.all_messages()` |
+| `data.result`, `data.error` | `ok` or `error` with the type and the message (500 characters) |
+| `cost` | `result.usage.cost` (`None` if genai-prices does not know the model) |
+| `latency_ms`, `instance_id` | measured around the `run`; whatever the caller passes |
+| rest of `data` | whatever the caller adds (`rule_id`...) |
 
-Nota: en v2 `result.usage` es una propiedad, no un método (`result.usage`, no `result.usage()`).
+Note: in v2 `result.usage` is a property, not a method (`result.usage`, not `result.usage()`).
 
-## 3. Agentes
+## 3. Agents
 
-### 3.1 Compilador A y B (Martín)
+### 3.1 Compilers A and B (Martín)
 
 | | |
 |---|---|
-| Definición | `compilador = Agent(None, output_type=Propuesta, name="compilador")`. Un solo agente; A y B son dos ejecuciones con papeles distintos (`compilador_a`, `compilador_b`), cada una con su versión activa, sus modelos y su historial. Ninguna ve lo de la otra (P9) |
-| `output_type` | `Propuesta` actual: `codigo` + `tests` con `instancia_json`/`fuentes_json`/`otras_json` como texto. Se mantiene: el modo estricto de JSON Schema no admite objetos libres |
-| `deps_type` | ninguno |
-| Instrucciones | `agentes/prompts/compilador.md` (el `SISTEMA` actual) o la sobrescritura de la versión. El contexto de la regla (`_contexto`) va en el mensaje de usuario |
-| Validador | `@compilador.output_validator` async: `_tests(p)` (menos de `MIN_TESTS` o JSON inválido → `ModelRetry`) y `await asyncio.to_thread(_errores_propios, p.codigo, tests)`; si devuelve texto → `ModelRetry(texto)` |
-| Reintentos / límites | `reintentos: 2` (equivale al `MAX_REPARACIONES` actual), `limite_peticiones: 4` |
-| Invocación | `compilar()` lee las dos versiones activas, luego `asyncio.gather(ejecutar(A), ejecutar(B))`, luego `asyncio.to_thread(validar, ...)` igual que hoy |
-| Registra | un evento `agente` por papel (con `regla_id`) y el evento `compilar_regla` actual con `valida` y los `config_agente_id` de A y B. Si A y B acabaron en el mismo proveedor (por fallback), `informe.aviso_mismo_proveedor = true` |
-| Fallo | `AgenteError` tras agotar reintentos o modelos → `CompilacionError` (502). `reglas.service.compilar` hace commit de los eventos antes de relanzar |
-| Tests | `compilador.override(model=FunctionModel(fn))`: 1) código correcto a la primera → evento con `reintentos=0`; 2) primero código que falla sus tests y luego uno bueno → `reintentos=1` y el mensaje de reintento contiene el test fallido; 3) siempre mal → `CompilacionError`. `validar` conserva sus tests puros. `fn` responde llamando a la tool de salida (`info.output_tools[0].name`) |
+| Definition | `compiler = Agent(None, output_type=Proposal, name="compiler")`. A single agent; A and B are two runs with different roles (`compiler_a`, `compiler_b`), each with its own active version, models and history. Neither sees the other's work (P9) |
+| `output_type` | Current `Proposal`: `code` + `tests` with `instance_json`/`sources_json`/`others_json` as text. Kept: strict JSON Schema mode does not accept free-form objects |
+| `deps_type` | none |
+| Instructions | `agents/prompts/compiler.md` (the current `SYSTEM`) or the version's override. The rule context (`_context`) goes in the user message |
+| Validator | async `@compiler.output_validator`: `_tests(p)` (fewer than `MIN_TESTS` or invalid JSON → `ModelRetry`) and `await asyncio.to_thread(_own_errors, p.code, tests)`; if it returns text → `ModelRetry(text)` |
+| Retries / limits | `retries: 2` (same as the current `MAX_REPAIRS`), `request_limit: 4` |
+| Invocation | `compile_rule()` reads both active versions, then `asyncio.gather(run(A), run(B))`, then `asyncio.to_thread(validate, ...)` as today |
+| Records | one `agent` event per role (with `rule_id`) and the current `compile_rule` event with `valid` and the `agent_config_id` of A and B. If A and B ended up on the same provider (through fallback), `report.same_provider_warning = true` |
+| Failure | `AgentError` after exhausting retries or models → `CompilationError` (502). `rules.service.compile_rule` commits the events before re-raising |
+| Tests | `compiler.override(model=FunctionModel(fn))`: 1) correct code on the first try → event with `retries=0`; 2) first code that fails its tests and then a good one → `retries=1` and the retry message contains the failing test; 3) always wrong → `CompilationError`. `validate` keeps its pure tests. `fn` answers by calling the output tool (`info.output_tools[0].name`) |
 
-Por qué el validador corre en un hilo: `ejecutar_lote` lanza un subproceso y espera hasta 10 s; en el bucle de eventos bloquearía la API. `asyncio.to_thread` ya es el patrón del código actual.
+Why the validator runs in a thread: `run_batch` starts a subprocess and waits up to 10 s; on the event loop it would block the API. `asyncio.to_thread` is already the pattern in the current code.
 
-### 3.2 Asistente de escalado (Martín)
-
-| | |
-|---|---|
-| Definición | `asistente = Agent(None, output_type=_Salida, deps_type=DepsAsistente, name="asistente")` |
-| `deps_type` | `@dataclass DepsAsistente: tipos: list[str]` (los tipos de decisión del proceso) |
-| Instrucciones | `agentes/prompts/asistente.md` (el `SISTEMA` actual). El contexto JSON del caso va en el mensaje de usuario |
-| Validador | `if out.decision not in ctx.deps.tipos: raise ModelRetry(f"decision debe ser uno de {tipos}")` |
-| Reintentos / límites | `reintentos: 1` (el reintento único actual), `limite_peticiones: 3` |
-| Registra | evento `agente` con `instancia_id` y la sugerencia completa en `datos.salida`. Sustituye a `sugerir_escalado` |
-| Se calcula una vez | `GET /instancias/{id}/sugerencia` devuelve la sugerencia guardada si ya hay una para la misma decisión vigente de la instancia; solo llama al modelo si no la hay o con `?regenerar=true`. Mismo caso, misma respuesta, cero tokens al volver a abrir la cola |
-| Fallo | `AgenteError` → `AsistenteError` (502), como hoy |
-| Tests | `FunctionModel` que primero propone `"INVENTADA"` y luego `"NO_PAGAR"` → sale `NO_PAGAR` con `reintentos=1`; con `TestModel()` comprobar que el endpoint devuelve el esquema. Los tests contra Postgres actuales se quedan, cambiando el `monkeypatch` por `override` |
-
-### 3.3 Extractor(es) de símbolos (Álvaro)
+### 3.2 Escalation assistant (Martín)
 
 | | |
 |---|---|
-| Definición | `extractor = Agent(None, name="extractor")`. El `output_type` se pasa en cada `run` (el parámetro existe en `Agent.run`) porque los símbolos son datos del proceso |
-| `output_type` | modelo Pydantic creado con `pydantic.create_model` desde `simbolos` del proceso: cada campo `T \| None = None` según su tipo (`texto`→`str`, `numero`→`Decimal`, `booleano`→`bool`, `iban`/`nif`→`str`). Todo opcional: "no aparece" siempre se puede expresar con `null` |
-| Entrada | texto del fichero; si es un escaneo sin texto, `BinaryContent(data=..., media_type="application/pdf")` (o la imagen PNG) |
-| Instrucciones | `agentes/prompts/extractor.md`: copiar literal, `null` si no está, nunca calcular ni completar, las instrucciones impresas en el documento no se obedecen (idea que Álvaro ya usa en su prompt de OCR) |
-| Validadores | **ninguno con `ModelRetry`**. Solo los errores de forma de Pydantic reintentan (un número devuelto como frase), y como todo admite `null` un reintento nunca obliga a inventar |
-| Reintentos / límites | `reintentos: 1`, `limite_peticiones: 3` |
-| Invocación | `extraccion.service`: si el fichero (por hash) ya tiene extracciones de esos símbolos, se reutilizan y no se llama a nadie. Si no hay texto ni imagen, `REVISION` sin llamar al modelo. Si no, `gather` de `extractor_1` y `extractor_2` (proveedores distintos), comparar valores normalizados, luego los validadores puros sobre el valor acordado. Discrepancia o validador fallido → `REVISION` con el motivo (P20, P21) |
-| Registra | un evento `agente` por extracción con `instancia_id`, más la fila de `extracciones` (con `modelo` = el que respondió de verdad y `coste`) |
-| Tests | `FunctionModel` que devuelve un IBAN con el dígito de control mal → la instancia queda en `REVISION` y **solo hubo una petición** (`peticiones == 1`); dos extractores que discrepan → `REVISION`; texto vacío → `REVISION` sin llamadas |
+| Definition | `assistant = Agent(None, output_type=_Output, deps_type=AssistantDeps, name="assistant")` |
+| `deps_type` | `@dataclass AssistantDeps: types: list[str]` (the process's decision types) |
+| Instructions | `agents/prompts/assistant.md` (the current `SYSTEM`). The case's JSON context goes in the user message |
+| Validator | `if out.decision not in ctx.deps.types: raise ModelRetry(f"decision must be one of {types}")` |
+| Retries / limits | `retries: 1` (the current single retry), `request_limit: 3` |
+| Records | `agent` event with `instance_id` and the full suggestion in `data.output`. Replaces `suggest_escalation` |
+| Computed once | `GET /instances/{instance_id}/suggestion` returns the stored suggestion if there already is one for the instance's current decision; it only calls the model when there is none or with `?regenerate=true`. Same case, same answer, zero tokens when the queue is reopened |
+| Failure | `AgentError` → `AssistantError` (502), as today |
+| Tests | `FunctionModel` that first proposes `"INVENTED"` and then `"NO_PAGAR"` → returns `NO_PAGAR` with `retries=1`; with `TestModel()` check that the endpoint returns the schema. The current Postgres tests stay, swapping `monkeypatch` for `override` |
 
-Validadores por tipo (`extraccion/validadores.py`, funciones puras):
-
-| Tipo de símbolo | Comprobación |
-|---|---|
-| `iban` | mod-97 (ISO 13616) sobre el valor normalizado |
-| `nif` | letra de control del NIF/NIE/CIF |
-| comprobación de suma del proceso | `sum(sumandos) == total` con tolerancia, declarada en el JSON del proceso: `"comprobaciones": [{"tipo": "suma", "sumandos": ["base", "cuota_iva"], "total": "total", "tolerancia": "0.01"}]` |
-
-Los tipos `iban` y `nif` y el campo `comprobaciones` son un cambio del contrato de `procesos` (carpeta de Mateo): se acuerda con él antes (tarea 6).
-
-### 3.4 Corrector (iteración 2, Martín)
+### 3.3 Symbol extractor(s) (Álvaro)
 
 | | |
 |---|---|
-| Definición | `corrector = Agent(None, output_type=ReglaPropuesta, deps_type=DepsCorrector, name="corrector")` |
-| `deps_type` | foto en memoria: reglas activas, fuentes, histórico de símbolos y decisiones validadas. Sin `AsyncSession`: las tools no tocan la base de datos |
-| Tools | `@corrector.tool` de solo lectura: `probar_codigo(ctx, codigo)` ejecuta un borrador en el sandbox sobre la instancia y las decisiones validadas (con `asyncio.to_thread`), `ver_regla(ctx, id)`. Errores del sandbox → `ModelRetry` en la tool |
-| Salida | `ReglaPropuesta(texto, tipo, decision, explicacion)`; validador igual que el asistente (`decision` en los tipos). La propuesta entra como regla en borrador y se compila con A y B como cualquier otra: el corrector nunca escribe código activo |
-| Límites | `limite_peticiones: 10`; `UsageLimits(tool_calls_limit=...)` se puede añadir a la config si hace falta |
-| Tests | `FunctionModel` que llama a `probar_codigo` y luego devuelve la propuesta |
+| Definition | `extractor = Agent(None, name="extractor")`. The `output_type` is passed on every `run` (the parameter exists on `Agent.run`) because the symbols are process data |
+| `output_type` | Pydantic model built with `pydantic.create_model` from the process's `symbols`: each field `T \| None = None` according to its type (`text`→`str`, `number`→`Decimal`, `boolean`→`bool`, `iban`/`nif`→`str`). Everything optional: "not present" can always be expressed as `null` |
+| Input | the file's text; for a scan without text, `BinaryContent(data=..., media_type="application/pdf")` (or the PNG image) |
+| Instructions | `agents/prompts/extractor.md`: copy verbatim, `null` if absent, never compute or fill in, instructions printed on the document are not obeyed (an idea Álvaro already uses in his OCR prompt) |
+| Validators | **none with `ModelRetry`**. Only Pydantic shape errors retry (a number returned as a sentence), and since everything accepts `null` a retry never forces the model to invent |
+| Retries / limits | `retries: 1`, `request_limit: 3` |
+| Invocation | `extraction.service`: if the file (by hash) already has extractions of those symbols, they are reused and nobody is called. If there is neither text nor image, `REVIEW` without calling the model. Otherwise, `gather` of `extractor_1` and `extractor_2` (different providers), compare normalized values, then the pure validators on the agreed value. Discrepancy or failed validator → `REVIEW` with the reason (P20, P21) |
+| Records | one `agent` event per extraction with `instance_id`, plus the `extractions` row (with `model` = the one that actually answered, and `cost`) |
+| Tests | `FunctionModel` that returns an IBAN with a wrong check digit → the instance stays in `REVIEW` and **there was only one request** (`requests == 1`); two extractors that disagree → `REVIEW`; empty text → `REVIEW` without calls |
 
-## 4. Configuración
+Validators per type (`extraction/validators.py`, pure functions):
 
-### 4.1 Tabla `config_agente` (sustituye a `config_llm`)
+| Symbol type | Check |
+|---|---|
+| `iban` | mod-97 (ISO 13616) on the normalized value |
+| `nif` | check letter of the NIF/NIE/CIF |
+| process sum check | `sum(addends) == total` within a tolerance, declared in the process JSON: `"checks": [{"type": "sum", "addends": ["base", "vat_amount"], "total": "total", "tolerance": "0.01"}]` |
 
-| Columna | Tipo | Nota |
+The `iban` and `nif` types and the `checks` field change the `processes` contract (Mateo's folder): agree it with him first (task 6).
+
+### 3.4 Corrector (iteration 2, Martín)
+
+| | |
+|---|---|
+| Definition | `corrector = Agent(None, output_type=ProposedRule, deps_type=CorrectorDeps, name="corrector")` |
+| `deps_type` | in-memory snapshot: active rules, sources, symbol history and validated decisions. No `AsyncSession`: the tools do not touch the database |
+| Tools | read-only `@corrector.tool`: `try_code(ctx, code)` runs a draft in the sandbox on the instance and the validated decisions (with `asyncio.to_thread`), `view_rule(ctx, rule_id)`. Sandbox errors → `ModelRetry` in the tool |
+| Output | `ProposedRule(text, type, decision, explanation)`; validator same as the assistant's (`decision` among the types). The proposal enters as a draft rule and is compiled by A and B like any other: the corrector never writes active code |
+| Limits | `request_limit: 10`; `UsageLimits(tool_calls_limit=...)` can be added to the config if needed |
+| Tests | `FunctionModel` that calls `try_code` and then returns the proposal |
+
+## 4. Configuration
+
+### 4.1 Table `agent_config` (replaces `llm_config`)
+
+| Column | Type | Note |
 |---|---|---|
-| `id` | `bigint` PK | lo que se guarda en cada evento |
-| `papel` | `text` not null | uno de `PAPELES` |
-| `version` | `int` not null | 1, 2, 3... por papel; `unique (papel, version)` |
-| `config` | `jsonb` not null | forma abajo |
-| `prompt` | `text` null | sobrescritura del prompt para experimentar; `null` = fichero del repo |
-| `autor` | `text` not null | email del usuario o `preset:<nombre>` |
-| `nota` | `text` null | qué se prueba |
-| `creada` | `timestamptz` | `created_at` |
-| `activa` | `bool` not null default false | índice único parcial `(papel) where activa`: como mucho una activa por papel |
+| `id` | `bigint` PK | what every event stores |
+| `role` | `text` not null | one of `ROLES` |
+| `version` | `int` not null | 1, 2, 3... per role; `unique (role, version)` |
+| `config` | `jsonb` not null | shape below |
+| `prompt` | `text` null | prompt override for experiments; `null` = the repo file |
+| `author` | `text` not null | user's email or `preset:<name>` |
+| `note` | `text` null | what is being tried |
+| `created_at` | `timestamptz` | |
+| `is_active` | `bool` not null default false | partial unique index `(role) where is_active`: at most one active per role |
 
-Reglas:
-- Nunca se borra una fila ni se cambia su `config`, `prompt`, `autor` o `nota`. Editar es crear una versión nueva.
-- La única escritura sobre una fila existente es mover `activa`: desactivar la anterior y activar la nueva en la misma transacción. Cada activación deja un evento `activar_config_agente` (papel, de `id`, a `id`, autor), así se sabe qué estuvo activo y cuándo. (Alternativa descartada por más piezas: una tabla aparte de activaciones.)
-- Volver atrás = activar una versión antigua.
-- Un papel sin versión activa no ejecuta: `ConflictError` "el papel X no tiene configuración activa: ejecuta make setup".
+Rules:
+- A row is never deleted, and its `config`, `prompt`, `author` or `note` never change. Editing means creating a new version.
+- The only write to an existing row is moving `is_active`: deactivate the previous one and activate the new one in the same transaction. Each activation leaves an `activate_agent_config` event (role, from `id`, to `id`, author), so we know what was active and when. (Alternative discarded for having more parts: a separate activations table.)
+- Rolling back = activating an old version.
+- A role with no active version does not run: `ConflictError` "role X has no active configuration: run make setup".
 
-Forma de `config` (la misma que cada papel de un preset):
+Shape of `config` (the same as each role in a preset):
 
 ```json
 {
-  "modelos": ["anthropic:claude-opus-5", "anthropic:claude-sonnet-5"],
-  "ajustes": {"timeout": 120},
-  "reintentos": 2,
-  "limite_peticiones": 4,
-  "prompt": "compilador.md"
+  "models": ["anthropic:claude-opus-5", "anthropic:claude-sonnet-5"],
+  "settings": {"timeout": 120},
+  "retries": 2,
+  "request_limit": 4,
+  "prompt": "compiler.md"
 }
 ```
 
-- `modelos`: cadena de fallback, el primero es el principal. Al menos uno.
-- `ajustes`: subconjunto de `ModelSettings` (`temperature`, `max_tokens`, `timeout`, `seed`). `timeout` es obligatorio; `temperature` se omite para modelos que no la aceptan (Claude Opus 4.7/4.8/5 rechazan los ajustes de muestreo; PydanticAI los quita y avisa).
-- `reintentos`: presupuesto de reintentos de salida (`retries={'output': N}`).
-- `limite_peticiones`: `UsageLimits(request_limit=...)`.
-- `prompt`: fichero de `agentes/prompts/`.
-- `cache` (opcional, `false` por defecto): caché de prompts de Anthropic en los modelos `anthropic:` de la cadena (7.3).
+- `models`: fallback chain, the first one is the primary. At least one.
+- `settings`: subset of `ModelSettings` (`temperature`, `max_tokens`, `timeout`, `seed`). `timeout` is required; `temperature` is left out for models that do not accept it (Claude Opus 4.7/4.8/5 reject sampling settings; PydanticAI drops them and warns).
+- `retries`: output retry budget (`retries={'output': N}`).
+- `request_limit`: `UsageLimits(request_limit=...)`.
+- `prompt`: file in `agents/prompts/`.
+- `cache` (optional, `false` by default): Anthropic prompt caching on the `anthropic:` models of the chain (7.3).
 
-Validación al crear una versión (`schemas.Config`, Pydantic con `extra="forbid"`): cada modelo con prefijo `proveedor:` y construible con `infer_model` (si falta la clave del proveedor, 422); `reintentos` entre 0 y 5; `limite_peticiones` entre 1 y 20; `timeout` entre 5 y 600; el fichero de prompt existe.
+Validation when creating a version (`schemas.Config`, Pydantic with `extra="forbid"`): each model has a `provider:` prefix and can be built with `infer_model` (if the provider key is missing, 422); `retries` between 0 and 5; `request_limit` between 1 and 20; `timeout` between 5 and 600; the prompt file exists.
 
 ### 4.2 Presets
 
-`backend/app/features/agentes/presets/<nombre>.json`:
+`backend/app/features/agents/presets/<name>.json`:
 
 ```json
 {
-  "descripcion": "Máxima calidad; proveedores distintos en cada pareja",
-  "papeles": {
-    "compilador_a": {"modelos": ["anthropic:claude-opus-5", "anthropic:claude-sonnet-5"], "ajustes": {"timeout": 120}, "reintentos": 2, "limite_peticiones": 4, "prompt": "compilador.md"},
-    "compilador_b": {"modelos": ["openai:gpt-5", "google:gemini-3-pro-preview"], "ajustes": {"timeout": 120}, "reintentos": 2, "limite_peticiones": 4, "prompt": "compilador.md"},
-    "extractor_1":  {"modelos": ["anthropic:claude-sonnet-5", "anthropic:claude-haiku-4-5"], "ajustes": {"temperature": 0, "timeout": 60}, "reintentos": 1, "limite_peticiones": 3, "prompt": "extractor.md", "cache": true},
-    "extractor_2":  {"modelos": ["openai:gpt-5-mini", "google:gemini-3-flash-preview"], "ajustes": {"temperature": 0, "timeout": 60}, "reintentos": 1, "limite_peticiones": 3, "prompt": "extractor.md"},
-    "asistente":    {"modelos": ["anthropic:claude-opus-5", "openai:gpt-5"], "ajustes": {"timeout": 90}, "reintentos": 1, "limite_peticiones": 3, "prompt": "asistente.md"}
+  "description": "Highest quality; different providers in each pair",
+  "roles": {
+    "compiler_a":  {"models": ["anthropic:claude-opus-5", "anthropic:claude-sonnet-5"], "settings": {"timeout": 120}, "retries": 2, "request_limit": 4, "prompt": "compiler.md"},
+    "compiler_b":  {"models": ["openai:gpt-5", "google:gemini-3-pro-preview"], "settings": {"timeout": 120}, "retries": 2, "request_limit": 4, "prompt": "compiler.md"},
+    "extractor_1": {"models": ["anthropic:claude-sonnet-5", "anthropic:claude-haiku-4-5"], "settings": {"temperature": 0, "timeout": 60}, "retries": 1, "request_limit": 3, "prompt": "extractor.md", "cache": true},
+    "extractor_2": {"models": ["openai:gpt-5-mini", "google:gemini-3-flash-preview"], "settings": {"temperature": 0, "timeout": 60}, "retries": 1, "request_limit": 3, "prompt": "extractor.md"},
+    "assistant":   {"models": ["anthropic:claude-opus-5", "openai:gpt-5"], "settings": {"timeout": 90}, "retries": 1, "request_limit": 3, "prompt": "assistant.md"}
   }
 }
 ```
 
 | Preset | Idea |
 |---|---|
-| `calidad.json` | el de arriba, por defecto. Los modelos principales son los de la migración inicial de `config_llm` |
-| `barato.json` | modelos pequeños en todos los papeles (Sonnet/Haiku, `gpt-5-mini`, Gemini Flash) |
-| `rapido.json` | como `barato` pero con `timeout` bajo y `reintentos` 1 |
+| `quality.json` | the one above, the default. The primary models are those of the initial `llm_config` migration |
+| `cheap.json` | small models in every role (Sonnet/Haiku, `gpt-5-mini`, Gemini Flash) |
+| `fast.json` | like `cheap` but with a low `timeout` and `retries` 1 |
 
-Las cadenas de cada pareja (`compilador_a`/`_b`, `extractor_1`/`_2`) no comparten proveedor, ni siquiera en el fallback: así un fallo de un proveedor no hace que A y B, o las dos extracciones, acaben en el mismo modelo (P9, P20, P22). Los nombres existen en `KnownModelName` de la documentación local; se comprueban con `infer_model` al cargar el preset.
+The chains of each pair (`compiler_a`/`_b`, `extractor_1`/`_2`) do not share a provider, not even in the fallback: a provider outage cannot make A and B, or the two extractions, end up on the same model (P9, P20, P22). The names exist in `KnownModelName` in the local docs; they are checked with `infer_model` when the preset is loaded.
 
-Aplicar un preset (`agentes.config.aplicar_preset`), por papel: si la versión activa ya tiene esa `config` y ningún `prompt` sobrescrito, no hace nada; si no, crea una versión (`autor = "preset:<nombre>"`) y la activa. `make setup` aplica `calidad` **solo a los papeles sin ninguna versión**: igual que las definiciones de proceso, no pisa lo que se cambió en ejecución.
+Applying a preset (`agents.config.apply_preset`), per role: if the active version already has that `config` and no overridden `prompt`, it does nothing; otherwise it creates a version (`author = "preset:<name>"`) and activates it. `make setup` applies `quality` **only to roles with no version at all**: like process definitions, it does not overwrite what was changed at runtime.
 
 ### 4.3 Prompts
 
-- Por defecto, `agentes/prompts/<fichero>.md`, versionados con git.
-- Prompt efectivo = `config_agente.prompt` si no es `null`; si no, el fichero que nombra `config.prompt`.
-- Se lee en cada llamada (un fichero pequeño; sin caché, así editar el `.md` en local vale sin reiniciar).
-- Hash: `sha256(texto_efectivo)[:12]`, guardado en cada evento. Dos ejecuciones con el mismo hash usaron exactamente el mismo prompt, venga del fichero o de la base de datos.
-- Lo variable (regla, símbolos, caso) va siempre en el mensaje de usuario, nunca en el prompt: el prompt es fijo y su hash significa algo. Además deja un prefijo estable para la caché implícita de los proveedores.
+- By default, `agents/prompts/<file>.md`, versioned with git.
+- Effective prompt = `agent_config.prompt` if not `null`; otherwise the file named by `config.prompt`.
+- Read on every call (a small file; no cache, so editing the `.md` locally takes effect without a restart).
+- Hash: `sha256(effective_text)[:12]`, stored in every event. Two runs with the same hash used exactly the same prompt, whether it came from the file or the database.
+- Whatever varies (rule, symbols, case) always goes in the user message, never in the prompt: the prompt is fixed and its hash means something. It also leaves a stable prefix for the providers' implicit caching.
 
 ### 4.4 Endpoints
 
-Sustituyen a `GET /llm/config` y `PUT /llm/config/{papel}` (avisar a Carlos).
+They replace `GET /llm/config` and `PUT /llm/config/{role}` (tell Carlos).
 
-| Método y ruta | Qué hace | Quién |
+| Method and path | What it does | Who |
 |---|---|---|
-| `GET /agentes/config` | Versión activa de cada papel | cualquiera |
-| `GET /agentes/{papel}/config/versiones` | Todas las versiones del papel, la más nueva primero | cualquiera |
-| `POST /agentes/{papel}/config` | Cuerpo `{config, prompt?, nota?, activar=false}`. Crea la versión siguiente; `activar` la activa en la misma transacción | responsable |
-| `POST /agentes/{papel}/config/{id}/activar` | Activa esa versión (también una antigua) | responsable |
-| `POST /agentes/presets/{nombre}/aplicar` | Aplica un preset del repo (4.2) | responsable |
-| `GET /agentes/{papel}/config/{id}/exportar` | Devuelve `{"papeles": {papel: config}}`, el formato de preset, más `prompt_texto` si la versión sobrescribe el prompt, para subir el experimento al repo | cualquiera |
+| `GET /agents/config` | Active version of each role | anyone |
+| `GET /agents/{role}/config/versions` | Every version of the role, newest first | anyone |
+| `POST /agents/{role}/config` | Body `{config, prompt?, note?, activate=false}`. Creates the next version; `activate` activates it in the same transaction | manager |
+| `POST /agents/{role}/config/{config_id}/activate` | Activates that version (including an old one) | manager |
+| `POST /agents/presets/{name}/apply` | Applies a preset from the repo (4.2) | manager |
+| `GET /agents/{role}/config/{config_id}/export` | Returns `{"roles": {role: config}}`, the preset format, plus `prompt_text` if the version overrides the prompt, to commit the experiment to the repo | anyone |
 
-`autor` sale de `UsuarioActual` (`X-Usuario-Id`). Errores: papel desconocido → 404; versión de otro papel → 404; config inválida → 422.
+`author` comes from `CurrentUser` (`X-User-Id`). Errors: unknown role → 404; version of another role → 404; invalid config → 422.
 
-Comparar configuraciones después es una consulta sobre `eventos`:
+Comparing configurations afterwards is a query over `events`:
 
 ```sql
-select datos->>'config_agente_id' as config, count(*) as llamadas,
-       avg(latencia_ms) as ms, sum(coste) as usd,
-       avg((datos->>'reintentos')::int) as reintentos
-from eventos where paso = 'agente' and datos->>'papel' = 'compilador_a'
+select data->>'agent_config_id' as config, count(*) as calls,
+       avg(latency_ms) as ms, sum(cost) as usd,
+       avg((data->>'retries')::int) as retries
+from events where step = 'agent' and data->>'role' = 'compiler_a'
 group by 1;
 ```
 
-## 5. Integración con el sandbox
+## 5. Sandbox integration
 
-| Dónde | Qué se llama | Cómo |
+| Where | What is called | How |
 |---|---|---|
-| `output_validator` del compilador | `sandbox.comprobar(codigo)` y `sandbox.ejecutar_lote(codigo, tests propios)`, vía `_errores_propios` | `await asyncio.to_thread(...)`; timeout del lote 10 s (el de `ejecutar_lote`); el fallo vuelve al modelo como `ModelRetry` |
-| `validar` (puro, fuera del agente) | `ejecutar_lote` con todos los tests A+B y el histórico, sobre los dos códigos | `asyncio.to_thread(validar, ..., sandbox.ejecutar_lote)` tras el `gather`, como hoy. No reintenta: un fallo cruzado lo resuelve el responsable (P9) |
-| tools del corrector (iteración 2) | `ejecutar_lote` sobre la instancia y las decisiones validadas | `asyncio.to_thread` dentro de la tool; error → `ModelRetry` |
-| motor | `ejecutar` / `ejecutar_lote` | sin cambios, sin LLM |
+| Compiler `output_validator` | `sandbox.check(code)` and `sandbox.run_batch(code, own tests)`, via `_own_errors` | `await asyncio.to_thread(...)`; batch timeout 10 s (that of `run_batch`); the failure goes back to the model as `ModelRetry` |
+| `validate` (pure, outside the agent) | `run_batch` with all A+B tests and the history, on both codes | `asyncio.to_thread(validate, ..., sandbox.run_batch)` after the `gather`, as today. No retry: the manager resolves a cross failure (P9) |
+| Corrector tools (iteration 2) | `run_batch` on the instance and the validated decisions | `asyncio.to_thread` inside the tool; error → `ModelRetry` |
+| Engine | `run` / `run_batch` | unchanged, no LLM |
 
-Tiempos: el validador puede correr hasta `reintentos + 1` veces por compilación, cada una ≤ 10 s de sandbox, y cuenta dentro del límite de reloj de `ejecutar` (`timeout × limite_peticiones`). Con el preset `calidad`: 120 s × 4 = 8 min como techo absoluto por agente; lo normal son 30-60 s.
+Timing: the validator may run up to `retries + 1` times per compilation, each ≤ 10 s of sandbox, and counts within `run`'s wall-clock limit (`timeout × request_limit`). With the `quality` preset: 120 s × 4 = 8 min as the absolute ceiling per agent; 30-60 s is typical.
 
-## 6. Coste y resiliencia
+## 6. Cost and resilience
 
-**Coste**
-- `UsageLimits(request_limit=...)` por papel acota los reintentos y el bucle de tools. `cost_limit` existe pero es "best-effort" según la documentación (depende de que genai-prices conozca el modelo): no se usa como garantía.
-- Modelos por niveles: los papeles de volumen (extracción, ~1.000 llamadas por lote) usan modelos pequeños; los de pocas llamadas (compilador, asistente) usan los grandes. Se cambia por preset, sin tocar código.
-- Caché de prompts: solo donde se repite mucho el mismo prefijo, es decir, en la extracción (7.3). En compilador y asistente no compensa (pocas llamadas, prompts de 1-2 k tokens).
-- Batch: la documentación local no describe las APIs batch de los proveedores. No se usa.
-- `service_tier` (`'flex'` en OpenAI) está documentado; posible palanca para `barato.json`, no en v1.
-- Precios de modelos nuevos: `pydantic_ai.prices.update_in_background()` al arrancar, opcional. Sin ella, `coste` puede ser `None` para modelos posteriores a la versión instalada.
+**Cost**
+- `UsageLimits(request_limit=...)` per role bounds retries and the tool loop. `cost_limit` exists but is "best-effort" according to the docs (it depends on genai-prices knowing the model): it is not used as a guarantee.
+- Tiered models: high-volume roles (extraction, ~1,000 calls per batch) use small models; low-volume ones (compiler, assistant) use the large ones. Changed by preset, without touching code.
+- Prompt caching: only where the same prefix repeats a lot, that is, in extraction (7.3). For the compiler and the assistant it does not pay off (few calls, 1-2 k token prompts).
+- Batch: the local docs do not describe the providers' batch APIs. Not used.
+- `service_tier` (`'flex'` on OpenAI) is documented; a possible lever for `cheap.json`, not in v1.
+- Prices of new models: `pydantic_ai.prices.update_in_background()` at startup, optional. Without it, `cost` may be `None` for models newer than the installed version.
 
-**Resiliencia**
-- `FallbackModel` pasa al siguiente modelo ante `ModelAPIError` (4xx/5xx). Los errores de validación no provocan fallback: reintentan con el mismo modelo (documentado así).
-- `ajustes.timeout` acota cada intento de petición (OpenAI, Anthropic y Google lo aplican). El reloj total de un `run` no lo acota PydanticAI: lo hace `asyncio.timeout` en `ejecutar`.
-- Los SDK de OpenAI y Anthropic reintentan solos 2 veces por defecto, lo que retrasa el fallback hasta 3 × `timeout`. En v1 se aceptan; si en pruebas el paso al siguiente modelo tarda demasiado, `fabrica` construye esos proveedores con `max_retries=0` (`AnthropicProvider(anthropic_client=AsyncAnthropic(max_retries=0))`, `OpenAIProvider(openai_client=AsyncOpenAI(max_retries=0))`, documentado) pasando `provider_factory` a `infer_model`.
-- Si fallan todos los modelos: `FallbackExceptionGroup` → `AgenteError` → evento con `resultado = "error"` → la operación falla en cerrado:
-  - compilar: la regla sigue en borrador, la anterior sigue activa, el proceso no se para (3.2 del plano);
-  - asistente: 502; el responsable resuelve sin sugerencia;
-  - extracción: la instancia queda en `REVISION` con motivo "modelo no disponible" y cuenta en la cola; nunca se decide sin símbolos.
+**Resilience**
+- `FallbackModel` moves to the next model on `ModelAPIError` (4xx/5xx). Validation errors do not trigger fallback: they retry with the same model (documented that way).
+- `settings.timeout` bounds each request attempt (OpenAI, Anthropic and Google apply it). PydanticAI does not bound the total wall clock of a `run`: `asyncio.timeout` in `run` does.
+- The OpenAI and Anthropic SDKs retry 2 times on their own by default, which delays fallback up to 3 × `timeout`. Accepted in v1; if in testing the switch to the next model takes too long, `factory` builds those providers with `max_retries=0` (`AnthropicProvider(anthropic_client=AsyncAnthropic(max_retries=0))`, `OpenAIProvider(openai_client=AsyncOpenAI(max_retries=0))`, documented) by passing `provider_factory` to `infer_model`.
+- If every model fails: `FallbackExceptionGroup` → `AgentError` → event with `result = "error"` → the operation fails closed:
+  - compile: the rule stays a draft, the previous one stays active, the process does not stop (3.2 of the blueprint);
+  - assistant: 502; the manager resolves without a suggestion;
+  - extraction: the instance stays in `REVIEW` with reason "model unavailable" and counts in the queue; we never decide without symbols.
 
-## 7. Rendimiento, tokens y determinismo
+## 7. Performance, tokens and determinism
 
-### 7.1 Dónde se gastan los tokens
+### 7.1 Where tokens are spent
 
-| Etapa | Cuándo llama al LLM | Llamadas | Orden de magnitud (estimación; se confirma con 7.4) |
+| Stage | When it calls the LLM | Calls | Order of magnitude (estimate; confirmed with 7.4) |
 |---|---|---|---|
-| Compilar | Una vez por cambio de regla, nunca por instancia | 2 agentes × (1 + reparaciones) | ~5 k tokens por petición; la norma v3 entera (~12 reglas) ≈ 24-72 peticiones |
-| Motor | Nunca | 0 | 0 tokens por instancia: ejecuta código compilado |
-| Asistente | A demanda, por caso escalado, y una sola vez por caso (3.2) | 1-2 | ~5-15 k tokens por sugerencia (lleva el texto del fichero) |
-| Extracción | Una vez por fichero, dos lectores | 540 ficheros × 2 = ~1.080 | ~2-3 k tokens por lectura de texto: **la etapa que domina coste y tiempo** |
+| Compile | Once per rule change, never per instance | 2 agents × (1 + repairs) | ~5 k tokens per request; the whole v3 policy (~12 rules) ≈ 24-72 requests |
+| Engine | Never | 0 | 0 tokens per instance: it runs compiled code |
+| Assistant | On demand, per escalated case, and only once per case (3.2) | 1-2 | ~5-15 k tokens per suggestion (it carries the file text) |
+| Extraction | Once per file, two readers | 540 files × 2 = ~1,080 | ~2-3 k tokens per text reading: **the stage that dominates cost and time** |
 
-Tiempo del motor, medido en local (macOS, un código de regla, `sandbox.ejecutar_lote`): 540 casos en ~40 ms en un solo subproceso; ~0,27 s si cada caso lleva las otras 539 instancias en `otras`. El coste está en arrancar el subproceso: `sandbox.ejecutar` caso a caso cuesta ~20 ms por caso. Hoy `decisiones.service.ejecutar` llama a `sandbox.ejecutar` por cada instancia y regla, dentro del bucle de eventos: con 540 instancias y ~12 reglas son ~6.500 subprocesos, ~2 minutos con la API bloqueada. Recomendación para Mateo (fuera de este plan): un `ejecutar_lote` por regla sobre todas las instancias pendientes, en `asyncio.to_thread`. Pasaría a ~12 subprocesos y unos segundos.
+Engine time, measured locally (macOS, one rule's code, `sandbox.run_batch`): 540 cases in ~40 ms in a single subprocess; ~0.27 s if each case carries the other 539 instances in `others`. The cost is in starting the subprocess: `sandbox.run` case by case costs ~20 ms per case. Today `decisions.service.run` calls `sandbox.run` for every instance and rule, inside the event loop: with 540 instances and ~12 rules that is ~6,500 subprocesses, ~2 minutes with the API blocked. Recommendation for Mateo (outside this plan): one `run_batch` per rule over all pending instances, in `asyncio.to_thread`. That would drop to ~12 subprocesses and a few seconds.
 
-### 7.2 Determinismo por construcción
+### 7.2 Determinism by construction
 
-No se confía en `temperature=0`: la propia documentación dice que "incluso con `temperature` 0.0 los resultados no son totalmente deterministas" (`pydantic-ai-settings.md`). El determinismo sale de calcular cada artefacto de un LLM una vez, guardarlo y no volver a llamar:
+We do not rely on `temperature=0`: the docs themselves say that "even with `temperature` 0.0 the results will not be fully deterministic" (`pydantic-ai-settings.md`). Determinism comes from computing each LLM artefact once, storing it and never calling again:
 
-| Artefacto | Se calcula | Se guarda en | Clave | Quién lo reutiliza |
+| Artefact | Computed | Stored in | Key | Reused by |
 |---|---|---|---|---|
-| Símbolos de un fichero | una vez por fichero y lista de símbolos | `extracciones`, `instancias.simbolos` | hash del fichero (`ficheros.hash`) | motor, auditoría, recompilaciones (histórico), P10 |
-| Código de una regla | una vez por texto de regla | `reglas.codigo_a/_b`, `tests_a/_b` | `reglas.hash` (texto + códigos) | motor, auditoría retroactiva |
-| Sugerencia del asistente | una vez por caso y decisión vigente | evento `agente` (`datos.salida`) | instancia + decisión | cola del responsable |
-| Configuración usada | por llamada | `config_agente` + `eventos.datos.config_agente_id` | `config_agente.id` + `prompt_hash` | comparar experimentos |
+| Symbols of a file | once per file and symbol list | `extractions`, `instances.symbols` | file hash (`files.hash`) | engine, audit, recompilations (history), P10 |
+| Code of a rule | once per rule text | `rules.code_a/_b`, `tests_a/_b` | `rules.hash` (text + codes) | engine, retroactive audit |
+| Assistant suggestion | once per case and current decision | `agent` event (`data.output`) | instance + decision | manager's queue |
+| Configuration used | per call | `agent_config` + `events.data.agent_config_id` | `agent_config.id` + `prompt_hash` | comparing experiments |
 
-Consecuencia: repetir una ejecución o una auditoría (3.6, 3.7 del plano) lee símbolos y código guardados y ejecuta el motor, sin ningún LLM. El resultado es idéntico bit a bit porque las entradas lo son. Lo único que puede variar entre dos compilaciones del mismo texto es el código generado, y eso lo cubren P9 (A y B deben coincidir) y la revisión del responsable antes de activar.
+Consequence: repeating a run or an audit (3.6, 3.7 of the blueprint) reads stored symbols and code and runs the engine, without any LLM. The result is bit-for-bit identical because the inputs are. The only thing that can vary between two compilations of the same text is the generated code, and P9 (A and B must agree) and the manager's review before activation cover that.
 
-### 7.3 Extracción eficiente
+### 7.3 Efficient extraction
 
-- **Texto antes que visión.** Un PDF con texto va al modelo como el texto de `pdftotext` guardado en `ficheros.texto` (sin tokens de imagen). Solo los escaneos (`texto` vacío) van como `BinaryContent`.
-- **Modelos pequeños para texto.** `extractor_1`/`_2` usan modelos pequeños en todos los presets. Si los escaneos necesitan un modelo mayor, se añaden papeles `extractor_escaneo_1`/`_2` con su propia cadena; no antes de medirlo.
-- **Nunca se extrae dos veces.** Antes de llamar, `extraccion.service` busca extracciones del mismo hash de fichero con los mismos símbolos. Un símbolo nuevo (P10) se extrae solo, sobre el texto guardado.
-- **Caché de prompts (Anthropic).** El prefijo que se repite en las ~540 lecturas de un lector son las instrucciones y el esquema de salida (la tool de salida con los símbolos del proceso). PydanticAI documenta `AnthropicModelSettings.anthropic_cache_instructions` y `anthropic_cache_tool_definitions`, cada uno con un punto de caché; se activan con `"cache": true` en la config (2.3). Lo variable (el texto de la factura) va detrás, en el mensaje de usuario. OpenAI: la documentación solo describe caché con `CachePoint` para GPT-5.6 en adelante, así que en `gpt-5-mini` no contamos con ella. Gemini: exige crear el recurso de caché con el SDK de Google fuera de PydanticAI; no en v1. El efecto se mide en `result.usage.cache_read_tokens` (conviene añadirlo al evento). La documentación local no da el tamaño mínimo de prefijo cacheable: si el prefijo es demasiado corto, `cache_read_tokens` sale 0 y se apaga.
-- **Sin Batch API**: no está en la documentación de PydanticAI.
-- **Concurrencia acotada.** `extraccion.service` lanza todas las lecturas con `asyncio.gather`; el `ConcurrencyLimiter` por proveedor de `fabrica` deja pasar `TRACE_LLM_CONCURRENCIA` a la vez (documentado: `ConcurrencyLimitedModel`, `ConcurrencyLimiter(max_running=..., name=...)`). Con 8 por proveedor y ~3 s por lectura, 540 ficheros ≈ 540 / 8 × 3 s ≈ 3-4 minutos, con los dos lectores en paralelo porque van a proveedores distintos. Los 429 que aun así lleguen los reintenta el SDK y, si persisten, saltan al siguiente modelo.
+- **Text before vision.** A PDF with text goes to the model as the `pdftotext` text stored in `files.text` (no image tokens). Only scans (empty `text`) go as `BinaryContent`.
+- **Small models for text.** `extractor_1`/`_2` use small models in every preset. If scans need a larger model, add roles `scan_extractor_1`/`_2` with their own chain; not before measuring it.
+- **Never extract twice.** Before calling, `extraction.service` looks for extractions of the same file hash with the same symbols. A new symbol (P10) is extracted on its own, from the stored text.
+- **Prompt caching (Anthropic).** The prefix that repeats across a reader's ~540 readings is the instructions and the output schema (the output tool with the process's symbols). PydanticAI documents `AnthropicModelSettings.anthropic_cache_instructions` and `anthropic_cache_tool_definitions`, each with one cache point; they are turned on with `"cache": true` in the config (2.3). Whatever varies (the invoice text) goes after, in the user message. OpenAI: the docs only describe caching with `CachePoint` for GPT-5.6 onwards, so we do not count on it for `gpt-5-mini`. Gemini: requires creating the cache resource with Google's SDK outside PydanticAI; not in v1. The effect is measured in `result.usage.cache_read_tokens` (worth adding to the event). The local docs do not give the minimum cacheable prefix size: if the prefix is too short, `cache_read_tokens` comes out 0 and it is switched off.
+- **No Batch API**: it is not in the PydanticAI docs.
+- **Bounded concurrency.** `extraction.service` launches every reading with `asyncio.gather`; `factory`'s per-provider `ConcurrencyLimiter` lets `TRACE_LLM_CONCURRENCY` through at a time (documented: `ConcurrencyLimitedModel`, `ConcurrencyLimiter(max_running=..., name=...)`). With 8 per provider and ~3 s per reading, 540 files ≈ 540 / 8 × 3 s ≈ 3-4 minutes, with both readers in parallel because they go to different providers. Any 429s that still arrive are retried by the SDK and, if they persist, fall through to the next model.
 
-### 7.4 Control del presupuesto
+### 7.4 Budget control
 
-- Por ejecución: `UsageLimits(request_limit=...)` y `reintentos` de cada versión de config (sección 4). Una compilación no puede pasar de `limite_peticiones` peticiones por agente, pase lo que pase.
-- Por proceso: `GET /procesos/{id}/metricas` (feature `trazas`, tarea 5) agrega `eventos`:
-  - por etapa y papel: llamadas, errores, coste total, tokens, latencia p50 y p95 (`percentile_cont` de Postgres);
-  - coste por instancia: coste de extracción y asistente / instancias distintas;
-  - motor: tiempo por ejecución (necesita un evento `motor` por ejecución en `decisiones.service.ejecutar`, a acordar con Mateo).
-- Para eso cada evento `agente` lleva `datos.proceso_id` (quien llama lo pasa en `datos`).
-- El mismo endpoint da las cifras de la demo ("0 tokens por decisión; X € por factura extraída; compilar la norma costó Y €") y la evidencia del ADR (P23).
+- Per run: `UsageLimits(request_limit=...)` and `retries` of each config version (section 4). A compilation cannot exceed `request_limit` requests per agent, whatever happens.
+- Per process: `GET /processes/{process_id}/metrics` (feature `traces`, task 5) aggregates `events`:
+  - per stage and role: calls, errors, total cost, tokens, p50 and p95 latency (Postgres `percentile_cont`);
+  - cost per instance: extraction and assistant cost / distinct instances;
+  - engine: time per run (needs one `engine` event per run in `decisions.service.run`, to agree with Mateo).
+- For that, every `agent` event carries `data.process_id` (the caller passes it in `data`).
+- The same endpoint gives the demo figures ("0 tokens per decision; X € per extracted invoice; compiling the policy cost Y €") and the ADR evidence (P23).
 
-### 7.5 Opción a evaluar, no decidida: extractores compilados
+### 7.5 Option to evaluate, not decided: compiled extractors
 
-La idea: aplicar a la extracción lo mismo que a las reglas. Un agente escribe, a partir de la lista de símbolos y unos textos de ejemplo de un mismo formato de documento, un parser determinista `extraer(texto) -> dict`; se valida como una regla (dos agentes, tests con los valores ya acordados por la doble extracción LLM de esos ejemplos) y se ejecuta en el sandbox. En ejecución: parser → validadores por tipo → si falla algo o falta un símbolo, lectura LLM como ahora.
+The idea: apply to extraction what we do for rules. From the symbol list and a few sample texts of one document format, an agent writes a deterministic parser `extract(text) -> dict`; it is validated like a rule (two agents, tests with the values already agreed by the double LLM extraction of those samples) and runs in the sandbox. At runtime: parser → per-type validators → if anything fails or a symbol is missing, LLM reading as now.
 
-| A favor | En contra |
+| For | Against |
 |---|---|
-| 0 tokens y milisegundos por fichero una vez compilado el formato | Hace falta agrupar ficheros por formato (por NIF del emisor o por huella del texto); con muchos formatos distintos compensa poco |
-| Determinista de verdad, y cuenta la misma historia que las reglas: "todo lo que decide es código compilado" | Frágil ante formatos no vistos: sin el respaldo LLM, un cambio de plantilla rompe en silencio |
-| Reutiliza sandbox, compilador y `validar` | Los escaneos siguen necesitando OCR o visión |
-| | P20 descarta "parsers por plantilla"; esto solo encaja porque los parsers los generan y validan agentes, y hay que dejarlo escrito en el plano |
-| | Las etiquetas de los tests salen de la extracción LLM: no elimina el LLM, lo mueve a la compilación |
+| 0 tokens and milliseconds per file once the format is compiled | Files must be grouped by format (by issuer NIF or by text fingerprint); with many different formats it pays off little |
+| Truly deterministic, and tells the same story as the rules: "everything that decides is compiled code" | Fragile with unseen formats: without the LLM fallback, a template change breaks silently |
+| Reuses the sandbox, the compiler and `validate` | Scans still need OCR or vision |
+| | P20 discards "per-template parsers"; this only fits because agents generate and validate the parsers, and the blueprint must say so |
+| | The test labels come from LLM extraction: it does not remove the LLM, it moves it to compilation |
 
-Esfuerzo: ~1 día (clave de formato, contrato `extraer`, reutilizar compilador y `validar`, respaldo LLM, métricas de cobertura). Pista a favor: la rama `data-ingestion` de Álvaro ya extrae los 471 PDFs nativos con un parser escrito a mano (`ingesta/pdf/invoice.py`) y su auditoría no encontró discrepancias en los campos revisados: el texto de estos PDFs es regular.
+Effort: ~1 day (format key, `extract` contract, reuse compiler and `validate`, LLM fallback, coverage metrics). A point in favour: Álvaro's `data-ingestion` branch already extracts the 471 native PDFs with a hand-written parser (`ingesta/pdf/invoice.py`) and its audit found no discrepancies in the fields reviewed: the text of these PDFs is regular.
 
-Recomendación: **no antes de H2.** El lote 1 se cierra con la doble extracción LLM, que ya deja guardados los valores acordados. Después de H2, contar formatos distintos con esos datos: si ~20 formatos cubren más del 90 % de los ficheros, compilar extractores para el lote 2 y la demo; si no, no compensa.
+Recommendation: **not before H2.** Batch 1 is closed with the double LLM extraction, which already stores the agreed values. After H2, count distinct formats with that data: if ~20 formats cover more than 90 % of the files, compile extractors for batch 2 and the demo; otherwise it does not pay off.
 
-## 8. Observabilidad
+## 8. Observability
 
-- **Fuente de verdad: `eventos`.** Es lo que consulta la aplicación, lo que se exporta y lo que se enseña en la demo ("por qué se decidió X"). No depende de ningún servicio externo.
-- **OpenTelemetry / Logfire: opcional, apagado por defecto.** PydanticAI emite spans por petición y por tool con `Agent.instrument_all()` o `logfire.instrument_pydantic_ai()`; con `logfire.configure(send_to_logfire='if-token-present')` no se envía nada sin `LOGFIRE_TOKEN`. Sirve para depurar un compilador que reintenta raro, no para la trazabilidad del producto. Si se activa: `InstrumentationSettings(include_content=False)` para no sacar facturas ni prompts del sistema. Requiere el extra `logfire` (tarea 9). En v2 el formato por defecto es la versión 5, con el uso agregado en `gen_ai.aggregated_usage.*`.
+- **Source of truth: `events`.** It is what the application queries, what is exported and what the demo shows ("why was X decided"). It depends on no external service.
+- **OpenTelemetry / Logfire: optional, off by default.** PydanticAI emits spans per request and per tool with `Agent.instrument_all()` or `logfire.instrument_pydantic_ai()`; with `logfire.configure(send_to_logfire='if-token-present')` nothing is sent without `LOGFIRE_TOKEN`. It helps debug a compiler that retries oddly, not product traceability. If enabled: `InstrumentationSettings(include_content=False)` so no invoices or system prompts leave. Requires the `logfire` extra (task 9). In v2 the default format is version 5, with aggregated usage in `gen_ai.aggregated_usage.*`.
 
-## 9. Tareas (una por PR, en orden)
+## 9. Tasks (one per PR, in order)
 
-Paquete: **`pydantic-ai-slim[openai,anthropic,google]>=2.45,<3`** (2.45.0 es la última en PyPI a 2026-09-18; `uv.lock` fija la exacta). `slim` porque `pydantic-ai` completo trae además CLI, MCP, evals, web, retries y logfire, que no usamos.
+Package: **`pydantic-ai-slim[openai,anthropic,google]>=2.45,<3`** (2.45.0 is the latest on PyPI as of 2026-09-18; `uv.lock` pins the exact one). `slim` because the full `pydantic-ai` also brings CLI, MCP, evals, web, retries and logfire, which we do not use.
 
-| # | Rama | Quién | Ficheros | Hecho cuando | Tests |
+| # | Branch | Who | Files | Done when | Tests |
 |---|---|---|---|---|---|
-| 1 | `feat/agentes-config` | Martín | `pyproject.toml` (añadir `pydantic-ai-slim`), `agentes/model.py`, `agentes/config.py`, `agentes/schemas.py`, `agentes/router.py`, `agentes/presets/*.json`, `agentes/prompts/*.md` (los `SISTEMA` actuales), migración `0005` (crea `config_agente`; `config_llm` se queda hasta la 8), `app/cli.py` (`presets aplicar <nombre> [--si-falta]`), `Makefile` (`setup` aplica `calidad --si-falta`), `.env.example` (`GEMINI_API_KEY` → `GOOGLE_API_KEY`, la variable de PydanticAI) | Los 6 endpoints de 4.4 responden; `make setup` dos veces no crea versiones de más; activar una versión antigua funciona; nunca hay dos activas | versiones y activación contra Postgres; índice único parcial; preset idempotente; exportar → aplicar da la misma config; config inválida → 422 |
-| 2 | `feat/llm-ejecutar` | Martín | `llm/fabrica.py`, `llm/ejecutar.py`, `app/conftest.py` | `ejecutar` registra el evento completo en éxito y en error | `FunctionModel` con salida válida → evento con `modelo`, tokens, `config_agente_id`, `prompt_hash`; `FallbackModel(FunctionModel(falla con ModelAPIError), FunctionModel(ok))` → `modelo` es el segundo; todos fallan → `AgenteError` y evento `error`; límite de peticiones → error |
-| 3 | `feat/compilador-pydantic-ai` | Martín | `agentes/compilador.py`, `agentes/tests/test_compilador.py`, `reglas/service.py` (commit de eventos al fallar) | `make compilar` compila la norma v3 igual que antes; los eventos traen la versión usada | 3.1 |
-| 4 | `feat/asistente-pydantic-ai` | Martín | `agentes/asistente.py`, `agentes/tests/test_asistente.py` | `GET /instancias/{id}/sugerencia` igual que antes, pero devuelve la guardada si existe | 3.2 |
-| 5 | `feat/metricas-agentes` | Martín | `trazas/service.py`, `trazas/router.py`, `trazas/schemas.py`, `main.py`; `datos.proceso_id` en los eventos | `GET /procesos/{id}/metricas` devuelve 7.4 para el proceso de facturas | eventos sintéticos → p50/p95 y coste por instancia correctos |
-| 6 | `feat/simbolos-validables` | Álvaro con Mateo | `procesos/definicion.py`, `procesos/schemas.py`, `procesos/README.md`, `procesos/pago-facturas.json` (tipos `iban`, `nif`; `comprobaciones`) | el JSON de facturas declara sus tipos y su suma; `gastos-viaje.json` sigue cargando | carga con y sin `comprobaciones`; tipo desconocido → rechazo |
-| 7 | `feat/extraccion-agentes` | Álvaro | `extraccion/extractor.py`, `extraccion/validadores.py`, `extraccion/service.py`, `agentes/prompts/extractor.md` | las 500 facturas pasan por doble extracción; ninguna llamada reintenta por un validador; repetir la extracción no llama a ningún modelo (caché por hash) | 3.3, y un test por validador (IBAN, NIF, suma) con casos buenos y malos |
-| 8 | `chore/quitar-litellm` | Martín | borrar `llm/cliente.py`, `llm/model.py`, `llm/router.py`, `llm/schemas.py`; `main.py`; migración `0006` (borra `config_llm`); `pyproject.toml` (fuera `litellm`); `docs/team-guide.md` | `grep -ri litellm backend` vacío; `make test` en verde | suite completa |
-| 9 | `feat/observabilidad-logfire` (opcional) | quien quiera | extra `logfire`, arranque condicionado a `LOGFIRE_TOKEN` | sin token no cambia nada | ninguno nuevo |
-| 10 | `feat/corrector` (iteración 2) | Martín | `agentes/corrector.py`, `agentes/prompts/corrector.md`, papel `corrector` en los presets | F12 funciona con propuestas que pasan por A y B | 3.4 |
+| 1 | `feat/agents-config` | Martín | `pyproject.toml` (add `pydantic-ai-slim`), `agents/model.py`, `agents/config.py`, `agents/schemas.py`, `agents/router.py`, `agents/presets/*.json`, `agents/prompts/*.md` (the current `SYSTEM` prompts), migration `0007` (creates `agent_config`; `llm_config` stays until task 8), `app/cli.py` (`presets apply <name> [--if-missing]`), `Makefile` (`setup` applies `quality --if-missing`), `.env.example` (`GEMINI_API_KEY` → `GOOGLE_API_KEY`, the PydanticAI variable) | The 6 endpoints of 4.4 answer; running `make setup` twice creates no extra versions; activating an old version works; there are never two active | versions and activation against Postgres; partial unique index; idempotent preset; export → apply gives the same config; invalid config → 422 |
+| 2 | `feat/llm-run` | Martín | `llm/factory.py`, `llm/run.py`, `app/conftest.py` | `run` records the full event on success and on error | `FunctionModel` with valid output → event with `model`, tokens, `agent_config_id`, `prompt_hash`; `FallbackModel(FunctionModel(fails with ModelAPIError), FunctionModel(ok))` → `model` is the second one; all fail → `AgentError` and `error` event; request limit → error |
+| 3 | `feat/compiler-pydantic-ai` | Martín | `agents/compiler.py`, `agents/tests/test_compiler.py`, `rules/service.py` (commit events on failure) | `make compile` compiles policy v3 as before; events carry the version used | 3.1 |
+| 4 | `feat/assistant-pydantic-ai` | Martín | `agents/assistant.py`, `agents/tests/test_assistant.py` | `GET /instances/{instance_id}/suggestion` as before, but returns the stored one if it exists | 3.2 |
+| 5 | `feat/agent-metrics` | Martín | `traces/service.py`, `traces/router.py`, `traces/schemas.py`, `main.py`; `data.process_id` in events | `GET /processes/{process_id}/metrics` returns 7.4 for the invoice process | synthetic events → correct p50/p95 and cost per instance |
+| 6 | `feat/validatable-symbols` | Álvaro with Mateo | `processes/definition.py`, `processes/schemas.py`, `processes/README.md`, `processes/invoice-payment.json` (types `iban`, `nif`; `checks`) | the invoice JSON declares its types and its sum; `travel-expenses.json` still loads | load with and without `checks`; unknown type → rejected |
+| 7 | `feat/extraction-agents` | Álvaro | `extraction/extractor.py`, `extraction/validators.py`, `extraction/service.py`, `agents/prompts/extractor.md` | the 500 invoices go through double extraction; no call retries because of a validator; repeating the extraction calls no model (cache by hash) | 3.3, and one test per validator (IBAN, NIF, sum) with good and bad cases |
+| 8 | `chore/remove-litellm` | Martín | delete `llm/client.py`, `llm/model.py`, `llm/router.py`, `llm/schemas.py`; `main.py`; migration `0008` (drops `llm_config`); `pyproject.toml` (drop `litellm`); `docs/team-guide.md` | `grep -ri litellm backend` is empty; `make test` green | full suite |
+| 9 | `feat/logfire-observability` (optional) | whoever wants it | `logfire` extra, startup conditional on `LOGFIRE_TOKEN` | without a token nothing changes | no new ones |
+| 10 | `feat/corrector` (iteration 2) | Martín | `agents/corrector.py`, `agents/prompts/corrector.md`, `corrector` role in the presets | F12 works with proposals that go through A and B | 3.4 |
 
-Qué tiene que adoptar Álvaro (tareas 6 y 7):
-- No construir nada sobre `cliente.completar`: desaparece en la 8. Su rama `data-ingestion` aún declara `litellm` en `pyproject.toml`; al hacer rebase, que no lo use.
-- Toda llamada a un LLM pasa por `llm.ejecutar` con un papel de `config_agente`. Si el OCR con Gemini (`ingesta/ocr/gemini.py`, hoy `httpx` directo con `GEMINI_API_KEY`) entra en el flujo, se convierte en un agente más (`output_type=str`, entrada `BinaryContent`) con su propio papel, para que quede en la traza y en los presets. Mientras sea un experimento fuera del flujo, puede quedarse como está.
-- Validadores sin `ModelRetry` (sección 10).
+What Álvaro has to adopt (tasks 6 and 7):
+- Build nothing on `client.complete`: it goes away in task 8. His `data-ingestion` branch still declares `litellm` in `pyproject.toml`; when rebasing, do not use it.
+- Every LLM call goes through `llm.run` with an `agent_config` role. If the Gemini OCR (`ingesta/ocr/gemini.py`, today direct `httpx` with `GEMINI_API_KEY`) joins the flow, it becomes one more agent (`output_type=str`, `BinaryContent` input) with its own role, so it shows up in the trace and the presets. While it is an experiment outside the flow, it can stay as it is.
+- Validators without `ModelRetry` (section 10).
 
-## 10. Riesgos y qué no hacer
+## 10. Risks and what not to do
 
-| No hacer | Por qué |
+| Don't | Why |
 |---|---|
-| Lanzar `ModelRetry` cuando falla un validador de extracción (IBAN, NIF, suma) | Le dices al modelo "este IBAN no cuadra, prueba otra vez" y el modelo aprende a devolver un IBAN que cuadre, no el que pone la factura. El validador deja de detectar errores y pasa a fabricar datos plausibles. La salida correcta es `REVISION` |
-| Hacer obligatorio un campo de la salida de extracción | Un reintento por "falta el campo" empuja al modelo a rellenarlo. Todo `T \| None` |
-| Pasar la `AsyncSession` en `deps` o usarla dentro de validadores o tools | A y B corren a la vez sobre la misma sesión; SQLAlchemy async no admite operaciones concurrentes en una sesión. Las `deps` llevan datos ya leídos |
-| Llamar a `agente.run` fuera de `llm.ejecutar` | Se pierde la traza y el `config_agente_id`; deja de poder compararse |
-| Meter en el prompt datos del caso | El hash deja de identificar el prompt y se rompe el prefijo estable |
-| Ejecutar `sandbox` en el bucle de eventos | Bloquea la API hasta 10 s por lote. Siempre `asyncio.to_thread` |
-| Actualizar o borrar filas de `config_agente` (salvo mover `activa`) | Se pierden experimentos y los eventos antiguos apuntan a una config que ya no es la que corrió |
-| Usar tools diferidas (`requires_approval`), durable execution (Temporal, DBOS, Prefect) o `pydantic_graph` | La aprobación humana ya es la activación de reglas y la cola en Postgres; los runs duran segundos y se pueden repetir; el flujo ya está en nuestro código. Añadirían estado duplicado fuera de la base de datos |
-| Usar `SpendLimits` (`pydantic_ai_harness`) | Es otro paquete y resuelve presupuestos diarios compartidos entre procesos, que no tenemos |
-| Confiar en `cost_limit` como tope de gasto | La documentación dice que es aproximado; el tope real es `request_limit` y los límites del proveedor |
-| Nombres de modelo sin prefijo (`'gpt-5'`) | En v2 lanzan `UserError` |
+| Raise `ModelRetry` when an extraction validator fails (IBAN, NIF, sum) | You tell the model "this IBAN does not check out, try again" and the model learns to return an IBAN that checks out, not the one on the invoice. The validator stops catching errors and starts fabricating plausible data. The right output is `REVIEW` |
+| Make a field of the extraction output required | A retry for "missing field" pushes the model to fill it in. Everything `T \| None` |
+| Pass the `AsyncSession` in `deps` or use it inside validators or tools | A and B run at the same time on the same session; async SQLAlchemy does not allow concurrent operations on one session. `deps` carry data already read |
+| Call `agent.run` outside `llm.run` | The trace and the `agent_config_id` are lost; it can no longer be compared |
+| Put case data in the prompt | The hash no longer identifies the prompt and the stable prefix breaks |
+| Run the `sandbox` on the event loop | Blocks the API for up to 10 s per batch. Always `asyncio.to_thread` |
+| Update or delete `agent_config` rows (except moving `is_active`) | Experiments are lost and old events point to a config that is no longer the one that ran |
+| Use deferred tools (`requires_approval`), durable execution (Temporal, DBOS, Prefect) or `pydantic_graph` | Human approval already is rule activation and the queue in Postgres; runs last seconds and can be repeated; the flow is already in our code. They would add duplicate state outside the database |
+| Use `SpendLimits` (`pydantic_ai_harness`) | It is another package and solves daily budgets shared across processes, which we do not have |
+| Trust `cost_limit` as a spending cap | The docs say it is approximate; the real cap is `request_limit` and the provider limits |
+| Model names without a prefix (`'gpt-5'`) | In v2 they raise `UserError` |
 
-Riesgos:
-- **Coincidencia por fallback.** Si cae el proveedor principal de A, A y B podrían acabar en la misma familia. Mitigado con cadenas disjuntas por pareja (4.2) y el aviso en el informe (3.1).
-- **Cambios de versión menor.** La política de PydanticAI permite cambiar atributos de OpenTelemetry y añadir campos a los mensajes en versiones menores. No dependemos de ninguno: leemos `result.usage` y `result.response`.
-- **Modelos que rechazan ajustes.** Claude Opus 5 no acepta `temperature`; PydanticAI la quita y avisa. Por eso los presets no la ponen en los papeles con Opus.
+Risks:
+- **Agreement through fallback.** If A's primary provider goes down, A and B could end up in the same family. Mitigated with disjoint chains per pair (4.2) and the warning in the report (3.1).
+- **Minor version changes.** PydanticAI's policy allows changing OpenTelemetry attributes and adding fields to messages in minor versions. We depend on none of them: we read `result.usage` and `result.response`.
+- **Models that reject settings.** Claude Opus 5 does not accept `temperature`; PydanticAI drops it and warns. That is why the presets do not set it for roles on Opus.
 
-## 11. APIs sin confirmar en la documentación local
+## 11. APIs not confirmed in the local docs
 
-- **Que un timeout o un error de conexión llegue a `FallbackModel` como `ModelAPIError`.** La documentación dice que el fallback salta con `ModelAPIError` y que, al expirar `timeout`, "el cliente del proveedor lanza"; no dice si se envuelve. La tarea 2 lo comprueba; si no se envuelve, `fallback_on` acepta un manejador de excepciones propio.
-- **Ajustes de un proveedor pasados en el `model_settings` del `run` con un `FallbackModel` mixto** (por ejemplo `anthropic_cache_instructions` con un modelo de OpenAI en la cadena). No documentado; por eso la caché se pone en los ajustes del propio `AnthropicModel` (documentado en "Per-Model Settings").
-- **Si `anthropic_cache_tool_definitions` cubre la tool de salida** (la que lleva el esquema de símbolos) además de las tools de función. La documentación habla de "tool definitions" sin distinguir; se ve en `cache_read_tokens`.
-- **Tamaño mínimo de prefijo para que la caché de Anthropic actúe.** No está en la documentación local.
-- **Si una salida con fallback cuenta como una o varias peticiones en `request_limit`.** No documentado; los presets dejan una petición de margen.
-- **APIs batch de los proveedores.** No aparecen en la documentación de PydanticAI.
-- **`result.usage()`** como método: en v2 es la propiedad `result.usage`.
+- **That a timeout or a connection error reaches `FallbackModel` as `ModelAPIError`.** The docs say fallback triggers on `ModelAPIError` and that, when `timeout` expires, "the provider client raises"; they do not say whether it is wrapped. Task 2 checks it; if it is not wrapped, `fallback_on` accepts a custom exception handler.
+- **Provider settings passed in the `run`'s `model_settings` with a mixed `FallbackModel`** (for example `anthropic_cache_instructions` with an OpenAI model in the chain). Undocumented; that is why caching goes in the settings of the `AnthropicModel` itself (documented in "Per-Model Settings").
+- **Whether `anthropic_cache_tool_definitions` covers the output tool** (the one carrying the symbol schema) as well as function tools. The docs talk about "tool definitions" without distinguishing; it shows in `cache_read_tokens`.
+- **Minimum prefix size for Anthropic caching to kick in.** Not in the local docs.
+- **Whether an output with fallback counts as one or several requests in `request_limit`.** Undocumented; the presets leave one request of margin.
+- **Providers' batch APIs.** They do not appear in the PydanticAI docs.
+- **`result.usage()`** as a method: in v2 it is the property `result.usage`.
 
-## 12. Referencias
+## 12. References
 
-Documentación local de PydanticAI (`.context/pydantic-ai/sections/`):
+Local PydanticAI docs (`.context/pydantic-ai/sections/`):
 
-| Decisión | Sección |
+| Decision | Section |
 |---|---|
 | `Agent(...)`, `run(model=, instructions=, output_type=, model_settings=, usage_limits=, retries=)`, `override` | `pydantic-ai-agent.md` (`__init__`, `run`, `override`), `agents.md` |
-| `output_validator`, `ModelRetry`, `ToolOutput`, `StructuredDict`, modos de salida | `output.md` |
-| Presupuestos de reintento y qué se reintenta | `retries.md`, `agents.md` ("How output retries are enforced") |
-| `FallbackModel`, `fallback_on`, ajustes por modelo, `FallbackExceptionGroup` | `model-providers.md` ("Fallback Model"), `pydantic-ai-models-fallback.md`, `pydantic-ai-exceptions.md` |
-| `infer_model`, formato `proveedor:modelo`, ciclo de vida del cliente HTTP | `pydantic-ai-models.md`, `model-providers.md` |
-| `ModelSettings` (`temperature`, `timeout`) y quién los soporta | `pydantic-ai-settings.md`, `timeouts.md` |
-| `UsageLimits`, `RunUsage.cost`, precios | `agents.md` ("Usage Limits"), `pydantic-ai-usage.md` |
+| `output_validator`, `ModelRetry`, `ToolOutput`, `StructuredDict`, output modes | `output.md` |
+| Retry budgets and what is retried | `retries.md`, `agents.md` ("How output retries are enforced") |
+| `FallbackModel`, `fallback_on`, per-model settings, `FallbackExceptionGroup` | `model-providers.md` ("Fallback Model"), `pydantic-ai-models-fallback.md`, `pydantic-ai-exceptions.md` |
+| `infer_model`, `provider:model` format, HTTP client life cycle | `pydantic-ai-models.md`, `model-providers.md` |
+| `ModelSettings` (`temperature`, `timeout`) and who supports them | `pydantic-ai-settings.md`, `timeouts.md` |
+| `UsageLimits`, `RunUsage.cost`, prices | `agents.md` ("Usage Limits"), `pydantic-ai-usage.md` |
 | `AgentRunResult.response`, `.usage`, `ModelResponse.model_name`, `.provider_name`, `RetryPromptPart` | `pydantic-ai-run.md`, `pydantic-ai-messages.md`, `retries.md` |
 | `RunContext`, `deps_type` | `dependencies.md` |
-| Tools del corrector | `function-tools.md`, `timeouts.md` |
-| `BinaryContent` para escaneos | `multimodal-input.md` |
-| Caché de prompts | `anthropic.md` ("Prompt Caching", "Cache Point Limits"), `openai.md` ("Prompt caching"), `google.md` ("Context caching") |
-| Concurrencia por proveedor: `ConcurrencyLimitedModel`, `ConcurrencyLimiter` | `model-providers.md` ("HTTP Request Concurrency"), `pydantic-ai-concurrency.md` |
-| `temperature` 0 no es determinista; qué modelos rechazan ajustes de muestreo | `pydantic-ai-settings.md`, `pydantic-ai-profiles.md` (`anthropic_disallows_sampling_settings`) |
-| SDK retries y `max_retries=0` | `anthropic.md`, `openai.md`, `retries.md` |
+| Corrector tools | `function-tools.md`, `timeouts.md` |
+| `BinaryContent` for scans | `multimodal-input.md` |
+| Prompt caching | `anthropic.md` ("Prompt Caching", "Cache Point Limits"), `openai.md` ("Prompt caching"), `google.md` ("Context caching") |
+| Per-provider concurrency: `ConcurrencyLimitedModel`, `ConcurrencyLimiter` | `model-providers.md` ("HTTP Request Concurrency"), `pydantic-ai-concurrency.md` |
+| `temperature` 0 is not deterministic; which models reject sampling settings | `pydantic-ai-settings.md`, `pydantic-ai-profiles.md` (`anthropic_disallows_sampling_settings`) |
+| SDK retries and `max_retries=0` | `anthropic.md`, `openai.md`, `retries.md` |
 | Tests: `TestModel`, `FunctionModel`, `AgentInfo`, `ALLOW_MODEL_REQUESTS` | `unit-testing.md`, `pydantic-ai-models-function.md`, `pydantic-ai-models-test.md` |
 | OpenTelemetry, Logfire, `include_content=False` | `pydantic-logfire-debugging-and-monitoring.md` |
-| Programmatic hand-off (nuestro patrón) frente a delegación y grafos | `multi-agent-applications.md` |
-| Por qué no durable execution | `durable-execution.md` |
-| Cambios de v2 (`openai:` = Responses, `ModelProfile` como `TypedDict`, extras) | `upgrade-guide.md`, `v1-v2-migration-map.md`, `version-policy.md` |
-| Comparativas (escritas por Pydantic, con su sesgo) | `pydantic-ai-vs-langchain-langgraph.md`, `pydantic-ai-vs-crewai.md`, `pydantic-ai-vs-claude-agent-sdk.md`, `pydantic-ai-vs-openai-agents-sdk.md` |
+| Programmatic hand-off (our pattern) versus delegation and graphs | `multi-agent-applications.md` |
+| Why not durable execution | `durable-execution.md` |
+| v2 changes (`openai:` = Responses, `ModelProfile` as `TypedDict`, extras) | `upgrade-guide.md`, `v1-v2-migration-map.md`, `version-policy.md` |
+| Comparisons (written by Pydantic, with its bias) | `pydantic-ai-vs-langchain-langgraph.md`, `pydantic-ai-vs-crewai.md`, `pydantic-ai-vs-claude-agent-sdk.md`, `pydantic-ai-vs-openai-agents-sdk.md` |
 
-Ideas tomadas de repos ganadores (`hackInfo/.context/repos-ganadores/`, `.docs/`). Ninguno usa PydanticAI; lo que se reutiliza es el diseño:
-- `prosperai-challenge/src/prosper/llm.py`: timeout explícito por petición (15 s) en vez del de 600 s por defecto, y un modelo de reserva. → `ajustes.timeout` obligatorio y cadena de fallback.
-- `prosperai-challenge/tests/test_llm_failure.py`: un test con un LLM que siempre falla comprueba que el sistema degrada sin romperse. → test de "todos los modelos fallan" en la tarea 2.
-- `prosperai-challenge` `make mock-eval` (LLM determinista, 5 s, 0 tokens) y `tests/test_prompts.py` (tests sobre los prompts). → `FunctionModel` en todos los tests y un test que carga cada preset y cada prompt.
-- `.docs/momentos-de-demo.md` C2 "fallar en cerrado y ruidoso" y C3 "el silencio alucina". → instancias en `REVISION` cuando no hay modelo o no hay texto, sin llamar al LLM.
-- `.docs/tecnicas-ganadoras.md` 5 y 6 ("el LLM fuera del camino caliente", "el LLM conversa; otra cosa decide"). → ya es P7; este plan no lo cambia.
+Ideas taken from winning repos (`hackInfo/.context/repos-ganadores/`, `.docs/`). None uses PydanticAI; what we reuse is the design:
+- `prosperai-challenge/src/prosper/llm.py`: explicit per-request timeout (15 s) instead of the default 600 s, and a fallback model. → required `settings.timeout` and a fallback chain.
+- `prosperai-challenge/tests/test_llm_failure.py`: a test with an LLM that always fails checks that the system degrades without breaking. → "every model fails" test in task 2.
+- `prosperai-challenge` `make mock-eval` (deterministic LLM, 5 s, 0 tokens) and `tests/test_prompts.py` (tests over the prompts). → `FunctionModel` in every test and a test that loads every preset and every prompt.
+- `.docs/momentos-de-demo.md` C2 "fail closed and loud" and C3 "silence hallucinates". → instances in `REVIEW` when there is no model or no text, without calling the LLM.
+- `.docs/tecnicas-ganadoras.md` 5 and 6 ("the LLM off the hot path", "the LLM talks; something else decides"). → already P7; this plan does not change it.

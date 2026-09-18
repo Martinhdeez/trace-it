@@ -1,142 +1,142 @@
-# trace-it: guía del equipo
+# trace-it: team guide
 
-Cómo trabajamos en el repo de trace-it: ramas, commits, estructura del backend y cómo arrancarlo.
-Qué construimos y por qué: `docs/application-blueprint.md`. Quién hace qué: `docs/mvp-plan.md`.
+How we work in the trace-it repo: branches, commits, backend structure and how to run it.
+What we are building and why: `docs/application-blueprint.md`. Who does what: `docs/mvp-plan.md`.
 
-## Arranque rápido
+## Quick start
 
-Requisitos: Docker y [uv](https://docs.astral.sh/uv/).
+Requirements: Docker and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-make setup      # .env, Postgres + backend, migraciones y proceso "Invoice payment" con sus usuarios
+make setup      # .env, Postgres + backend, migrations and the "Invoice payment" process with its users
 ```
-API en http://localhost:8000/docs (con el 8000 ocupado: `BACKEND_PORT=8001 make setup`). Entra con `martin@trace-it.local` (`manager`).
+API at http://localhost:8000/docs (if port 8000 is taken: `BACKEND_PORT=8001 make setup`). Sign in as `martin@trace-it.local` (`manager`).
 
-| Comando | Qué hace |
+| Command | What it does |
 |---|---|
-| `make compile` | Compila las reglas en borrador (necesita claves de LLM en `.env`) |
-| `make erp` | Arranca el ERP del reto |
-| `make test` | Tests del backend contra el Postgres local |
-| `make down` | Para los contenedores (los datos se quedan) |
-| `make reset-db` | **Borra la base de datos** |
+| `make compile` | Compiles the draft rules (needs LLM keys in `.env`) |
+| `make erp` | Starts the challenge ERP |
+| `make test` | Backend tests against the local Postgres |
+| `make down` | Stops the containers (the data stays) |
+| `make reset-db` | **Deletes the database** |
 
-Los procesos son ficheros JSON en `processes/` (formato en `processes/README.md`). `make setup` se puede repetir: no duplica nada ni toca reglas activas.
+Processes are JSON files in `processes/` (format in `processes/README.md`). `make setup` can be repeated: it duplicates nothing and does not touch active rules.
 
 ## 1. Git
 
-### Ramas
-| Rama | Para qué | Quién escribe |
+### Branches
+| Branch | What for | Who writes to it |
 |---|---|---|
-| `main` | Versión estable, la que se enseña | Solo se une desde `dev` cuando todo funciona |
-| `dev` | Integración: aquí se juntan todas las funcionalidades | Solo por pull request |
-| `feat/<funcionalidad>` | Una funcionalidad nueva | Una persona (o pareja) |
-| `fix/<problema>` | Arreglo | Quien lo arregla |
-| `docs/<tema>` | Solo documentación | Cualquiera |
+| `main` | Stable version, the one we show | Only merged from `dev` when everything works |
+| `dev` | Integration: every feature comes together here | Only through pull requests |
+| `feat/<feature>` | A new feature | One person (or a pair) |
+| `fix/<problem>` | A fix | Whoever fixes it |
+| `docs/<topic>` | Documentation only | Anyone |
 
-Nombres cortos, en minúsculas y con guiones: `feat/cliente-erp`, `feat/compilador-reglas`, `fix/iva-redondeo`.
+Short, lowercase, hyphenated names: `feat/erp-client`, `feat/rule-compiler`, `fix/vat-rounding`.
 
-### Flujo
-1. Partir siempre de `dev` actualizado:
+### Flow
+1. Always start from an up-to-date `dev`:
    ```bash
    git switch dev && git pull
-   git switch -c feat/cliente-erp
+   git switch -c feat/erp-client
    ```
-2. Commits pequeños y frecuentes (ver formato abajo).
-3. Antes de abrir el PR, traer lo último de `dev` y comprobar que todo pasa:
+2. Small, frequent commits (see the format below).
+3. Before opening the PR, bring in the latest `dev` and check that everything passes:
    ```bash
    git fetch && git rebase origin/dev
    cd backend && uv run ruff check . && uv run ruff format --check . && uv run pytest
    ```
-4. Subir la rama y abrir un pull request contra `dev`:
+4. Push the branch and open a pull request against `dev`:
    ```bash
-   git push -u origin feat/cliente-erp
+   git push -u origin feat/erp-client
    gh pr create --base dev --fill
    ```
-5. Otra persona revisa y aprueba. Se une con **squash merge**, así cada funcionalidad queda en `dev` como un solo commit.
-6. Borrar la rama tras unirla.
+5. Someone else reviews and approves. It is merged with **squash merge**, so each feature lands in `dev` as a single commit.
+6. Delete the branch after merging.
 
-### Reglas
-- Nunca hacer push directo a `dev` ni a `main`.
-- Nunca `git push --force` sobre ramas compartidas. En tu propia rama, solo `--force-with-lease`.
-- Nada de secretos en el repo: las claves van en `.env`, que no se sube. Ver `.env.example`.
-- Un PR = una funcionalidad. Si crece mucho, se parte.
-- Si tocas un contrato compartido (modelo, esquema o firma de otro módulo), avisa en el grupo antes.
+### Rules
+- Never push directly to `dev` or `main`.
+- Never `git push --force` on shared branches. On your own branch, only `--force-with-lease`.
+- No secrets in the repo: keys go in `.env`, which is not committed. See `.env.example`.
+- One PR = one feature. If it grows too much, split it.
+- If you touch a shared contract (a model, schema or signature of another module), tell the group first.
 
-### Formato de commit
-Conventional Commits, en inglés, en imperativo:
+### Commit format
+Conventional Commits, in English, in the imperative:
 ```
-feat(reglas): add cross-test runner for compiled rules
-fix(erp): retry on ORA-00600 before renewing token
+feat(rules): add cross-test runner for compiled rules
+fix(sources): retry on ORA-00600 before renewing token
 docs: add team guide
-test(motor): cover priority when several rules fire
+test(decisions): cover priority when several rules fire
 chore: bump pydantic-ai
 ```
-Tipos: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`. El ámbito entre paréntesis es la carpeta de la feature.
+Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`. The scope in parentheses is the feature folder.
 
-## 2. Estructura del backend
+## 2. Backend structure
 
-Organizado **por funcionalidad**, no por tipo de fichero. Todo lo de una funcionalidad vive en su carpeta.
+Organized **by feature**, not by file type. Everything for a feature lives in its folder.
 
 ```
 backend/
-  pyproject.toml          # dependencias (uv)
-  alembic/                # migraciones de base de datos
+  pyproject.toml          # dependencies (uv)
+  alembic/                # database migrations
   app/
-    main.py               # crea la app FastAPI y monta los routers
-    models.py             # importa todos los modelos (lo necesita Alembic)
-    core/                 # infraestructura: configuración, base de datos
-    common/               # utilidades compartidas: errores
+    main.py               # creates the FastAPI app and mounts the routers
+    models.py             # imports every model (Alembic needs it)
+    core/                 # infrastructure: configuration, database
+    common/               # shared utilities: errors
     features/
-      users/              # usuarios y usuario actual (cabecera X-User-Id)
-      processes/          # procesos, símbolos, tipos de decisión
-      ingestion/          # ficheros e instancias, extracción de texto
-      sources/            # fuentes de verdad: hojas de cálculo y sistemas externos (ERP)
-      extraction/         # símbolos con doble extracción LLM
-      rules/              # reglas: alta, estados, activación
-      agents/             # agentes (compilador A/B, asistente), sandbox, config por versiones, presets y prompts
-      decisions/          # motor, histórico, auditoría, colas, exportar
-      traces/             # eventos de traza
-      llm/                # runtime de PydanticAI: modelo desde la config, ejecución y traza
+      users/              # users and current user (X-User-Id header)
+      processes/          # processes, symbols, decision types
+      ingestion/          # files and instances, text extraction
+      sources/            # sources of truth: spreadsheets and external systems (ERP)
+      extraction/         # symbols with double LLM extraction
+      rules/              # rules: creation, statuses, activation
+      agents/             # agents (compiler A/B, assistant), sandbox, versioned config, presets and prompts
+      decisions/          # engine, history, audit, queues, export
+      traces/             # trace events
+      llm/                # PydanticAI runtime: model from config, run and trace
 ```
 
-### Dentro de cada funcionalidad
-| Fichero | Qué contiene |
+### Inside each feature
+| File | What it holds |
 |---|---|
-| `model.py` | Tablas (SQLAlchemy) |
-| `schemas.py` | Entrada y salida de la API (Pydantic) |
-| `service.py` | Lógica de negocio. Recibe la sesión de base de datos |
-| `router.py` | Endpoints. Finos: validan, llaman al servicio y devuelven |
-| `tests/` | Tests de esa funcionalidad (`test_*.py`) |
-| otros | Piezas propias, con nombre claro: `engine.py`, `sandbox.py`, `erp.py`… |
+| `model.py` | Tables (SQLAlchemy) |
+| `schemas.py` | API input and output (Pydantic) |
+| `service.py` | Business logic. Receives the database session |
+| `router.py` | Endpoints. Thin: validate, call the service and return |
+| `tests/` | That feature's tests (`test_*.py`) |
+| others | Feature-specific pieces with clear names: `engine.py`, `sandbox.py`, `erp.py`… |
 
-Reglas:
-- Un router **no** hace consultas SQL: llama al servicio.
-- Una funcionalidad puede importar el `model.py` o el `service.py` de otra, pero nunca su `router.py`.
-- Los errores se lanzan con las clases de `app/common/exceptions.py` (`NotFoundError`, `ConflictError`…). La API los convierte en respuestas JSON.
-- Lo que aún no está hecho lanza `NotImplementedYetError` (la API responde 501). Así el contrato existe y el frontend puede trabajar contra él.
-- Todo el código va en inglés (identificadores, base de datos, API, mensajes, prompts): ver `docs/CONVENTIONS.md` y su glosario.
+Rules:
+- A router does **not** run SQL queries: it calls the service.
+- A feature may import another feature's `model.py` or `service.py`, but never its `router.py`.
+- Errors are raised with the classes in `app/common/exceptions.py` (`NotFoundError`, `ConflictError`…). The API turns them into JSON responses.
+- Whatever is not done yet raises `NotImplementedYetError` (the API answers 501). That way the contract exists and the frontend can work against it.
+- All code is in English (identifiers, database, API, messages, prompts): see `docs/CONVENTIONS.md` and its glossary.
 
-### Agentes (LLM)
-Todos los agentes usan PydanticAI v2. Arquitectura, configuración por versiones y tareas: `docs/agents-plan.md`.
-- Toda llamada a un LLM pasa por `features/llm/ejecutar.py`, con un papel de `config_agente`: así queda en la traza con su versión de configuración, coste y latencia.
-- Los prompts son ficheros en `features/agents/prompts/`. Los datos del caso van en el mensaje, nunca en el prompt.
-- En la extracción, un validador que falla manda la instancia a `REVIEW`; nunca se devuelve al modelo con `ModelRetry`.
-- Tests sin red: `FunctionModel`/`TestModel` con `agente.override(...)`.
-- **Antes de escribir código de PydanticAI, consulta `.context/pydantic-ai/`** (empieza por `START-HERE.md` y `SECTIONS.md`, y abre solo la sección que necesites). Vale para personas y para asistentes de código: la API cambió mucho en la v2 y lo que recuerda un modelo suele ser de la v1. `llms-full.txt` (5,5 MB, la documentación entera) no está en el repo: descárgalo de https://ai.pydantic.dev/llms-full.txt si lo necesitas para buscar.
+### Agents (LLM)
+Every agent uses PydanticAI v2. Architecture, versioned configuration and tasks: `docs/agents-plan.md`.
+- Every LLM call goes through `features/llm/run.py`, with an `agent_config` role: that way it lands in the trace with its configuration version, cost and latency.
+- Prompts are files in `features/agents/prompts/`. Case data goes in the message, never in the prompt.
+- In extraction, a failing validator sends the instance to `REVIEW`; it is never fed back to the model with `ModelRetry`.
+- Tests without network: `FunctionModel`/`TestModel` with `agent.override(...)`.
+- **Before writing PydanticAI code, check `.context/pydantic-ai/`** (start with `START-HERE.md` and `SECTIONS.md`, and open only the section you need). This applies to people and to coding assistants: the API changed a lot in v2 and what a model remembers is usually v1. `llms-full.txt` (5.5 MB, the whole documentation) is not in the repo: download it from https://ai.pydantic.dev/llms-full.txt if you need it for searching.
 
-## 3. Arrancar en local
+## 3. Running locally
 
-Requisitos: Docker y [uv](https://docs.astral.sh/uv/).
+Requirements: Docker and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-cp .env.example .env              # pon tus claves de LLM
-docker compose up --build         # Postgres + backend en http://localhost:8000
+cp .env.example .env              # add your LLM keys
+docker compose up --build         # Postgres + backend at http://localhost:8000
 ```
-- Documentación de la API: http://localhost:8000/docs
-- Las migraciones se aplican solas al arrancar el backend.
-- Si el puerto 8000 está ocupado: `BACKEND_PORT=8001 docker compose up --build`.
+- API docs: http://localhost:8000/docs
+- Migrations are applied automatically when the backend starts.
+- If port 8000 is taken: `BACKEND_PORT=8001 docker compose up --build`.
 
-Trabajar sin Docker para el backend (más rápido para tests):
+Working on the backend without Docker (faster for tests):
 ```bash
 docker compose up db -d
 cd backend
@@ -147,26 +147,26 @@ uv run pytest
 uv run ruff check . && uv run ruff format .
 ```
 
-ERP del reto (en otra terminal):
+Challenge ERP (in another terminal):
 ```bash
 cd .context/500-sombras-de-alberto && make erp
 ```
 
-### Cambiar la base de datos
-1. Edita o crea el `model.py` de tu funcionalidad. Si la tabla es nueva, impórtala en `app/models.py`.
-2. Genera la migración y **revísala** antes de subirla:
+### Changing the database
+1. Edit or create your feature's `model.py`. If the table is new, import it in `app/models.py`.
+2. Generate the migration and **review it** before pushing:
    ```bash
-   uv run alembic revision --autogenerate -m "add campo x a reglas"
+   uv run alembic revision --autogenerate -m "add column x to rules"
    ```
-3. Si dos personas generan migraciones a la vez, habrá dos "heads". Se resuelve con `uv run alembic merge heads` y se avisa en el grupo.
+3. If two people generate migrations at the same time, there will be two "heads". Resolve it with `uv run alembic merge heads` and tell the group.
 
-## 4. Quién toca qué
-| Persona | Carpetas |
+## 4. Who touches what
+| Person | Folders |
 |---|---|
-| Martín | `features/agents/` (compilador, sandbox, asistente, config de agentes), `features/llm/` |
-| Mateo | `features/rules/`, `features/decisions/` (motor, auditoría, API), `features/processes/`, `features/users/` |
-| Álvaro | `features/ingestion/`, `features/sources/` (Excel, ERP), `features/extraction/` |
+| Martín | `features/agents/` (compiler, sandbox, assistant, agent config), `features/llm/` |
+| Mateo | `features/rules/`, `features/decisions/` (engine, audit, API), `features/processes/`, `features/users/` |
+| Álvaro | `features/ingestion/`, `features/sources/` (workbook, ERP), `features/extraction/` |
 | Carlos | `frontend/` |
 | Varsovia | `docs/`, ADRs, demo |
 
-Si necesitas cambiar algo en la carpeta de otra persona, habla antes con ella.
+If you need to change something in someone else's folder, talk to them first.

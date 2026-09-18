@@ -1,59 +1,59 @@
-# Tareas de Mateo: motor de decisiones y ciclo de vida de las reglas
+# Mateo's tasks: decision engine and rule life cycle
 
-## Antes de empezar
-- Parte de `dev` una vez unido el PR del esqueleto (`feat/esqueleto-backend`): `git switch dev && git pull`.
-- Lee `docs/team-guide.md` (git y estructura) y de `docs/application-blueprint.md`: 3.6, 3.7, 3.8, P3, P7, P14, P15, P18, P19, P21.
+## Before you start
+- Branch from `dev` once the skeleton PR (`feat/esqueleto-backend`) is merged: `git switch dev && git pull`.
+- Read `docs/team-guide.md` (git and structure) and, from `docs/application-blueprint.md`: 3.6, 3.7, 3.8, P3, P7, P14, P15, P18, P19, P21.
 
-## Tu zona
+## Your area
 `backend/app/features/rules/`, `features/decisions/`, `features/processes/`, `features/users/`.
-No tocas `features/agents/` (Martín) ni `features/ingestion/`, `extraction/`, `sources/` (Álvaro).
+You do not touch `features/agents/` (Martín) or `features/ingestion/`, `extraction/`, `sources/` (Álvaro).
 
-## Contrato que usas de Martín
+## Contract you use from Martín
 ```python
 agents.sandbox.run(code, instance, sources, others) -> {"fires": bool, "reason": str}
 ```
-Lanza excepción ante cualquier error. Hasta que esté hecho, en tus tests usa un ejecutor falso (una función que recibe el código y devuelve el resultado).
+It raises an exception on any error. Until it is done, use a fake runner in your tests (a function that takes the code and returns the result).
 
-## Tareas (en orden, cada una en su rama y su PR a `dev`)
+## Tasks (in order, each on its own branch with its own PR into `dev`)
 
 ### 1. `feat/motor` — `features/decisions/engine.py`
-Función pura, sin base de datos ni LLM:
+Pure function, no database and no LLM:
 ```python
 decide(rules, priorities: dict[str, int], default: str, escalate: str,
        instance: dict, sources: dict, others: list[dict], run) -> Verdict
 ```
-- Ejecuta **todas** las reglas activas, cada una con `code_a` y `code_b`.
-- Si las dos versiones discrepan o alguna falla: `REVIEW` con motivo. Nunca decide sin esa regla.
-- Si no salta ninguna: `default`. Si saltan varias: gana la de mayor prioridad.
-- El veredicto incluye el resultado de cada regla (`rule_id`, `hash`, `fires`, `reason`) y el hash del conjunto de reglas.
-- Tests: ninguna salta; varias saltan y gana la prioridad; discrepancia A/B a `REVIEW`; excepción a `REVIEW`.
+- Runs **every** active rule, each with `code_a` and `code_b`.
+- If the two versions disagree or either fails: `REVIEW` with a reason. It never decides without that rule.
+- If none fires: `default`. If several fire: the highest priority wins.
+- The verdict includes the result of each rule (`rule_id`, `hash`, `fires`, `reason`) and the hash of the rule set.
+- Tests: none fires; several fire and priority wins; A/B disagreement to `REVIEW`; exception to `REVIEW`.
 
-### 2. `feat/decisiones-api` — servicio y endpoints
-- `POST /processes/{id}/run`: para cada instancia `PENDING` con símbolos, llama al motor con las fuentes vigentes (última carga por nombre). Guarda una fila en `decisions` (`author` = `engine`) o pasa la instancia a `REVIEW`. Devuelve el recuento por decisión.
-- `GET /processes/{id}/instances?status=` y `GET /instances/{id}`. El detalle incluye símbolos, el histórico de decisiones con el resultado de cada regla y los eventos.
-- `GET /processes/{id}/queue`: instancias en `REVIEW` más las que tienen una decisión cuyo tipo tiene `requires_human`. Filtro opcional `?type=`. Ningún nombre de decisión fijo en el código: los tipos son del proceso (`DecisionType.requires_human`, añadido en el PR #5).
-- `POST /instances/{id}/resolve` con `{decision, reason}`: decisión nueva con autor = usuario actual. El histórico solo añade filas, nunca edita.
-- `GET /processes/{id}/export`: una línea por instancia con su nombre y su decisión. El formato del reto (`outcomes.jsonl`) es `{"file_id": nombre, "result": decisión}`; el código no sabe nada de facturas, solo usa esos dos nombres de campo. Devuelve 409 si queda alguna instancia `PENDING` o en `REVIEW`.
-  - **Qué decisión se exporta [DECIDIDO]:** la última decisión del **motor**. Las decisiones de una persona llevan un tipo: `resolution` (resuelve un caso cuyo tipo tiene `requires_human`; nunca cambia lo exportado, P4) o `review_correction` (corrige una instancia que estaba en `REVIEW`; se exporta si no hay decisión del motor).
-  - **Nombres repetidos [DECIDIDO]:** se exporta solo la instancia más reciente de cada `name` y se avisa si había repetidos.
-  - Hecho en `fix/exportar-decision-motor` (`Decision.human_kind`, cabecera `X-Duplicate-Names`).
+### 2. `feat/decisiones-api` — service and endpoints
+- `POST /processes/{process_id}/run`: for each `PENDING` instance with symbols, calls the engine with the current sources (latest load per name). Stores a row in `decisions` (`author` = `engine`) or moves the instance to `REVIEW`. Returns the count per decision.
+- `GET /processes/{process_id}/instances?status=` and `GET /instances/{instance_id}`. The detail includes symbols, the decision history with the result of each rule, and the events.
+- `GET /processes/{process_id}/queue`: instances in `REVIEW` plus those whose decision's type has `requires_human`. Optional filter `?type=`. No decision name fixed in code: the types belong to the process (`DecisionType.requires_human`, added in PR #5).
+- `POST /instances/{instance_id}/resolve` with `{decision, reason}`: new decision with author = current user. The history only appends rows, never edits.
+- `GET /processes/{process_id}/export`: one line per instance with its name and its decision. The challenge format (`outcomes.jsonl`) is `{"file_id": name, "result": decision}`; the code knows nothing about invoices, it only uses those two field names. Returns 409 if any instance is still `PENDING` or in `REVIEW`.
+  - **Which decision is exported [DECIDED]:** the latest **engine** decision. A person's decisions carry a kind: `resolution` (resolves a case whose type has `requires_human`; never changes what is exported, P4) or `review_correction` (corrects an instance that was in `REVIEW`; exported if there is no engine decision).
+  - **Duplicate names [DECIDED]:** only the most recent instance of each `name` is exported, with a warning if there were duplicates.
+  - Done in `fix/exportar-decision-motor` (`Decision.human_kind`, header `X-Duplicate-Names`).
 
-### 3. `feat/auditoria` — `features/decisions/audit.py` + comprobación al activar
-- `audit.check(session, process_id, proposed)` vuelve a ejecutar las reglas activas + la nueva sobre los símbolos guardados de todas las instancias decididas. No relee PDFs ni llama al ERP.
-- Clasifica cada instancia en tres grupos:
-  - sin cambio;
-  - cambio (una decisión del motor que cambiaría);
-  - conflicto (contradice una decisión validada por una persona).
-- Para cada decisión pasada que cambiaría, genera un hallazgo (`Finding`) con la decisión registrada y la que saldría ahora (en facturas: pagada indebidamente, no pagada debiendo). Ningún nombre de decisión fijo en el código. Nunca modifica el pasado.
-- `rules.service.activate` (y `retire`) lo usa: si hay conflictos, 409 y la regla no entra.
-- `GET /processes/{id}/findings` y `GET /rules/{id}/impact`.
+### 3. `feat/auditoria` — `features/decisions/audit.py` + check on activation
+- `audit.check(session, process_id, proposed)` re-runs the active rules + the new one over the stored symbols of every decided instance. It does not re-read PDFs or call the ERP.
+- Sorts each instance into three groups:
+  - unchanged;
+  - change (an engine decision that would change);
+  - conflict (contradicts a decision a person validated).
+- For each past decision that would change, it produces a finding (`Finding`) with the recorded decision and the one that would come out now (for invoices: paid when it should not have been, not paid when it should have been). No decision name fixed in code. It never modifies the past.
+- `rules.service.activate` (and `retire`) use it: if there are conflicts, 409 and the rule does not go in.
+- `GET /processes/{process_id}/findings` and `GET /rules/{rule_id}/impact`.
 
-### 4. ~~`feat/seed-facturas`~~ — hecho
-Lo cubre el setup rápido (PR #11): `processes/invoice-payment.json` + `make setup`.
+### 4. ~~`feat/seed-facturas`~~ — done
+Covered by the quick setup (PR #11): `processes/invoice-payment.json` + `make setup`.
 
-## Criterio de hecho en cada PR
-- `uv run ruff check .` y `uv run pytest` en verde.
-- Endpoints visibles en `/docs`.
-- Otra persona lo revisa antes del squash merge.
+## Definition of done for every PR
+- `uv run ruff check .` and `uv run pytest` green.
+- Endpoints visible in `/docs`.
+- Someone else reviews it before the squash merge.
 
-Si cambias un modelo compartido (`rules`, `decisions`, `instances`), genera la migración con `alembic revision --autogenerate` y avisa en el grupo.
+If you change a shared model (`rules`, `decisions`, `instances`), generate the migration with `alembic revision --autogenerate` and tell the group.

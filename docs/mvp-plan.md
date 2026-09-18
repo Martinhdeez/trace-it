@@ -1,80 +1,80 @@
-# trace-it: plan del MVP
+# trace-it: MVP plan
 
-**Estado:** propuesta. Basado en `docs/application-blueprint.md` (decisiones P1-P23). Agentes: `docs/agents-plan.md`.
+**Status:** proposal. Based on `docs/application-blueprint.md` (decisions P1-P23). Agents: `docs/agents-plan.md`.
 
-## Objetivo
-Un proceso ("Pago de facturas") funcionando de punta a punta en la aplicación: ingesta, conectores, extracción, reglas compiladas por dos agentes, motor, histórico, escalado y exportación. El `outcomes.jsonl` del lote 1 sale de ese flujo y es correcto. Todo lo propio de las facturas (tipos de decisión, símbolos, fuentes, reglas) se da de alta como datos del proceso, no en el código.
+## Goal
+One process ("Invoice payment") working end to end in the application: ingestion, connectors, extraction, rules compiled by two agents, engine, history, escalation and export. Batch 1's `outcomes.jsonl` comes out of that flow and is correct. Everything specific to invoices (decision types, symbols, sources, rules) is entered as process data, not in code.
 
-## Ruta crítica (2026-09-19)
-**El filtro de apto va primero.** La ruta crítica termina cuando la comparación de ese `outcomes.jsonl` con los 433 casos limpios y los 38 casos trampa de `docs/invoice-payment-rules.md` sale sin diferencias. Ese `outcomes.jsonl` sale de las reglas v3 escritas a mano (`feat/reglas-v3-manuales`). Todo lo demás queda por debajo de esa comparación.
+## Critical path (2026-09-19)
+**The pass/fail filter comes first.** The critical path ends when comparing that `outcomes.jsonl` against the 433 clean cases and the 38 trap cases in `docs/invoice-payment-rules.md` shows no differences. That `outcomes.jsonl` comes from the hand-written v3 rules (`feat/reglas-v3-manuales`). Everything else ranks below that comparison.
 
-Mientras `data-ingestion` no esté terminada, avanzamos en todo lo que no depende de ella:
-1. **Mentor, a primera hora.** Confirmar R01, R02, R07 y R08. Confirmar también cómo tratar el texto con instrucciones incrustadas, con los ficheros donde nuestra política difiere de la de hsdatos: F26-2201_transportes, F26-3355, F26-7728, factura_5402, factura_6612, 2026-23904 y FA-3388. La lista la sacó una revisión externa; hay que comprobarla contra el lote antes de llevarla. Hay que preguntar y no copiar la política de otro equipo.
-2. **Unir `feat/reglas-v3-manuales` y `fix/exportar-decision-motor` a `dev`.** No dependen de `data-ingestion`.
-3. **Conector genérico de APIs HTTP**, que sirva para cualquier ERP (ver "Fuentes: conector genérico"). El ERP del reto es su primera configuración.
-4. **`outcomes.jsonl` con las reglas manuales**, en paralelo con el punto 3. Mientras no exista la foto real del ERP, R12-R14 se evalúan contra una foto preparada a mano con los datos del ERP del reto (incluye los 9 pedidos PAGADA). La entrega final se hace con la foto real descargada de la API, porque la norma exige cruzar con el ERP.
-5. **Si una comprobación falla, la factura nunca sale PAGAR.** Si falla el LLM, se agota el tiempo o falta un campo, la instancia queda en `REVIEW` o se decide ESCALAR. Es una sola comprobación en el motor y se hace junto al punto 4. Las pruebas de caos (`--llm-down`, `--llm-429` y `--llm-timeout`) quedan para después.
-6. **Integrar `data-ingestion` cuando esté terminada.** Se une sola, se prueba el flujo con unas pocas facturas y después se sigue.
-7. **Plantillas regex para las facturas nativas que quedan en `NEEDS_REVIEW` (202 de 501).** El LLM y la revisión humana quedan solo para lo que siga sin cerrar.
+While `data-ingestion` is not finished, we move forward on everything that does not depend on it:
+1. **Mentor, first thing in the morning.** Confirm R01, R02, R07 and R08. Also confirm how to treat text with embedded instructions, with the files where our policy differs from hsdatos's: F26-2201_transportes, F26-3355, F26-7728, factura_5402, factura_6612, 2026-23904 and FA-3388. The list came from an external review; check it against the batch before taking it. Ask, do not copy another team's policy.
+2. **Merge `feat/reglas-v3-manuales` and `fix/exportar-decision-motor` into `dev`.** They do not depend on `data-ingestion`.
+3. **Generic HTTP API connector**, usable for any ERP (see "Sources: generic connector"). The challenge ERP is its first configuration.
+4. **`outcomes.jsonl` with the hand-written rules**, in parallel with item 3. Until the real ERP snapshot exists, R12-R14 are evaluated against a snapshot prepared by hand from the challenge ERP data (it includes the 9 PAGADA orders). The final submission uses the real snapshot downloaded from the API, because the policy requires cross-checking with the ERP.
+5. **If a check fails, the invoice never comes out PAGAR.** If the LLM fails, time runs out or a field is missing, the instance stays in `REVIEW` or is decided ESCALAR. It is a single check in the engine and is done together with item 4. The chaos tests (`--llm-down`, `--llm-429` and `--llm-timeout`) come later.
+6. **Integrate `data-ingestion` when it is finished.** Merge it on its own, test the flow with a few invoices, then carry on.
+7. **Regex templates for the native invoices left in `NEEDS_REVIEW` (202 of 501).** The LLM and human review are kept only for what is still open.
 
-**Congelado hasta que salga el punto 4:** proceso travel-expenses, frontend y roles de usuario.
-**Fuera de la ruta crítica:** el compilador de dos agentes. Se enseña en la demo, comparándolo con las reglas manuales.
-**Cuando el flujo funcione:** pruebas de caos, coste en euros por factura y por 10.000 facturas, ADRs 2-5 y guion de defensa (Varsovia).
+**Frozen until item 4 is out:** the travel-expenses process, the frontend and user roles.
+**Off the critical path:** the two-agent compiler. It is shown in the demo, compared against the hand-written rules.
+**Once the flow works:** chaos tests, cost in euros per invoice and per 10,000 invoices, ADRs 2-5 and the defence script (Varsovia).
 
-### Fuentes: conector genérico
-Ningún ERP concreto entra en el código. Un único conector de APIs HTTP se configura por proceso en `sources.json` (ver `docs/process-packs.md`). Cada configuración declara:
-- la URL base y la autenticación (token con caducidad y renovación);
-- la paginación;
-- los reintentos: errores transitorios, como el ORA-00600 del reto, y 429 con `Retry-After`;
-- el límite de peticiones por segundo;
-- el formato de respuesta y su codificación (XML en ISO-8859-1 en el reto);
-- cómo se mapea cada campo a las columnas que leen las reglas.
+### Sources: generic connector
+No specific ERP goes into the code. A single HTTP API connector is configured per process in `sources.json` (see `docs/process-packs.md`). Each configuration declares:
+- the base URL and authentication (expiring token with renewal);
+- pagination;
+- retries: transient errors, such as the challenge's ORA-00600, and 429 with `Retry-After`;
+- the requests-per-second limit;
+- the response format and its encoding (XML in ISO-8859-1 in the challenge);
+- how each field maps to the columns the rules read.
 
-El resultado siempre es una foto local guardada como una fila nueva de `sources`. Las reglas leen esa foto y nunca la API.
+The result is always a local snapshot stored as a new row of `sources`. Rules read that snapshot, never the API.
 
-**Alcance antes de H1:** la configuración del ERP del reto va en `sources.json` desde el primer día. El código solo implementa las opciones que usa este ERP. Cuando llegue otro ERP, se amplía el código detrás de la misma configuración. Así el contrato ya es genérico y el riesgo de plazo es menor.
+**Scope before H1:** the challenge ERP's configuration lives in `sources.json` from day one. The code only implements the options this ERP uses. When another ERP arrives, the code is extended behind the same configuration. That way the contract is already generic and the deadline risk is lower.
 
-## Hitos
-| Hito | Cuándo | Criterio de hecho |
+## Milestones
+| Milestone | When | Definition of done |
 |---|---|---|
-| H0 Contratos | Viernes noche | `docker compose up` levanta Postgres + FastAPI; esquema creado; firmas y endpoints acordados; cada persona puede trabajar sin esperar a otra |
-| H1 Flujo completo | Sábado 10:00 | Las 471 facturas con texto pasan por ingesta, extracción, reglas de la norma v3 y motor |
-| H2 Lote 1 cerrado | Sábado 14:00 | 500 facturas, incluidos escaneos, 0 en `REVIEW`, resultado revisado contra nuestro análisis. Frontend básico usable |
-| H3 Lote 2 | Sábado 18:00 en adelante | Lote 2 + ERP actualizado + norma v4, todo a través de la aplicación |
-| H4 Entrega | Domingo 10:30 | Repo público con `outcomes.jsonl`, `outcomes_lote2.jsonl` y `albertitos_plan.pdf` |
+| H0 Contracts | Friday night | `docker compose up` starts Postgres + FastAPI; schema created; signatures and endpoints agreed; everyone can work without waiting for anyone else |
+| H1 Full flow | Saturday 10:00 | The 471 invoices with text go through ingestion, extraction, the v3 policy rules and the engine |
+| H2 Batch 1 closed | Saturday 14:00 | 500 invoices, scans included, 0 in `REVIEW`, result reviewed against our analysis. Basic usable frontend |
+| H3 Batch 2 | Saturday 18:00 onwards | Batch 2 + updated ERP + policy v4, all through the application |
+| H4 Submission | Sunday 10:30 | Public repo with `outcomes.jsonl`, `outcomes_lote2.jsonl` and `albertitos_plan.pdf` |
 
-## Estructura del repo
-Ver `docs/team-guide.md` (organizado por funcionalidades en `backend/app/features/`).
+## Repo structure
+See `docs/team-guide.md` (organized by feature under `backend/app/features/`).
 
-## Tablas (fuente de verdad: `backend/app/models.py` y las migraciones)
-- `users`: nombre, email, rol (`manager`/`operator`).
-- `processes`: id, nombre, descripción.
-- `decision_types`: proceso, nombre, prioridad, por defecto (`is_default`), requiere persona (`requires_human`).
-- `symbols`: proceso, nombre, tipo, descripción.
-- `files`: hash (clave), nombre original, bytes, texto extraído, fecha de ingesta.
-- `sources`: proceso, nombre de la fuente (en facturas: `suppliers`, `orders`, `erp`, `parameters`), fichero o descarga de origen, filas (`jsonb`).
-- `instances`: proceso, fichero, nombre, estado (`PENDING`, `REVIEW`, `DECIDED`), motivo de la revisión, símbolos acordados (`jsonb`).
-- `extractions`: instancia, papel (`extractor_1`/`extractor_2`), símbolos (`jsonb`), coste, latencia.
-- `rules`: proceso, texto, tipo (`requirement`/`prohibition`), decisión si salta, código A, código B, tests A, tests B, hash, estado (`draft`, `rejected`, `active`, `retired`), informe de validación, fecha de activación.
-- `decisions`: instancia, resultado de cada regla (`jsonb`), decisión, hash de las reglas aplicadas, autor (`engine` o persona), tipo de decisión humana (`resolution`/`review_correction`), motivo.
-- `findings`: decisión, tipo (hoy `different_decision`), detalle, regla que lo genera.
-- `events`: traza de todo (paso, entrada, salida, latencia, reintentos, coste).
-- `config_agente`: versiones de la configuración de cada papel de agente (cadena de modelos en formato PydanticAI `proveedor:modelo`, ajustes, reintentos, límite de peticiones, prompt); solo se añaden filas y hay una activa por papel. Sustituye a `llm_config` (ver `docs/agents-plan.md` §4).
+## Tables (source of truth: `backend/app/models.py` and the migrations)
+- `users`: name, email, role (`manager`/`operator`).
+- `processes`: id, name, description.
+- `decision_types`: process, name, priority, default (`is_default`), requires a human (`requires_human`).
+- `symbols`: process, name, type, description.
+- `files`: hash (key), original name, bytes, extracted text, ingestion date.
+- `sources`: process, source name (for invoices: `suppliers`, `orders`, `erp`, `parameters`), originating file or download, rows (`jsonb`).
+- `instances`: process, file, name, status (`PENDING`, `REVIEW`, `DECIDED`), review reason, agreed symbols (`jsonb`).
+- `extractions`: instance, role (`extractor_1`/`extractor_2`), symbols (`jsonb`), cost, latency.
+- `rules`: process, text, type (`requirement`/`prohibition`), decision when it fires, code A, code B, tests A, tests B, hash, status (`draft`, `rejected`, `active`, `retired`), validation report, activation date.
+- `decisions`: instance, result of each rule (`jsonb`), decision, hash of the rules applied, author (`engine` or a person), human kind (`resolution`/`review_correction`), reason.
+- `findings`: decision, type (today `different_decision`), detail, rule that produced it.
+- `events`: trace of everything (step, input, output, latency, retries, cost).
+- `agent_config`: configuration versions of each agent role (model chain in PydanticAI `provider:model` format, settings, retries, request limit, prompt); rows are only appended and there is one active per role. Replaces `llm_config` (see `docs/agents-plan.md` §4).
 
-## Reparto
-| Persona | Bloque | Entregable |
+## Division of work
+| Person | Area | Deliverable |
 |---|---|---|
-| Martín | Agentes: compilador (dos agentes, tests cruzados), sandbox, asistente de escalado (el corrector de F12 es de la iteración 2); infraestructura de agentes sobre PydanticAI y su configuración (`docs/agents-plan.md`). Texto de las reglas de la norma v3. Responsable del filtro | `features/agents/`, `features/llm/`, reglas v3 |
-| Mateo | Reglas y decisiones: ciclo de vida de reglas, motor, API de decisiones, auditoría y hallazgos; procesos y usuarios. Tareas en `docs/tasks-mateo.md` | `features/rules/`, `features/decisions/`, `features/processes/`, `features/users/` |
-| Álvaro | Todo lo que entra: ingesta (hash, `pdftotext`, render/OCR de escaneos), extracción de símbolos (doble extracción con un agente de PydanticAI sobre `features/llm/`, validadores sin reintentar al modelo; `docs/agents-plan.md` §3.3), conector del Excel (normalización). El conector genérico de APIs HTTP (ERP) queda por asignar, porque Álvaro está con el OCR | `features/ingestion/`, `features/extraction/`, `features/sources/` |
-| Varsovia | Producto e ideas: demo, ADRs, `albertitos_plan.pdf`, hoja de resultados esperados para verificar | Guion de demo, ADRs |
-| Carlos | Frontend contra los endpoints de H0 (datos simulados hasta H1): procesos, instancias con traza, alta de regla que encadena crear → compilar mostrando el progreso (compilar tarda 30-60 s) y el informe, cola del responsable (tipos con `requires_human` y `REVIEW`), exportar | `frontend/` |
+| Martín | Agents: compiler (two agents, cross-tests), sandbox, escalation assistant (the F12 corrector is iteration 2); agent infrastructure on PydanticAI and its configuration (`docs/agents-plan.md`). Text of the v3 policy rules. Owns the filter | `features/agents/`, `features/llm/`, v3 rules |
+| Mateo | Rules and decisions: rule life cycle, engine, decisions API, audit and findings; processes and users. Tasks in `docs/tasks-mateo.md` | `features/rules/`, `features/decisions/`, `features/processes/`, `features/users/` |
+| Álvaro | Everything that comes in: ingestion (hash, `pdftotext`, render/OCR of scans), symbol extraction (double extraction with a PydanticAI agent on `features/llm/`, validators that never retry the model; `docs/agents-plan.md` §3.3), workbook connector (normalization). The generic HTTP API connector (ERP) is still unassigned, because Álvaro is on OCR | `features/ingestion/`, `features/extraction/`, `features/sources/` |
+| Varsovia | Product and ideas: demo, ADRs, `albertitos_plan.pdf`, expected-results sheet for verification | Demo script, ADRs |
+| Carlos | Frontend against the H0 endpoints (mock data until H1): processes, instances with trace, adding a rule that chains create → compile showing progress (compiling takes 30-60 s) and the report, manager's queue (types with `requires_human` and `REVIEW`), export | `frontend/` |
 
-## Ruta crítica y riesgos
-1. **Texto de las reglas de la norma v3 (Martín, con Varsovia revisando, antes de H1).** Decidir qué produce cada anomalía (NO_PAGAR o ESCALAR) es el mayor riesgo para el filtro. Hay casos pendientes en `.artifacts/specs/2026-09-18-reglas-sistema.md`. Preguntar a un mentor con ejemplos concretos.
-2. **Escaneos (29).** Además de la doble extracción, se revisan a mano antes de H2.
-3. **Verificación final antes de exportar:**
-   - Una línea por fichero.
-   - Nombres exactos.
-   - 0 instancias en `REVIEW`.
-   - Diferencias con la hoja de resultados esperados revisadas una a una.
+## Critical path and risks
+1. **Text of the v3 policy rules (Martín, with Varsovia reviewing, before H1).** Deciding what each anomaly produces (NO_PAGAR or ESCALAR) is the biggest risk for the filter. There are open cases in `.artifacts/specs/2026-09-18-reglas-sistema.md`. Ask a mentor with concrete examples.
+2. **Scans (29).** Besides the double extraction, they are reviewed by hand before H2.
+3. **Final check before exporting:**
+   - One line per file.
+   - Exact names.
+   - 0 instances in `REVIEW`.
+   - Differences against the expected-results sheet reviewed one by one.
