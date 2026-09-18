@@ -51,7 +51,7 @@ La aplicación mejora con el uso. Cada decisión humana sobre un caso no cubiert
 Decidir tiene que ser totalmente determinista, y las reglas tienen que poder cambiar sin romper el sistema. Por eso las reglas no se interpretan en ejecución: se convierten en código.
 
 Hay dos agentes distintos:
-- **Agente compilador.** Lee una regla y escribe el código determinista que la aplica. Se dispara automáticamente cada vez que se añade o cambia una regla.
+- **Agente compilador.** Lee una regla y escribe el código determinista que la aplica. Se dispara automáticamente cada vez que se añade o cambia una regla: la interfaz encadena "crear regla" y "compilar" (`POST /reglas/{id}/compilar`) y muestra el progreso, porque compilar tarda 30-60 s por las llamadas a los LLM. [DECIDIDO]
 - **Decisor (motor).** Para cada instancia, ejecuta el código de todas las reglas activas y resuelve uno de los tipos de decisión del proceso (P19). Se ciñe al resultado del código y no usa LLM (ver P7).
 
 Así la misma instancia con las mismas reglas da siempre el mismo resultado.
