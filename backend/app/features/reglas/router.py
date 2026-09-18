@@ -4,6 +4,7 @@ from fastapi import APIRouter, status
 
 from app.common.exceptions import PermissionDeniedError
 from app.core.database import Session
+from app.features.decisiones.schemas import ImpactoOut
 from app.features.reglas import service
 from app.features.reglas.schemas import ReglaDetalle, ReglaIn, ReglaOut
 from app.features.usuarios.dependencies import UsuarioActual
@@ -49,18 +50,37 @@ async def compile_regla(regla_id: int, session: Session) -> ReglaDetalle:
     return await service.compilar(session, regla_id)
 
 
+@router.get(
+    "/reglas/{regla_id}/impacto",
+    operation_id="getImpacto",
+    summary="What activating (or retiring) this rule would change, without doing it",
+)
+async def get_impacto(regla_id: int, session: Session) -> ImpactoOut:
+    return ImpactoOut.model_validate(await service.impacto(session, regla_id), from_attributes=True)
+
+
 @router.post(
     "/reglas/{regla_id}/activar",
     operation_id="activateRegla",
     summary="Activate a validated draft",
-    responses={409: {"description": "Not compiled, or discrepancies unresolved"}},
+    responses={
+        409: {
+            "description": "Not compiled, discrepancies unresolved, or it would "
+            "contradict a decision a person took"
+        }
+    },
 )
 async def activate_regla(regla_id: int, session: Session, usuario: UsuarioActual) -> ReglaDetalle:
     _solo_responsable(usuario)
     return await service.activar(session, regla_id)
 
 
-@router.post("/reglas/{regla_id}/retirar", operation_id="retireRegla", summary="Retire a rule")
+@router.post(
+    "/reglas/{regla_id}/retirar",
+    operation_id="retireRegla",
+    summary="Retire a rule. Checked against past decisions exactly like activating one",
+    responses={409: {"description": "It would contradict a decision a person took"}},
+)
 async def retire_regla(regla_id: int, session: Session, usuario: UsuarioActual) -> ReglaDetalle:
     _solo_responsable(usuario)
     return await service.retirar(session, regla_id)

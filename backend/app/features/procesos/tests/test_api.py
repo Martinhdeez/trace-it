@@ -2,12 +2,17 @@
 
 import uuid
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 
 
-async def test_proceso_regla_flujo() -> None:
+async def test_proceso_regla_flujo(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def llm_caido(*args, **kwargs):
+        raise RuntimeError("sin LLM en tests")
+
+    monkeypatch.setattr("app.features.llm.cliente.completar", llm_caido)
     sufijo = uuid.uuid4().hex[:8]
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         r = await api.post(
@@ -24,7 +29,7 @@ async def test_proceso_regla_flujo() -> None:
             json={
                 "nombre": f"facturas-{sufijo}",
                 "tipos_decision": [
-                    {"nombre": "ESCALAR", "prioridad": 3},
+                    {"nombre": "ESCALAR", "prioridad": 3, "requiere_persona": True},
                     {"nombre": "NO_PAGAR", "prioridad": 2},
                     {"nombre": "PAGAR", "prioridad": 1, "por_defecto": True},
                 ],
@@ -37,6 +42,7 @@ async def test_proceso_regla_flujo() -> None:
         assert r.status_code == 201, r.text
         proceso = r.json()
         assert [t["nombre"] for t in proceso["tipos_decision"]] == ["ESCALAR", "NO_PAGAR", "PAGAR"]
+        assert [t["requiere_persona"] for t in proceso["tipos_decision"]] == [True, False, False]
         assert len(proceso["simbolos"]) == 2
 
         r = await api.post(
@@ -52,8 +58,28 @@ async def test_proceso_regla_flujo() -> None:
         assert regla["estado"] == "borrador"
 
         r = await api.post(f"/reglas/{regla['id']}/compilar")
-        assert r.status_code == 501, r.text
-        assert r.json()["code"] == "not_implemented"
+        assert r.status_code == 502, r.text
+        assert r.json()["code"] == "compilation_failed"
 
         r = await api.post(f"/reglas/{regla['id']}/activar", headers=cabeceras)
         assert r.status_code == 409, r.text
+
+
+async def test_por_defecto_no_puede_requerir_persona() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        r = await api.post(
+            "/procesos",
+            json={
+                "nombre": f"conflicto-{uuid.uuid4().hex[:8]}",
+                "tipos_decision": [
+                    {
+                        "nombre": "REVISAR",
+                        "prioridad": 1,
+                        "por_defecto": True,
+                        "requiere_persona": True,
+                    }
+                ],
+            },
+        )
+        assert r.status_code == 409, r.text
+        assert r.json()["code"] == "conflict"

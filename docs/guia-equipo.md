@@ -1,7 +1,26 @@
-# Guía del equipo
+# trace-it: guía del equipo
 
-Cómo trabajamos en este repo: ramas, commits, estructura del backend y cómo arrancarlo.
+Cómo trabajamos en el repo de trace-it: ramas, commits, estructura del backend y cómo arrancarlo.
 Qué construimos y por qué: `docs/plano-aplicacion.md`. Quién hace qué: `docs/plan-mvp.md`.
+
+## Arranque rápido
+
+Requisitos: Docker y [uv](https://docs.astral.sh/uv/).
+
+```bash
+make setup      # .env, Postgres + backend, migraciones y proceso "Pago de facturas" con sus usuarios
+```
+API en http://localhost:8000/docs (con el 8000 ocupado: `BACKEND_PORT=8001 make setup`). Entra con `martin@trace-it.local` (responsable).
+
+| Comando | Qué hace |
+|---|---|
+| `make compilar` | Compila las reglas en borrador (necesita claves de LLM en `.env`) |
+| `make erp` | Arranca el ERP del reto |
+| `make test` | Tests del backend contra el Postgres local |
+| `make down` | Para los contenedores (los datos se quedan) |
+| `make reset-db` | **Borra la base de datos** |
+
+Los procesos son ficheros JSON en `procesos/` (formato en `procesos/README.md`). `make setup` se puede repetir: no duplica nada ni toca reglas activas.
 
 ## 1. Git
 
@@ -26,7 +45,7 @@ Nombres cortos, en minúsculas y con guiones: `feat/cliente-erp`, `feat/compilad
 3. Antes de abrir el PR, traer lo último de `dev` y comprobar que todo pasa:
    ```bash
    git fetch && git rebase origin/dev
-   uv run ruff check . && uv run pytest
+   cd backend && uv run ruff check . && uv run ruff format --check . && uv run pytest
    ```
 4. Subir la rama y abrir un pull request contra `dev`:
    ```bash
@@ -50,7 +69,7 @@ feat(reglas): add cross-test runner for compiled rules
 fix(erp): retry on ORA-00600 before renewing token
 docs: add team guide
 test(motor): cover priority when several rules fire
-chore: bump litellm
+chore: bump pydantic-ai
 ```
 Tipos: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`. El ámbito entre paréntesis es la carpeta de la feature.
 
@@ -71,13 +90,13 @@ backend/
       usuarios/           # usuarios y usuario actual (cabecera X-Usuario-Id)
       procesos/           # procesos, símbolos, tipos de decisión
       ingesta/            # ficheros e instancias, extracción de texto
-      fuentes/            # Excel y ERP
+      fuentes/            # fuentes de verdad: hojas de cálculo y sistemas externos (ERP)
       extraccion/         # símbolos con doble extracción LLM
       reglas/             # reglas: alta, estados, activación
-      agentes/            # compilador (dos agentes), sandbox, asistente de escalado
+      agentes/            # agentes (compilador A/B, asistente), sandbox, config por versiones, presets y prompts
       decisiones/         # motor, histórico, auditoría, colas, exportar
       trazas/             # eventos de traza
-      llm/                # cliente LiteLLM y modelo por papel
+      llm/                # runtime de PydanticAI: modelo desde la config, ejecución y traza
 ```
 
 ### Dentro de cada funcionalidad
@@ -96,6 +115,14 @@ Reglas:
 - Los errores se lanzan con las clases de `app/common/exceptions.py` (`NotFoundError`, `ConflictError`…). La API los convierte en respuestas JSON.
 - Lo que aún no está hecho lanza `NotImplementedYetError` (la API responde 501). Así el contrato existe y el frontend puede trabajar contra él.
 - Los nombres de dominio van en español (`proceso`, `regla`, `instancia`), igual que en los documentos.
+
+### Agentes (LLM)
+Todos los agentes usan PydanticAI v2. Arquitectura, configuración por versiones y tareas: `docs/plan-agentes.md`.
+- Toda llamada a un LLM pasa por `features/llm/ejecutar.py`, con un papel de `config_agente`: así queda en la traza con su versión de configuración, coste y latencia.
+- Los prompts son ficheros en `features/agentes/prompts/`. Los datos del caso van en el mensaje, nunca en el prompt.
+- En la extracción, un validador que falla manda la instancia a `REVISION`; nunca se devuelve al modelo con `ModelRetry`.
+- Tests sin red: `FunctionModel`/`TestModel` con `agente.override(...)`.
+- **Antes de escribir código de PydanticAI, consulta `.context/pydantic-ai/`** (empieza por `START-HERE.md` y `SECTIONS.md`, y abre solo la sección que necesites). Vale para personas y para asistentes de código: la API cambió mucho en la v2 y lo que recuerda un modelo suele ser de la v1. `llms-full.txt` (5,5 MB, la documentación entera) no está en el repo: descárgalo de https://ai.pydantic.dev/llms-full.txt si lo necesitas para buscar.
 
 ## 3. Arrancar en local
 
@@ -136,7 +163,7 @@ cd .context/500-sombras-de-alberto && make erp
 ## 4. Quién toca qué
 | Persona | Carpetas |
 |---|---|
-| Martín | `features/agentes/` (compilador, sandbox, asistente), `features/llm/` |
+| Martín | `features/agentes/` (compilador, sandbox, asistente, config de agentes), `features/llm/` |
 | Mateo | `features/reglas/`, `features/decisiones/` (motor, auditoría, API), `features/procesos/`, `features/usuarios/` |
 | Álvaro | `features/ingesta/`, `features/fuentes/` (Excel, ERP), `features/extraccion/` |
 | Carlos | `frontend/` |
