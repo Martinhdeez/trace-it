@@ -27,10 +27,7 @@ def verdicts() -> dict[str, adapter.Verdict]:
     codes = adapter.REFERENCE_CODE
     sources = challenge.sources()
     instances = golden.symbols()
-    others = {
-        s["file_id"]: [{**o, "_instancia": o["file_id"]} for o in instances if o is not s]
-        for s in instances
-    }
+    others = {s["file_id"]: adapter.others_of(instances, s) for s in instances}
     cases = [(s, sources, others[s["file_id"]]) for s in instances]
 
     # Every rule over every instance, in the real sandbox, batched. The engine then reads

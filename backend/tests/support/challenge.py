@@ -1,6 +1,6 @@
 """Read-only access to the challenge data in `.context/500-sombras-de-alberto`.
 
-Sources come out as rows shaped the way `procesos/pago-facturas.json` describes them, so
+Sources come out as rows shaped the way `processes/invoice-payment.json` describes them, so
 the rules see what a real source connector would give them. Nothing here imports the app.
 """
 
@@ -63,32 +63,32 @@ def erp_entries() -> list[dict[str, str]]:
 def sources() -> dict[str, list[dict[str, Any]]]:
     """The four sources of the invoice process, with the column names its rules use."""
     return {
-        "proveedores": [
-            {"id": r["ID"], "razon_social": r["Razon Social"], "nif": r["NIF"], "iban": r["IBAN"]}
+        "suppliers": [
+            {"id": r["ID"], "company_name": r["Razon Social"], "nif": r["NIF"], "iban": r["IBAN"]}
             for r in _sheet("Proveedores")
         ],
-        "pedidos": [
+        "orders": [
             {
-                "pedido": r["Pedido"],
-                "proveedor_id": r["ProveedorID"],
+                "purchase_order": r["Pedido"],
+                "supplier_id": r["ProveedorID"],
                 "nif": r["NIF"],
-                "importe_total": r["Importe_Total"],
-                "estado": r["Estado"],
-                "fecha_pedido": r["Fecha_Pedido"],
+                "total_amount": r["Importe_Total"],
+                "status": r["Estado"],
+                "order_date": r["Fecha_Pedido"],
             }
             for r in _sheet("Pedidos_2026")
         ],
         "erp": [
             {
-                "asiento_id": r["asiento_id"],
-                "fecha": r["fecha_registro"],
-                "proveedor_id": r["proveedor_id"],
+                "entry_id": r["asiento_id"],
+                "date": r["fecha_registro"],
+                "supplier_id": r["proveedor_id"],
                 "nif": r["nif"],
-                "pedido": r["pedido"],
-                "importe": r["importe_esperado"],
-                "estado": r["estado"],
+                "purchase_order": r["pedido"],
+                "amount": r["importe_esperado"],
+                "status": r["estado"],
             }
             for r in erp_entries()
         ],
-        "parametros": [{"fecha_corte": CUT_OFF}],
+        "parameters": [{"cut_off_date": CUT_OFF}],
     }

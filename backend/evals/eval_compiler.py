@@ -3,7 +3,7 @@
     make eval-compiler                                   # all 16 rules
     cd backend && uv run python -m evals.eval_compiler --rules 2,7
 
-For each rule, both blind compiler agents run with the real configured models (`config_llm`
+For each rule, both blind compiler agents run with the real configured models (`llm_config`
 in the app database, keys from `.env`). Both generated codes then run in the real sandbox on
 every golden instance of batch 1 (and on the compiler's own tests), and are compared with the
 reference code. The report goes to `backend/evals/reports/compiler-<timestamp>.md`.
@@ -57,10 +57,7 @@ def evaluate(spec: adapter.RuleSpec, compiled: list[adapter.Compiled]) -> RuleRe
     reference = adapter.REFERENCE_CODE[spec.number - 1]
     sources = challenge.sources()
     instances = golden.symbols()
-    cases = [
-        (s, sources, [{**o, "_instancia": o["file_id"]} for o in instances if o is not s])
-        for s in instances
-    ]
+    cases = [(s, sources, adapter.others_of(instances, s)) for s in instances]
     ok = [c for c in compiled if c.code]
     ref, *generated = adapter.run_batched([reference] + [c.code for c in ok], cases)
     for c, results in zip(ok, generated, strict=True):
@@ -102,7 +99,7 @@ def describe(result: Any) -> str:
     v = adapter.verdict(result)
     if v is None:
         return f"ERROR ({str(result)[:80]})"
-    return f"fires ({result.get('motivo', '')[:60]})" if v else "does not fire"
+    return f"fires ({adapter.reason(result)[:60]})" if v else "does not fire"
 
 
 def render(reports: list[RuleReport], models: dict[str, str], started: datetime) -> str:

@@ -1,6 +1,6 @@
 """The compiler eval: its harness with a fake LLM (default run), and the real thing (opt-in)."""
 
-import json
+from datetime import UTC, datetime
 
 import pytest
 
@@ -17,23 +17,19 @@ pytestmark = pytest.mark.skipif(
 async def test_the_harness_scores_the_reference_code_at_100(monkeypatch) -> None:
     """A fake LLM that answers with the reference code must agree 100% with it."""
     spec = adapter.rules(adapter.definition())[1]  # R02: the issuer is in the master
-    master = challenge.sources()["proveedores"][:1]
+    master = challenge.sources()["suppliers"][:1]
     tests = [
         {
-            "nombre": f"nif {nif}",
-            "instancia_json": json.dumps({"nif_emisor": nif}),
-            "fuentes_json": json.dumps({"proveedores": master}),
-            "otras_json": "[]",
-            "salta": nif != master[0]["nif"],
+            "name": f"nif {nif}",
+            "instance": {"issuer_nif": nif},
+            "sources": {"suppliers": master},
+            "others": [],
+            "fires": nif != master[0]["nif"],
         }
         for nif in [master[0]["nif"], "B00000000", "X1", "B00000001", "B00000002", "B00000003"]
     ]
-    answer = json.dumps({"codigo": adapter.REFERENCE_CODE[1], "tests": tests})
-
-    async def fake_llm(session, role, messages, schema=None):
-        return adapter.llm_client.Respuesta(answer, f"fake/{role}", 0.001, 5)
-
-    monkeypatch.setattr(adapter.llm_client, "completar", fake_llm)
+    code = adapter.REFERENCE_CODE[1]
+    adapter.patch_llm(monkeypatch, lambda role: adapter.fake_llm_reply(code, tests, role))
 
     compiled = await adapter.compile_rule(spec, adapter.definition(), challenge.sources())
     report = eval_compiler.evaluate(spec, compiled)
@@ -42,9 +38,8 @@ async def test_the_harness_scores_the_reference_code_at_100(monkeypatch) -> None
     assert report.agreement == {role: 100.0 for role in adapter.COMPILER_ROLES}
     assert report.reference_on_tests == "12/12"
     assert report.valid
-    assert "| R02 | NO_PAGAR | yes | 100.0% | 100.0% |" in eval_compiler.render(
-        [report], {"compilador_a": "fake/a"}, eval_compiler.datetime.now(eval_compiler.UTC)
-    )
+    table = eval_compiler.render([report], {}, datetime.now(UTC))
+    assert "| R02 | NO_PAGAR | yes | 100.0% | 100.0% |" in table
 
 
 @pytest.mark.llm

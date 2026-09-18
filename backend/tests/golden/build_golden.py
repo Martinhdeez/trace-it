@@ -98,7 +98,7 @@ def last(pattern: str, text: str) -> re.Match[str] | None:
 
 
 def parse(fid: str, text: str) -> dict[str, Any]:
-    """Symbols with the names of `procesos/pago-facturas.json`. Missing ones are None."""
+    """Symbols with the names of `processes/invoice-payment.json`. Missing ones are None."""
     nifs = [n for n in re.findall(r"\b([A-Z]\d{7}[A-Z0-9]|\d{8}[A-Z])\b", text) if n != CLIENT_NIF]
     iban = re.search(r"\bES\d{2}(?: ?\d{4}){5}\b", text)
     order = re.search(r"\bPO-\d{4}-\d{3,5}\b", text)
@@ -106,14 +106,14 @@ def parse(fid: str, text: str) -> dict[str, Any]:
     base, vat, total = (last(LABELS[k], text) for k in ("base", "vat", "total"))
     return {
         "file_id": fid,
-        "nif_emisor": nifs[0] if nifs else None,
+        "issuer_nif": nifs[0] if nifs else None,
         "iban": iban.group() if iban else None,
-        "numero_factura": number,
-        "fecha": printed_date(text),
-        "pedido": order.group() if order else None,
+        "invoice_number": number,
+        "date": printed_date(text),
+        "purchase_order": order.group() if order else None,
         "base": as_json_number(amount(base[1])) if base else None,
-        "tipo_iva": as_json_number(amount(vat[1] + ",00")) if vat else None,
-        "cuota_iva": as_json_number(amount(vat[2])) if vat else None,
+        "vat_rate": as_json_number(amount(vat[1] + ",00")) if vat else None,
+        "vat_amount": as_json_number(amount(vat[2])) if vat else None,
         "total": as_json_number(amount(total[1])) if total else None,
     }
 
@@ -194,15 +194,24 @@ class Reference:
 
 
 def findings(s: dict[str, Any], src: dict[str, list[dict[str, Any]]]) -> list[str]:
-    required = ["nif_emisor", "iban", "pedido", "fecha", "base", "tipo_iva", "cuota_iva", "total"]
+    required = [
+        "issuer_nif",
+        "iban",
+        "purchase_order",
+        "date",
+        "base",
+        "vat_rate",
+        "vat_amount",
+        "total",
+    ]
     out = [f"MISSING_SYMBOL: {', '.join(k for k in required if s[k] is None)}"]
     if all(s[k] is not None for k in required):
         out = []
-    nif, po = key(s["nif_emisor"]), key(s["pedido"])
-    master = [r for r in src["proveedores"] if key(r["nif"]) == nif]
+    nif, po = key(s["issuer_nif"]), key(s["purchase_order"])
+    master = [r for r in src["suppliers"] if key(r["nif"]) == nif]
     variants = {(r["id"], key(r["iban"])) for r in master}
-    order = next((r for r in src["pedidos"] if key(r["pedido"]) == po), None)
-    erp = next((r for r in src["erp"] if key(r["pedido"]) == po), None)
+    order = next((r for r in src["orders"] if key(r["purchase_order"]) == po), None)
+    erp = next((r for r in src["erp"] if key(r["purchase_order"]) == po), None)
     if nif and not master:
         out.append(f"NIF_NOT_IN_MASTER: {nif}")
     if len(variants) > 1:
@@ -210,49 +219,49 @@ def findings(s: dict[str, Any], src: dict[str, list[dict[str, Any]]]) -> list[st
     elif variants and s["iban"] and key(s["iban"]) != next(iter(variants))[1]:
         out.append(f"IBAN_MISMATCH: {key(s['iban'])} vs master {next(iter(variants))[1]}")
     if po and order is None:
-        out.append(f"PO_NOT_FOUND: {s['pedido']}")
+        out.append(f"PO_NOT_FOUND: {s['purchase_order']}")
     if order is not None:
         if order["nif"]:
             other = key(order["nif"]) != nif
         else:
-            other = bool(master) and order["proveedor_id"] != master[0]["id"]
+            other = bool(master) and order["supplier_id"] != master[0]["id"]
         if nif and other:
-            out.append(f"PO_OTHER_VENDOR: {s['pedido']} belongs to {order['proveedor_id']}")
-        if s["total"] is not None and not near(s["total"], order["importe_total"]):
-            out.append(f"AMOUNT_NE_PO: {s['total']} vs {order['importe_total']}")
+            out.append(f"PO_OTHER_VENDOR: {s['purchase_order']} belongs to {order['supplier_id']}")
+        if s["total"] is not None and not near(s["total"], order["total_amount"]):
+            out.append(f"AMOUNT_NE_PO: {s['total']} vs {order['total_amount']}")
         if erp is None:
-            out.append(f"PO_NOT_IN_ERP: {s['pedido']}")
-    if None not in (s["base"], s["tipo_iva"], s["cuota_iva"]):
-        due = (Decimal(str(s["base"])) * Decimal(str(s["tipo_iva"])) / 100).quantize(
+            out.append(f"PO_NOT_IN_ERP: {s['purchase_order']}")
+    if None not in (s["base"], s["vat_rate"], s["vat_amount"]):
+        due = (Decimal(str(s["base"])) * Decimal(str(s["vat_rate"])) / 100).quantize(
             Decimal("0.01"), ROUND_HALF_UP
         )
-        if not near(s["cuota_iva"], due):
-            out.append(f"VAT_MISCALCULATED: {s['cuota_iva']} vs {due} at {s['tipo_iva']}%")
-    if s["tipo_iva"] is not None and cents(s["tipo_iva"]) != 2100:
-        out.append(f"VAT_RATE_NOT_21: {s['tipo_iva']}%")
-    if None not in (s["base"], s["cuota_iva"], s["total"]):
-        added = Decimal(str(s["base"])) + Decimal(str(s["cuota_iva"]))
+        if not near(s["vat_amount"], due):
+            out.append(f"VAT_MISCALCULATED: {s['vat_amount']} vs {due} at {s['vat_rate']}%")
+    if s["vat_rate"] is not None and cents(s["vat_rate"]) != 2100:
+        out.append(f"VAT_RATE_NOT_21: {s['vat_rate']}%")
+    if None not in (s["base"], s["vat_amount"], s["total"]):
+        added = Decimal(str(s["base"])) + Decimal(str(s["vat_amount"]))
         if not near(s["total"], added):
             out.append(f"TOTAL_NE_BASE_PLUS_VAT: {s['total']} vs {added}")
-    if s["fecha"] is not None:
-        if not real_date(s["fecha"]):
-            out.append(f"IMPOSSIBLE_DATE: {s['fecha']}")
-        elif s["fecha"] > src["parametros"][0]["fecha_corte"]:
-            out.append(f"FUTURE_DATE: {s['fecha']}")
+    if s["date"] is not None:
+        if not real_date(s["date"]):
+            out.append(f"IMPOSSIBLE_DATE: {s['date']}")
+        elif s["date"] > src["parameters"][0]["cut_off_date"]:
+            out.append(f"FUTURE_DATE: {s['date']}")
     if order is not None and erp is not None:
         differ = [
             name
             for name, same in [
-                ("importe", near(erp["importe"], order["importe_total"])),
-                ("proveedor_id", erp["proveedor_id"] == order["proveedor_id"]),
+                ("amount", near(erp["amount"], order["total_amount"])),
+                ("supplier_id", erp["supplier_id"] == order["supplier_id"]),
                 ("nif", not (erp["nif"] and order["nif"]) or key(erp["nif"]) == key(order["nif"])),
             ]
             if not same
         ]
         if differ:
             out.append(f"ERP_NE_PO: {', '.join(differ)}")
-    if erp is not None and erp["estado"].strip().upper() != "PENDIENTE":
-        out.append(f"ERP_PAID: {erp['asiento_id']} is {erp['estado']}")
+    if erp is not None and erp["status"].strip().upper() != "PENDIENTE":
+        out.append(f"ERP_PAID: {erp['entry_id']} is {erp['status']}")
     return out
 
 
@@ -276,12 +285,12 @@ def build() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 
     by_order = defaultdict(list)
     for ref in refs:
-        if ref.symbols and ref.symbols["pedido"]:
-            by_order[key(ref.symbols["pedido"])].append(ref.file_id)
+        if ref.symbols and ref.symbols["purchase_order"]:
+            by_order[key(ref.symbols["purchase_order"])].append(ref.file_id)
     for ref in refs:
-        if ref.symbols and len(twins := by_order[key(ref.symbols["pedido"])]) > 1:
+        if ref.symbols and len(twins := by_order[key(ref.symbols["purchase_order"])]) > 1:
             others = ", ".join(t for t in twins if t != ref.file_id)
-            ref.findings.append(f"DUPLICATE_PO: {ref.symbols['pedido']} also in {others}")
+            ref.findings.append(f"DUPLICATE_PO: {ref.symbols['purchase_order']} also in {others}")
 
     check_traps(refs)
 
