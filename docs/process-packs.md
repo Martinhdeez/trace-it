@@ -16,7 +16,7 @@ Best practice: **configuration as code to start, database for runtime changes.**
 | Runtime state | PostgreSQL | Active rules and their versions, agent config versions, decisions, findings, traces | The app (UI/API), while it runs |
 | Secrets | `.env` (never committed) | API keys, ERP credentials | Each developer / deployment |
 
-The bootstrap layer makes a setup reproducible on any machine. The runtime layer lets the approver change behaviour without touching code or restarting. Every runtime change is kept as a new version and never overwritten.
+The bootstrap layer makes a setup reproducible on any machine. The runtime layer lets the manager change behaviour without touching code or restarting. Every runtime change is kept as a new version and never overwritten.
 
 ## Anatomy of a process pack
 ```
@@ -42,7 +42,7 @@ processes/
 | `unresolved_review` (our own doubt, state `REVIEW`, not corrected by a person) | `block` (cannot export until corrected) / a decision type name | `block` |
 | `unresolved_escalation` (a case sent to a person that nobody resolves) | `keep` (stays as it is, indefinitely) | `keep` |
 
-- `users` (optional): initial users and roles (`approver`, `operator`).
+- `users` (optional): initial users and roles (`manager`, `operator`).
 
 ### `sources.json` *(planned)*
 Declares each source of truth the rules read (`sources` in `evaluate(instance, sources, others)`) and its connector: spreadsheet sheets and column mapping, an HTTP API such as the challenge ERP (base URL; credentials referenced by `.env` variable name, never inline), or a CSV. This is what makes connectors reusable across processes.
@@ -62,11 +62,11 @@ Optional pointers to sample data (e.g. the challenge PDFs folder and Excel file)
 | `POST /processes/definition` | Same as `load`, from the API or the UI |
 | Export endpoint *(planned)* | Returns the current process (and agent config) as pack JSON, so changes made in the app can be committed |
 
-For the challenge: `make demo PROCESS=invoice-payment`. When batch 2 and norma v4 arrive, the approver adds the new rules in the app, exports the pack and commits it.
+For the challenge: `make demo PROCESS=invoice-payment`. When batch 2 and norma v4 arrive, the manager adds the new rules in the app, exports the pack and commits it.
 
 ## Loader rules (the contract)
 1. **Idempotent.** Loading the same pack twice changes nothing.
-2. **Loading never overrides runtime decisions.** Missing items are added. A rule whose text changed in the file enters as a new **draft**; active rules are never modified or removed by a load. What the approver decided in the app always wins.
+2. **Loading never overrides runtime decisions.** Missing items are added. A rule whose text changed in the file enters as a new **draft**; active rules are never modified or removed by a load. What the manager decided in the app always wins.
 3. **Round trip.** What is tuned in the app can be exported back to pack JSON and committed, so a good configuration is never lost and can be reproduced elsewhere.
 4. **Validation first.** A pack is validated before anything is written (e.g. exactly one default decision type, a default type cannot require a human, every rule names an existing decision type). Invalid packs are rejected whole.
 
