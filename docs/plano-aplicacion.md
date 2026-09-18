@@ -1,7 +1,7 @@
 # Plano de la aplicación
 
 **Estado:** borrador vivo. Se itera hasta tener el plano completo.
-**Marcadores:** [DECIDIDO] acordado por el equipo · [PROPUESTA] sugerencia pendiente de validar · [ABIERTO] sin decidir · [PENDIENTE] sección por escribir.
+**Marcadores:** [DECIDIDO] acordado por el equipo · [PROPUESTA] sugerencia pendiente de validar · [ABIERTO] sin decidir · [DESCARTADO] valorado y rechazado · [PENDIENTE] sección por escribir.
 
 ## 1. Visión
 
@@ -37,10 +37,32 @@ La aplicación mejora con el uso. Cada decisión humana sobre un caso no cubiert
    - las **reglas**,
    - los **tipos de decisión**.
 
-### 3.2 Ejecutar
-Para cada instancia, el sistema extrae los símbolos, evalúa las reglas y decide. Si ninguna regla resuelve el caso, o una regla dice escalar, la instancia va al responsable. [PENDIENTE: detalle; ver `.artifacts/specs/2026-09-18-reglas-sistema.md` para extracción, ERP y resiliencia]
+### 3.2 Compilar las reglas a código [DECIDIDO]
+Decidir tiene que ser totalmente determinista, y las reglas tienen que poder cambiar sin romper el sistema. Por eso las reglas no se interpretan en ejecución: se convierten en código.
 
-### 3.3 Escalado asistido [DECIDIDO]
+Hay dos agentes distintos:
+- **Agente compilador.** Lee una regla y escribe el código determinista que la aplica. Se dispara automáticamente cada vez que se añade o cambia una regla.
+- **Decisor (motor).** Para cada instancia, ejecuta el código de todas las reglas activas y resuelve PAGAR, NO_PAGAR o ESCALAR. Se ciñe al resultado del código y no usa LLM (ver P7).
+
+Así la misma instancia con las mismas reglas da siempre el mismo resultado.
+
+[PROPUESTA] Contrato del código de una regla:
+- Es una función pura: recibe los símbolos de la instancia y devuelve si se cumple, un código de motivo y la decisión que implica.
+- No tiene red, disco, reloj ni aleatoriedad. La fecha de corte entra como símbolo.
+- Se guarda versionada junto al texto de la regla del que sale y el hash de ambos.
+
+[PROPUESTA] Validación antes de activar código nuevo:
+1. El compilador genera también casos de prueba a partir de la regla (los que cumplen y los que no).
+2. El código debe pasar esos casos y los casos reales ya etiquetados.
+3. Se ejecuta contra el histórico y se muestra qué decisiones cambian (ver P2).
+4. El responsable aprueba. Solo entonces la versión pasa a activa.
+
+Si la validación falla, la regla anterior sigue activa y el proceso no se para.
+
+### 3.3 Ejecutar
+Para cada instancia, el sistema extrae los símbolos, ejecuta el código de las reglas activas y decide. Si ninguna regla resuelve el caso, o una regla dice escalar, la instancia va al responsable. [PENDIENTE: detalle; ver `.artifacts/specs/2026-09-18-reglas-sistema.md` para extracción, ERP y resiliencia]
+
+### 3.4 Escalado asistido [DECIDIDO]
 Cuando una instancia se escala, el responsable ve:
 - el caso y por qué se escaló,
 - **la decisión que tomaría el agente y su razonamiento**,
@@ -52,27 +74,55 @@ El responsable tiene dos opciones:
 
 En los dos casos entra una regla nueva en el proceso. Por eso el proceso aprende de forma continua.
 
-### 3.4 Autocorrección por revisión [DECIDIDO]
+### 3.5 Autocorrección por revisión [DECIDIDO]
 El manager puede revisar cualquier instancia ya decidida, no solo las escaladas. Si encuentra un error, explica por qué ocurrió. El proceso se corrige a sí mismo a partir de esa explicación.
 [PROPUESTA] Usar el mismo mecanismo que el escalado: el agente convierte la explicación en un cambio de regla y el manager lo aprueba.
+
+### 3.6 Registro de decisiones y comprobación de reglas nuevas [DECIDIDO]
+Se aplican todas las reglas a cada instancia, con funciones deterministas. Todas las decisiones quedan registradas. Cuando entra una regla nueva, se vuelve a ejecutar sobre las decisiones pasadas para comprobar si con ella todo sigue bien.
+
+[PROPUESTA] Qué guarda cada decisión:
+- Instancia: identificador y hash del fichero.
+- **Símbolos usados**, con el valor exacto y su origen (texto de la factura, Excel, ERP con fecha de la consulta).
+- Versión del conjunto de reglas y resultado de cada regla (se cumple o no, código de motivo).
+- Decisión final y quién la tomó: motor o responsable.
+- Si un humano la validó o la corrigió: decisión correcta y motivo.
+
+Guardar los símbolos permite repetir la decisión sin volver a leer el PDF ni llamar al ERP. Así la comprobación es rápida, gratis y siempre da lo mismo.
+
+[PROPUESTA] Resultado de la comprobación de una regla nueva, por instancia:
+- **Sin cambio:** la decisión es la misma.
+- **Regresión:** cambia una decisión que un humano ya validó. Bloquea la activación hasta que el responsable la resuelva.
+- **Cambio por revisar:** cambia una decisión que nadie validó. Se muestra al responsable antes de activar.
+
+### 3.7 Auditoría retroactiva [DECIDIDO]
+Hay un histórico de todas las decisiones, tomadas por el motor o por personas. Cada vez que se añade una regla, se revisa el histórico para ver si alguna decisión pasada fue incorrecta según la regla nueva. Por ejemplo:
+- una factura pagada que no tocaba pagar,
+- una factura no pagada que sí había que pagar.
+
+### 3.8 Procesos y versionado de reglas [DECIDIDO]
+- **Proceso:** es como una carpeta que contiene unas reglas. Dentro se pueden añadir y quitar reglas.
+- Cada proceso tiene **su propio histórico de decisiones** y **su propio versionado de reglas**. Se puede volver a una versión anterior o avanzar a una posterior, como un git simplificado.
+- Si se quieren aplicar reglas totalmente distintas, se crea un **proceso independiente**.
+- Al ejecutar, se elige qué proceso aplicar. Los procesos no comparten reglas ni histórico.
+
+Detalle en P13 a P16.
 
 ## 4. Preguntas abiertas (con recomendación)
 
 **P1. ¿Qué forma tiene una regla nueva?** [ABIERTO]
 Recomendación: el agente propone la regla en dos formas, texto legible y condición estructurada sobre símbolos (por ejemplo, `iva_aplicado = 0.16 → NO_PAGAR`). En ejecución solo se evalúa la forma estructurada, sin LLM. Así la regla es determinista y reproducible. El LLM propone; nunca decide en ejecución.
 
-**P2. ¿Una regla nueva se aplica también al pasado?** [ABIERTO]
-Recomendación: antes de activarla, se ejecuta contra todas las instancias ya decididas y se muestra qué decisiones cambiarían. El manager confirma viendo ese impacto. Sirve para detectar reglas demasiado amplias y es barato de hacer.
+**P2. ¿Una regla nueva se aplica también al pasado?** [DECIDIDO]
+Sí, como comprobación: antes de activarla se ejecuta contra todas las decisiones registradas (ver 3.6). El responsable confirma viendo el impacto.
 
-**P3. ¿Qué pasa si la regla nueva contradice otra?** [ABIERTO]
-Recomendación: el sistema detecta el conflicto al proponerla y no la activa hasta que el manager elige cuál gana. Nunca hay dos reglas activas que den decisiones distintas para el mismo caso.
+**P3. ¿Qué pasa si dos reglas chocan?** [DECIDIDO]
+Si dos reglas dan decisiones distintas para el mismo caso, el choque se escala a una persona. Esa persona decide qué regla queda por encima de la otra. La prioridad elegida entra como cambio de reglas (versión nueva).
 
-**P4. Tensión con el filtro del reto.** [ABIERTO, crítico]
-En la solución de referencia, ESCALAR es una salida correcta. Si el sistema aprende a resolver casos escalados, podría devolver PAGAR donde la referencia espera ESCALAR, y eso descalifica.
-Recomendación:
-- Separar la **salida del proceso** (lo que dice la norma, incluido ESCALAR) de la **resolución posterior** del responsable.
-- `outcomes.jsonl` exporta la salida del proceso con una versión de reglas congelada (norma v3 para el lote 1, v4 para el lote 2).
-- Las reglas aprendidas se aplican solo a casos que la norma deja sin definir, nunca por encima de una regla explícita de la norma.
+**P4. ESCALAR y el filtro del reto.** [DECIDIDO]
+- ESCALAR es una salida válida del proceso: una regla puede dar ESCALAR como solución correcta. La resolución posterior del responsable se guarda aparte y no cambia esa salida.
+- **Cada entrega lleva asignada una versión concreta de reglas.** Así se sabe con qué reglas se hizo cada entrega, y el aprendizaje posterior no la altera.
+- El versionado completo es de la iteración 2. [ABIERTO] Cómo cubrir esto en la iteración 1.
 
 **P5. ¿Quién valida el proceso generado al crearlo?** [ABIERTO]
 Recomendación: el usuario revisa los símbolos, las reglas y los tipos de decisión extraídos antes de la primera ejecución. Cada regla muestra de dónde sale (hoja del Excel, frase del texto). Si un error de lectura pasa aquí, se repite en todas las instancias.
@@ -80,10 +130,115 @@ Recomendación: el usuario revisa los símbolos, las reglas y los tipos de decis
 **P6. ¿Cómo se representan los símbolos que requieren sistemas externos (ERP)?** [ABIERTO]
 Recomendación: cada fuente de verdad es un conector con un contrato fijo (qué símbolos da y cómo falla). El ERP del reto es el primer conector. Esto es lo que permite reutilizar el sistema en otros procesos.
 
-## 5. Secciones por escribir [PENDIENTE]
-- Funcionalidades de la primera iteración.
-- Arquitectura (componentes, datos, flujo).
-- Interfaz del responsable (cola de escalados, revisión, historial de reglas).
-- Trazabilidad: qué se guarda de cada decisión y de cada regla.
-- Encaje con la rúbrica (ADRs, escalabilidad y coste, resiliencia).
-- Relación con los documentos existentes en `.artifacts/`.
+**P7. ¿El agente decisor es un LLM?** [DECIDIDO: no]
+Si un LLM eligiera qué regla aplicar, la elección no sería determinista y podría saltarse una regla que sí aplicaba.
+Decisión:
+- Se ejecuta **siempre el código de todas las reglas activas** sobre cada instancia; nadie elige cuáles.
+- Una tabla de precedencia fija combina los resultados: ESCALAR > NO_PAGAR > PAGAR.
+- El "agente decisor" es ese motor, sin LLM.
+- El LLM solo interviene después: explica la decisión y, si la instancia se escala, propone decisión y regla (3.4).
+
+**P8. ¿Código libre o lenguaje de reglas?** [ABIERTO]
+Recomendación: híbrido.
+- El compilador escribe primero la regla como condición estructurada sobre símbolos, usando un catálogo pequeño de primitivas (igual a, dentro de tolerancia, existe en fuente, fecha válida, único por clave...).
+- Esa forma se lee, se compara entre versiones y no necesita sandbox.
+- Solo si la regla no cabe en las primitivas, el compilador genera código Python puro, que se ejecuta aislado.
+- Casi todas las reglas de la norma v3 caben en primitivas.
+
+**P9. ¿Cómo se sabe que el código generado es correcto?** [PROPUESTA]
+- **Cada decisión humana se convierte en un caso de prueba.** Cada escalado resuelto y cada error corregido quedan como ejemplo etiquetado. El conjunto de pruebas crece con el uso, y ninguna regla nueva puede romper una decisión ya validada sin que el responsable lo vea.
+- **Opcional: doble compilación.** Dos compilaciones independientes de la misma regla (otro modelo u otro prompt) se ejecutan sobre el histórico. Si coinciden en todos los casos, se acepta. Si no, se muestra la diferencia al responsable. Cuesta poco y detecta errores de interpretación de la regla.
+
+**P10. ¿Y si la regla nueva usa un símbolo que no se guardó?** [ABIERTO]
+Por ejemplo, una regla nueva sobre el "recargo financiero" necesita un campo que antes no se extraía.
+Recomendación: guardar siempre el texto completo extraído de cada factura, además de los símbolos. Si falta un símbolo, se extrae del texto guardado (sin volver a leer PDFs escaneados) y se registra como símbolo nuevo antes de comprobar la regla. Si el símbolo viene del ERP, se consulta la foto local guardada del ERP, no el ERP en vivo.
+
+**P11. ¿Cómo se llama la unidad?** [DECIDIDO]
+**Proceso.** No existe "proyecto". Ver 3.8.
+
+**P12. ¿Cuándo se crea un proceso nuevo y cuándo una versión nueva?** [DECIDIDO]
+- **Versión nueva:** se añaden, quitan o cambian reglas dentro del mismo proceso. Ejemplo: norma v3 → norma v4.
+- **Proceso nuevo:** reglas totalmente distintas. Proceso independiente, con su propio histórico.
+- [PROPUESTA] Un proceso nuevo puede crearse copiando las reglas de otro, pero su histórico empieza vacío.
+
+**P13. ¿Qué es una versión y cómo se "vuelve atrás"?** [DECIDIDO]
+- El versionado es lineal: un registro de los cambios de reglas del proceso.
+- Cada cambio crea una versión nueva e inmutable con la foto completa de las reglas, quién la hizo, el motivo y la instancia que la provocó, si la hay.
+- "Volver atrás" activa una versión anterior. No borra nada y queda registrado como un paso más.
+- Solo hay una versión activa por proceso. Las instancias nuevas se deciden con ella.
+
+**P14. ¿Qué hace la auditoría retroactiva con una decisión pasada que ahora sale distinta?** [DECIDIDO]
+**Nunca cambia el pasado.** Solo avisa: genera información sobre decisiones pasadas erróneas, por ejemplo "pagada indebidamente" o "no pagada debiendo pagarse". Con eso la empresa decide si reclama el dinero o paga lo pendiente. La gestión de ese aviso queda fuera del sistema.
+
+**P15. Si la regla nueva contradice una decisión que validó una persona, ¿quién gana?** [DECIDIDO]
+Ninguno de los dos automáticamente. Se marca como conflicto y lo resuelve el responsable.
+
+**P16. ¿Se versionan también los datos (Excel, ERP)?** [DECIDIDO: no]
+- Los ficheros ingeridos no tienen versiones: se guardan tal cual y no cambian. Lo que cambia son las decisiones sobre ellos.
+- Cada decisión del histórico queda asociada a los ficheros con los que se tomó.
+- Si un fichero se modifica, se trata como un fichero nuevo. Se identifica por su hash de contenido.
+- [PROPUESTA] El ERP no es un fichero, sino un sistema vivo. Cada descarga del ERP se guarda como un ingreso más, con su fecha, igual que un fichero nuevo. Así la regla anterior también le aplica.
+
+**P17. ¿Comparar dos versiones cualesquiera?** [DESCARTADO]
+No hace falta como funcionalidad propia: basta con ejecutar una versión y luego otra.
+
+## 5. Funcionalidades de la primera iteración [PROPUESTA; corte de F11 DECIDIDO]
+Objetivo de la iteración 1 (sábado ~14:00): `outcomes.jsonl` del lote 1 correcto y todo el ciclo de reglas funcionando de punta a punta en un proceso.
+
+| # | Funcionalidad | Qué hace | Entra en v1 |
+|---|---|---|---|
+| F1 | Procesos | Crear, listar y seleccionar procesos. Cada uno con sus reglas, versiones e histórico | Sí |
+| F2 | Ingesta | Subir ficheros. Se identifican por hash; se guardan tal cual con el texto completo extraído (texto del PDF u OCR/visión para escaneos) | Sí |
+| F3 | Conectores | Excel (maestros) y ERP (API tolerante a fallos). Cada descarga del ERP se guarda como un ingreso | Sí |
+| F4 | Extracción de símbolos | Saca de cada instancia los símbolos que usan las reglas, con su origen | Sí |
+| F5 | Reglas y compilador | Alta de una regla en texto; el agente compilador genera código y pruebas; se valida y se activa como versión nueva | Sí |
+| F6 | Motor | Ejecuta todas las reglas activas sobre cada instancia, aplica la precedencia y registra la decisión. Sin LLM | Sí |
+| F7 | Histórico y auditoría | Registro de todas las decisiones. Al activar una versión, se reejecuta sobre el histórico: cambios, conflictos y hallazgos | Sí |
+| F8 | Escalado asistido | Cola de escalados. El agente sugiere decisión, razonamiento y regla; el responsable acepta o escribe la suya | Sí |
+| F9 | Versionado | Lista lineal de versiones; activar una anterior | Iteración 2 [DECIDIDO] |
+| F10 | Exportar | Genera `outcomes.jsonl` y registra con qué reglas se hizo la entrega | Sí |
+| F11 | Crear proceso desde datos | A partir de todos los datos subidos y texto libre, deriva símbolos, reglas y tipos de decisión | Iteración 2 |
+| F12 | Autocorrección por revisión | El manager marca un error en una decisión y explica por qué; el agente propone el cambio de regla | Iteración 2 |
+| F13 | Doble compilación | Dos compilaciones independientes de cada regla deben coincidir sobre el histórico | Si sobra tiempo |
+
+Motivo del corte: F11 es lo más difícil de dejar fiable y no hace falta para pasar el filtro. En v1, las reglas de la norma v3 se dan de alta una a una por F5. Así el mismo flujo del producto genera la entrega.
+
+## 6. Arquitectura [PROPUESTA]
+
+**Stack [DECIDIDO]:** backend en Python con FastAPI; base de datos PostgreSQL. Frontend a elegir por Carlos.
+
+### 6.1 Componentes
+| Componente | Responsabilidad | ¿Usa LLM? |
+|---|---|---|
+| Almacén | PostgreSQL: procesos, versiones, reglas, ficheros, instancias, símbolos, decisiones, hallazgos, eventos | No |
+| Ingesta | Hash, guardado del fichero, extracción de texto | Solo para escaneos (visión) |
+| Conectores | Excel y ERP. El cliente del ERP gestiona token, reintentos, límite de peticiones y cortes | No |
+| Extractor de símbolos | Texto de la instancia + fuentes a símbolos con origen | Solo si el texto no se puede leer con reglas fijas |
+| Compilador | Regla en texto a código + pruebas | Sí |
+| Motor | Ejecuta el código de todas las reglas y decide | **No** |
+| Auditor | Reejecuta una versión sobre el histórico y clasifica las diferencias | No |
+| Asistente de escalado | Sugiere decisión, razonamiento y regla para un escalado | Sí |
+| API + web | Interfaz del responsable | No |
+
+Principio: el LLM nunca está en el camino de la decisión. Solo escribe código de reglas, lee escaneos y sugiere al responsable.
+
+### 6.2 Flujo de una instancia
+1. Ingesta: fichero → hash → texto completo guardado.
+2. Extracción: texto + fuentes → símbolos con origen.
+3. Motor: símbolos + código de la versión activa → resultado de cada regla → decisión.
+4. Registro: decisión con símbolos, versión y resultados de cada regla.
+5. Si la decisión es ESCALAR → cola del responsable con la sugerencia del asistente.
+
+### 6.3 Flujo de un cambio de regla
+1. Texto de la regla (escrita por el responsable o propuesta por el asistente).
+2. El compilador genera código y pruebas.
+3. El código pasa sus pruebas y todas las decisiones validadas por humanos.
+4. El auditor reejecuta sobre el histórico: sin cambio, cambio por revisar, conflicto y hallazgos.
+5. El responsable aprueba → versión nueva activa.
+
+## 7. Pendiente [PENDIENTE]
+- Interfaz del responsable (pantallas).
+- Trazabilidad: formato de eventos y cómo se consulta "por qué se decidió X".
+- Encaje con la rúbrica y lista de ADRs.
+- Frontend.
+- Reparto del trabajo en el equipo.
