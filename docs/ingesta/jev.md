@@ -76,8 +76,8 @@ de reglas o encaminamiento. No se ha implementado entrenamiento continuo en este
 Desde `backend/`:
 
 ```powershell
-uv run python -m app.features.ingesta.tools.probe_jev --output ../reports/jev/probe-v1
-uv run python -m app.features.ingesta.tools.probe_jev --output ../reports/jev/probe-v1 --offline
+uv run python -m app.features.ingestion.tools.probe_jev --output ../reports/jev/probe-v1
+uv run python -m app.features.ingestion.tools.probe_jev --output ../reports/jev/probe-v1 --offline
 ```
 
 El primer comando consulta solo las peticiones sin caché. El segundo necesita respuestas

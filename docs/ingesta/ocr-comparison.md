@@ -23,7 +23,7 @@ La tarifa publicada de GOT-OCR en el momento de la consulta fue 0,05 USD por ima
 El experimento es explícito, fuera de la ruta automática de la API. Desde `backend/`:
 
 ```powershell
-uv run python -m app.features.ingesta.tools.compare_fal_ocr --output ../reports/fal-got --offline
+uv run python -m app.features.ingestion.tools.compare_fal_ocr --output ../reports/fal-got --offline
 ```
 
 `--offline` reinterpreta respuestas locales sin llamadas ni cargos. Sin esa opción, el script puede enviar imágenes al proveedor y consumir saldo. Lee `FAL_KEY` del `.env` de la raíz. Guarda el identificador de petición antes de esperar y recupera la petición existente tras un timeout. Los recortes requieren `--local-extractions ruta/al/files.jsonl`.

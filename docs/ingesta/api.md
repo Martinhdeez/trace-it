@@ -1,6 +1,6 @@
 # API de ingesta
 
-Desde `backend/`: `uv run uvicorn app.features.ingesta.application:create_app --factory --host 127.0.0.1 --port 8000 --workers 1`.
+Desde `backend/`: `uv run uvicorn app.features.ingestion.application:create_app --factory --host 127.0.0.1 --port 8000 --workers 1`.
 
 Swagger en `/docs`, referencia en `/redoc` y contrato en `/openapi.json`. Rutas agrupadas bajo `Ingestion`.
 

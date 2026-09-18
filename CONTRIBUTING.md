@@ -4,7 +4,8 @@ La [guía del equipo](docs/guia-equipo.md) define ramas, responsables y estructu
 
 ## Cambios pequeños y verificables
 
-- Un commit representa un comportamiento o cambio coherente, con sus pruebas cuando correspondan. Usar Conventional Commits, por ejemplo `fix(ingesta): preserve ambiguous OCR candidates`.
+- Un commit representa un comportamiento o cambio coherente, con sus pruebas cuando correspondan. Usar Conventional Commits, por ejemplo `fix(ingestion): preserve ambiguous OCR candidates`.
+- Use English for new package and file names, identifiers, comments, docstrings and developer messages. Preserve source-language document text, parser labels and test fixtures when they are input data or evidence.
 - Conservar los tests dentro de `backend/app/features/<funcionalidad>/tests/` y el router separado del servicio.
 - Mantener evidencia original al normalizar. Un valor ilegible no se completa con el resultado esperado de otra fuente.
 - Documentar en `docs/` cambios de contrato, configuración, límites y resultados de evaluación.
@@ -22,7 +23,7 @@ uv run ruff format --check .
 uv run pytest -q
 ```
 
-La suite general incluye pruebas de procesos que necesitan Postgres y el entorno indicado en la guía. Para comprobar esta entrega aisladamente: `uv run pytest -q app/features/ingesta/tests app/features/fuentes/tests`. La prueba asíncrona de procesos de dev falla actualmente con ProactorEventLoop en Windows; no está oculta ni modificada por la ingesta.
+La suite general incluye pruebas de procesos que necesitan Postgres y el entorno indicado en la guía. Para comprobar esta entrega aisladamente: `uv run pytest -q app/features/ingestion/tests app/features/sources/tests`. La prueba asíncrona de procesos de dev falla actualmente con ProactorEventLoop en Windows; no está oculta ni modificada por la ingesta.
 
 Para aplicar formato: `uv run ruff format .`. Ruff y `.editorconfig` fijan espaciado, imports y finales de línea. No reformatear archivos ajenos como efecto secundario de una feature.
 
@@ -35,7 +36,7 @@ git fetch origin dev
 git rebase origin/dev
 git diff --check
 git status --short
-git push -u origin NOMBRE-DE-RAMA
+git push -u origin BRANCH-NAME
 ```
 
 Repetir las comprobaciones si el rebase cambia código. Las claves van en `.env`; los informes, objetos y modelos permanecen ignorados. Un PR debe explicar comportamiento, validación y diferencias de integración pendientes.

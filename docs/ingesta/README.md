@@ -8,8 +8,8 @@ Desde `backend/`, con Python 3.12 y `uv`:
 
 ```powershell
 uv sync --locked --group dev
-uv run python -m app.features.ingesta.tools.download_models
-uv run uvicorn app.features.ingesta.application:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
+uv run python -m app.features.ingestion.tools.download_models
+uv run uvicorn app.features.ingestion.application:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
 ```
 
 Abrir http://127.0.0.1:8000/docs. La descarga de modelos se hace una vez; el servicio OCR funciona después sin conexión. Las revisiones de Hugging Face están fijadas en `scripts/download_models.py`, y los hashes quedan en `.models/manifest.json` y `.models/verify/manifest.json`. El lector latino móvil y el verificador local ocupan juntos unos 102 MB de pesos ONNX.
@@ -97,15 +97,15 @@ El adaptador VLM tiene timeout de 60 segundos, concurrencia 1 y salida limitada.
 uv run pytest -q
 uv run ruff check .
 uv run ruff format --check .
-uv run python -m app.features.ingesta.tools.benchmark ../.context/500-sombras-de-alberto --output reports/extraction
-uv run python -m app.features.ingesta.tools.review_corpus ../.context/500-sombras-de-alberto reports/extraction/files.jsonl --output reports/review
+uv run python -m app.features.ingestion.tools.benchmark ../.context/500-sombras-de-alberto --output reports/extraction
+uv run python -m app.features.ingestion.tools.review_corpus ../.context/500-sombras-de-alberto reports/extraction/files.jsonl --output reports/review
 ```
 
 El benchmark genera `files.jsonl` con evidencia por archivo y `summary.json`. Para una medición sin caché, usar un `TRACEPAY_DATA_DIR` nuevo. No se suministran campos de negocio ni una moneda predeterminada. Las pruebas de material requieren el submódulo y la prueba OCR real requiere los pesos; si faltan se omiten indicando el motivo.
 
 Ver [medición y casuísticas](extraction-validation.md). La medición de completitud no sustituye a una evaluación con campos etiquetados ni al verificador privado de decisiones del reto.
 
-Se ha probado GOT-OCR v2 de fal.ai con peticiones reales, comparándolo con las lecturas visuales de los scans difíciles. La clave se lee de `.env` mediante `FAL_KEY` y está excluida de Git. El experimento se ejecuta explícitamente con `python -m app.features.ingesta.tools.compare_fal_ocr`; `--offline` reevalúa las respuestas guardadas sin llamadas ni cargos. El script conserva los identificadores de petición para recuperar trabajos sin volver a enviarlos. Este proveedor no se activa automáticamente en la API. Ver [comparación de OCR](ocr-comparison.md).
+Se ha probado GOT-OCR v2 de fal.ai con peticiones reales, comparándolo con las lecturas visuales de los scans difíciles. La clave se lee de `.env` mediante `FAL_KEY` y está excluida de Git. El experimento se ejecuta explícitamente con `python -m app.features.ingestion.tools.compare_fal_ocr`; `--offline` reevalúa las respuestas guardadas sin llamadas ni cargos. El script conserva los identificadores de petición para recuperar trabajos sin volver a enviarlos. Este proveedor no se activa automáticamente en la API. Ver [comparación de OCR](ocr-comparison.md).
 
 ## Decisiones de implementación
 

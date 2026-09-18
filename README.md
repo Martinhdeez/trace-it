@@ -11,8 +11,8 @@ Desde la raíz, con Python 3.12 y uv:
 ```powershell
 cd backend
 uv sync --locked --group dev
-uv run python -m app.features.ingesta.tools.download_models
-uv run uvicorn app.features.ingesta.application:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
+uv run python -m app.features.ingestion.tools.download_models
+uv run uvicorn app.features.ingestion.application:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
 ```
 
 Abrir <http://127.0.0.1:8000/docs>. PDF nativo y Excel funcionan sin descargar modelos. La ingesta independiente no necesita Postgres. El backend general de dev se conserva: `uvicorn app.main:app` arranca sus routers; la ingesta aún no está conectada a sus procesos e instancias.
@@ -23,18 +23,18 @@ Abrir <http://127.0.0.1:8000/docs>. PDF nativo y Excel funcionan sin descargar m
 backend/
   pyproject.toml, uv.lock
   app/
-    main.py                  # entrada de FastAPI
-    common/                  # evidencia, normalización y errores compartidos
+    main.py                  # FastAPI entry point
+    common/                  # shared evidence, normalization and errors
     features/
-      ingesta/
-        router.py, schemas.py # interfaz HTTP y contratos
-        service.py, store.py  # orquestación, caché y trabajos
-        pdf/, ocr/           # lectores y proveedores
-        tests/, tools/       # regresión y experimentos
-      fuentes/
-        service.py, excel.py # lectura estructural de Excel
+      ingestion/
+        router.py, schemas.py # HTTP interface and contracts
+        service.py, store.py  # orchestration, cache and jobs
+        pdf/, ocr/           # readers and providers
+        tests/, tools/       # regression tests and experiments
+      sources/
+        service.py, excel.py # structured Excel extraction
         config.py, tests/
-docs/ingesta/                # uso, integración, mediciones y límites
+docs/ingesta/                # usage, integration, measurements and limits
 ```
 
 - [Guía de ingesta](docs/ingesta/README.md)

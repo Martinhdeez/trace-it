@@ -2,11 +2,11 @@
 
 ## Alcance
 
-La referencia es [la guía del equipo](../guia-equipo.md). `backend/app/features/ingesta/` contiene recepción, PDF, OCR, cola y evidencia. `features/fuentes/` contiene Excel y su servicio público. Cada funcionalidad conserva sus tests. Evidencia, normalización y errores comunes viven en `app/common/`.
+La referencia es [la guía del equipo](../guia-equipo.md). `backend/app/features/ingestion/` contiene recepción, PDF, OCR, cola y evidencia. `features/sources/` contiene Excel y su servicio público. Cada funcionalidad conserva sus tests. Evidencia, normalización y errores comunes viven en `app/common/`.
 
-El router valida y llama al servicio. `ingesta.service` consume `fuentes.service`, sin importar routers ajenos. `app/main.py` conserva el arranque general de dev. `ingesta.application.create_app` ofrece la API independiente con composición y ciclo de vida propios; sus rutas aún no están montadas en la aplicación general.
+El router valida y llama al servicio. `ingestion.service` consume `sources.service`, sin importar routers ajenos. `app/main.py` conserva el arranque general de dev. `ingestion.application.create_app` ofrece la API independiente con composición y ciclo de vida propios; sus rutas aún no están montadas en la aplicación general.
 
-`ingesta/pdf/invoice.py` es un adaptador determinista de campos de factura de los formatos observados. No implementa los símbolos genéricos por proceso de `features/extraccion/`. Conserva texto completo y evidencia para esa integración.
+`ingestion/pdf/invoice.py` es un adaptador determinista de campos de factura de los formatos observados. No implementa los símbolos genéricos por proceso de `features/extraccion/`. Conserva texto completo y evidencia para esa integración.
 
 ## Flujo y estado
 

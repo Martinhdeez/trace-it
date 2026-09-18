@@ -45,8 +45,8 @@ Los identificadores de respuesta, versiones, hashes y métricas están resumidos
 Desde `backend/`, con `GEMINI_API_KEY` en el `.env` de la raíz:
 
 ```powershell
-uv run python -m app.features.ingesta.tools.compare_gemini_ocr --model gemini-3.1-flash-lite --output ../reports/gemini-ocr/flash-lite
-uv run python -m app.features.ingesta.tools.compare_gemini_ocr --model gemini-3.1-flash-lite --output ../reports/gemini-ocr/flash-lite --offline
+uv run python -m app.features.ingestion.tools.compare_gemini_ocr --model gemini-3.1-flash-lite --output ../reports/gemini-ocr/flash-lite
+uv run python -m app.features.ingestion.tools.compare_gemini_ocr --model gemini-3.1-flash-lite --output ../reports/gemini-ocr/flash-lite --offline
 ```
 
 El primer comando puede consumir saldo si falta una respuesta en caché. El segundo nunca llama al proveedor. La caché incorpora modelo, prompt, configuración y hashes de imágenes. Cada intento se registra antes de llamar; un timeout o intento incompleto bloquea el reenvío automático para evitar cobros duplicados. `--input-images` admite una carpeta de recortes `archivo.pdf.png`; no se inventan coordenadas PDF para esos recortes.

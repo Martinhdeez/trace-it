@@ -35,9 +35,9 @@ uv run pytest -q
 uv run ruff check .
 uv run ruff format --check .
 $env:TRACEPAY_DATA_DIR = 'reports/cold-data'
-uv run python -m app.features.ingesta.tools.benchmark ../.context/500-sombras-de-alberto --output reports/cold
-uv run python -m app.features.ingesta.tools.review_corpus ../.context/500-sombras-de-alberto reports/cold/files.jsonl --output reports/review
-uv run python -m app.features.ingesta.tools.evaluate_scans --extractions reports/cold/files.jsonl --output reports/scans
+uv run python -m app.features.ingestion.tools.benchmark ../.context/500-sombras-de-alberto --output reports/cold
+uv run python -m app.features.ingestion.tools.review_corpus ../.context/500-sombras-de-alberto reports/cold/files.jsonl --output reports/review
+uv run python -m app.features.ingestion.tools.evaluate_scans --extractions reports/cold/files.jsonl --output reports/scans
 ```
 
 Usar un directorio de datos nuevo para medir sin caché. El benchmark genera un registro por archivo con hash y evidencia; los informes detallados quedan fuera de Git. La auditoría no sustituye una lectura humana independiente.

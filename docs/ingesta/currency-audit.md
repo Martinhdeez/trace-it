@@ -28,7 +28,7 @@ Este análisis no ha cambiado el extractor ni ha rellenado silenciosamente los 1
 ## Reproducción
 
 ```powershell
-uv run python -m app.features.ingesta.tools.audit_currency ../.context/500-sombras-de-alberto
+uv run python -m app.features.ingestion.tools.audit_currency ../.context/500-sombras-de-alberto
 ```
 
 Requiere `pdftotext` instalado. `reports/currency-audit/files.jsonl` conserva una fila por documento con SHA-256, las dos búsquedas de moneda, pedido, comparación de importe y evidencia de otras facturas del mismo NIF. `reports/currency-audit/summary.json` contiene el resumen. Material oficial fijado a `18d43b3`; el hash del Excel queda incluido en el informe.
