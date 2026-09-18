@@ -43,8 +43,10 @@ SUGERENCIA = {
 
 
 @pytest.fixture
-async def caso():
-    """A process with an escalated instance, a past human resolution and a pending one."""
+async def caso(request):
+    """A process with an escalated instance, a past human resolution and a pending one. The
+    human-queue type is named ESCALAR unless the test passes another name as param."""
+    escalar = getattr(request, "param", "ESCALAR")
     sufijo = uuid.uuid4().hex[:8]
     async with session_factory() as s:
         proceso = Proceso(nombre=f"asistente-{sufijo}")
@@ -52,7 +54,9 @@ async def caso():
         await s.flush()
         s.add_all(
             [
-                TipoDecision(proceso_id=proceso.id, nombre="ESCALAR", prioridad=3),
+                TipoDecision(
+                    proceso_id=proceso.id, nombre=escalar, prioridad=3, requiere_persona=True
+                ),
                 TipoDecision(proceso_id=proceso.id, nombre="NO_PAGAR", prioridad=2),
                 TipoDecision(proceso_id=proceso.id, nombre="PAGAR", prioridad=1, por_defecto=True),
             ]
@@ -62,7 +66,7 @@ async def caso():
             proceso_id=proceso.id,
             texto="Si importe > 1000, escalar",
             tipo="prohibicion",
-            decision="ESCALAR",
+            decision=escalar,
             estado="activa",
         )
         fichero = Fichero(
@@ -82,7 +86,7 @@ async def caso():
             [
                 Decision(
                     instancia_id=escalada.id,
-                    decision="ESCALAR",
+                    decision=escalar,
                     resultados=resultados,
                     reglas_hash="h",
                     autor="motor",
@@ -122,6 +126,7 @@ async def test_sugiere_y_registra_evento(caso, monkeypatch) -> None:
 
     contexto = json.loads(llamadas[0][1]["content"])
     assert contexto["tipos_decision"] == ["ESCALAR", "NO_PAGAR", "PAGAR"]
+    assert contexto["tipos_requieren_persona"] == ["ESCALAR"]
     assert contexto["motivo_escalado"]["reglas_que_saltaron"][0]["texto"].startswith("Si importe")
     assert contexto["resoluciones_humanas"][0]["motivo"] == "ACME no cobra por encima de 4000"
     assert contexto["caso"]["texto_fichero"] == "Total: 5000 EUR"
@@ -131,6 +136,17 @@ async def test_sugiere_y_registra_evento(caso, monkeypatch) -> None:
     assert evento.paso == "sugerir_escalado"
     assert evento.datos["modelo"] == "falso/modelo"
     assert evento.latencia_ms == 5
+
+
+@pytest.mark.parametrize("caso", ["REVISAR_MANUAL"], indirect=True)
+async def test_tipo_con_persona_de_otro_nombre(caso, monkeypatch) -> None:
+    llamadas = _llm(monkeypatch, [SUGERENCIA])
+    async with session_factory() as s:
+        sugerencia = await asistente.sugerir(s, caso["escalada"])
+    assert sugerencia.decision == "NO_PAGAR"
+    contexto = json.loads(llamadas[0][1]["content"])
+    assert contexto["tipos_requieren_persona"] == ["REVISAR_MANUAL"]
+    assert contexto["motivo_escalado"]["decision_actual"] == "REVISAR_MANUAL"
 
 
 async def test_decision_invalida_reintenta_una_vez(caso, monkeypatch) -> None:

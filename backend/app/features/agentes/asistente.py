@@ -26,10 +26,12 @@ MAX_RESOLUCIONES = 10
 
 SISTEMA = """\
 You assist a person who must resolve a case that an automatic, rule-based decision process \
-escalated. You do not decide: you suggest, and the person decides.
+sent to a person (its decision type requires a person, or it is under review). You do not \
+decide: you suggest, and the person decides.
 
 Given the case, answer with:
-- decision: the decision you would take. It MUST be exactly one of the allowed decision types.
+- decision: the decision you would take. It MUST be exactly one of tipos_decision. Avoid the \
+types in tipos_requieren_persona: those only send the case to a person, who needs a final one.
 - razonamiento: why, citing the concrete symbol values (with their origin) and the rule(s) \
 that fired. Be brief and factual. Write in Spanish.
 - regla_propuesta: ONE new rule, in Spanish, that would resolve this case and similar future \
@@ -70,17 +72,19 @@ async def _contexto(
         .order_by(Decision.id.desc())
         .limit(1)
     )
-    if not (ultima and ultima.decision == "ESCALAR") and instancia.estado != "REVISION":
-        raise ConflictError(f"La instancia {instancia.id} no está escalada ni en revisión")
-
     pid = instancia.proceso_id
-    tipos = list(
+    todos = list(
         await session.scalars(
-            select(TipoDecision.nombre)
+            select(TipoDecision)
             .where(TipoDecision.proceso_id == pid)
             .order_by(TipoDecision.prioridad.desc())
         )
     )
+    tipos = [t.nombre for t in todos]
+    con_persona = [t.nombre for t in todos if t.requiere_persona]
+    if not (ultima and ultima.decision in con_persona) and instancia.estado != "REVISION":
+        raise ConflictError(f"La instancia {instancia.id} no está escalada ni en revisión")
+
     reglas = {r.id: r for r in await session.scalars(select(Regla).where(Regla.proceso_id == pid))}
     fichero = await session.get(Fichero, instancia.fichero_hash)
     resoluciones = await session.execute(
@@ -94,6 +98,7 @@ async def _contexto(
     saltaron = [r for r in (ultima.resultados if ultima else []) if r.get("salta")]
     contexto = {
         "tipos_decision": tipos,
+        "tipos_requieren_persona": con_persona,
         "caso": {
             "nombre": instancia.nombre,
             "simbolos": instancia.simbolos or {},
