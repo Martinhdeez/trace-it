@@ -378,7 +378,22 @@
       "payment_iban"
     ],
     "review_method": "assistant_visual_transcription",
-    "sha256": "d80c01723c5862ae77124cf616bf211fc2753c90b9984cb3717da0cde18a5490"
+    "sha256": "d80c01723c5862ae77124cf616bf211fc2753c90b9984cb3717da0cde18a5490",
+    "human_review": {
+      "source": "user_visual_reading_in_conversation",
+      "status": "PROVISIONAL",
+      "note": "El usuario indica que no están seguros y que es lo que parece. No confirma ground truth.",
+      "fields": {
+        "supplier_tax_id": {
+          "raw": "B96233419",
+          "value": "B96233419"
+        },
+        "payment_iban": {
+          "raw": "ES18 0081 5290 6700 0123 4567",
+          "value": "ES1800815290670001234567"
+        }
+      }
+    }
   },
   {
     "file_id": "scan_025.pdf",

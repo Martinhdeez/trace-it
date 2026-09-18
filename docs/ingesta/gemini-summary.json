@@ -97,5 +97,23 @@
       "origin": "DOCUMENT"
     },
     "payment_iban_candidate": "ES1800815290070001234567"
+  },
+  "provisional_human_review": {
+    "file_id": "scan_023.pdf",
+    "source": "user_visual_reading_in_conversation",
+    "status": "PROVISIONAL",
+    "note": "El usuario indica que no están seguros y que es lo que parece. No confirma ground truth.",
+    "fields": {
+      "supplier_tax_id": {
+        "raw": "B96233419",
+        "value": "B96233419"
+      },
+      "payment_iban": {
+        "raw": "ES18 0081 5290 6700 0123 4567",
+        "value": "ES1800815290670001234567"
+      }
+    },
+    "included_in_score": false,
+    "note_on_score": "Human review adds no confirmed field to the historical 47-field benchmark; NIF already had an assistant provisional reference."
   }
 }

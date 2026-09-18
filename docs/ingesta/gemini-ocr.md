@@ -24,6 +24,12 @@ La mejora no equivale a poder aceptar todos los valores:
 
 Las propuestas pasan por el mismo parser y permanecen `UNVERIFIED`. No se ha conectado Gemini como ruta automática de producción ni se ha implementado una regla que elija la lectura correcta usando las etiquetas de evaluación.
 
+### Lectura humana posterior de scan_023
+
+El usuario propone NIF `B96233419` e IBAN `ES18 0081 5290 6700 0123 4567`, indicando expresamente que no están seguros. Se registra como `PROVISIONAL` en la referencia, con texto original y valor normalizado, sin modificar la imagen ni completar candidatos del OCR.
+
+El NIF coincide con la referencia visual provisional anterior. El IBAN discrepa de Gemini: el grupo humano es `6700`, mientras el modelo escribió `0700`. Esa discrepancia sigue pendiente de confirmación; no autoriza a sustituir automáticamente el dígito. El IBAN continúa excluido de la puntuación y la comparación histórica sigue siendo 46/47. Ni el checksum ni los datos del maestro convierten esta lectura incierta en evidencia documental confirmada.
+
 ## Tiempo, uso y errores
 
 Las cinco páginas completas tardaron 17,618 s en total; mediana 2,632 s por petición. Consumieron 5.945 tokens de entrada y 1.012 de salida. Con la tarifa estándar publicada de 0,25 USD/M de entrada y 1,50 USD/M de salida, el coste calculado es **0,00300425 USD**. Es una estimación por tokens, no una factura ni una garantía de coste; no incluye intentos fallidos. [Tarifas oficiales](https://ai.google.dev/gemini-api/docs/pricing).
