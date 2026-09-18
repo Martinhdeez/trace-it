@@ -55,9 +55,9 @@ class Store:
     def submit_batch(self, ident, jobs, options, limit):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            queued = db.execute("SELECT count(*) FROM jobs WHERE status IN ('QUEUED','RUNNING')").fetchone()[
-                0
-            ]
+            queued = db.execute(
+                "SELECT count(*) FROM jobs WHERE status IN ('QUEUED','RUNNING')"
+            ).fetchone()[0]
             if queued + len(jobs) > limit:
                 raise ValueError("Queue capacity exceeded")
             db.execute("INSERT INTO batches VALUES (?,?)", (ident, time.time()))
@@ -84,7 +84,9 @@ class Store:
     def claim(self):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT * FROM jobs WHERE status='QUEUED' ORDER BY created LIMIT 1").fetchone()
+            row = db.execute(
+                "SELECT * FROM jobs WHERE status='QUEUED' ORDER BY created LIMIT 1"
+            ).fetchone()
             if row:
                 db.execute("UPDATE jobs SET status='RUNNING' WHERE id=?", (row["id"],))
         return dict(row) if row else None
@@ -100,13 +102,17 @@ class Store:
         with self.connect() as db:
             exists = db.execute("SELECT 1 FROM batches WHERE id=?", (ident,)).fetchone()
             rows = db.execute(
-                "SELECT id,file_id,status,result_id,error FROM jobs WHERE batch_id=? ORDER BY created,id",
+                (
+                    "SELECT id,file_id,status,result_id,error FROM jobs WHERE "
+                    "batch_id=? ORDER BY created,id"
+                ),
                 (ident,),
             ).fetchall()
         if not exists:
             return None
         counts = {
-            s: sum(r["status"] == s for r in rows) for s in ("QUEUED", "RUNNING", "COMPLETED", "FAILED")
+            s: sum(r["status"] == s for r in rows)
+            for s in ("QUEUED", "RUNNING", "COMPLETED", "FAILED")
         }
         return {
             "id": ident,

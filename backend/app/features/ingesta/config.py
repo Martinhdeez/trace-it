@@ -11,7 +11,9 @@ class Settings:
         default_factory=lambda: Path(os.getenv("TRACEPAY_DATA_DIR", str(REPOSITORY_ROOT / ".data")))
     )
     model_dir: Path = field(
-        default_factory=lambda: Path(os.getenv("TRACEPAY_MODEL_DIR", str(REPOSITORY_ROOT / ".models")))
+        default_factory=lambda: Path(
+            os.getenv("TRACEPAY_MODEL_DIR", str(REPOSITORY_ROOT / ".models"))
+        )
     )
     max_file_bytes: int = 25 * 1024 * 1024
     max_pages: int = 40

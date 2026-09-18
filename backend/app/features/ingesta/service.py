@@ -5,6 +5,7 @@ import os
 import threading
 import time
 import uuid
+from contextlib import suppress
 from pathlib import Path
 
 from app.common.exceptions import NotFoundError
@@ -77,10 +78,8 @@ class ExtractionService:
             sha = digest.hexdigest()
             destination = self.objects / sha
             # Publish atomically without replacing an object another worker may be reading.
-            try:
+            with suppress(FileExistsError):
                 os.link(temp, destination)
-            except FileExistsError:
-                pass
             return {"id": uuid.uuid4().hex, "file_id": filename, "sha256": sha, "kind": kind}
         finally:
             temp.unlink(missing_ok=True)

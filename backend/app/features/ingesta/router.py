@@ -11,9 +11,9 @@ from fastapi.concurrency import run_in_threadpool
 from openpyxl.utils.exceptions import InvalidFileException
 
 from app.common.exceptions import TraceError
-from .errors import InvalidDocumentError
 
 from .config import Settings
+from .errors import InvalidDocumentError
 from .schemas import ExtractionResult, ExtractOptions
 from .service import ExtractionService
 
@@ -26,11 +26,15 @@ def create_router(settings: Settings, service: ExtractionService) -> APIRouter:
     @router.post("/v1/extractions", response_model=ExtractionResult)
     async def extract(
         file: Annotated[
-            UploadFile, File(description="Original PDF or XLSX; business fields are read from its contents.")
+            UploadFile,
+            File(description="Original PDF or XLSX; business fields are read from its contents."),
         ],
-        ocr: Annotated[bool, Form(description="Allow local OCR for pages without reliable text.")] = True,
+        ocr: Annotated[
+            bool, Form(description="Allow local OCR for pages without reliable text.")
+        ] = True,
         vlm: Annotated[
-            bool, Form(description="Allow the configured vision fallback; proposals remain unverified.")
+            bool,
+            Form(description="Allow the configured vision fallback; proposals remain unverified."),
         ] = False,
     ):
         try:
@@ -56,9 +60,12 @@ def create_router(settings: Settings, service: ExtractionService) -> APIRouter:
             list[UploadFile],
             File(description="Original PDF or XLSX; business fields are read from its contents."),
         ],
-        ocr: Annotated[bool, Form(description="Allow local OCR for pages without reliable text.")] = True,
+        ocr: Annotated[
+            bool, Form(description="Allow local OCR for pages without reliable text.")
+        ] = True,
         vlm: Annotated[
-            bool, Form(description="Allow the configured vision fallback; proposals remain unverified.")
+            bool,
+            Form(description="Allow the configured vision fallback; proposals remain unverified."),
         ] = False,
     ):
         try:

@@ -14,7 +14,9 @@ from app.features.ingesta.service import ExtractionService
 logger = logging.getLogger(__name__)
 
 
-def create_app(settings: Settings | None = None, service: ExtractionService | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, service: ExtractionService | None = None
+) -> FastAPI:
     settings = settings or Settings()
     service = service or ExtractionService(settings)
 
@@ -38,13 +40,18 @@ def create_app(settings: Settings | None = None, service: ExtractionService | No
         title="Trace Pay",
         version="0.1.0",
         lifespan=lifespan,
-        description="PDF/XLSX extraction with provenance. COMPLETE means extracted, not approved for payment.",
+        description=(
+            "PDF/XLSX extraction with provenance. COMPLETE means "
+            "extracted, not approved for payment."
+        ),
     )
     app.state.service = service
 
     @app.exception_handler(TraceError)
     async def app_error_handler(request: Request, exc: TraceError):
-        return JSONResponse(status_code=exc.status_code, content={"code": exc.code, "message": exc.message})
+        return JSONResponse(
+            status_code=exc.status_code, content={"code": exc.code, "message": exc.message}
+        )
 
     @app.get("/health")
     def health():
