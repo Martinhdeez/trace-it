@@ -1,47 +1,33 @@
-# Trace Pay
+# trace-it
 
-Aplicación para convertir documentos y fuentes de referencia en decisiones auditables. Diseño: [plano](docs/plano-aplicacion.md), [MVP](docs/plan-mvp.md) y [guía del equipo](docs/guia-equipo.md).
+Configurable decision processes with document evidence, compiled rules and an audit trail.
+See the [team guide](docs/team-guide.md), [blueprint](docs/application-blueprint.md)
+and [conventions](docs/CONVENTIONS.md).
 
-Esta rama implementa la **ingesta de PDF y Excel**: extracción con evidencia, OCR local, normalización y API FastAPI. Las decisiones de pago pertenecen al motor de reglas.
+## Run
 
-## Arranque
-
-Desde la raíz, con Python 3.12 y uv:
+Use `make setup` for the team's Docker setup. For local development, configure PostgreSQL
+in `.env` and run from `backend/`:
 
 ```powershell
-cd backend
 uv sync --locked --group dev
+uv run alembic upgrade head
 uv run python -m app.features.ingestion.tools.download_models
-uv run uvicorn app.features.ingestion.application:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
+uv run uvicorn app.main:app --env-file ../.env --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-Abrir <http://127.0.0.1:8000/docs>. PDF nativo y Excel funcionan sin descargar modelos. La ingesta independiente no necesita Postgres. El backend general de dev se conserva: `uvicorn app.main:app` arranca sus routers; la ingesta aún no está conectada a sus procesos e instancias.
+Open <http://127.0.0.1:8000/docs>. Use `POST /login` to obtain `X-User-Id`.
+Native PDF and Excel reading do not require downloaded OCR weights.
 
-## Organización por funcionalidades
+The main API includes extraction and process uploads alongside the existing ERP, rules
+and decisions. Extraction returns available field readings and evidence. Missing fields
+do not cause an error or a document review state.
 
-```text
-backend/
-  pyproject.toml, uv.lock
-  app/
-    main.py                  # FastAPI entry point
-    common/                  # shared evidence, normalization and errors
-    features/
-      ingestion/
-        router.py, schemas.py # HTTP interface and contracts
-        service.py, store.py  # orchestration, cache and jobs
-        pdf/, ocr/           # readers and providers
-        tests/, tools/       # regression tests and experiments
-      sources/
-        service.py, excel.py # structured Excel extraction
-        config.py, tests/
-docs/ingesta/                # usage, integration, measurements and limits
-```
+- [Ingestion guide](docs/ingestion/README.md)
+- [API contract](docs/ingestion/api.md)
+- [Integration](docs/ingestion/architecture.md)
+- [Full corpus audit](docs/ingestion/corpus-audit.md)
+- [Contributing](CONTRIBUTING.md)
 
-- [Guía de ingesta](docs/ingesta/README.md)
-- [Contrato HTTP y ejemplos](docs/ingesta/api.md)
-- [Integración y diferencias pendientes con dev](docs/ingesta/architecture.md)
-- [Validación y límites conocidos](docs/ingesta/extraction-validation.md)
-- [Comparación real de Gemini, OCR local y GOT](docs/ingesta/gemini-ocr.md)
-- [Contribuir y comprobar cambios](CONTRIBUTING.md)
-
-El material oficial se conserva como submódulo en `.context/500-sombras-de-alberto`. Modelos, credenciales, resultados de ejecución y datos locales están excluidos de Git.
+The challenge submodule remains unmodified. Credentials, model weights, provider journals
+and local results are excluded from Git.

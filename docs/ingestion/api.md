@@ -1,72 +1,58 @@
-# API de ingesta
+# Ingestion API
 
-Desde `backend/`: `uv run uvicorn app.features.ingestion.application:create_app --factory --host 127.0.0.1 --port 8000 --workers 1`.
+Use `app.main:app`. Its `/health` remains `{"status":"ok"}`.
+The combined contract is in `/docs`, `/redoc` and `/openapi.json`.
+Ingestion uses the existing `X-User-Id` header obtained through `POST /login`.
 
-Swagger en `/docs`, referencia en `/redoc` y contrato en `/openapi.json`. Rutas agrupadas bajo `Ingestion`.
+## Extraction
 
-## Extraer un documento
-
-```powershell
-curl.exe http://127.0.0.1:8000/v1/extractions -F "file=@../.context/500-sombras-de-alberto/facturas/scan_001.pdf"
-curl.exe http://127.0.0.1:8000/v1/extractions -F "file=@../.context/500-sombras-de-alberto/FINAL_v7_DEFINITIVO_ahorasi.xlsx"
-```
-
-Multipart: `file` obligatorio, `ocr=true`, `vlm` y `jev` opcionales. Omitir `vlm`/`jev` habilita el proveedor configurado cuando hace falta; `false` lo desactiva. No se pide moneda, NIF ni otro campo que deba leerse del documento. Hasta 25 MiB por archivo. Un `200` devuelve:
-
-- `id`, `file_id`, `sha256`: identidad de esta ingesta y contenido original.
-- `kind`: `invoice` o `workbook`.
-- `status`: `COMPLETE` o `NEEDS_REVIEW`; ninguno es una decisión de pago.
-- `fields`: valores normalizados, estados y candidatos con texto, página y coordenadas.
-- `data`: hojas/celdas de Excel, propuestas visuales, `committee` (lectores, soporte por campo y recomendaciones de Jev) y procedencia del procesamiento.
-- `warnings`, `pages`, `metrics`, `pipeline_version`, `cache_hit`.
-- `review`: `required`, `action` (`CONTINUE` o `HUMAN_REVIEW`), `fields` y `reasons`.
-
-Los importes son cadenas decimales. `OBSERVED` es una observación que puede contener errores OCR. Un candidato generativo sin corroboración queda `UNVERIFIED`. El comité puede aceptar una coincidencia con otro lector fiable si no hay evidencia incompatible. Excel conserva hoja, celda, fórmula, caché de fórmula y formato numérico.
-
-Desde `invoice-v1.8.0`, los campos inciertos de facturas tienen `value: null`; las lecturas
-propuestas permanecen en `candidates`. `[ILLEGIBLE]`, caracteres `?`, contradicciones y OCR sin
-corroboración impiden utilizar el valor automáticamente. También es obligatorio el número de
-factura. Si `review.required` es verdadero, el consumidor debe enviar el documento a revisión;
-esta API comunica esa necesidad, pero no implementa la bandeja de revisión ni decide pagos.
-Ejemplo parcial:
-
-```json
-{
-  "status": "NEEDS_REVIEW",
-  "review": {
-    "required": true,
-    "action": "HUMAN_REVIEW",
-    "fields": ["supplier_tax_id"],
-    "reasons": ["UNREADABLE_FIELD", "FIELD_UNVERIFIED"]
-  }
-}
-```
-
-Los resultados históricos sin contrato `review` se presentan con
-`LEGACY_RESULT_REEXTRACT` y requieren volver a subir el original. Sus campos antiguos se
-conservan como histórico y no deben consumirse como una extracción validada por la versión nueva.
-
-`GET /v1/extractions/{id}` recupera el resultado persistido. Subir contenido idéntico con otro nombre reutiliza la extracción y conserva otra identidad documental; no deduplica facturas a efectos de pago.
-
-## Procesar un lote
+`POST /v1/extractions`: multipart `file`, optional `ocr=true`, `vlm` and `jev`.
+No business fields are required as input.
 
 ```powershell
-curl.exe http://127.0.0.1:8000/v1/batches -F "files=@primera.pdf" -F "files=@segunda.pdf"
-curl.exe http://127.0.0.1:8000/v1/batches/IDENTIFICADOR
+curl.exe http://127.0.0.1:8000/v1/extractions -H "X-User-Id: 1" -F "file=@invoice.pdf"
 ```
 
-El POST admite hasta 100 archivos, rechaza nombres repetidos y responde `202` con `id`, `files` y `status_url`. La consulta devuelve trabajos y recuentos `QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`, además de `finished`. `COMPLETED` significa trabajo ejecutado; hay que consultar también el `status` del resultado.
+The response contains `id`, `file_id`, `sha256`, `kind`, `fields`, `text`,
+`data`, `warnings`, `pages`, `metrics`, `pipeline_version` and `cache_hit`.
+There is no document `status`, `review` or required-field completeness gate.
 
-Tras reiniciar se recuperan los trabajos en curso. Un fallo transitorio del proveedor conserva lo leído y evita guardar un éxito en caché. El diario remoto impide repetir automáticamente una petición cuya entrega fue incierta; reenviar el documento no elimina ese bloqueo. Inspeccionar el diario del proveedor antes de un nuevo intento. Los lotes fallidos no se reenvían automáticamente.
+Invoice fields expose `value`, `text`, `selected_by`, `agreeing_readers`,
+`confidence` and `candidates`. The value is the best available normalized reading,
+not a verified business fact, and may come from a single reader.
+Raw text remains available when normalization fails. No reading means `null`, not an error.
+Confidence is an available OCR score, not a calibrated probability. Supporting readers
+are actual readers, not extra votes inferred from Jev's textual selection.
 
-## Errores
+Candidates retain original text, method, page, region and normalized proposals.
+Document-level `text` retains reader-labelled full transcriptions.
+`data` contains processing evidence, committee metadata or workbook sheets/cells.
+Workbook cell diagnostics do not impose workflow states.
 
-| HTTP | Significado |
-|---|---|
-| 404 | Identificador inexistente. |
-| 422 | Entrada, tamaño, estructura o formato no admitido. |
-| 500 | Fallo interno; detalle técnico en el log. |
+`GET /v1/extractions/{id}` retrieves a persisted result. Identical content with another
+filename reuses processing while retaining document identity. Re-upload historical
+documents for the v2 contract; versioned cache keys prevent reuse of the old policy.
 
-Los errores de aplicación siguen dev: `{"code":"invalid_document","message":"mensaje"}`; la validación de parámetros de FastAPI puede devolver una lista en `detail`.
+## Process upload
 
-`GET /health` informa de configuración y modelos; no prueba inferencia remota. Un proceso Uvicorn por directorio de datos. Una exposición externa requiere autenticación y límites de carga en el proxy.
+`POST /processes/{process_id}/files` accepts a PDF and the same options.
+The 201 response includes `instance_id`, `process_id`, `name`, `file_hash`,
+`created`, the existing instance `status`, and `extraction`.
+
+Original bytes/text are stored in PostgreSQL. New instances are `PENDING` with no approved
+symbols. Missing readings never change this to `REVIEW`. Re-uploading the same process,
+filename and content preserves the instance and any existing downstream decisions.
+
+`GET /instances/{instance_id}/document` retrieves the latest extraction from PostgreSQL
+events independently of the local cache. Use `/v1/extractions` to inspect XLSX.
+Mapping readings to configurable symbols or workbook data to source snapshots is separate.
+
+## Batches and errors
+
+`POST /v1/batches` accepts multipart `files` and returns 202.
+`GET /v1/batches/{id}` reports jobs: `QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`.
+These are execution states, not document completeness states. Missing fields do not fail jobs.
+
+Unknown identifiers return 404; unsupported/corrupt/oversized files 422; internal failures 500.
+Application errors follow `{"code":"invalid_document","message":"..."}`; FastAPI parameter
+validation may return `detail`. The standalone local API has no authentication.

@@ -1,71 +1,39 @@
-# Comité de extracción
+# Extraction committee
 
-Desde `invoice-v1.9.0`, la API usa lectores complementarios según la evidencia disponible.
-El objetivo es transcribir el documento; esta funcionalidad no decide pagos ni modifica
-las reglas publicadas de un proceso.
+Pipeline `invoice-v2.0.0+xlsx-v1.3` returns available readings without document review
+states. A single model can supply a value when others cannot read it.
 
-1. El texto nativo suficiente evita llamadas OCR y visuales.
-2. Las páginas que necesitan OCR pasan por el reconocedor primario y el secundario local.
-   El segundo ya no exige una primera extracción casi completa. Puede corroborar campos
-   sueltos o aportar candidatos que faltaban.
-3. Si quedan campos pendientes, se consulta el lector visual configurado. Se usa el servidor
-   `TRACEPAY_VLM_URL` cuando existe; en su ausencia, Gemini con `GEMINI_API_KEY`.
-4. Si siguen existiendo campos pendientes y hay `TYPESAFE_API_KEY`, Jev recibe las
-   transcripciones etiquetadas por lector y selecciona entre candidatos existentes o `none`.
-   Su recomendación queda en `data.committee.text_judge`; no modifica el valor canónico.
+## Routing
 
-Los POST aceptan `vlm` y `jev` por separado. Omitirlos permite la participación automática
-del proveedor configurado; `false` impide su uso y `true` solicita su uso cuando corresponde.
-No se exige ninguna clave para procesar documentos localmente. La biblioteca toma variables
-del entorno; Uvicorn puede cargar `.env` mediante `--env-file ../.env` desde `backend/`.
+1. Read sufficient native PDF text directly.
+2. Run both local OCR recognizers on pages needing OCR, including incomplete first readings.
+3. Consult the configured visual server or Gemini for unresolved readings. Missing currency
+   alone in native documents does not trigger visual inference.
+4. Ask configured Jev to select existing candidates or `none` from labelled transcriptions.
 
-## Política por campo
+Omitted `vlm`/`jev` options permit configured providers; `false` disables them.
 
-Una observación nativa clara puede aceptarse por sí sola. Para OCR se requieren dos lectores
-concordantes y sin evidencia incompatible. Una lectura local solo aporta soporte si supera
-el umbral configurado y sus comprobaciones; una lectura visual sola queda pendiente.
-Las propuestas de separadores, los fragmentos ilegibles y los conflictos no se resuelven
-por mayoría. Todos los candidatos y sus regiones se conservan.
+## Selection
 
-Los dos reconocedores locales pertenecen a la misma familia y pueden equivocarse igual.
-Por eso también se comprueba la aritmética con los campos disponibles: base, porcentaje y
-cuota bastan para detectar una discrepancia aunque falte el total. Un desacuerdo aritmético
-en OCR mantiene los importes pendientes; nunca se cambia el importe para cuadrar la factura.
-El texto nativo claramente impreso se conserva aunque los números del documento no cuadren.
+Use a valid Jev selection, otherwise a corroborated internal reading, otherwise the first
+reader with one usable candidate: native, visual, primary OCR, secondary OCR, then unlabelled
+OCR. Preserve every alternative and source text. A field can have `value=null` while
+retaining raw `text`. Disagreement does not erase available readings or demand human review.
 
-Jev no recibe imágenes. Que seleccione un IBAN significa que lo encuentra respaldado por
-las transcripciones, no que haya leído esos caracteres en el original. Contar esa selección
-como otro voto visual duplicaría la misma evidencia. El consumidor puede mostrarla como
-la mejor propuesta textual, junto a los candidatos y los motivos de revisión.
+Jev receives text, not images. Its selection is not independent pixel evidence.
+`agreeing_readers` identifies actual supporting readers. OCR confidence is not calibrated.
+Partial arithmetic checks route additional readers and record disagreements; they do not
+change printed amounts. Identifiers are not reconstructed from source tables or checksums.
 
-`OBSERVED` significa que se cumple esta política, no una garantía matemática de exactitud.
-Los modelos pueden compartir errores. Los campos inciertos devuelven `value=null` y el
-documento requiere `HUMAN_REVIEW`. El comité no contiene excepciones por nombre de archivo,
-valores esperados del Excel ni respuestas de la auditoría.
+## Evidence and recovery
 
-## Trazabilidad y recuperación
+`data.committee` records readers and selections. Candidate locators distinguish primary
+and secondary OCR, page and region. Transformations remain traceable.
 
-`data.committee` identifica la política, los lectores y el soporte por campo.
-Los localizadores OCR incluyen el lector, de modo que dos regiones con el mismo índice
-siguen siendo distinguibles. `vision_proposals` y `ocr_verification` se conservan por
-compatibilidad. Los resultados y métricas se persisten con una nueva versión del pipeline.
+Provider journals preserve request identities and completed responses without credentials.
+Completed responses can be reused. Interrupted/failed delivery is not resent automatically.
+Available readings survive provider errors. Journals contain document text and stay outside Git.
 
-La caché de extracción depende de las opciones, modelos, configuración y activación de
-proveedores. Los diarios de `.data/provider-journal/` conservan identidad de petición,
-respuesta, tiempos y estado, sin credenciales. Una petición completa puede reutilizarse.
-Una petición interrumpida o fallida queda bloqueada para evitar duplicarla automáticamente;
-requiere inspección del diario antes de un reenvío deliberado. No borrar ese registro como
-parte de un reintento automático. Los errores mantienen la evidencia y requieren revisión.
-
-Las métricas de llamadas cuentan invocaciones del adaptador; el diario indica si hubo una
-petición remota. En una respuesta servida desde la caché de extracción, los contadores
-`*_calls_this_request` son cero. Los diarios contienen texto documental y se quedan fuera
-de Git, igual que los originales y los resultados locales.
-
-## Límites pendientes
-
-La selección conservadora deja campos legibles pendientes cuando un lector los contradice.
-No se ha entrenado un árbitro visual calibrado capaz de descartar de forma fiable una lectura
-errónea. Tampoco hay una bandeja humana ni memoria de correcciones conectada a PostgreSQL.
-Las referencias visuales de esta auditoría son provisionales salvo los campos confirmados
-expresamente por el usuario. Ver [resultados y documentos concretos](corpus-audit.md).
+Adapter-call metrics can include journal reuse; they do not necessarily mean new remote calls.
+Extraction cache hits have zero calls for the current request.
+Shared OCR errors and wrong visual proposals remain possible; see [audit](corpus-audit.md).

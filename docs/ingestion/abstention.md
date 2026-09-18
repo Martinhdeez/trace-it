@@ -1,50 +1,33 @@
-# Abstención y revisión de OCR
+# Historical OCR abstention policy
 
-> Medición histórica anterior a `invoice-v1.9.0`. La integración y evaluación actuales están en [comité](committee.md) y [auditoría del corpus](corpus-audit.md).
+This page records `invoice-v1.8.0+xlsx-v1.3`. It is not the current API contract.
+See [v2 readings](api.md) and the [updated corpus audit](corpus-audit.md).
 
-Pipeline: `invoice-v1.8.0+xlsx-v1.3`. Un fragmento ilegible no se completa por plausibilidad,
-checksum o coincidencia con el maestro de proveedores. El texto original y las propuestas
-se conservan como evidencia; un campo incierto no expone un valor canónico utilizable.
+v1.8 withheld uncertain normalized values and returned document review states. OCR needed
+corroboration; unreadable markers, incompatible candidates and low-confidence agreement
+could prevent acceptance. Original text and candidates remained available. The policy
+reduced accepted errors by reducing coverage; it did not improve the unreadable characters.
 
-La API devuelve `NEEDS_REVIEW` y `review.action=HUMAN_REVIEW` cuando faltan campos, hay
-contradicciones o regiones ilegibles. También exige número de factura. Este contrato sirve
-para que la aplicación derive el trabajo: todavía no implementa una bandeja de revisores.
+Historical cold run, Windows 11 / Python 3.12.13:
 
-Los marcadores `[ILLEGIBLE]`, `?` y caracteres de sustitución asociados a un campo lo dejan
-`UNVERIFIED`. Un marcador explícito sin campo identificable bloquea la completitud del
-documento. El OCR sin corroboración mantiene candidatos, pero no un valor aceptado. La
-segunda lectura debe superar el umbral de confianza; coincidir con baja confianza no basta.
-Si dos modelos discrepan, no se elige el candidato que parezca más plausible.
-
-Esto no garantiza detectar todos los errores: dos reconocedores pueden coincidir en una
-lectura incorrecta y una capa textual nativa también puede contener errores.
-
-## Medición en los archivos disponibles
-
-Ejecución local sin caché, 501 archivos, Windows 11 y Python 3.12.13:
-
-| Medida | Resultado |
+| Measurement | Result |
 |---|---|
-| Archivos procesados | 500 PDF y 1 XLSX; cero fallos de procesamiento |
-| Estado | 295 COMPLETE; 206 NEEDS_REVIEW |
-| Invocaciones | 44 OCR; 0 VLM |
-| Tiempo | 75,568 s; 6,63 archivos/s |
-| Campos etiquetados en 29 escaneados | 283 |
-| Valores canónicos coincidentes | 113 |
-| Valores canónicos retenidos por incertidumbre | 170, expuestos como `null` |
-| Valores OBSERVED discrepantes con la referencia | 0 |
+| Inputs | 500 PDFs and one XLSX; no processing failures |
+| Former document states | 295 COMPLETE, 206 NEEDS_REVIEW |
+| Calls | 44 OCR, no visual provider |
+| Duration | 75.568 seconds; 6.63 files/second |
+| Provisionally labelled scan fields | 283 |
+| Accepted matches | 113 |
+| Withheld values | 170 |
+| Accepted disagreements | 0 |
 
-La referencia es una transcripción visual provisional, no ground truth humano confirmado.
-Los cuatro errores antes publicados como `OBSERVED` ahora quedan retenidos; no se han
-corregido sus caracteres. La mejora en contención reduce la cobertura automática y aumenta
-la revisión. El tiempo es una ejecución individual con actividad concurrente de pruebas;
-no constituye una comparación controlada de rendimiento ni una garantía de capacidad.
+These were provisional assistant references. Later human corrections changed the reference
+denominator; use the updated audit for comparisons. One concurrent local run is not a
+controlled performance benchmark or capacity guarantee.
 
-En `scan_025.pdf`, el número de factura no tiene corroboración y queda `UNVERIFIED`.
-En `scan_026.pdf`, los lectores discrepan entre `F26-7712` y `NF26-7712`: queda `AMBIGUOUS`.
-Los otros nueve campos de ambas facturas mantienen las coincidencias de la regresión.
+Historical `scan_025.pdf` invoice number lacked corroboration; `scan_026.pdf` had competing
+`F26-7712` and `NF26-7712` readings. Their other nine fields retained matching readings.
+Artifacts remain in ignored `backend/reports/abstention-cold/`.
 
-Para reproducir, ejecutar el benchmark con un directorio de datos nuevo y contrastar
-`files.jsonl` mediante `tools.evaluate_scans`, como explica [validación](extraction-validation.md).
-Las salidas locales de esta ejecución están en `backend/reports/abstention-cold/`, ignoradas
-por Git. Un cambio de pipeline invalida la reutilización de resultados anteriores en caché.
+The current API exposes best readings, including single-reader proposals, and produces no
+NEEDS_REVIEW/HUMAN_REVIEW decision.
