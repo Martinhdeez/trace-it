@@ -1,11 +1,11 @@
-"""The decision engine: every active rule runs, nobody chooses which (P7).
+"""The decision engine: every active rule runs, nobody chooses which (ADR 0002, 0014).
 
 Pure function. No database, no LLM, no clock, no network: the same inputs always give the
 same verdict, so a past decision can be replayed from its stored symbols.
 
-Fail closed (ADR 0004, 0009, 0014): when any rule result cannot be trusted, the verdict has
-no decision and the instance goes to REVIEW with the reason. Our doubt is never mapped to a
-decision type, and the default type is never produced while a rule is unevaluated.
+Every instance gets a decision. When a rule cannot be trusted (its code failed, or two
+decision types tie), the verdict is the process's escalation type with the reason: a
+person looks at it, and the default is never produced while a rule is unevaluated.
 """
 
 import hashlib
@@ -15,34 +15,38 @@ from typing import Any
 
 from app.features.rules.model import Rule
 
-Case = tuple[dict[str, Any], dict[str, list[dict[str, Any]]], list[dict[str, Any]]]
-# The sandbox's `run_batch`: runs `evaluate(instance, sources, others)` from `code` on every
-# case in one subprocess. Returns, per case, {"fires": bool, "reason": str} or the exception
-# for that case; raises when the whole batch fails.
-RunBatch = Callable[[str, list[Case]], list[Any]]
-DatasetEntry = tuple[int, dict[str, Any]]
-RunDataset = Callable[
-    [str, list[DatasetEntry], dict[str, list[dict[str, Any]]], list[DatasetEntry]], list[Any]
-]
+DatasetEntry = tuple[int, dict[str, Any]]  # (instance key, {symbol: value})
+Sources = dict[str, list[dict[str, Any]]]
+# The sandbox's `run_dataset`: runs `evaluate(instance, sources, others)` from `code` on every
+# requested instance in one subprocess, deriving each one's `others` from the population.
+# Returns, per instance, {"fires": bool, "reason": str} or that instance's exception; raises
+# when the whole batch fails.
+RunDataset = Callable[[str, list[DatasetEntry], Sources, list[DatasetEntry]], list[Any]]
+
+
+@dataclass(frozen=True)
+class Outcomes:
+    """What a process can conclude: the priority of each decision type, the one that applies
+    when no rule fires, and the one that sends the case to a person."""
+
+    priorities: dict[str, int]
+    default: str
+    escalate: str
 
 
 @dataclass(frozen=True)
 class RuleResult:
-    """What one rule answered. `fires` is None when the rule could not be trusted: it failed,
-    or its two codes disagree. `reason` is code A's; `reason_b` is code B's."""
+    """What one rule answered. `fires` is None when the rule could not be evaluated."""
 
     rule_id: int
     hash: str | None
     fires: bool | None
     reason: str
-    reason_b: str | None = None
 
 
 @dataclass(frozen=True)
 class Verdict:
-    """`decision` is None when the instance must go to REVIEW; `reason` then says why."""
-
-    decision: str | None
+    decision: str
     reason: str
     results: list[RuleResult]
     rules_hash: str
@@ -55,7 +59,7 @@ def hash_rules(rules: Sequence[Rule]) -> str:
 
 
 def _read(answer: Any) -> tuple[bool, str]:
-    """A case's answer, or raise if it is an error or malformed."""
+    """An instance's answer, or raise if it is an error or malformed."""
     if isinstance(answer, BaseException):
         raise answer
     fires = answer["fires"]
@@ -64,151 +68,75 @@ def _read(answer: Any) -> tuple[bool, str]:
     return fires, str(answer.get("reason", ""))
 
 
-def _run_code(code: str | None, cases: list[Case], run_batch: RunBatch) -> list[Any]:
-    """One code over every case. A whole-batch failure becomes that error for every case."""
-    try:
-        if not code:
-            raise ValueError("rule is active without both codes")
-        answers = run_batch(code, cases)
-        if len(answers) != len(cases):
-            raise ValueError(f"{len(answers)} results for {len(cases)} cases")
-        return answers
-    except Exception as error:  # noqa: BLE001 - any failure is the same to the engine
-        return [error] * len(cases)
-
-
-def _run_code_dataset(
-    code: str | None,
+def _run_rule(
+    rule: Rule,
     instances: list[DatasetEntry],
-    sources: dict[str, list[dict[str, Any]]],
+    sources: Sources,
     population: list[DatasetEntry],
     run_dataset: RunDataset,
-) -> list[Any]:
-    """One code over a shared dataset. A batch failure affects every requested instance."""
+) -> list[RuleResult]:
+    """One rule over every instance. A whole-batch failure is that error for every one."""
     try:
-        if not code:
-            raise ValueError("rule is active without both codes")
-        answers = run_dataset(code, instances, sources, population)
+        if not rule.code:
+            raise ValueError("rule is active without code")
+        answers = run_dataset(rule.code, instances, sources, population)
         if len(answers) != len(instances):
             raise ValueError(f"{len(answers)} results for {len(instances)} instances")
-        return answers
     except Exception as error:  # noqa: BLE001 - any failure is the same to the engine
-        return [error] * len(instances)
-
-
-def _compare(rule: Rule, answers_a: list[Any], answers_b: list[Any]) -> list[RuleResult]:
-    """Codes A and B of one rule, compared case by case."""
-    results: list[RuleResult] = []
-    for a, b in zip(answers_a, answers_b, strict=True):
+        answers = [error] * len(instances)
+    results = []
+    for answer in answers:
         try:
-            fires_a, reason_a = _read(a)
-            fires_b, reason_b = _read(b)
+            fires, reason = _read(answer)
         except Exception as error:  # noqa: BLE001
             failure = f"RULE_ERROR {rule.id}: {type(error).__name__}: {error}"
             results.append(RuleResult(rule.id, rule.hash, None, failure))
             continue
-        if fires_a != fires_b:
-            failure = f"CODES_DISAGREE {rule.id}: A fires={fires_a}, B fires={fires_b}"
-            results.append(RuleResult(rule.id, rule.hash, None, failure, reason_b))
-            continue
-        results.append(RuleResult(rule.id, rule.hash, fires_a, reason_a, reason_b))
+        results.append(RuleResult(rule.id, rule.hash, fires, reason))
     return results
 
 
 def _combine(
-    rules: Sequence[Rule],
-    results: list[RuleResult],
-    priorities: dict[str, int],
-    default: str,
-    rules_hash: str,
+    rules: Sequence[Rule], results: list[RuleResult], outcomes: Outcomes, rules_hash: str
 ) -> Verdict:
-    """No rule fires -> `default`. Several fire -> the type with the highest priority."""
+    """No rule fires -> the default. Several fire -> the highest priority. A rule that could
+    not be evaluated, or a tie between types -> escalate with the reason."""
 
-    def verdict(decision: str | None, reason: str) -> Verdict:
+    def verdict(decision: str, reason: str) -> Verdict:
         return Verdict(decision, reason, results, rules_hash)
 
     failures = [r.reason for r in results if r.fires is None]
     if failures:
-        return verdict(None, " | ".join(failures))
+        return verdict(outcomes.escalate, " | ".join(failures))
 
     fired = [rule for rule, r in zip(rules, results, strict=True) if r.fires]
-    unknown = sorted({r.decision for r in fired if r.decision not in priorities})
-    if unknown:
-        return verdict(None, f"UNKNOWN_DECISION: {', '.join(unknown)}")
-
     if not fired:
-        return verdict(default, "")
+        return verdict(outcomes.default, "")
 
-    highest = max(priorities[r.decision] for r in fired)
-    winners = [r for r in fired if priorities[r.decision] == highest]
+    highest = max(outcomes.priorities[r.decision] for r in fired)
+    winners = [r for r in fired if outcomes.priorities[r.decision] == highest]
     decisions = sorted({r.decision for r in winners})
     if len(decisions) > 1:
-        return verdict(None, f"RULE_CONFLICT: {', '.join(decisions)} share priority {highest}")
-
+        tie = f"RULE_CONFLICT: {', '.join(decisions)} share priority {highest}"
+        return verdict(outcomes.escalate, tie)
     return verdict(decisions[0], " | ".join(r.text for r in winners))
-
-
-def decide_batch(
-    rules: Sequence[Rule],
-    priorities: dict[str, int],
-    default: str,
-    cases: list[Case],
-    run_batch: RunBatch,
-) -> list[Verdict]:
-    """Apply every rule in `rules` to every case. Each code of each rule runs once, over all
-    the cases together; a case's error only affects that case, a whole-batch failure every
-    case of that batch."""
-    if not cases:
-        return []
-    by_rule = [
-        _compare(
-            rule, _run_code(rule.code_a, cases, run_batch), _run_code(rule.code_b, cases, run_batch)
-        )
-        for rule in rules
-    ]
-    rules_hash = hash_rules(rules)
-    return [
-        _combine(rules, [r[k] for r in by_rule], priorities, default, rules_hash)
-        for k in range(len(cases))
-    ]
-
-
-def decide_dataset(
-    rules: Sequence[Rule],
-    priorities: dict[str, int],
-    default: str,
-    instances: list[DatasetEntry],
-    sources: dict[str, list[dict[str, Any]]],
-    population: list[DatasetEntry],
-    run_dataset: RunDataset,
-) -> list[Verdict]:
-    """Apply all rules without repeating the shared sources and population per instance."""
-    if not instances:
-        return []
-    by_rule = [
-        _compare(
-            rule,
-            _run_code_dataset(rule.code_a, instances, sources, population, run_dataset),
-            _run_code_dataset(rule.code_b, instances, sources, population, run_dataset),
-        )
-        for rule in rules
-    ]
-    rules_hash = hash_rules(rules)
-    return [
-        _combine(rules, [r[k] for r in by_rule], priorities, default, rules_hash)
-        for k in range(len(instances))
-    ]
 
 
 def decide(
     rules: Sequence[Rule],
-    priorities: dict[str, int],
-    default: str,
-    instance: dict[str, Any],
-    sources: dict[str, list[dict[str, Any]]],
-    others: list[dict[str, Any]],
-    run_batch: RunBatch,
-) -> Verdict:
-    """`decide_batch` for a single instance."""
-    [verdict] = decide_batch(rules, priorities, default, [(instance, sources, others)], run_batch)
-    return verdict
+    outcomes: Outcomes,
+    instances: list[DatasetEntry],
+    sources: Sources,
+    population: list[DatasetEntry],
+    run_dataset: RunDataset,
+) -> list[Verdict]:
+    """Apply every rule to every instance. Each rule's code runs once, over all the instances
+    together; the shared sources and population cross to the sandbox once per rule."""
+    if not instances:
+        return []
+    by_rule = [_run_rule(rule, instances, sources, population, run_dataset) for rule in rules]
+    rules_hash = hash_rules(rules)
+    return [
+        _combine(rules, [r[k] for r in by_rule], outcomes, rules_hash)
+        for k in range(len(instances))
+    ]

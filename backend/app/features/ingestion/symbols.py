@@ -1,6 +1,6 @@
 """An instance's symbols: stored with provenance, handed to rule code as plain values.
 
-Stored (`Instance.symbols`): {name: {"value": <json>, "origin": <str>}} (ADR 0008, 0010).
+Stored (`Instance.symbols`): {name: {"value": <json>, "origin": <str>}} (ADR 0008).
 Rule contract (`evaluate(instance, sources, others)`): {name: value}. Rule code never sees
 `origin`.
 """

@@ -44,7 +44,7 @@ Names inside a definition (process, decision types, symbols, sources) are the pr
   "name": "Travel expenses",
   "description": "Approves or rejects each expense report of a business trip. Conventions for every rule: amount is in euros and is compared with Decimal(str(amount)); if a symbol the rule needs is missing (None), the rule does not fire.",
   "decision_types": [
-    {"name": "REVIEW", "priority": 3, "requires_human": true},
+    {"name": "ESCALATE", "priority": 3, "requires_human": true},
     {"name": "REJECT", "priority": 2},
     {"name": "APPROVE", "priority": 1, "is_default": true}
   ],
@@ -55,9 +55,9 @@ Names inside a definition (process, decision types, symbols, sources) are the pr
   ],
   "rules": [
     {"text": "`has_receipt` is true.", "type": "requirement", "decision": "REJECT"},
-    {"text": "`amount` is greater than 500.", "type": "prohibition", "decision": "REVIEW"}
+    {"text": "`amount` is greater than 500.", "type": "prohibition", "decision": "ESCALATE"}
   ]
 }
 ```
 
-An 800 € report without a receipt fires both rules and ends up in `REVIEW` (priority 3 > 2).
+An 800 € report without a receipt fires both rules and ends up in `ESCALATE` (priority 3 > 2).

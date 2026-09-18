@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import NotFoundError, TraceError
+from app.core import events
 from app.core.config import settings
 from app.features.processes.model import Process
 from app.features.sources.http_connector import (
@@ -25,7 +26,6 @@ from app.features.sources.http_connector import (
     SyncError,
 )
 from app.features.sources.model import Source
-from app.features.traces import service as traces
 
 
 class SourceUnavailableError(TraceError):
@@ -144,7 +144,7 @@ async def sync(
     try:
         rows = await connector.download()
     except SyncError as e:
-        traces.record(
+        events.record(
             session,
             "sync_source_failed",
             data={"source": name, "error": str(e), **connector.stats.__dict__},
@@ -162,7 +162,7 @@ async def sync(
     await session.flush()
     diff = await diff_latest(session, process_id, name, config.key)
     stats = connector.stats.__dict__
-    traces.record(
+    events.record(
         session,
         "sync_source",
         data={

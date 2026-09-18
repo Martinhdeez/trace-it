@@ -7,17 +7,6 @@ because the process has to run before any model is configured; the compiler in
 output can be compared against.
 """
 
-import json
-from pathlib import Path
+from tests.support import pack
 
-PACK = Path(__file__).resolve().parents[5] / "processes"
-DEFINITION = PACK / "invoice-payment.json"
-
-
-def codes() -> list[str]:
-    """Each rule's code, in the order the definition lists them."""
-    rules = json.loads(DEFINITION.read_text(encoding="utf-8"))["rules"]
-    return [(PACK / r["code"]).read_text(encoding="utf-8") for r in rules]
-
-
-RULES_V3 = codes()
+RULES_V3 = pack.codes()

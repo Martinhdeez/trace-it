@@ -141,7 +141,7 @@ OUTCOME = {
 }
 RANK = {"PAGAR": 1, "NO_PAGAR": 2, "ESCALAR": 3}
 
-# The trap table of `.artifacts/specs/2026-09-18-analisis-caja-v3.md`, found by a different
+# The trap table of `.artifacts/specs/batch1-analysis.md`, found by a different
 # quick scan. Every listed file must show the finding here too, or the build fails.
 TRAPS = {
     "IBAN_MISMATCH": [

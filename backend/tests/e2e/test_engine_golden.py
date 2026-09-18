@@ -1,18 +1,20 @@
 """The v3 rules decide batch 1 as the golden reference says. No LLM, no database.
 
-Mateo's hand-written code for the 16 rules runs in the real sandbox, one batch per rule, over
-the symbols of the 471 text PDFs and the real sources (workbook + ERP export). The engine's
-own `decidir` then combines the findings. A failure here means the rule texts, the engine,
-the sandbox or the source shapes disagree with an independent reading of the norm.
+The hand-written code for the 16 rules runs in the real sandbox, one subprocess per rule,
+over the symbols of the 471 text PDFs and the real sources (workbook + ERP export). The
+engine's own `decide` combines the findings, exactly as the service does. A failure here
+means the rule texts, the engine, the sandbox or the source shapes disagree with an
+independent reading of the norm.
 """
 
 from typing import Any
 
 import pytest
 
+from app.features.agents import sandbox
+from app.features.decisions.engine import Verdict, decide
 from tests.golden import golden
-from tests.support import app_adapter as adapter
-from tests.support import challenge
+from tests.support import challenge, pack
 
 pytestmark = [
     pytest.mark.e2e,
@@ -20,33 +22,26 @@ pytestmark = [
 ]
 
 
+def patient(code: str, instances: list, sources: dict, population: list) -> list:
+    return sandbox.run_dataset(code, instances, sources, population, timeout_s=120)
+
+
 @pytest.fixture(scope="module")
-def verdicts() -> dict[str, adapter.Verdict]:
-    defn = adapter.definition()
-    specs, out = adapter.rules(defn), adapter.outcomes(defn)
-    codes = adapter.REFERENCE_CODE
-    sources = challenge.sources()
+def verdicts() -> dict[str, Verdict]:
     instances = golden.symbols()
-    others = {s["file_id"]: adapter.others_of(instances, s) for s in instances}
-    cases = [(s, sources, others[s["file_id"]]) for s in instances]
+    dataset = [(s["file_id"], s) for s in instances]
+    population = [(s["file_id"], {**s, "_instance": s["file_id"]}) for s in instances]
+    results = decide(
+        pack.rules(), pack.outcomes(), dataset, challenge.sources(), population, patient
+    )
+    return {s["file_id"]: v for s, v in zip(instances, results, strict=True)}
 
-    # Every rule over every instance, in the real sandbox, batched. The engine then reads
-    # these answers instead of spawning 16 x 471 subprocesses.
-    answers: dict[tuple[str, str], Any] = {}
-    for code, results in zip(codes, adapter.run_batched(codes, cases), strict=True):
-        for instance, result in zip(instances, results, strict=True):
-            answers[(code, instance["file_id"])] = result
 
-    def execute(code: str, instance: dict[str, Any], *_: Any) -> dict[str, Any]:
-        result = answers[(code, instance["file_id"])]
-        if isinstance(result, Exception):
-            raise result
-        return result
-
-    return {
-        s["file_id"]: adapter.decide(specs, codes, out, s, sources, others[s["file_id"]], execute)
-        for s in instances
-    }
+def fired(verdict: Verdict) -> str:
+    return (
+        " | ".join(f"R{r.rule_id:02d}: {r.reason}" for r in verdict.results if r.fires is not False)
+        or "-"
+    )
 
 
 def table(rows: list[tuple[str, str, str, str]]) -> str:
@@ -61,7 +56,7 @@ def table(rows: list[tuple[str, str, str, str]]) -> str:
 def test_every_text_invoice_matches_the_golden_outcome(verdicts: dict[str, Any]) -> None:
     expected = golden.expected()
     wrong = [
-        (fid, expected[fid]["expected"], v.decision, " | ".join(v.fired) or "-")
+        (fid, expected[fid]["expected"], v.decision, fired(v))
         for fid, v in sorted(verdicts.items())
         if v.decision != expected[fid]["expected"] and fid not in golden.KNOWN_MISMATCHES
     ]

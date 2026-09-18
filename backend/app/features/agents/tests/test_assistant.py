@@ -1,7 +1,6 @@
-"""Against the local database (`docker compose up db -d` + migrations); skipped if absent.
-The LLM is monkeypatched: no network."""
+"""Against the local database (`make test-db`); skipped if absent. The model is scripted:
+no network."""
 
-import json
 import socket
 import uuid
 
@@ -12,14 +11,14 @@ from sqlalchemy.engine import make_url
 
 from app.core.config import settings
 from app.core.database import engine, session_factory
-from app.features.agents import assistant
+from app.core.events import Event
+from app.features.agents import assistant, llm
 from app.features.decisions.model import Decision
 from app.features.ingestion.model import File, Instance
-from app.features.llm.client import Reply
 from app.features.processes.model import DecisionType, Process
 from app.features.rules.model import Rule
-from app.features.traces.model import Event
 from app.main import app
+from tests.support.models import per_role, user_json
 
 
 def _db_available() -> bool:
@@ -104,25 +103,19 @@ async def case(request):
     await engine.dispose()  # connections are bound to this test's event loop
 
 
-def _llm(monkeypatch, replies: list[dict]) -> list[list[dict]]:
-    calls = []
-
-    async def fake(session, role, messages, response_format=None):
-        assert role == "assistant"
-        calls.append(list(messages))
-        return Reply(json.dumps(replies.pop(0)), "fake/model", 0.01, 5)
-
-    monkeypatch.setattr(assistant, "complete", fake)
-    return calls
+def script(monkeypatch, replies: list[dict]) -> list:
+    seen: dict = {}
+    monkeypatch.setattr(llm, "model_for", per_role({"assistant": replies}, seen))
+    return seen.setdefault("assistant", [])
 
 
 async def test_suggests_and_records_an_event(case, monkeypatch) -> None:
-    calls = _llm(monkeypatch, [SUGGESTION])
+    calls = script(monkeypatch, [SUGGESTION])
     async with session_factory() as s:
         suggestion = await assistant.suggest(s, case["escalated"])
     assert suggestion == assistant.Suggestion(**SUGGESTION)
 
-    context = json.loads(calls[0][1]["content"])
+    context = user_json(calls[0])
     assert context["process_description"] == DESCRIPTION
     assert context["decision_types"] == ["ESCALAR", "NO_PAGAR", "PAGAR"]
     assert context["human_decision_types"] == ["ESCALAR"]
@@ -134,31 +127,42 @@ async def test_suggests_and_records_an_event(case, monkeypatch) -> None:
         event = await s.scalar(select(Event).where(Event.instance_id == case["escalated"]))
     assert event.step == "suggest_escalation"
     assert event.data["model"] == "fake/model"
-    assert event.latency_ms == 5
+    assert event.data["decision"] == "NO_PAGAR"
+    assert event.latency_ms is not None
 
 
-@pytest.mark.parametrize("case", ["MANUAL_REVIEW"], indirect=True)
+@pytest.mark.parametrize("case", ["MANUAL_CHECK"], indirect=True)
 async def test_human_type_with_another_name(case, monkeypatch) -> None:
-    calls = _llm(monkeypatch, [SUGGESTION])
+    calls = script(monkeypatch, [SUGGESTION])
     async with session_factory() as s:
         suggestion = await assistant.suggest(s, case["escalated"])
     assert suggestion.decision == "NO_PAGAR"
-    context = json.loads(calls[0][1]["content"])
-    assert context["human_decision_types"] == ["MANUAL_REVIEW"]
-    assert context["escalation"]["current_decision"] == "MANUAL_REVIEW"
+    context = user_json(calls[0])
+    assert context["human_decision_types"] == ["MANUAL_CHECK"]
+    assert context["escalation"]["current_decision"] == "MANUAL_CHECK"
 
 
 async def test_invalid_decision_retries_once(case, monkeypatch) -> None:
-    calls = _llm(monkeypatch, [{**SUGGESTION, "decision": "REJECT"}, SUGGESTION])
+    calls = script(monkeypatch, [{**SUGGESTION, "decision": "REJECT"}, SUGGESTION])
     async with session_factory() as s:
         suggestion = await assistant.suggest(s, case["escalated"])
     assert suggestion.decision == "NO_PAGAR"
     assert len(calls) == 2
-    assert "REJECT" in calls[1][-1]["content"]
+    async with session_factory() as s:
+        event = await s.scalar(select(Event).where(Event.instance_id == case["escalated"]))
+    assert event.data["retries"] == 1
+
+
+async def test_two_invalid_decisions_give_502(case, monkeypatch) -> None:
+    script(monkeypatch, [{**SUGGESTION, "decision": "REJECT"}] * 2)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        r = await api.get(f"/instances/{case['escalated']}/suggestion")
+    assert r.status_code == 502, r.text
+    assert r.json()["code"] == "llm_error"
 
 
 async def test_not_escalated_gives_409(case, monkeypatch) -> None:
-    _llm(monkeypatch, [])
+    script(monkeypatch, [])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         r = await api.get(f"/instances/{case['pending']}/suggestion")
         assert r.status_code == 409, r.text

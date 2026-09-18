@@ -7,12 +7,12 @@ from sqlalchemy.orm import Mapped, mapped_column, validates
 from app.core.database import Base, created_at
 from app.features.ingestion.symbols import check_stored
 
-INSTANCE_STATUSES = ("PENDING", "REVIEW", "DECIDED")
+INSTANCE_STATUSES = ("PENDING", "DECIDED")
 
 
 class File(Base):
     """An ingested file. Immutable and identified by its content hash: a modified file is a
-    new file (P16)."""
+    new file (ADR 0008)."""
 
     __tablename__ = "files"
 
@@ -25,7 +25,7 @@ class File(Base):
 
 class Instance(Base):
     """One case the process decides. `name` identifies it in exports (the challenge's
-    `outcomes.jsonl` calls it `file_id`)."""
+    `outcomes.jsonl` calls it `file_id`). PENDING until the engine or a person decides it."""
 
     __tablename__ = "instances"
     __table_args__ = (
@@ -38,8 +38,8 @@ class Instance(Base):
     file_hash: Mapped[str] = mapped_column(ForeignKey("files.hash"))
     name: Mapped[str]
     status: Mapped[str] = mapped_column(default="PENDING")
-    review_reason: Mapped[str | None]
-    # Agreed symbols: {name: {"value": ..., "origin": ...}}. Rule code gets them flattened.
+    # Extracted symbols: {name: {"value": ..., "origin": ...}}. Rule code gets them flattened.
+    # None until extraction has run.
     symbols: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     @validates("symbols")

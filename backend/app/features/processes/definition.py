@@ -7,7 +7,6 @@ code already written, which is how a process runs before any model is configured
 a compiled rule can be compared against.
 """
 
-import hashlib
 from pathlib import Path
 from typing import Self
 
@@ -22,6 +21,7 @@ from app.features.processes.schemas import ProcessDetail, ProcessIn
 from app.features.processes.service import get
 from app.features.rules.model import Rule
 from app.features.rules.schemas import RuleIn
+from app.features.rules.service import rule_hash
 from app.features.users.model import User
 from app.features.users.schemas import UserIn
 
@@ -48,6 +48,9 @@ class Definition(ProcessIn):
             raise ValueError("There must be exactly one default decision type")
         if any(t.is_default and t.requires_human for t in self.decision_types):
             raise ValueError("The default decision type cannot require a human")
+        if not any(t.requires_human for t in self.decision_types):
+            # Where a case goes when a rule cannot be evaluated: always a person.
+            raise ValueError("At least one decision type must require a human")
         if len({s.name for s in self.symbols}) != len(self.symbols):
             raise ValueError("Duplicate symbols")
         if len({r.text for r in self.rules}) != len(self.rules):
@@ -78,9 +81,9 @@ def _rule(data: RuleDefinition, process_id: int, base: Path | None) -> Rule:
             )
         code = (base / data.code).read_text(encoding="utf-8")
         sandbox.check(code)
-        rule.code_a = rule.code_b = code
-        rule.hash = hashlib.sha256("\0".join([rule.text, code, code]).encode()).hexdigest()
-        # Nothing to disagree about: one text, one implementation, written by a person.
+        rule.code = code
+        rule.hash = rule_hash(rule.text, code)
+        # Nothing to cross-check: one text, one implementation, written by a person.
         rule.report = {"valid": True, "origin": "hand-written", "file": data.code}
     return rule
 

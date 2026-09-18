@@ -10,8 +10,10 @@ import pytest
 
 from app.features.agents import sandbox
 from app.features.decisions.engine import decide
-from app.features.decisions.tests.rules_v3 import RULES_V3
-from app.features.rules.model import Rule
+from tests.support import pack
+
+RULES = pack.rules()
+OUTCOMES = pack.outcomes()
 
 CLEAN: dict[str, Any] = {
     "issuer_nif": "B96233419",
@@ -42,7 +44,7 @@ SOURCES: dict[str, list[dict[str, Any]]] = {
     "suppliers": [SUPPLIER],
     "orders": [ORDER],
     "erp": [ENTRY],
-    "parameters": [{"cut_off_date": "2026-09-19"}],
+    "parameters": [{"cut_off_date": "2026-09-18"}],
 }
 
 # Per rule (1-based): what to change so that it, and only it, has something to say.
@@ -67,7 +69,10 @@ WHAT_MAKES_IT_FIRE: dict[int, tuple[dict[str, Any], dict[str, Any], list[dict[st
 
 
 def run(number: int, instance: dict, sources: dict, others: list) -> dict[str, Any]:
-    return sandbox.run(RULES_V3[number - 1], instance, sources, others)
+    [result] = sandbox.run_batch(RULES[number - 1].code, [(instance, sources, others)])
+    if isinstance(result, sandbox.SandboxError):
+        raise result
+    return result
 
 
 @pytest.mark.parametrize("number", sorted(WHAT_MAKES_IT_FIRE))
@@ -93,20 +98,12 @@ def test_no_rule_fails_without_symbols_or_sources(number: int) -> None:
     assert result["fires"] is (number == 1)
 
 
-PRIORITIES = {"ESCALAR": 3, "NO_PAGAR": 2, "PAGAR": 1}
-DECISIONS = [
-    "ESCALAR", "NO_PAGAR", "NO_PAGAR", "ESCALAR", "NO_PAGAR", "NO_PAGAR", "NO_PAGAR",
-    "NO_PAGAR", "ESCALAR", "NO_PAGAR", "NO_PAGAR", "NO_PAGAR", "NO_PAGAR", "NO_PAGAR",
-    "NO_PAGAR", "ESCALAR",
-]  # fmt: skip
-RULES = [
-    Rule(id=n, text=f"R{n:02d}", decision=DECISIONS[n - 1], code_a=code, code_b=code, hash=f"h{n}")
-    for n, code in enumerate(RULES_V3, 1)
-]
-
-
-def decide_invoice(instance: dict, sources: dict, others: list) -> str:
-    return decide(RULES, PRIORITIES, "PAGAR", instance, sources, others, sandbox.run_batch).decision
+def decide_invoice(instance: dict, sources: dict, others: list[dict]) -> str:
+    population = [(0, {**instance, "_instance": "this.pdf"})] + [
+        (n, other) for n, other in enumerate(others, 1)
+    ]
+    [verdict] = decide(RULES, OUTCOMES, [(0, instance)], sources, population, sandbox.run_dataset)
+    return verdict.decision
 
 
 def test_the_whole_process_on_the_three_reference_invoices() -> None:
@@ -122,7 +119,10 @@ def test_the_whole_process_on_the_three_reference_invoices() -> None:
 def test_escalar_beats_no_pagar() -> None:
     """An invoice that is both wrong and suspicious goes to a person, not to a refusal."""
     broken = {**CLEAN, "vat_rate": 10, "vat_amount": 849.41, "total": 9343.51}
-
     sources = {**SOURCES, "erp": [{**ENTRY, "status": "PAGADA"}]}
 
     assert decide_invoice(broken, sources, []) == "ESCALAR"
+
+
+def test_a_duplicate_order_escalates_both_invoices() -> None:
+    assert decide_invoice(CLEAN, SOURCES, [{**CLEAN, "_instance": "twin.pdf"}]) == "ESCALAR"

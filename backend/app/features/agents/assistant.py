@@ -1,34 +1,34 @@
-"""Escalation assistant: suggests a decision, its reasoning and a new rule (3.4).
-Owner: Martín.
+"""Escalation assistant: suggests a decision, its reasoning and a new rule.
 
-The LLM never decides anything in the pipeline. This is only a suggestion shown to a
-person, who then resolves the case and, if they want, adds the proposed rule (which is
+The LLM never decides anything in the pipeline (ADR 0002). This is only a suggestion shown
+to a person, who then resolves the case and, if they want, adds the proposed rule (which is
 compiled and validated like any other rule)."""
 
 import json
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
+from pydantic_ai import Agent, ModelRetry, RunContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.exceptions import ConflictError, NotFoundError, TraceError
+from app.common.exceptions import ConflictError, NotFoundError
+from app.core import events
+from app.features.agents import llm
 from app.features.decisions.model import ENGINE, Decision
 from app.features.ingestion.model import File, Instance
 from app.features.ingestion.symbols import flatten_symbols
-from app.features.llm.client import complete
 from app.features.processes.model import DecisionType, Process
 from app.features.rules.model import Rule
-from app.features.traces.service import record
 
 MAX_TEXT = 12_000  # chars of the file's text sent to the model
 MAX_RESOLUTIONS = 10
 
 SYSTEM = """\
 You assist a person who must resolve a case that an automatic, rule-based decision process \
-sent to a person (its decision type requires a human, or it is under review). You do not \
-decide: you suggest, and the person decides.
+sent to a person (its decision type requires a human). You do not decide: you suggest, and \
+the person decides.
 
 Given the case, answer with:
 - decision: the decision you would take. It MUST be exactly one of decision_types. Avoid the \
@@ -46,24 +46,30 @@ past cases when they are relevant.
 "prohibition" if it states a condition that must not happen."""
 
 
-class AssistantError(TraceError):
-    status_code = 502
-    code = "llm_error"
-
-
-class _Output(BaseModel):
+class Suggestion(BaseModel):
     decision: str
     reasoning: str
-    proposed_rule: str
+    proposed_rule: str  # rule text, to be compiled like any other rule if accepted
     proposed_type: Literal["requirement", "prohibition"]
 
 
 @dataclass(frozen=True)
-class Suggestion:
-    decision: str
-    reasoning: str
-    proposed_rule: str  # rule text, to be compiled like any other rule if accepted
-    proposed_type: str  # requirement | prohibition
+class Deps:
+    decision_types: list[str]
+
+
+assistant = Agent(
+    None, output_type=Suggestion, instructions=SYSTEM, deps_type=Deps, name="assistant", retries=1
+)
+
+
+@assistant.output_validator
+def _known_decision(ctx: RunContext[Deps], suggestion: Suggestion) -> Suggestion:
+    if suggestion.decision not in ctx.deps.decision_types:
+        raise ModelRetry(
+            f"decision {suggestion.decision!r} is not one of {ctx.deps.decision_types}"
+        )
+    return suggestion
 
 
 async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str, Any], list[str]]:
@@ -83,8 +89,8 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
     )
     types = [t.name for t in all_types]
     human = [t.name for t in all_types if t.requires_human]
-    if not (latest and latest.decision in human) and instance.status != "REVIEW":
-        raise ConflictError(f"Instance {instance.id} is neither escalated nor in review")
+    if not (latest and latest.decision in human):
+        raise ConflictError(f"Instance {instance.id} is not escalated")
 
     rules = {r.id: r for r in await session.scalars(select(Rule).where(Rule.process_id == pid))}
     file = await session.get(File, instance.file_hash)
@@ -97,7 +103,7 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
     )
 
     process = await session.get(Process, pid)
-    fired = [r for r in (latest.results if latest else []) if r.get("fires")]
+    fired = [r for r in latest.results if r.get("fires")]
     context = {
         # conventions every rule of the process follows; the proposed rule must too
         "process_description": process.description if process else "",
@@ -109,9 +115,8 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
             "file_text": ((file.text if file else None) or "")[:MAX_TEXT],
         },
         "escalation": {
-            "current_decision": latest.decision if latest else None,
-            "status": instance.status,
-            "review_reason": instance.review_reason,
+            "current_decision": latest.decision,
+            "reason": latest.reason,
             "fired_rules": [
                 {
                     "id": r.get("rule_id"),
@@ -145,46 +150,15 @@ async def suggest(session: AsyncSession, instance_id: int) -> Suggestion:
     if instance is None:
         raise NotFoundError(f"Instance {instance_id} does not exist")
     context, types = await _context(session, instance)
-
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": SYSTEM},
-        {"role": "user", "content": json.dumps(context, ensure_ascii=False, default=str)},
-    ]
-    latency, cost, output, model, attempts = 0, None, None, None, 0
-    while attempts < 2:  # one retry if the reply is invalid
-        attempts += 1
-        try:
-            reply = await complete(session, "assistant", messages, _Output)
-        except TraceError:
-            raise
-        except Exception as error:
-            raise AssistantError(f"The assistant's model failed: {error}") from error
-        model = reply.model
-        latency += reply.latency_ms
-        if reply.cost is not None:
-            cost = (cost or 0) + reply.cost
-        try:
-            output = _Output.model_validate_json(reply.content)
-            if output.decision in types:
-                break
-            problem = f"decision {output.decision!r} is not one of {types}"
-        except ValidationError as error:
-            problem = f"invalid reply: {error}"
-        output = None
-        messages += [
-            {"role": "assistant", "content": reply.content},
-            {"role": "user", "content": f"Fix this: {problem}. Answer again."},
-        ]
-    if output is None:
-        raise AssistantError(f"The assistant gave no valid suggestion: {problem}")
-
-    record(
+    prompt = json.dumps(context, ensure_ascii=False, default=str)
+    suggestion, trace = await llm.run(assistant, "assistant", prompt, deps=Deps(types))
+    events.record(
         session,
         "suggest_escalation",
         instance_id=instance_id,
-        data={"model": model, "decision": output.decision, "attempts": attempts},
-        latency_ms=latency,
-        cost=cost,
+        data={"decision": suggestion.decision, **trace.as_data()},
+        latency_ms=trace.latency_ms,
+        cost=trace.cost,
     )
     await session.commit()
-    return Suggestion(**output.model_dump())
+    return suggestion

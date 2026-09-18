@@ -8,11 +8,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base, created_at
 
 RULE_TYPES = ("requirement", "prohibition")
-RULE_STATUSES = ("draft", "rejected", "active", "retired")
+RULE_STATUSES = ("draft", "active", "retired")
 
 
 class Rule(Base):
-    """A rule as text plus the two independently generated implementations (P9)."""
+    """A rule as text plus the code that runs for it (ADR 0003). The compiler writes the
+    code with two blind agents and keeps the second one's work in `report` as evidence
+    (ADR 0004); a hand-written rule arrives with its code and no report to speak of."""
 
     __tablename__ = "rules"
     __table_args__ = (
@@ -28,11 +30,9 @@ class Rule(Base):
     text: Mapped[str]
     type: Mapped[str]
     decision: Mapped[str]  # outcome produced when the rule fires
-    code_a: Mapped[str | None]
-    code_b: Mapped[str | None]
-    tests_a: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
-    tests_b: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
-    hash: Mapped[str | None]  # sha256 of text + code_a + code_b
+    code: Mapped[str | None]  # defines evaluate(instance, sources, others)
+    tests: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    hash: Mapped[str | None]  # sha256 of text + code
     status: Mapped[str] = mapped_column(default="draft")
     report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # validation report
     created_at: Mapped[created_at]

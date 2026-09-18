@@ -1,13 +1,13 @@
-"""Compiler without network, LLM or database: the sandbox is faked with a plain `exec`
-(acceptable in tests only) and the DB reads are monkeypatched."""
+"""Compiler without network, LLM or database: the models are scripted, the sandbox is faked
+with a plain `exec` (acceptable in tests only) and the DB reads are monkeypatched."""
 
 import json
 from types import SimpleNamespace
 
 import pytest
 
-from app.features.agents import compiler, sandbox
-from app.features.llm.client import Reply
+from app.features.agents import compiler, llm, sandbox
+from tests.support.models import per_role, retry_prompts, user_prompt
 
 
 class SandboxError(Exception):
@@ -132,7 +132,8 @@ def evaluate(instance, sources, others):
     )
 
 
-def _proposal(code: str) -> str:
+def proposal(code: str) -> dict:
+    """What an agent answers: code plus six tests around the threshold."""
     tests = [
         {
             "name": f"amount {amount}",
@@ -143,7 +144,7 @@ def _proposal(code: str) -> str:
         }
         for amount in (0, 10, 999.99, 1000, 1000.01, 5000)
     ]
-    return json.dumps({"code": code, "tests": tests})
+    return {"code": code, "tests": tests}
 
 
 class FakeSession:
@@ -154,36 +155,37 @@ class FakeSession:
         self.added.append(obj)
 
 
-@pytest.fixture
-def llm(monkeypatch: pytest.MonkeyPatch) -> dict:
-    """Canned answers per role, consumed in order; records what each role was sent."""
-    script: dict = {"replies": {}, "messages": {"compiler_a": [], "compiler_b": []}}
-
-    async def complete(session, role, messages, response_format=None) -> Reply:
-        script["messages"][role].append(list(messages))
-        content = script["replies"][role].pop(0)
-        return Reply(content=content, model=f"fake/{role}", cost=0.01, latency_ms=5)
-
-    async def read(session, process_id):
-        return DESCRIPTION, {"suppliers": [{"cif": "B1", "iban": "ES1"}]}, HISTORY, []
-
-    monkeypatch.setattr(compiler.client, "complete", complete)
-    monkeypatch.setattr(compiler, "_read", read)
-    return script
-
-
 DESCRIPTION = "Amounts in whole cents; if a value is missing, the rule does not fire."
 RULE = SimpleNamespace(id=7, process_id=1, text="If amount > 1000, escalate", type="prohibition")
 SYMBOLS = [SimpleNamespace(name="amount", type="number", description="invoice total")]
 
 
-async def test_compile_end_to_end(llm: dict) -> None:
-    llm["replies"] = {"compiler_a": [_proposal(CODE)], "compiler_b": [_proposal(CODE)]}
+@pytest.fixture
+def seen(monkeypatch: pytest.MonkeyPatch) -> dict:
+    """The compiler reads the process from a fake, not the database."""
+
+    async def read(session, process_id):
+        return DESCRIPTION, {"suppliers": [{"cif": "B1", "iban": "ES1"}]}, HISTORY
+
+    monkeypatch.setattr(compiler, "read_process", read)
+    return {}
+
+
+def script(monkeypatch: pytest.MonkeyPatch, seen: dict, a: list[dict], b: list[dict]) -> None:
+    monkeypatch.setattr(llm, "model_for", per_role({"compiler_a": a, "compiler_b": b}, seen))
+
+
+async def test_compile_end_to_end(monkeypatch: pytest.MonkeyPatch, seen: dict) -> None:
+    script(monkeypatch, seen, [proposal(CODE)], [proposal(CODE)])
     session = FakeSession()
+
     result = await compiler.compile_rule(session, RULE, SYMBOLS)
+
+    assert result.code == CODE
     assert result.report["valid"] is True
     assert len(result.report["tests"]) == 12
-    assert result.tests_a[3] == {
+    assert result.report["alternative"]["code"] == CODE
+    assert result.tests[3] == {
         "name": "amount 1000",
         "instance": {"amount": 1000},
         "sources": {},
@@ -191,39 +193,39 @@ async def test_compile_end_to_end(llm: dict) -> None:
         "fires": False,
     }
     # Both agents got the same context, which carries the rule, symbols and sources.
-    [[ctx_a]], [[ctx_b]] = ([m[1:] for m in v] for v in llm["messages"].values())
+    [ctx_a], [ctx_b] = (list(map(user_prompt, calls)) for calls in seen.values())
     assert ctx_a == ctx_b
-    assert "prohibition" in ctx_a["content"] and "amount (number)" in ctx_a["content"]
-    assert '"iban": "ES1"' in ctx_a["content"]
-    assert DESCRIPTION in ctx_a["content"]
+    assert "prohibition" in ctx_a and "amount (number)" in ctx_a
+    assert '"iban": "ES1"' in ctx_a
+    assert DESCRIPTION in ctx_a
     events = [e for e in session.added if e.step == "compile_rule"]
     assert [e.data["role"] for e in events] == ["compiler_a", "compiler_b"]
-    assert all(e.data["repairs"] == 0 and e.cost == 0.01 for e in events)
+    assert all(e.data["retries"] == 0 for e in events)
+    assert all(e.data["model"] == "fake/model" and e.data["valid"] for e in events)
 
 
-async def test_compile_self_repair(llm: dict) -> None:
-    llm["replies"] = {
-        "compiler_a": [_proposal("def evaluate(:\n"), _proposal(CODE)],
-        "compiler_b": [_proposal(CODE)],
-    }
+async def test_compile_self_repair(monkeypatch: pytest.MonkeyPatch, seen: dict) -> None:
+    script(monkeypatch, seen, [proposal("def evaluate(:\n"), proposal(CODE)], [proposal(CODE)])
     session = FakeSession()
+
     result = await compiler.compile_rule(session, RULE, SYMBOLS)
+
     a, b = session.added
-    assert (a.data["repairs"], b.data["repairs"]) == (1, 0)
-    assert a.latency_ms == 10
+    assert (a.data["retries"], b.data["retries"]) == (1, 0)
     # A only ever saw its own broken answer and the sandbox error, never B's work.
-    repair = llm["messages"]["compiler_a"][1]
-    assert "sandbox" in repair[-1]["content"]
-    assert DESCRIPTION in repair[1]["content"]  # its own context, kept in the repair round
-    assert all(m["role"] != "assistant" or "def evaluate(:" in m["content"] for m in repair)
+    repair = seen["compiler_a"][1]
+    [complaint] = retry_prompts(repair)
+    assert "sandbox" in complaint and "Fix it" in complaint
+    assert DESCRIPTION in user_prompt(repair)  # its own context, kept in the repair round
+    assert len(seen["compiler_b"]) == 1
     assert result.report["valid"] is True
 
 
-async def test_compile_without_a_fix_fails(llm: dict) -> None:
-    llm["replies"] = {
-        "compiler_a": [_proposal("def evaluate(:\n")] * 3,
-        "compiler_b": [_proposal(CODE)],
-    }
+async def test_compile_without_a_fix_fails(monkeypatch: pytest.MonkeyPatch, seen: dict) -> None:
+    script(monkeypatch, seen, [proposal("def evaluate(:\n")] * 3, [proposal(CODE)])
+
     with pytest.raises(compiler.CompilationError) as e:
         await compiler.compile_rule(FakeSession(), RULE, SYMBOLS)
+
     assert e.value.status_code == 502 and "compiler_a" in e.value.message
+    assert len(seen["compiler_a"]) == 3  # the first answer and two repairs

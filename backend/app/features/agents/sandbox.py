@@ -207,19 +207,3 @@ def run_dataset(
         }
     )
     return _run(stdin, len(instances), timeout_s)
-
-
-def run(
-    code: str,
-    instance: dict[str, Any],
-    sources: dict[str, list[dict[str, Any]]],
-    others: list[dict[str, Any]],
-    timeout_s: float = 2.0,
-) -> dict[str, Any]:
-    """Run `evaluate(instance, sources, others)` from `code` in the sandbox. Returns
-    {"fires": bool, "reason": str}; raises SandboxError on any error, timeout or malformed
-    result. Callers must never decide without the result."""
-    [result] = run_batch(code, [(instance, sources, others)], timeout_s)
-    if isinstance(result, SandboxError):
-        raise result
-    return result

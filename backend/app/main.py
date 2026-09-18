@@ -8,7 +8,6 @@ from app.features.decisions.router import router as decisions_router
 from app.features.ingestion.process_router import router as ingestion_router
 from app.features.ingestion.router import create_router as create_extraction_router
 from app.features.ingestion.runtime import ingestion_lifespan
-from app.features.llm.router import router as llm_router
 from app.features.processes.router import router as processes_router
 from app.features.rules.router import router as rules_router
 from app.features.sources.router import router as sources_router
@@ -22,11 +21,11 @@ app = FastAPI(
     description=(
         "Deterministic decision processes with rules compiled to code by agents.\n\n"
         "Identify with the `X-User-Id` header (see `POST /login`). Errors are "
-        '`{"code", "message"}`; 501 means the contract exists but is not implemented yet.'
+        '`{"code", "message"}`.'
     ),
 )
 
-# ponytail: open CORS for the hackathon frontend; restrict origins if deployed.
+# Open CORS for the hackathon frontend; restrict origins if deployed.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
@@ -47,7 +46,6 @@ for router in (
     processes_router,
     rules_router,
     decisions_router,
-    llm_router,
     agents_router,
     ingestion_router,
     sources_router,

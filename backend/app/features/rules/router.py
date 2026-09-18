@@ -11,7 +11,7 @@ from app.features.users.dependencies import CurrentUser
 
 router = APIRouter(tags=["rules"])
 
-Status = Literal["draft", "rejected", "active", "retired"]
+Status = Literal["draft", "active", "retired"]
 
 
 def _manager_only(user: CurrentUser) -> None:

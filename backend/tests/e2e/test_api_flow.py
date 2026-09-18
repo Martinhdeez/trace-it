@@ -1,21 +1,28 @@
 """The whole invoice flow through the HTTP API and the real database. No LLM.
 
 Loads the invoice pack the way `python -m app.cli load` does, so its 16 rules arrive with
-Mateo's hand-written code from `processes/rules-v3/` and no compiler runs. Activates them
+the hand-written code from `processes/rules-v3/` and no compiler runs. Activates them
 through the API, loads the real sources, and decides a sample of ~40 files that covers every
 trap category. Ingestion and extraction do not exist yet, so instances carry the golden
 symbols.
 """
 
+import hashlib
+import json
 import uuid
 from collections import Counter
+from typing import Any
 
 import pytest
+from app.features.ingestion.model import File, Instance
 from httpx import ASGITransport, AsyncClient
 
+from app.core.database import session_factory
+from app.features.processes.definition import Definition, load_definition
+from app.features.sources.model import Source
+from app.main import app
 from tests.golden import golden
-from tests.support import app_adapter as adapter
-from tests.support import challenge
+from tests.support import challenge, pack
 
 pytestmark = [
     pytest.mark.e2e,
@@ -67,57 +74,90 @@ def test_the_sample_covers_every_trap_category() -> None:
     assert {expected[f]["expected"] for f in files} == {"PAGAR", "NO_PAGAR", "ESCALAR"}
 
 
-async def test_decide_review_and_export_through_the_api() -> None:
+async def load(defn: dict[str, Any], files: dict[str, dict[str, Any]]) -> int:
+    """What the CLI loader, the source connectors and extraction do: the pack with its code
+    files, the real sources, and one instance per file with the golden symbols stored as
+    extraction writes them."""
+    async with session_factory() as session:
+        result = await load_definition(session, Definition.model_validate(defn), pack.PACK)
+        process_id = result.process.id
+        for name, rows in challenge.sources().items():
+            session.add(Source(process_id=process_id, name=name, origin="tests", rows=rows))
+        for name, values in files.items():
+            content = (challenge.INVOICES / name).read_bytes()
+            digest = hashlib.sha256(content).hexdigest()
+            if await session.get(File, digest) is None:
+                session.add(File(hash=digest, name=name, content=content, text=None))
+            symbols = {k: {"value": v, "origin": "golden"} for k, v in values.items()}
+            session.add(
+                Instance(process_id=process_id, file_hash=digest, name=name, symbols=symbols)
+            )
+        await session.commit()
+    return process_id
+
+
+async def test_decide_resolve_and_export_through_the_api() -> None:
     files = sample()
     expected = {f: golden.expected()[f]["expected"] for f in files}
     symbols = {s["file_id"]: s for s in golden.symbols() if s["file_id"] in expected}
     suffix = uuid.uuid4().hex[:8]
 
-    defn = adapter.definition()
+    defn = pack.definition()
     defn["name"] = f"{defn['name']} e2e-{suffix}"
     defn.pop("users", None)
-    process_id = await adapter.load_pack(defn)
-    await adapter.load_sources(process_id, challenge.sources())
-    await adapter.add_instances(
-        process_id, {f: ((challenge.INVOICES / f).read_bytes(), symbols[f]) for f in files}
-    )
+    process_id = await load(defn, symbols)
 
-    async with AsyncClient(transport=ASGITransport(app=adapter.app), base_url="http://t") as api:
-        manager = await adapter.create_user(api, "Manager", f"manager-{suffix}@e2e.test", "manager")
-        rules = await adapter.list_rules(api, process_id)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api:
+        r = await api.post(
+            "/users",
+            json={"name": "Manager", "email": f"manager-{suffix}@e2e.test", "role": "manager"},
+        )
+        manager = {"X-User-Id": str(r.json()["id"])}
+        rules = (await api.get(f"/processes/{process_id}/rules")).json()
         assert len(rules) == 16
         for rule in rules:
-            assert await adapter.activate_rule(api, rule["id"], manager) == "active"
+            r = await api.post(f"/rules/{rule['id']}/activate", headers=manager)
+            assert r.status_code == 200, r.text
 
-        summary = await adapter.run_process(api, process_id)
-        assert summary == dict(Counter(expected.values()))
+        r = await api.post(f"/processes/{process_id}/run")
+        assert r.status_code == 200, r.text
+        assert r.json()["by_decision"] == dict(Counter(expected.values()))
 
-        instances = await adapter.list_instances(api, process_id)
+        instances = {
+            i["name"]: i for i in (await api.get(f"/processes/{process_id}/instances")).json()
+        }
         got = {name: i["decision"] for name, i in instances.items()}
         wrong = {f: (expected[f], got.get(f)) for f in files if got.get(f) != expected[f]}
         assert not wrong, f"file: (expected, got): {wrong}"
 
         escalated = sorted(f for f, d in expected.items() if d == "ESCALAR")
-        assert sorted(await adapter.queue(api, process_id)) == escalated
+        queue = (await api.get(f"/processes/{process_id}/queue")).json()
+        assert sorted(i["name"] for i in queue) == escalated
 
         # Every rule's answer is recorded, not only the ones that fired.
-        case = escalated[0]
-        case_id = instances[case]["id"]
-        [engine] = await adapter.history(api, case_id)
-        assert engine["author"] == adapter.ENGINE_AUTHOR
-        assert engine["decision"] == "ESCALAR"
-        assert len(engine["results"]) == 16
+        case_id = instances[escalated[0]]["id"]
+        [engine] = (await api.get(f"/instances/{case_id}")).json()["decisions"]
+        assert (engine["author"], engine["decision"], len(engine["results"])) == (
+            "engine",
+            "ESCALAR",
+            16,
+        )
 
         # A person resolves it. The engine's decision stays; the person's is appended.
-        after = await adapter.resolve(api, case_id, "NO_PAGAR", "Paid the first one", manager)
-        assert [(h["author"], h["decision"], h["human_kind"]) for h in after] == [
-            (adapter.ENGINE_AUTHOR, "ESCALAR", None),
-            ("Manager", "NO_PAGAR", "resolution"),
+        r = await api.post(
+            f"/instances/{case_id}/resolve",
+            json={"decision": "NO_PAGAR", "reason": "Paid the first one"},
+            headers=manager,
+        )
+        assert r.status_code == 200, r.text
+        assert [(h["author"], h["decision"]) for h in r.json()["decisions"]] == [
+            ("engine", "ESCALAR"),
+            ("Manager", "NO_PAGAR"),
         ]
 
-        lines = await adapter.export(api, process_id)
-        assert len(lines) == len(files)
+        r = await api.get(f"/processes/{process_id}/export")
+        assert r.status_code == 200, r.text
+        lines = [json.loads(line) for line in r.text.splitlines()]
         assert sorted(line["file_id"] for line in lines) == files  # accents survive
-        assert all(set(line) >= {"file_id", "result"} for line in lines)
         # The export is the engine's decision, even for the case a person resolved.
         assert {line["file_id"]: line["result"] for line in lines} == expected

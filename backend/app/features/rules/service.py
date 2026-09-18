@@ -13,6 +13,10 @@ from app.features.rules.model import Rule
 from app.features.rules.schemas import RuleDetail, RuleIn, RuleOut
 
 
+def rule_hash(text: str, code: str) -> str:
+    return hashlib.sha256(f"{text}\0{code}".encode()).hexdigest()
+
+
 def _out(rule: Rule) -> RuleOut:
     return RuleOut.model_validate(rule, from_attributes=True)
 
@@ -57,12 +61,8 @@ async def compile_rule(session: AsyncSession, rule_id: int) -> RuleDetail:
         await session.scalars(select(Symbol).where(Symbol.process_id == rule.process_id))
     )
     result = await compiler.compile_rule(session, rule, symbols)
-    rule.code_a, rule.code_b = result.code_a, result.code_b
-    rule.tests_a, rule.tests_b = result.tests_a, result.tests_b
-    rule.report = result.report
-    rule.hash = hashlib.sha256(
-        "\0".join([rule.text, rule.code_a, rule.code_b]).encode()
-    ).hexdigest()
+    rule.code, rule.tests, rule.report = result.code, result.tests, result.report
+    rule.hash = rule_hash(rule.text, rule.code)
     await session.commit()
     return _detail(rule)
 
@@ -71,11 +71,11 @@ async def _apply(session: AsyncSession, rule: Rule, proposed: list[Rule]) -> Non
     """Check a rule change against every decision already taken, then adopt it.
 
     The past is never rewritten. What the change says about it is recorded as findings for
-    the manager to act on outside this system (P14). A change that would contradict a
-    decision a person took is refused until they resolve it (P15).
+    the manager to act on outside this system. A change that would contradict a decision a
+    person took is refused until they resolve it (ADR 0008).
     """
     impact = await audit.check(session, rule.process_id, proposed)
-    if impact.has_conflicts:
+    if impact.conflicts:
         contradicted = ", ".join(c.name for c in impact.conflicts[:5])
         raise ConflictError(
             f"{len(impact.conflicts)} decisions taken by a person would change: "
@@ -96,7 +96,7 @@ async def impact(session: AsyncSession, rule_id: int) -> audit.Impact:
 
 
 async def activate(session: AsyncSession, rule_id: int) -> RuleDetail:
-    """A rule only enters the process when its validation found no discrepancy (P21)."""
+    """A rule only enters the process when its validation found no discrepancy."""
     rule = await _rule(session, rule_id)
     if rule.status != "draft":
         raise ConflictError(f"Only a draft rule can be activated (it is {rule.status})")

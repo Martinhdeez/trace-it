@@ -1,18 +1,28 @@
-"""End-to-end against the local database: `docker compose up db -d` and migrations applied."""
+"""The process and rule endpoints against the local database (`make test-db`)."""
 
 import uuid
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.features.agents import llm
 from app.main import app
+
+INVOICES = {
+    "decision_types": [
+        {"name": "ESCALAR", "priority": 3, "requires_human": True},
+        {"name": "NO_PAGAR", "priority": 2},
+        {"name": "PAGAR", "priority": 1, "is_default": True},
+    ],
+    "symbols": [{"name": "amount", "type": "number"}, {"name": "supplier", "type": "text"}],
+}
 
 
 async def test_process_rule_flow(monkeypatch: pytest.MonkeyPatch) -> None:
     async def llm_down(*args, **kwargs):
-        raise RuntimeError("no LLM in tests")
+        raise llm.AgentError("no LLM in tests")
 
-    monkeypatch.setattr("app.features.llm.client.complete", llm_down)
+    monkeypatch.setattr(llm, "run", llm_down)
     suffix = uuid.uuid4().hex[:8]
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         r = await api.post(
@@ -24,26 +34,13 @@ async def test_process_rule_flow(monkeypatch: pytest.MonkeyPatch) -> None:
         assert r.status_code == 200, r.text
         headers = {"X-User-Id": str(r.json()["id"])}
 
-        r = await api.post(
-            "/processes",
-            json={
-                "name": f"invoices-{suffix}",
-                "decision_types": [
-                    {"name": "ESCALAR", "priority": 3, "requires_human": True},
-                    {"name": "NO_PAGAR", "priority": 2},
-                    {"name": "PAGAR", "priority": 1, "is_default": True},
-                ],
-                "symbols": [
-                    {"name": "amount", "type": "number"},
-                    {"name": "supplier", "type": "text"},
-                ],
-            },
-        )
-        assert r.status_code == 201, r.text
-        process = r.json()
+        r = await api.post("/processes/definition", json={"name": f"invoices-{suffix}", **INVOICES})
+        assert r.status_code == 200, r.text
+        process = r.json()["process"]
         assert [t["name"] for t in process["decision_types"]] == ["ESCALAR", "NO_PAGAR", "PAGAR"]
         assert [t["requires_human"] for t in process["decision_types"]] == [True, False, False]
         assert len(process["symbols"]) == 2
+        assert (await api.get(f"/processes/{process['id']}")).json() == process
 
         r = await api.post(
             f"/processes/{process['id']}/rules",
@@ -63,23 +60,31 @@ async def test_process_rule_flow(monkeypatch: pytest.MonkeyPatch) -> None:
 
         r = await api.post(f"/rules/{rule['id']}/activate", headers=headers)
         assert r.status_code == 409, r.text
+        assert "not compiled" in r.json()["message"]
 
 
-async def test_default_cannot_require_a_human() -> None:
+@pytest.mark.parametrize(
+    ("types", "message"),
+    [
+        (
+            [{"name": "REVIEW", "priority": 1, "is_default": True, "requires_human": True}],
+            "default decision type cannot require a human",
+        ),
+        (
+            [{"name": "PAGAR", "priority": 1, "is_default": True}],
+            "At least one decision type must require a human",
+        ),
+        (
+            [{"name": "A", "priority": 1, "is_default": True}, {"name": "B", "priority": 1}],
+            "share a priority",
+        ),
+    ],
+)
+async def test_inconsistent_decision_types_are_refused(types: list, message: str) -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         r = await api.post(
-            "/processes",
-            json={
-                "name": f"conflict-{uuid.uuid4().hex[:8]}",
-                "decision_types": [
-                    {
-                        "name": "REVIEW",
-                        "priority": 1,
-                        "is_default": True,
-                        "requires_human": True,
-                    }
-                ],
-            },
+            "/processes/definition",
+            json={"name": f"conflict-{uuid.uuid4().hex[:8]}", "decision_types": types},
         )
-        assert r.status_code == 409, r.text
-        assert r.json()["code"] == "conflict"
+        assert r.status_code == 422, r.text
+        assert message in r.text

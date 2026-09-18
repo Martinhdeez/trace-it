@@ -4,8 +4,7 @@
 process every draft whose code is already validated. A rule that arrives with its code
 written needs no compiler, so `--activate` alone is enough to run without any model.
 
-`sources sync <pack.json>` downloads an HTTP source (the ERP) into a new snapshot;
-`sources fallback <pack.json>` stores the hand-made ERP snapshot (tests and emergencies only).
+`sources sync <pack.json>` downloads an HTTP source (the ERP) into a new snapshot.
 """
 
 import argparse
@@ -21,9 +20,7 @@ from app.core.database import engine, session_factory
 from app.features.processes.definition import Definition, load_definition
 from app.features.processes.model import Process
 from app.features.rules import service as rules
-from app.features.sources import erp_fallback
 from app.features.sources import service as sources
-from app.features.sources.model import Source
 
 
 async def load(file: Path, compile_: bool, activate: bool) -> None:
@@ -67,20 +64,15 @@ async def load(file: Path, compile_: bool, activate: bool) -> None:
     await engine.dispose()
 
 
-async def _process_id(session, file: Path) -> int:
-    name = json.loads(file.read_text(encoding="utf-8"))["name"]
-    process = await session.scalar(select(Process).where(Process.name == name))
-    if process is None:
-        sys.exit(f"Process {name!r} is not loaded: run `python -m app.cli load {file}` first")
-    return process.id
-
-
 async def sync_source(file: Path, name: str) -> None:
     async with session_factory() as session:
-        process_id = await _process_id(session, file)
+        process_name = json.loads(file.read_text(encoding="utf-8"))["name"]
+        process = await session.scalar(select(Process).where(Process.name == process_name))
+        if process is None:
+            sys.exit(f"Process {process_name!r} is not loaded: run `python -m app.cli load {file}`")
         config = sources.load_config(sources.pack_sources_file(file), name)
         try:
-            result = await sources.sync(session, process_id, name, config)
+            result = await sources.sync(session, process.id, name, config)
         except sources.SourceUnavailableError as e:
             sys.exit(e.message)
         s, d = result.stats, result.diff
@@ -102,17 +94,6 @@ async def sync_source(file: Path, name: str) -> None:
     await engine.dispose()
 
 
-async def store_fallback(file: Path, script: Path) -> None:
-    async with session_factory() as session:
-        process_id = await _process_id(session, file)
-        rows = erp_fallback.fallback_rows(script)
-        origin = erp_fallback.ORIGIN
-        session.add(Source(process_id=process_id, name="erp", origin=origin, rows=rows))
-        await session.commit()
-        print(f"Stored {len(rows)} erp rows as {origin!r}. Not for the final delivery.")
-    await engine.dispose()
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -127,18 +108,11 @@ def main() -> None:
     action = actions.add_parser("sync", help="Download an HTTP source into a new snapshot")
     action.add_argument("file", type=Path, help="The process pack, e.g. processes/x.json")
     action.add_argument("--source", default="erp")
-    action = actions.add_parser(
-        "fallback", help="Store the hand-made erp snapshot (never for the final delivery)"
-    )
-    action.add_argument("file", type=Path)
-    action.add_argument("--script", type=Path, default=erp_fallback.DEFAULT_SCRIPT)
     args = parser.parse_args()
     if args.command == "load":
         asyncio.run(load(args.file, args.compile, args.activate))
-    elif args.action == "sync":
-        asyncio.run(sync_source(args.file, args.source))
     else:
-        asyncio.run(store_fallback(args.file, args.script))
+        asyncio.run(sync_source(args.file, args.source))
 
 
 if __name__ == "__main__":

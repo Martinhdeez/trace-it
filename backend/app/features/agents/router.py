@@ -1,10 +1,8 @@
-from dataclasses import asdict
-
 from fastapi import APIRouter
 
 from app.core.database import Session
 from app.features.agents import assistant
-from app.features.agents.schemas import SuggestionOut
+from app.features.agents.assistant import Suggestion
 
 router = APIRouter(tags=["agents"])
 
@@ -18,9 +16,9 @@ router = APIRouter(tags=["agents"])
         "(POST /processes/{id}/rules) themselves"
     ),
     responses={
-        409: {"description": "Instance not escalated nor in REVIEW"},
+        409: {"description": "Instance not escalated"},
         502: {"description": "The assistant's model failed"},
     },
 )
-async def get_suggestion(instance_id: int, session: Session) -> SuggestionOut:
-    return SuggestionOut(**asdict(await assistant.suggest(session, instance_id)))
+async def get_suggestion(instance_id: int, session: Session) -> Suggestion:
+    return await assistant.suggest(session, instance_id)

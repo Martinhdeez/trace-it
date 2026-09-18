@@ -4,42 +4,27 @@ Same setup as `test_api.py`: instances, sources and compiled rules inserted dire
 sandbox faked.
 """
 
-import uuid
-
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
 from app.core.database import session_factory
 from app.features.agents import sandbox
-from app.features.decisions.tests.test_api import RULES_V3, assert_flat, create_process, recording
+from app.features.decisions.tests.test_api import RULES_V3, assert_flat, client, create_process
 from app.features.rules.model import Rule
-from app.main import app
+from tests.support.fakes import dataset_runner
 
 # A rule nobody has activated yet: it escalates any invoice from this supplier. It stays
 # out of RULES_V3 so `seed` does not seed it as active.
 NEW_RULE = "watched_supplier"
-EXTRA = {NEW_RULE: ("ESCALAR", lambda i, s, o: i["nif"] == "B96233419")}
+RULES = {
+    **{n: fn for n, (_, fn) in RULES_V3.items()},
+    NEW_RULE: lambda i, s, o: i["nif"] == "B96233419",
+}
 
 
-def fake_sandbox(code: str, instance: dict, sources: dict, others: list) -> dict:
-    fires = {**RULES_V3, **EXTRA}[code][1](instance, sources, others)
-    return {"fires": fires, "reason": code if fires else ""}
-
-
-def fake_batch(code: str, cases: list) -> list:
-    return [fake_sandbox(code, *case) for case in cases]
-
-
-def fake_dataset(code: str, instances: list, sources: dict, population: list) -> list:
-    return [
-        fake_sandbox(
-            code,
-            instance,
-            sources,
-            [symbols for other_id, symbols in population if other_id != instance_id],
-        )
-        for instance_id, instance in instances
-    ]
+@pytest.fixture(autouse=True)
+def fake_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sandbox, "run_dataset", dataset_runner(RULES))
 
 
 async def create_draft(process_id: int) -> int:
@@ -49,8 +34,7 @@ async def create_draft(process_id: int) -> int:
             text=NEW_RULE,
             type="prohibition",
             decision="ESCALAR",
-            code_a=NEW_RULE,
-            code_b=NEW_RULE,
+            code=NEW_RULE,
             hash=f"hash-{NEW_RULE}",
             status="draft",
             report={"valid": True},
@@ -62,15 +46,13 @@ async def create_draft(process_id: int) -> int:
 
 async def prepare(api: AsyncClient) -> tuple[int, dict[str, str]]:
     """A process with its invoices already decided by the engine."""
-    process_id, headers = await create_process(api, uuid.uuid4().hex[:8], "manager")
+    process_id, headers = await create_process(api, "manager")
     await api.post(f"/processes/{process_id}/run")
     return process_id, headers
 
 
-async def test_impact_is_visible_before_activating(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+async def test_impact_is_visible_before_activating() -> None:
+    async with client() as api:
         process_id, _ = await prepare(api)
         rule_id = await create_draft(process_id)
 
@@ -92,12 +74,8 @@ async def test_impact_is_visible_before_activating(monkeypatch: pytest.MonkeyPat
         assert (await api.get(f"/processes/{process_id}/findings")).json() == []
 
 
-async def test_activating_records_findings_and_leaves_the_past_alone(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+async def test_activating_records_findings_and_leaves_the_past_alone() -> None:
+    async with client() as api:
         process_id, headers = await prepare(api)
         rule_id = await create_draft(process_id)
 
@@ -119,11 +97,9 @@ async def test_activating_records_findings_and_leaves_the_past_alone(
         assert len(detail["decisions"]) == 1
 
 
-async def test_a_human_decision_blocks_the_rule(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_human_decision_blocks_the_rule() -> None:
     """The rules do not overrule a person, and a person does not silently veto a rule."""
-    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+    async with client() as api:
         process_id, headers = await prepare(api)
         instances = (await api.get(f"/processes/{process_id}/instances")).json()
         affected = next(i for i in instances if i["name"] == "factura_1217.pdf")
@@ -146,10 +122,8 @@ async def test_a_human_decision_blocks_the_rule(monkeypatch: pytest.MonkeyPatch)
         assert (await api.get(f"/processes/{process_id}/findings")).json() == []
 
 
-async def test_retiring_is_checked_like_activating(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+async def test_retiring_is_checked_like_activating() -> None:
+    async with client() as api:
         process_id, headers = await prepare(api)
         rules = (await api.get(f"/processes/{process_id}/rules")).json()
         already_paid = next(r for r in rules if r["text"] == "order_already_paid")
@@ -166,11 +140,9 @@ async def test_retiring_is_checked_like_activating(monkeypatch: pytest.MonkeyPat
         assert findings[0]["detail"].startswith("NO_PAGAR -> PAGAR")
 
 
-async def test_an_escalated_case_gives_no_finding(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_an_escalated_case_gives_no_finding() -> None:
     """An instance sitting in the human queue was never acted on, so nothing went wrong."""
-    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+    async with client() as api:
         process_id, headers = await prepare(api)
         rules = (await api.get(f"/processes/{process_id}/rules")).json()
         iban = next(r for r in rules if r["text"] == "iban_mismatch")
@@ -186,11 +158,10 @@ async def test_an_escalated_case_gives_no_finding(monkeypatch: pytest.MonkeyPatc
 
 
 async def test_impact_gives_rule_code_flat_values(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+    async with client() as api:
         process_id, _ = await prepare(api)
         rule_id = await create_draft(process_id)
         seen: list = []
-        monkeypatch.setattr(sandbox, "run_dataset", recording(seen, fake_dataset))
+        monkeypatch.setattr(sandbox, "run_dataset", dataset_runner(RULES, seen))
         assert (await api.get(f"/rules/{rule_id}/impact")).status_code == 200
     assert_flat(seen[0])

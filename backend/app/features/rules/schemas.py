@@ -24,7 +24,5 @@ class RuleOut(BaseModel):
 
 
 class RuleDetail(RuleOut):
-    code_a: str | None
-    code_b: str | None
-    tests_a: list[dict[str, Any]] | None
-    tests_b: list[dict[str, Any]] | None
+    code: str | None
+    tests: list[dict[str, Any]] | None

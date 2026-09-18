@@ -14,14 +14,22 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.database import session_factory
+from app.core.events import Event
 from app.features.processes.model import Process
 from app.features.sources import service
-from app.features.sources.erp_fallback import ORIGIN, fallback_rows
 from app.features.sources.http_connector import HttpConnector
 from app.features.sources.model import Source
 from app.features.sources.tests.conftest import SOURCES_JSON, erp_config, start_erp
-from app.features.traces.model import Event
 from app.main import app
+from tests.support import challenge
+
+SEED_ORIGIN = "erp:test-seed"
+
+
+def expected_rows() -> list[dict]:
+    """The ERP's own embedded export, shaped as the connector stores it (offline oracle)."""
+    rows = [{**r, "amount": f"{float(r['amount']):.2f}"} for r in challenge.sources()["erp"]]
+    return sorted(rows, key=lambda r: r["entry_id"])
 
 
 async def new_process() -> int:
@@ -74,7 +82,7 @@ async def test_full_sync_with_the_pack_configuration(erp: str) -> None:
         "status": "PENDIENTE",
     }
     # What the API served is exactly the ERP's own data (read offline from its source).
-    assert rows == fallback_rows()
+    assert rows == expected_rows()
 
     async with session_factory() as session:
         event = await session.scalar(
@@ -106,7 +114,9 @@ async def test_token_renewed_by_uses(erp: str) -> None:
 async def test_failed_sync_keeps_the_previous_snapshot() -> None:
     process_id = await new_process()
     async with session_factory() as session:
-        session.add(Source(process_id=process_id, name="erp", origin=ORIGIN, rows=fallback_rows()))
+        session.add(
+            Source(process_id=process_id, name="erp", origin=SEED_ORIGIN, rows=expected_rows())
+        )
         await session.commit()
 
     down = httpx.MockTransport(lambda r: httpx.Response(503, content=b"down"))
@@ -116,7 +126,7 @@ async def test_failed_sync_keeps_the_previous_snapshot() -> None:
             await service.sync(session, process_id, "erp", config, transport=down)
 
     stored = await snapshots(process_id)
-    assert [s.origin for s in stored] == [ORIGIN]
+    assert [s.origin for s in stored] == [SEED_ORIGIN]
     async with session_factory() as session:
         failure = await session.scalar(
             select(Event).where(Event.step == "sync_source_failed").order_by(Event.id.desc())

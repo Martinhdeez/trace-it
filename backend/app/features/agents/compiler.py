@@ -1,6 +1,8 @@
-"""Rule compiler: two independent agents turn a rule's text into code + tests (P9).
+"""Rule compiler: two blind agents turn a rule's text into code + tests (ADR 0003, 0004).
 
-Owner: Martín. Contract used by `rules.service.compile_rule`.
+Each agent only ever sees the rule's context and its own mistakes. Every test then runs
+against both codes and both codes run over the process history; the rule is valid only when
+they agree everywhere. Code A is what runs afterwards; B's work stays in the report.
 """
 
 import asyncio
@@ -9,20 +11,19 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
+from pydantic_ai import Agent, ModelRetry, RunContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import TraceError
-from app.features.agents import sandbox
+from app.core import events
+from app.features.agents import llm, sandbox
 from app.features.ingestion.model import Instance
 from app.features.ingestion.symbols import flatten_symbols
-from app.features.llm import client
-from app.features.llm.model import LLMConfig
 from app.features.processes.model import Process, Symbol
 from app.features.rules.model import Rule
 from app.features.sources.model import Source
-from app.features.traces.service import record
 
 # A test case, as written by an agent from the rule text alone:
 # {"name": str, "instance": {...}, "sources": {...}, "others": [...], "fires": bool}
@@ -45,12 +46,10 @@ class CompilationError(TraceError):
 
 @dataclass(frozen=True)
 class Compilation:
-    code_a: str
-    code_b: str
-    tests_a: list[Test]
-    tests_b: list[Test]
+    code: str  # agent A's, the one that runs
+    tests: list[Test]  # agent A's
     # {"valid": bool, "tests": [...], "history": {"instances": n, "agree": k},
-    #  "discrepancies": [str, ...]}
+    #  "discrepancies": [...], "alternative": {"code", "tests", "model"}} (agent B's work)
     # `valid` is True only if both codes pass every test and agree on every past instance.
     report: dict[str, Any]
 
@@ -101,13 +100,19 @@ Tests (field `tests`, at least 6): each with `name`, `instance_json` (JSON objec
 return). Cover cases where it fires and where it does not, and the limits and exceptions the \
 rule's text mentions. The tests must pass with your own code."""
 
+compiler = Agent(
+    None, output_type=Proposal, instructions=SYSTEM, name="compiler", retries=MAX_REPAIRS
+)
 
-def _context(
+
+def context(
     rule: Rule,
     symbols: list[Symbol],
     sources: dict[str, list[dict[str, Any]]],
     description: str,
 ) -> str:
+    """What both agents see: the rule, the process conventions, the symbols and a sample of
+    each source. Never the other agent's work."""
     lines = [
         "Process description (conventions shared by all its rules):",
         description or "(no description)",
@@ -128,7 +133,8 @@ def _context(
     return "\n".join(lines)
 
 
-def _tests(proposal: Proposal) -> list[Test]:
+def tests_of(proposal: Proposal) -> list[Test]:
+    """The proposal's tests with their JSON decoded. Raises ValueError when malformed."""
     if len(proposal.tests) < MIN_TESTS:
         raise ValueError(f"At least {MIN_TESTS} tests are needed; there are {len(proposal.tests)}")
     tests = []
@@ -165,7 +171,7 @@ def _fires(result: Any) -> bool | None:
     return None
 
 
-def _own_errors(code: str, tests: list[Test]) -> str | None:
+def own_errors(code: str, tests: list[Test]) -> str | None:
     """What is wrong with an agent's own code against its own tests, or None."""
     try:
         sandbox.check(code)
@@ -180,40 +186,21 @@ def _own_errors(code: str, tests: list[Test]) -> str | None:
     return "Your code fails your own tests:\n" + "\n".join(failures) if failures else None
 
 
-async def _agent(session: AsyncSession, role: str, context: str) -> tuple[str, list[Test], dict]:
-    """One blind agent. It only ever sees the context and its own errors."""
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": SYSTEM},
-        {"role": "user", "content": context},
-    ]
-    trace: dict[str, Any] = {"role": role, "repairs": 0, "cost": None, "latency_ms": 0}
-    for round_ in range(MAX_REPAIRS + 1):
-        try:
-            reply = await client.complete(session, role, messages, Proposal)
-        except Exception as e:
-            raise CompilationError(f"{role}: the LLM call failed: {e}") from e
-        trace["model"] = reply.model
-        trace["latency_ms"] += reply.latency_ms
-        if reply.cost is not None:
-            trace["cost"] = (trace["cost"] or 0) + reply.cost
-        try:
-            proposal = Proposal.model_validate_json(reply.content)
-            tests = _tests(proposal)
-            error = await asyncio.to_thread(_own_errors, proposal.code, tests)
-        except (ValidationError, ValueError) as e:
-            error = f"Malformed reply: {e}"
-        if error is None:
-            trace["repairs"] = round_
-            return proposal.code, tests, trace
-        messages += [
-            {"role": "assistant", "content": reply.content},
-            {
-                "role": "user",
-                "content": f"{error}\n\nFix it and return the whole proposal "
-                "(code and tests) in the same format.",
-            },
-        ]
-    raise CompilationError(f"{role}: still failing after {MAX_REPAIRS} repair rounds: {error}")
+@compiler.output_validator
+async def _self_consistent(_ctx: RunContext[None], proposal: Proposal) -> Proposal:
+    """An agent's answer is only accepted when its code passes the sandbox check and its own
+    tests; otherwise it gets its errors back and another try (up to MAX_REPAIRS)."""
+    try:
+        tests = tests_of(proposal)
+    except ValueError as e:
+        raise ModelRetry(f"Malformed reply: {e}") from e
+    # The sandbox is a subprocess that may take seconds: off the event loop.
+    error = await asyncio.to_thread(own_errors, proposal.code, tests)
+    if error:
+        raise ModelRetry(
+            f"{error}\n\nFix it and return the whole proposal (code and tests) in the same format."
+        )
+    return proposal
 
 
 def validate(
@@ -225,9 +212,9 @@ def validate(
     sources: dict[str, list[dict[str, Any]]],
     run_batch: Callable[..., list[Any]],
 ) -> dict[str, Any]:
-    """Cross-check: every test on both codes, both codes on the whole history (P9)."""
+    """Cross-check: every test on both codes, both codes on the whole history (ADR 0004)."""
     tests = [("A", t) for t in tests_a] + [("B", t) for t in tests_b]
-    # ponytail: O(n²) `others` per instance; fine for a process history of hundreds.
+    # O(n²) `others` per instance; fine for a process history of hundreds.
     cases = _cases([t for _, t in tests]) + [
         (symbols, sources, [dict(s, _instance=n) for j, (n, s) in enumerate(history) if j != i])
         for i, (_, symbols) in enumerate(history)
@@ -273,12 +260,11 @@ def validate(
     }
 
 
-async def _read(
+async def read_process(
     session: AsyncSession, process_id: int
-) -> tuple[str, dict[str, list[dict[str, Any]]], History, list[LLMConfig]]:
-    """The process description, current sources (latest load per name), the process history,
-    and both agents' LLM config preloaded: the two agents run concurrently on one session,
-    and `complete`'s `session.get` must then hit the identity map instead of the connection."""
+) -> tuple[str, dict[str, list[dict[str, Any]]], History]:
+    """The process description, the current sources (latest load per name) and the history
+    of instances with their symbols as rule code sees them."""
     description = await session.scalar(select(Process.description).where(Process.id == process_id))
     loads = await session.scalars(
         select(Source)
@@ -293,8 +279,14 @@ async def _read(
         .order_by(Instance.id)
     )
     history = [(name, flatten_symbols(symbols)) for name, symbols in rows if symbols]
-    configs = list(await session.scalars(select(LLMConfig).where(LLMConfig.role.in_(ROLES))))
-    return description or "", sources, history, configs
+    return description or "", sources, history
+
+
+async def _agent(role: str, prompt: str) -> tuple[Proposal, llm.Trace]:
+    try:
+        return await llm.run(compiler, role, prompt)
+    except llm.AgentError as e:
+        raise CompilationError(e.message) from e
 
 
 async def compile_rule(session: AsyncSession, rule: Rule, symbols: list[Symbol]) -> Compilation:
@@ -305,26 +297,20 @@ async def compile_rule(session: AsyncSession, rule: Rule, symbols: list[Symbol])
 
     plus tests. Then every test runs against both codes, and both codes run on the
     process history. The result is reported, never silently accepted."""
-    description, sources, history, _configs = await _read(session, rule.process_id)
-    context = _context(rule, symbols, sources, description)  # `_configs`: keep refs alive
-    (code_a, tests_a, trace_a), (code_b, tests_b, trace_b) = await asyncio.gather(
-        *(_agent(session, role, context) for role in ROLES)
-    )
+    description, sources, history = await read_process(session, rule.process_id)
+    prompt = context(rule, symbols, sources, description)
+    (a, trace_a), (b, trace_b) = await asyncio.gather(*(_agent(role, prompt) for role in ROLES))
+    tests_a, tests_b = tests_of(a), tests_of(b)
     report = await asyncio.to_thread(
-        validate, code_a, code_b, tests_a, tests_b, history, sources, sandbox.run_batch
+        validate, a.code, b.code, tests_a, tests_b, history, sources, sandbox.run_batch
     )
+    report["alternative"] = {"code": b.code, "tests": tests_b, "model": trace_b.model}
     for trace in (trace_a, trace_b):
-        record(
+        events.record(
             session,
             "compile_rule",
-            data={
-                "rule_id": rule.id,
-                "role": trace["role"],
-                "model": trace["model"],
-                "repairs": trace["repairs"],
-                "valid": report["valid"],
-            },
-            latency_ms=trace["latency_ms"],
-            cost=trace["cost"],
+            data={"rule_id": rule.id, "valid": report["valid"], **trace.as_data()},
+            latency_ms=trace.latency_ms,
+            cost=trace.cost,
         )
-    return Compilation(code_a, code_b, tests_a, tests_b, report)
+    return Compilation(a.code, tests_a, report)

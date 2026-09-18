@@ -8,9 +8,8 @@ class DecisionOut(BaseModel):
     id: int
     decision: str
     author: str  # "engine" or the person's name
-    human_kind: str | None  # a person's decision: "resolution" or "review_correction"
     reason: str | None
-    results: list[dict[str, Any]]  # per rule: rule_id, hash, fires, reason, reason_b
+    results: list[dict[str, Any]]  # per rule: rule_id, hash, fires, reason
     rules_hash: str
     created_at: datetime
 
@@ -43,8 +42,7 @@ class ResolveIn(BaseModel):
 
 class RunSummary(BaseModel):
     decided: int
-    by_decision: dict[str, int] = Field(examples=[{"PAGAR": 431, "NO_PAGAR": 9, "ESCALAR": 60}])
-    review: int = 0  # sent to REVIEW because a rule result could not be trusted
+    by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
 
 
 class ChangeOut(BaseModel):

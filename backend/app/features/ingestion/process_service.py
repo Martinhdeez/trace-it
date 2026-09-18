@@ -4,9 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.common.exceptions import NotFoundError
+from app.core import events
+from app.core.events import Event
 from app.features.processes.model import Process
-from app.features.traces import service as traces
-from app.features.traces.model import Event
 
 from .model import File, Instance
 from .schemas import ExtractionResult
@@ -25,8 +25,8 @@ async def attach_document(session, process_id, user_id, content, result):
         .values(hash=result.sha256, name=result.file_id, content=content, text=text or None)
         .on_conflict_do_nothing(index_elements=[File.hash])
     )
-    # Missing or uncertain readings do not decide the workflow. The process's
-    # symbol extraction and rules own any later REVIEW transition.
+    # Missing or uncertain readings do not decide the workflow: the instance stays
+    # PENDING until symbol extraction fills it and the rules decide it.
     statement = (
         insert(Instance)
         .values(
@@ -34,7 +34,6 @@ async def attach_document(session, process_id, user_id, content, result):
             file_hash=result.sha256,
             name=result.file_id,
             status="PENDING",
-            review_reason=None,
             symbols=None,
         )
         .on_conflict_do_nothing(
@@ -51,7 +50,7 @@ async def attach_document(session, process_id, user_id, content, result):
         )
     )
     # Re-uploading never resets an existing instance or edits its decision history.
-    traces.record(
+    events.record(
         session,
         "ingest_document",
         instance_id=instance.id,

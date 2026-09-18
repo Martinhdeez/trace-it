@@ -2,15 +2,16 @@ import asyncio
 import json
 import logging
 from collections import Counter
-from dataclasses import asdict, dataclass
-from typing import Any
+from dataclasses import asdict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError, NotFoundError
+from app.core import events
+from app.core.events import Event
 from app.features.agents import sandbox
-from app.features.decisions.engine import decide_dataset
+from app.features.decisions.engine import Outcomes, Verdict, decide
 from app.features.decisions.model import ENGINE, Decision, Finding
 from app.features.decisions.schemas import (
     DecisionOut,
@@ -27,8 +28,6 @@ from app.features.processes.model import DecisionType
 from app.features.processes.service import get as get_process
 from app.features.rules.model import Rule
 from app.features.sources.model import Source
-from app.features.traces import service as traces
-from app.features.traces.model import Event
 from app.features.users.model import User
 
 log = logging.getLogger(__name__)
@@ -41,32 +40,27 @@ async def _instance(session: AsyncSession, instance_id: int) -> Instance:
     return instance
 
 
-@dataclass(frozen=True)
-class Outcomes:
-    """What a process can conclude: the priorities, the outcome when no rule fires, and the
-    outcomes that send the case to a person."""
-
-    priorities: dict[str, int]
-    default: str
-    human: list[str]
-
-
-async def _outcomes(session: AsyncSession, process_id: int) -> Outcomes:
+async def outcomes(session: AsyncSession, process_id: int) -> Outcomes:
+    """The loader guarantees one default and at least one type that requires a human; the
+    highest-priority one of those is where the engine sends what it cannot decide."""
     types = list(
         await session.scalars(select(DecisionType).where(DecisionType.process_id == process_id))
     )
-    if not types:
-        raise ConflictError("The process has no decision types")
-    default = next((t.name for t in types if t.is_default), None)
-    if default is None:
-        raise ConflictError("The process has no default decision type")
-    human = [t.name for t in types if t.requires_human]
-    return Outcomes({t.name: t.priority for t in types}, default, human)
+    default = next(t.name for t in types if t.is_default)
+    escalate = max((t for t in types if t.requires_human), key=lambda t: t.priority).name
+    return Outcomes({t.name: t.priority for t in types}, default, escalate)
 
 
-async def _current_sources(
-    session: AsyncSession, process_id: int
-) -> dict[str, list[dict[str, Any]]]:
+async def human_types(session: AsyncSession, process_id: int) -> list[str]:
+    types = await session.scalars(
+        select(DecisionType.name).where(
+            DecisionType.process_id == process_id, DecisionType.requires_human
+        )
+    )
+    return list(types)
+
+
+async def current_sources(session: AsyncSession, process_id: int) -> dict[str, list[dict]]:
     """The latest load of each source of truth. Every load is kept; only the last one is used."""
     loads = await session.scalars(
         select(Source).where(Source.process_id == process_id).order_by(Source.id)
@@ -74,7 +68,7 @@ async def _current_sources(
     return {load.name: load.rows for load in loads}
 
 
-async def _instances(session: AsyncSession, process_id: int) -> list[Instance]:
+async def instances_of(session: AsyncSession, process_id: int) -> list[Instance]:
     return list(
         await session.scalars(
             select(Instance).where(Instance.process_id == process_id).order_by(Instance.id)
@@ -82,9 +76,7 @@ async def _instances(session: AsyncSession, process_id: int) -> list[Instance]:
     )
 
 
-async def _latest_decisions(
-    session: AsyncSession, instances: list[Instance]
-) -> dict[int, Decision]:
+async def latest_decisions(session: AsyncSession, instances: list[Instance]) -> dict[int, Decision]:
     """An instance's current decision is its latest row (the history only ever grows)."""
     if not instances:
         return {}
@@ -96,6 +88,37 @@ async def _latest_decisions(
     return {row.instance_id: row for row in rows}
 
 
+async def active_rules(session: AsyncSession, process_id: int) -> list[Rule]:
+    return list(
+        await session.scalars(
+            select(Rule)
+            .where(Rule.process_id == process_id, Rule.status == "active")
+            .order_by(Rule.id)
+        )
+    )
+
+
+async def decide_all(
+    session: AsyncSession, process_id: int, rules: list[Rule], selected: list[Instance]
+) -> list[Verdict]:
+    """`selected` instances under `rules`, with the current sources and the whole population
+    of the process as `others`. Each population entry carries `_instance`, its name, so a
+    rule can name the duplicate it found; the sandbox leaves an instance out of its own
+    `others`. Rule code gets symbols as plain values (ADR 0008)."""
+    out = await outcomes(session, process_id)
+    sources = await current_sources(session, process_id)
+    population = [
+        (i.id, {**flatten_symbols(i.symbols), "_instance": i.name})
+        for i in await instances_of(session, process_id)
+        if i.symbols is not None
+    ]
+    dataset = [(i.id, flatten_symbols(i.symbols)) for i in selected]
+    # One subprocess per rule, off the event loop.
+    return await asyncio.to_thread(
+        decide, rules, out, dataset, sources, population, sandbox.run_dataset
+    )
+
+
 def _out(instance: Instance, decision: Decision | None) -> InstanceOut:
     return InstanceOut(
         id=instance.id,
@@ -105,88 +128,36 @@ def _out(instance: Instance, decision: Decision | None) -> InstanceOut:
     )
 
 
-def _dataset(
-    instances: list[Instance], selected: list[Instance]
-) -> tuple[list[tuple[int, dict[str, Any]]], list[tuple[int, dict[str, Any]]]]:
-    """What the engine needs, without repeating the shared context per instance: the symbols
-    of each selected instance as plain values, and the whole population it may compare
-    itself against. Each population entry carries `_instance` so a rule can name the
-    duplicate it found; the engine leaves an instance out of its own `others`."""
-    population = [
-        (i.id, {**flatten_symbols(i.symbols), "_instance": i.name})
-        for i in instances
-        if i.symbols is not None
-    ]
-    return [(i.id, flatten_symbols(i.symbols)) for i in selected], population
-
-
 async def run(session: AsyncSession, process_id: int) -> RunSummary:
     """Decide every PENDING instance that already has its symbols.
 
     Runs against the rules active now and the latest load of each source. A rule never
-    reads the clock: anything like a cut-off date is a row in a source of truth.
-
-    An instance without symbols is not run and keeps its status: PENDING while extraction
-    has not filled them, REVIEW when ingestion already sent it there (the two extractions
-    disagreed). An instance whose rule results cannot be trusted goes to REVIEW with the
-    reason and gets no decision row (fail closed, ADR 0004, 0009, 0014).
+    reads the clock: anything like a cut-off date is a row in a source of truth. An
+    instance without symbols is not run and stays PENDING until extraction fills them.
     """
     await get_process(session, process_id)
-    outcomes = await _outcomes(session, process_id)
-    rules = list(
-        await session.scalars(
-            select(Rule)
-            .where(Rule.process_id == process_id, Rule.status == "active")
-            .order_by(Rule.id)
-        )
-    )
-    sources = await _current_sources(session, process_id)
-    instances = await _instances(session, process_id)
-    pending = [i for i in instances if i.status == "PENDING" and i.symbols is not None]
-    dataset, population = _dataset(instances, pending)
-    # One subprocess per rule and code, off the event loop (ADR 0004).
-    verdicts = await asyncio.to_thread(
-        decide_dataset,
-        rules,
-        outcomes.priorities,
-        outcomes.default,
-        dataset,
-        sources,
-        population,
-        sandbox.run_dataset,
-    )
+    rules = await active_rules(session, process_id)
+    pending = [
+        i
+        for i in await instances_of(session, process_id)
+        if i.status == "PENDING" and i.symbols is not None
+    ]
+    verdicts = await decide_all(session, process_id, rules, pending)
 
     count: Counter[str] = Counter()
-    review = 0
     for instance, verdict in zip(pending, verdicts, strict=True):
-        results = [asdict(r) for r in verdict.results]
-        if verdict.decision is None:
-            instance.status = "REVIEW"
-            instance.review_reason = verdict.reason
-            traces.record(
-                session,
-                "review",
-                instance_id=instance.id,
-                data={
-                    "reason": verdict.reason,
-                    "rules_hash": verdict.rules_hash,
-                    "results": results,
-                },
-            )
-            review += 1
-            continue
         session.add(
             Decision(
                 instance_id=instance.id,
                 decision=verdict.decision,
-                results=results,
+                results=[asdict(r) for r in verdict.results],
                 rules_hash=verdict.rules_hash,
                 author=ENGINE,
                 reason=verdict.reason or None,
             )
         )
         instance.status = "DECIDED"
-        traces.record(
+        events.record(
             session,
             "decision",
             instance_id=instance.id,
@@ -195,25 +166,24 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
         count[verdict.decision] += 1
 
     await session.commit()
-    return RunSummary(decided=sum(count.values()), by_decision=dict(count), review=review)
+    return RunSummary(decided=sum(count.values()), by_decision=dict(count))
 
 
 async def list_instances(
     session: AsyncSession, process_id: int, status: str | None
 ) -> list[InstanceOut]:
     await get_process(session, process_id)
-    instances = await _instances(session, process_id)
-    latest = await _latest_decisions(session, instances)
+    instances = await instances_of(session, process_id)
+    latest = await latest_decisions(session, instances)
     return [_out(i, latest.get(i.id)) for i in instances if status is None or i.status == status]
 
 
 async def queue(session: AsyncSession, process_id: int, type: str | None) -> list[InstanceOut]:
     """Everything waiting for a person: by default, every outcome marked `requires_human`."""
     await get_process(session, process_id)
-    outcomes = await _outcomes(session, process_id)
-    wanted = {type} if type else set(outcomes.human)
-    instances = await _instances(session, process_id)
-    latest = await _latest_decisions(session, instances)
+    wanted = {type} if type else set(await human_types(session, process_id))
+    instances = await instances_of(session, process_id)
+    latest = await latest_decisions(session, instances)
     return [
         _out(i, latest[i.id])
         for i in instances
@@ -228,7 +198,7 @@ async def get_instance(session: AsyncSession, instance_id: int) -> InstanceDetai
             select(Decision).where(Decision.instance_id == instance_id).order_by(Decision.id)
         )
     )
-    events = await session.scalars(
+    rows = await session.scalars(
         select(Event).where(Event.instance_id == instance_id).order_by(Event.id)
     )
     return InstanceDetail(
@@ -236,21 +206,20 @@ async def get_instance(session: AsyncSession, instance_id: int) -> InstanceDetai
         file_hash=instance.file_hash,
         symbols=instance.symbols,
         decisions=[DecisionOut.model_validate(d, from_attributes=True) for d in decisions],
-        events=[EventOut.model_validate(e, from_attributes=True) for e in events],
+        events=[EventOut.model_validate(e, from_attributes=True) for e in rows],
     )
 
 
 async def resolve(
     session: AsyncSession, instance_id: int, data: ResolveIn, user: User
 ) -> InstanceDetail:
-    """A person's decision is a new row, never an edit of the engine's (P14)."""
+    """A person's decision is a new row, never an edit of the engine's (ADR 0008)."""
     instance = await _instance(session, instance_id)
-    outcomes = await _outcomes(session, instance.process_id)
-    if data.decision not in outcomes.priorities:
+    out = await outcomes(session, instance.process_id)
+    if data.decision not in out.priorities:
         raise ConflictError(f"{data.decision!r} is not a decision type of this process")
 
-    latest = await _latest_decisions(session, [instance])
-    previous = latest.get(instance.id)
+    previous = (await latest_decisions(session, [instance])).get(instance.id)
     session.add(
         Decision(
             instance_id=instance.id,
@@ -258,12 +227,11 @@ async def resolve(
             results=[],  # a person decides on the evidence, not by running the rules
             rules_hash=previous.rules_hash if previous else "",
             author=user.name,
-            human_kind="review_correction" if instance.status == "REVIEW" else "resolution",
             reason=data.reason,
         )
     )
     instance.status = "DECIDED"
-    traces.record(
+    events.record(
         session,
         "resolution",
         instance_id=instance.id,
@@ -278,14 +246,14 @@ async def export(session: AsyncSession, process_id: int) -> tuple[str, list[str]
 
     Returns the body and the names shared by several instances. `file_id` is the filename
     exactly as it was supplied, accents included. What is exported is the process output:
-    the engine's latest decision or, when the engine has none, a person's correction of an
-    instance that was in REVIEW. A person's `resolution` never changes it (P4).
+    the engine's latest decision (ADR 0009). A person's resolution never changes it; it is
+    exported only for an instance the engine never decided.
     """
     await get_process(session, process_id)
     # Two files can share a name: only the most recent instance of each name is exported.
     by_name: dict[str, Instance] = {}
     times: Counter[str] = Counter()
-    for instance in await _instances(session, process_id):  # ordered by id
+    for instance in await instances_of(session, process_id):  # ordered by id
         by_name[instance.name] = instance
         times[instance.name] += 1
     duplicates = [name for name, n in times.items() if n > 1]
@@ -293,12 +261,12 @@ async def export(session: AsyncSession, process_id: int) -> tuple[str, list[str]
         log.warning("Process %s: duplicate names on export: %s", process_id, duplicates)
     instances = list(by_name.values())
 
-    open_ = [i.name for i in instances if i.status in ("PENDING", "REVIEW")]
-    if open_:
-        raise ConflictError(f"{len(open_)} instances pending or in review: {', '.join(open_[:5])}")
+    pending = [i.name for i in instances if i.status == "PENDING"]
+    if pending:
+        raise ConflictError(f"{len(pending)} instances pending: {', '.join(pending[:5])}")
 
     engine: dict[int, Decision] = {}
-    corrections: dict[int, Decision] = {}
+    human: dict[int, Decision] = {}
     if instances:
         rows = await session.scalars(
             select(Decision)
@@ -306,11 +274,8 @@ async def export(session: AsyncSession, process_id: int) -> tuple[str, list[str]
             .order_by(Decision.id)
         )
         for row in rows:
-            if row.author == ENGINE:
-                engine[row.instance_id] = row
-            elif row.human_kind == "review_correction":
-                corrections[row.instance_id] = row
-    exported = {**corrections, **engine}
+            (engine if row.author == ENGINE else human)[row.instance_id] = row
+    exported = {**human, **engine}
 
     undecided = [i.name for i in instances if i.id not in exported]
     if undecided:
@@ -323,7 +288,7 @@ async def export(session: AsyncSession, process_id: int) -> tuple[str, list[str]
 
 
 async def list_findings(session: AsyncSession, process_id: int) -> list[FindingOut]:
-    """Past decisions a later rule says were wrong. A notice, never a correction (P14)."""
+    """Past decisions a later rule says were wrong. A notice, never a correction."""
     await get_process(session, process_id)
     rows = await session.scalars(
         select(Finding)

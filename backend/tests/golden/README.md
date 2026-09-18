@@ -23,7 +23,7 @@ The script only reads `.context/500-sombras-de-alberto`. It is deterministic and
 2. **Symbols:** a regex parser, written separately from the app, reads all six templates (Spanish, uppercase, simplified, "Nº de factura", English with dot decimals, multi-page with "Suma y sigue"). Totals come from the last page. `date` keeps the printed numbers, so 31/02 becomes `2026-02-31`. All 8 required symbols were found in all 471 text PDFs. `issuer_name` and `free_text` are not extracted, because no rule reads them.
 3. **Sources:** the `Proveedores` and `Pedidos_2026` sheets of the workbook, and the ERP export embedded in `alberto_erp.py`. That file is read as text, never imported or run. `parameters.cut_off_date` is `2026-09-18`, the day batch 1 arrived. Source loading lives in `tests/support/challenge.py`, and the engine test uses the same loader.
 4. **Decision:** the script's own reading of Norma_Pagos_v3, written separately from Mateo's rule code (`processes/rules-v3/`). It records every finding and then takes the highest-priority outcome: ESCALAR > NO_PAGAR > PAGAR.
-5. **Cross-check:** each file in the trap table of `.artifacts/specs/2026-09-18-analisis-caja-v3.md` must show the same finding, or the build fails.
+5. **Cross-check:** each file in the trap table of `.artifacts/specs/batch1-analysis.md` must show the same finding, or the build fails.
 
 ## Decisions built into the golden
 

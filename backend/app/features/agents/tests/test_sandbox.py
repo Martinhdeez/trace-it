@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from app.features.agents.sandbox import SandboxError, check, run, run_batch, run_dataset
+from app.features.agents.sandbox import SandboxError, check, run_batch, run_dataset
 
 VALID = """
 from decimal import Decimal
@@ -15,6 +15,14 @@ def evaluate(instance, sources, others):
 
 def rule(body: str) -> str:
     return f"def evaluate(instance, sources, others):\n    {body}\n"
+
+
+def run(code: str, instance: dict, sources: dict, others: list, timeout_s: float = 2.0) -> dict:
+    """One case; raises the case's SandboxError like the whole batch would."""
+    [result] = run_batch(code, [(instance, sources, others)], timeout_s)
+    if isinstance(result, SandboxError):
+        raise result
+    return result
 
 
 def test_valid_rule_returns_its_result():

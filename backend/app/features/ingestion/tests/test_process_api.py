@@ -8,11 +8,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 
 from app.core.database import engine, session_factory
+from app.core.events import Event
 from app.features.ingestion.model import File, Instance
 from app.features.ingestion.runtime import current_service
 from app.features.ingestion.service import ExtractionService
 from app.features.processes.model import DecisionType, Process
-from app.features.traces.model import Event
 from app.features.users.model import User
 from app.main import app
 
