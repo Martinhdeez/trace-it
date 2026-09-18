@@ -5,6 +5,7 @@ from app.features.ingesta.schemas import REQUIRED_INVOICE_FIELDS, ExtractOptions
 
 from .invoice import parse_invoice, unresolved
 from .native import native_pages, render
+from .uncertainty import preserve_unreadable, withhold_uncertain_values
 
 
 def extract_pdf(
@@ -98,10 +99,7 @@ def extract_pdf(
             all_lines.extend(confirmed_lines)
             for key in targets:
                 original, check = fields[key], check_fields[key]
-                agrees = check.value == original.value and check.status in {
-                    "OBSERVED",
-                    "LOW_CONFIDENCE",
-                }
+                agrees = check.value == original.value and check.status == "OBSERVED"
                 verification[key] = {
                     "agrees": agrees,
                     "candidates": [c.model_dump() for c in check.candidates],
@@ -141,8 +139,21 @@ def extract_pdf(
                 generated = vlm.transcribe(
                     render(content, page["number"], settings), page["number"], page["size"]
                 )
-                generated_fields, _ = parse_invoice(generated, settings.ocr_min_confidence)
+                generated_fields, generated_warnings = parse_invoice(
+                    generated, settings.ocr_min_confidence
+                )
+                stage_warnings.extend(generated_warnings)
                 all_lines.extend(generated)
+                for key, original in fields.items():
+                    proposed = generated_fields[key]
+                    if (
+                        original.value is not None
+                        and proposed.value is not None
+                        and original.value != proposed.value
+                    ):
+                        original.candidates.extend(proposed.candidates)
+                        original.value, original.status = None, "AMBIGUOUS"
+                        stage_warnings.append({"code": "MODEL_DISAGREEMENT", "field": key})
                 for key in vision_targets:
                     if generated_fields[key].candidates:
                         vision_proposals.setdefault(key, []).extend(
@@ -161,8 +172,11 @@ def extract_pdf(
                         "message": "Vision fallback failed; original evidence preserved",
                     }
                 )
+    # A later reading reporting illegibility must not be hidden by an earlier plausible guess.
+    warnings.extend(preserve_unreadable(fields, all_lines))
+    warnings.extend(withhold_uncertain_values(fields, verification))
     for key, field in fields.items():
-        if key != "invoice_number" and field.status != "OBSERVED":
+        if field.status != "OBSERVED":
             warnings.append({"code": "FIELD_" + field.status, "field": key})
     return (
         fields,

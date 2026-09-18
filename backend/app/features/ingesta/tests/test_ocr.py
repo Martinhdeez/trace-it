@@ -66,11 +66,14 @@ def test_ocr_success_skips_vlm(settings):
         def recognize(self, *args):
             return lines(VALID, "ocr", 0.99)
 
+        def verify(self, *args):
+            return lines(VALID, "ocr", 0.99)
+
     fields, _, _, _, metrics = extract_pdf(
         pdf_bytes(""), ExtractOptions(vlm=True), settings, OCR(), NoVLM()
     )
     assert all(fields[k].status == "OBSERVED" for k in REQUIRED_INVOICE_FIELDS)
-    assert metrics["ocr_calls"] == 1 and metrics["vlm_calls"] == 0
+    assert metrics["ocr_calls"] == 2 and metrics["vlm_calls"] == 0
 
 
 def test_vlm_proposals_remain_unverified(settings):
@@ -147,6 +150,12 @@ def test_shadow_and_vertical_stripe_regressions(settings):
             content, ExtractOptions(), settings, engine, NoVLM()
         )
         for key, expected in refs[name]["fields"].items():
+            if key == "invoice_number":
+                assert fields[key].value is None
+                assert expected in [candidate.value for candidate in fields[key].candidates]
+                expected_status = "UNVERIFIED" if name == "scan_025.pdf" else "AMBIGUOUS"
+                assert fields[key].status == expected_status
+                continue
             assert fields[key].value == expected, (name, key, fields[key])
             assert fields[key].status == "OBSERVED", (name, key, fields[key])
         assert operation in fields["supplier_tax_id"].candidates[0].evidence.preprocessing
