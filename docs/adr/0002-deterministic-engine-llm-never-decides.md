@@ -57,4 +57,4 @@ requires published rules to execute deterministically.
   `POST /instances/{id}/resolve`, stored as a new row.
 
 ## Related
-ADR 0001, 0003, 0004, 0009. Plan P7, P19, P22; `docs/plan-agentes.md` §7.2.
+ADR 0001, 0003, 0004, 0009. Plan P7, P19, P22; `docs/agents-plan.md` §7.2.

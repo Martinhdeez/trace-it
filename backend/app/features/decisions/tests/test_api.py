@@ -71,6 +71,13 @@ def fake_sandbox(code: str, instance: dict, sources: dict, others: list) -> dict
     return {"fires": fires, "reason": code if fires else ""}
 
 
+def stored(values: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Flat test values in the stored format, as extraction writes them."""
+    if values is None:
+        return None
+    return {k: {"value": v, "origin": "text"} for k, v in values.items()}
+
+
 def fake_batch(code: str, cases: list) -> list:
     return [fake_sandbox(code, *case) for case in cases]
 
@@ -86,7 +93,7 @@ async def seed(process_id: int) -> None:
                     process_id=process_id,
                     file_hash=digest,
                     name=name,
-                    symbols=symbols,
+                    symbols=stored(symbols),
                     status="PENDING" if symbols else "REVIEW",
                     review_reason=None if symbols else "The two extractions disagree",
                 )
@@ -166,7 +173,8 @@ async def test_run_review_and_export(monkeypatch: pytest.MonkeyPatch) -> None:
         r = await api.get(f"/instances/{escalated}")
         detail = r.json()
         assert detail["decision"] == "ESCALAR"
-        assert detail["symbols"]["purchase_order"] == "PO-2026-0813"
+        # The API shows symbols as stored, with their provenance.
+        assert detail["symbols"]["purchase_order"] == {"value": "PO-2026-0813", "origin": "text"}
         assert len(detail["decisions"]) == 1
         decision = detail["decisions"][0]
         assert decision["author"] == "engine"
@@ -257,7 +265,7 @@ async def test_export_a_duplicate_name_gives_a_single_line(
                     process_id=process_id,
                     file_hash=digest,
                     name="factura_1217.pdf",
-                    symbols=INVOICES["FA-1016_papelería.pdf"],  # its order was already paid
+                    symbols=stored(INVOICES["FA-1016_papelería.pdf"]),  # order already paid
                 )
             )
             await session.commit()
@@ -304,7 +312,9 @@ async def test_a_priority_tie_at_runtime_goes_to_review(monkeypatch: pytest.Monk
                 process_id=process_id,
                 file_hash=digest,
                 name="FA-7777_both.pdf",
-                symbols={**INVOICES["FA-5044_mensajería2.pdf"], "purchase_order": "PO-2026-0474"},
+                symbols=stored(
+                    {**INVOICES["FA-5044_mensajería2.pdf"], "purchase_order": "PO-2026-0474"}
+                ),
             )
             session.add(both)
             await session.commit()
@@ -331,3 +341,38 @@ async def test_a_priority_tie_at_runtime_goes_to_review(monkeypatch: pytest.Monk
 
         # Export refuses while our own doubt is open.
         assert (await api.get(f"/processes/{process_id}/export")).status_code == 409
+
+
+def test_flat_symbols_are_refused_on_write() -> None:
+    with pytest.raises(ValueError, match="must be stored as"):
+        Instance(name="x.pdf", symbols={"nif": "B96233419"})
+
+
+def recording(seen: list, batch: Any = fake_batch) -> Any:
+    """`batch` that also keeps every case it was handed."""
+
+    def run_batch(code: str, cases: list) -> list:
+        seen.extend(cases)
+        return batch(code, cases)
+
+    return run_batch
+
+
+def assert_flat(case: tuple) -> None:
+    """The first case of the seeded process, as rule code must receive it."""
+    instance, _, others = case
+    assert instance == INVOICES["factura_1217.pdf"]
+    assert others == [
+        {**INVOICES[n], "_instance": n}
+        for n in ("FA-1016_papelería.pdf", "FA-5044_mensajería2.pdf")
+    ]
+
+
+async def test_rule_code_gets_flat_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The database holds {value, origin}; rule code only ever sees the values."""
+    seen: list = []
+    monkeypatch.setattr(sandbox, "run_batch", recording(seen))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        process_id, _ = await create_process(api, uuid.uuid4().hex[:8], "operator")
+        assert (await api.post(f"/processes/{process_id}/run")).status_code == 200
+    assert_flat(seen[0])

@@ -8,7 +8,7 @@
 - Excel `FINAL_v7_DEFINITIVO_ahorasi.xlsx`: `Proveedores` (11 vendors, P007 duplicated, trailing spaces in names), `Pedidos_2026` (516 POs, all ABIERTO), `Norma_Pagos_v3`, plus noise sheets (`notas_alberto`, `pendiente_revisar`: PO-2026-0007, PO-2026-0141; note on reduced VAT).
 - ERP bridge: 516 entries (507 PENDIENTE, 9 PAGADA). XML ISO-8859-1, DD/MM/YYYY, `12.874,40`. Token 15 min / 300 uses, ORA-00600 every 10th authenticated call, 10 req/s limit (ERP-429, Retry-After 1), 0.12 s latency. Data embedded in `alberto_erp.py` (zlib+base64 CSV) — usable as cross-check.
 
-## Norma de pagos v3
+## Payment policy v3
 1. NIF in master and invoice IBAN equals master IBAN.
 2. PO exists, belongs to the vendor, invoice amount equals PO amount (±0.01).
 3. VAT correct and total = base + VAT (±0.01).

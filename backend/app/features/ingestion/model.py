@@ -2,9 +2,10 @@ from typing import Any
 
 from sqlalchemy import CheckConstraint, ForeignKey, LargeBinary, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.core.database import Base, created_at
+from app.features.ingestion.symbols import check_stored
 
 INSTANCE_STATUSES = ("PENDING", "REVIEW", "DECIDED")
 
@@ -38,5 +39,11 @@ class Instance(Base):
     name: Mapped[str]
     status: Mapped[str] = mapped_column(default="PENDING")
     review_reason: Mapped[str | None]
-    # Agreed symbols: {name: {"value": ..., "origin": ...}}
+    # Agreed symbols: {name: {"value": ..., "origin": ...}}. Rule code gets them flattened.
     symbols: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+    @validates("symbols")
+    def _check_symbols(self, _key: str, symbols: dict[str, Any] | None) -> dict[str, Any] | None:
+        if symbols is not None:
+            check_stored(symbols)
+        return symbols

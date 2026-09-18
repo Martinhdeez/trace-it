@@ -1,5 +1,5 @@
 ---
-status: accepted  # agent config versions: implementation in progress (plan-agentes task 1)
+status: accepted  # agent config versions: implementation in progress (agents-plan task 1)
 ---
 
 # Separate bootstrap files, versioned runtime configuration and secrets
@@ -35,7 +35,7 @@ Three layers:
 | Runtime | PostgreSQL | agent config versions, rules, decisions, traces | the app, while it runs |
 | Secrets | `.env` (never committed) | API keys, ERP credentials | each deployment |
 
-- **Agent configuration** (`config_agente` table): per role (`compiler_a`, `compiler_b`,
+- **Agent configuration** (`agent_config` table): per role (`compiler_a`, `compiler_b`,
   `extractor_1`, `extractor_2`, `assistant`, later `corrector`), append-only versions with
   model chain, settings, retries, request limit, prompt file, optional prompt override,
   author and note. At most one active version per role (partial unique index). Editing
@@ -48,15 +48,15 @@ Three layers:
 - Secrets are referenced by variable name (e.g. in `sources.json`), never stored inline.
 
 ## Consequences
-- Every result points to `config_agente.id` + prompt hash: experiments are comparable with
-  one SQL query over `eventos`.
-- The only update on an existing version row is moving `active`.
-- The frontend moves from `/llm/config` to `/agentes/.../config`.
+- Every result points to `agent_config.id` + prompt hash: experiments are comparable with
+  one SQL query over `events`.
+- The only update on an existing version row is moving `is_active`.
+- The frontend moves from `/llm/config` to `/agents/.../config`.
 - A role without an active version refuses to run ("run make setup").
 
 ## Evidence
-- Current state: `features/llm/model.py` (`ConfigLLM`), `features/llm/cliente.py`.
-- Design and endpoints: `docs/plan-agentes.md` §4; layers table: `docs/process-packs.md`.
+- Current state: `features/llm/model.py` (`LLMConfig`), `features/llm/client.py`.
+- Design and endpoints: `docs/agents-plan.md` §4; layers table: `docs/process-packs.md`.
 - Planned tests (task 1): versions and activation against Postgres, partial unique index,
   idempotent preset, export → apply gives the same config, invalid config → 422.
 

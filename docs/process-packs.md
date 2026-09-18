@@ -53,7 +53,7 @@ Declares each source of truth the rules read (`sources` in `evaluate(instance, s
 Optional pointers to sample data (e.g. the challenge PDFs folder and Excel file) so a full demo runs with one command.
 
 ## Agent presets (shared by all processes)
-`backend/app/features/agents/presets/{quality,cheap,fast}.json` define, per agent role, the model fallback chain, settings, retries, request limit, timeout and prompt file. See `docs/plan-agentes.md`.
+`backend/app/features/agents/presets/{quality,cheap,fast}.json` define, per agent role, the model fallback chain, settings, retries, request limit, timeout and prompt file. See `docs/agents-plan.md`.
 
 ## Commands
 | Command | Does |
@@ -64,7 +64,7 @@ Optional pointers to sample data (e.g. the challenge PDFs folder and Excel file)
 | `POST /processes/definition` | Same as `load`, from the API or the UI |
 | Export endpoint *(planned)* | Returns the current process (and agent config) as pack JSON, so changes made in the app can be committed |
 
-For the challenge: `make demo PROCESS=invoice-payment`. When batch 2 and norma v4 arrive, the manager adds the new rules in the app, exports the pack and commits it.
+For the challenge: `make demo PROCESS=invoice-payment`. When batch 2 and policy v4 arrive, the manager adds the new rules in the app, exports the pack and commits it.
 
 ## Loader rules (the contract)
 1. **Idempotent.** Loading the same pack twice changes nothing.

@@ -1,5 +1,5 @@
 ---
-status: accepted  # implementation in progress (plan-agentes tasks 6-7); compiled extractors: proposed
+status: accepted  # implementation in progress (agents-plan tasks 6-7); compiled extractors: proposed
 ---
 
 # Extract symbols with two independent readings and deterministic validators, never retrying on a failed check
@@ -58,9 +58,9 @@ parser per invoice template in the core.
 - The quick parser over the 471 text PDFs found no anomaly in 433 and produced 433 PAGAR,
   36 NO_PAGAR, 2 ESCALAR under the v3 rules (`.artifacts/specs/2026-09-18-analisis-caja-v3.md`).
   Zero-width characters in FA-4488 and F26-3011 are correct once normalised.
-- Planned tests (`docs/plan-agentes.md` §3.3): an IBAN with a bad check digit leaves the
+- Planned tests (`docs/agents-plan.md` §3.3): an IBAN with a bad check digit leaves the
   instance in REVIEW after exactly one request; two disagreeing readings → REVIEW; empty
   text → REVIEW without any call.
 
 ## Related
-ADR 0002, 0005, 0006, 0008, 0009. Plan P10, P20, P21; `docs/plan-agentes.md` §3.3, §7.3, §7.5.
+ADR 0002, 0005, 0006, 0008, 0009. Plan P10, P20, P21; `docs/agents-plan.md` §3.3, §7.3, §7.5.

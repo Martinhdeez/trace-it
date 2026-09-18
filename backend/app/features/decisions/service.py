@@ -22,6 +22,7 @@ from app.features.decisions.schemas import (
     RunSummary,
 )
 from app.features.ingestion.model import Instance
+from app.features.ingestion.symbols import flatten_symbols
 from app.features.processes.model import DecisionType
 from app.features.processes.service import get as get_process
 from app.features.rules.model import Rule
@@ -104,6 +105,23 @@ def _out(instance: Instance, decision: Decision | None) -> InstanceOut:
     )
 
 
+def _cases(
+    instances: list[Instance], selected: list[Instance], sources: dict[str, Any]
+) -> list[tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]]:
+    """The rule contract's arguments for each selected instance: its symbols as plain values,
+    the sources, and every other instance with symbols. Each entry of `others` carries
+    `_instance` so a rule can name the duplicate it found."""
+    flat = {
+        i.id: {**flatten_symbols(i.symbols), "_instance": i.name}
+        for i in instances
+        if i.symbols is not None
+    }
+    return [
+        (flatten_symbols(i.symbols), sources, [s for iid, s in flat.items() if iid != i.id])
+        for i in selected
+    ]
+
+
 async def run(session: AsyncSession, process_id: int) -> RunSummary:
     """Decide every PENDING instance that already has its symbols.
 
@@ -126,12 +144,8 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
     )
     sources = await _current_sources(session, process_id)
     instances = await _instances(session, process_id)
-    # Each entry of `others` carries `_instance` so a rule can name the duplicate it found.
-    symbols = {i.id: {**i.symbols, "_instance": i.name} for i in instances if i.symbols is not None}
     pending = [i for i in instances if i.status == "PENDING" and i.symbols is not None]
-    cases = [
-        (i.symbols, sources, [s for iid, s in symbols.items() if iid != i.id]) for i in pending
-    ]
+    cases = _cases(instances, pending, sources)
     # One subprocess per rule and code, off the event loop (ADR 0004).
     verdicts = await asyncio.to_thread(
         decide_batch, rules, outcomes.priorities, outcomes.default, cases, sandbox.run_batch

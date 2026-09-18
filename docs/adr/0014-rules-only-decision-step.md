@@ -13,7 +13,7 @@ model, and ADR 0002 already keeps LLMs out of the decision path: the challenge h
 filter, every decision must be replayable in a retroactive audit (ADR 0008), and a case can
 carry text that tries to steer its reader (`factura_1936`).
 
-The process description (`Proceso.descripcion`) already has a job: it states the domain
+The process description (`Process.description`) already has a job: it states the domain
 conventions every rule inherits (normalisation, units, tolerances, missing values), and the
 compiler agents receive it as shared context (ADR 0003, 0004, 0007).
 

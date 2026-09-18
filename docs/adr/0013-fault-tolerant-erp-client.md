@@ -68,4 +68,4 @@ runtime; values are fixed after load testing against the challenge ERP.
   `processes/invoice-payment/sources.json`; see `docs/sources-http.md`.
 
 ## Related
-ADR 0006, 0007 (`sources.json`), 0008. Plan P6, P16; `docs/plan-mvp.md` (owner Álvaro).
+ADR 0006, 0007 (`sources.json`), 0008. Plan P6, P16; `docs/mvp-plan.md` (owner Álvaro).
