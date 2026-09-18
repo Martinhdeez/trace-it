@@ -15,24 +15,7 @@ Un proceso ("Pago de facturas") funcionando de punta a punta en la aplicación: 
 | H4 Entrega | Domingo 10:30 | Repo público con `outcomes.jsonl`, `outcomes_lote2.jsonl` y `albertitos_plan.pdf` |
 
 ## Estructura del repo
-```
-docker-compose.yml        # postgres + backend
-backend/
-  app/main.py             # FastAPI: endpoints
-  app/schema.sql          # tablas
-  app/db.py
-  app/llm.py              # LiteLLM + configuración por papel
-  app/ingesta.py          # hash, texto, imagen de escaneos
-  app/conectores/excel.py
-  app/conectores/erp.py   # cliente tolerante a fallos + foto local
-  app/extraccion.py       # doble extracción + validadores
-  app/compilador.py       # dos agentes: código + tests, comprobación estática
-  app/sandbox.py          # ejecución aislada de código generado
-  app/motor.py            # todas las reglas, precedencia, registro
-  app/auditoria.py        # reejecución sobre histórico
-  app/escalado.py         # sugerencia del asistente
-frontend/
-```
+Ver `docs/guia-equipo.md` (organizado por funcionalidades en `backend/app/features/`).
 
 ## Tablas (primer borrador)
 - `procesos`: id, nombre.
@@ -50,9 +33,9 @@ frontend/
 ## Reparto
 | Persona | Bloque | Entregable |
 |---|---|---|
-| Martín | H0 contratos. Compilador (dos agentes, tests cruzados), sandbox, escalado asistido. Texto de las reglas de la norma v3. Responsable del filtro | `compilador.py`, `sandbox.py`, `escalado.py`, reglas v3 |
-| Mateo | Core de ejecución: `llm.py` (LiteLLM, configuración por papel), extracción de símbolos (doble extracción, validadores, `REVISION`), motor, auditoría, endpoints de la API | `llm.py`, `extraccion.py`, `motor.py`, `auditoria.py`, `main.py` |
-| Álvaro | Todo lo que entra: ingesta (hash, `pdftotext`, render/OCR de escaneos), conector del ERP (token, ORA-00600, 429/Retry-After, límite propio, paginación, foto local), conector del Excel (normalización) | `ingesta.py`, `conectores/erp.py`, `conectores/excel.py` |
+| Martín | Agentes: compilador (dos agentes, tests cruzados), sandbox, asistente de escalado y corrector; cliente LLM. Texto de las reglas de la norma v3. Responsable del filtro | `features/agentes/`, `features/llm/`, reglas v3 |
+| Mateo | Reglas y decisiones: ciclo de vida de reglas, motor, API de decisiones, auditoría y hallazgos, seed del proceso. Tareas en `docs/tareas-mateo.md` | `features/reglas/`, `features/decisiones/` |
+| Álvaro | Todo lo que entra: ingesta (hash, `pdftotext`, render/OCR de escaneos), extracción de símbolos (doble extracción con el cliente LLM, validadores), conector del ERP (token, ORA-00600, 429/Retry-After, límite propio, paginación, foto local), conector del Excel (normalización) | `features/ingesta/`, `features/extraccion/`, `features/fuentes/` |
 | Varsovia | Producto e ideas: demo, ADRs, `albertitos_plan.pdf`, hoja de resultados esperados para verificar | Guion de demo, ADRs |
 | Carlos | Frontend contra los endpoints de H0 (datos simulados hasta H1): procesos, instancias con traza, alta de regla con informe, colas `ESCALAR`/`REVISION`, exportar | `frontend/` |
 
