@@ -1,0 +1,84 @@
+{
+  "pipeline": "invoice-v1.7.1+xlsx-v1.3",
+  "cold": {
+    "files": 501,
+    "seconds": 142.028,
+    "files_per_second": 3.53,
+    "counts": {
+      "NEEDS_REVIEW": 202,
+      "cache_hits": 0,
+      "ocr_calls": 44,
+      "vlm_calls": 0,
+      "COMPLETE": 299
+    },
+    "warnings": {
+      "FIELD_MISSING": 216,
+      "FIELD_INVALID": 5,
+      "UNTRUSTED_INSTRUCTION": 12,
+      "TOTAL_MISMATCH": 5,
+      "FIELD_LOW_CONFIDENCE": 10,
+      "VAT_MISMATCH": 9,
+      "OCR_SEPARATOR_PROPOSAL": 7,
+      "OCR_NOT_CORROBORATED": 18,
+      "FIELD_UNVERIFIED": 34,
+      "OCR_ARITHMETIC_UNVERIFIED": 12,
+      "FIELD_AMBIGUOUS": 1,
+      "DUPLICATE_IDENTICAL": 1,
+      "UNRECOGNIZED_SCHEMA": 9,
+      "FORMULA_UNEVALUATED": 1
+    },
+    "python": "3.12.13",
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu_threads": 32,
+    "note": "Extraction completeness and observed anomalies, NOT ground-truth payment accuracy"
+  },
+  "warm": {
+    "files": 501,
+    "seconds": 7.341,
+    "files_per_second": 68.25,
+    "counts": {
+      "NEEDS_REVIEW": 202,
+      "cache_hits": 501,
+      "ocr_calls": 0,
+      "vlm_calls": 0,
+      "COMPLETE": 299
+    },
+    "warnings": {
+      "FIELD_MISSING": 216,
+      "FIELD_INVALID": 5,
+      "UNTRUSTED_INSTRUCTION": 12,
+      "TOTAL_MISMATCH": 5,
+      "FIELD_LOW_CONFIDENCE": 10,
+      "VAT_MISMATCH": 9,
+      "OCR_SEPARATOR_PROPOSAL": 7,
+      "OCR_NOT_CORROBORATED": 18,
+      "FIELD_UNVERIFIED": 34,
+      "OCR_ARITHMETIC_UNVERIFIED": 12,
+      "FIELD_AMBIGUOUS": 1,
+      "DUPLICATE_IDENTICAL": 1,
+      "UNRECOGNIZED_SCHEMA": 9,
+      "FORMULA_UNEVALUATED": 1
+    },
+    "python": "3.12.13",
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu_threads": 32,
+    "note": "Extraction completeness and observed anomalies, NOT ground-truth payment accuracy"
+  },
+  "audit": {
+    "files": 501,
+    "methods": {
+      "independent_text": 471,
+      "visual_development_labels": 29,
+      "independent_xlsx_xml": 1
+    },
+    "pdf_field_issues": {},
+    "xlsx_cells_checked": 3193,
+    "xlsx_mismatches": 0,
+    "xlsx_canonical_fields_checked": 3124,
+    "xlsx_canonical_mismatches": 0,
+    "scan_labeled_fields": 283,
+    "scan_matching_values": 254,
+    "scan_wrong_observed_values": 4,
+    "note": "Poppler and XML consistency audit; scan development labels transcribed visually by assistant, not independent organizer ground truth."
+  }
+}
