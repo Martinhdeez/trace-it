@@ -1,0 +1,2 @@
+class ProviderUnavailable(RuntimeError):
+    pass

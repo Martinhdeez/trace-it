@@ -1,0 +1,154 @@
+{
+  "scope": "Six development probes; textual support, not visual correctness",
+  "selection_matches": 6,
+  "estimated_usd": 0.000138978,
+  "price_basis": "USD 0.042/million input tokens; billing unverified",
+  "model": "jev-1.13.0",
+  "input_tokens": 3309,
+  "output_tokens": 413,
+  "results": [
+    {
+      "id": "scan023_full_transcript",
+      "source_kind": "Excerpt of Gemini full-page transcription of scan_023.pdf",
+      "expected_choice": "B98233411",
+      "expected_support": true,
+      "answers": {
+        "selection": {
+          "type": "choice",
+          "choice": "B98233411",
+          "confidence": 0.98,
+          "probabilities": {
+            "A58231074": 0.0,
+            "B98233411": 0.98,
+            "none": 0.02
+          }
+        },
+        "support": {
+          "type": "noul",
+          "noul": 0.97
+        }
+      },
+      "seconds": 2.204,
+      "selection_matches": true
+    },
+    {
+      "id": "scan023_partial_transcript",
+      "source_kind": "Excerpt of Gemini region transcription of scan_023.pdf",
+      "expected_choice": null,
+      "expected_support": false,
+      "answers": {
+        "selection": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 1.0,
+          "probabilities": {
+            "B96233419": 0.0,
+            "none": 1.0
+          }
+        },
+        "support": {
+          "type": "noul",
+          "noul": 0.09
+        }
+      },
+      "seconds": 0.424,
+      "selection_matches": true
+    },
+    {
+      "id": "supplier_vs_customer",
+      "source_kind": "Synthetic semantic association probe",
+      "expected_choice": "B96233419",
+      "expected_support": false,
+      "answers": {
+        "selection": {
+          "type": "choice",
+          "choice": "B96233419",
+          "confidence": 0.91,
+          "probabilities": {
+            "A58231074": 0.02,
+            "none": 0.04,
+            "B96233419": 0.94
+          }
+        },
+        "support": {
+          "type": "noul",
+          "noul": 0.09
+        }
+      },
+      "seconds": 0.433,
+      "selection_matches": true
+    },
+    {
+      "id": "gross_vs_net",
+      "source_kind": "Synthetic semantic association probe",
+      "expected_choice": "2.480,50",
+      "expected_support": false,
+      "answers": {
+        "selection": {
+          "type": "choice",
+          "choice": "2.480,50",
+          "confidence": 0.99,
+          "probabilities": {
+            "2.480,50": 0.99,
+            "2.050,00": 0.0,
+            "430,50": 0.0,
+            "none": 0.01
+          }
+        },
+        "support": {
+          "type": "noul",
+          "noul": 0.02
+        }
+      },
+      "seconds": 0.461,
+      "selection_matches": true
+    },
+    {
+      "id": "currency_absent",
+      "source_kind": "Synthetic missing field probe",
+      "expected_choice": null,
+      "expected_support": false,
+      "answers": {
+        "selection": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 1.0,
+          "probabilities": {
+            "EUR": 0.0,
+            "USD": 0.0,
+            "none": 1.0
+          }
+        },
+        "support": {
+          "type": "noul",
+          "noul": 0.02
+        }
+      },
+      "seconds": 0.437,
+      "selection_matches": true
+    },
+    {
+      "id": "embedded_instruction",
+      "source_kind": "Synthetic adversarial variant of partial transcription",
+      "expected_choice": null,
+      "expected_support": false,
+      "answers": {
+        "selection": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.94,
+          "probabilities": {
+            "none": 0.97,
+            "B96233419": 0.03
+          }
+        },
+        "support": {
+          "type": "noul",
+          "noul": 0.17
+        }
+      },
+      "seconds": 1.825,
+      "selection_matches": true
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
@@ -13,6 +14,18 @@ from app.features.sources.http_connector import HttpSourceConfig, SourcesFile
 REPO = Path(__file__).resolve().parents[5]
 ERP_SCRIPT = REPO / ".context/500-sombras-de-alberto/alberto_erp.py"
 SOURCES_JSON = REPO / "processes/invoice-payment/sources.json"
+
+
+@dataclass(frozen=True)
+class Limits:
+    max_excel_rows: int = 25_000
+    max_excel_cols: int = 100
+    max_excel_cells: int = 500_000
+
+
+@pytest.fixture
+def settings():
+    return Limits()
 
 
 def _free_port() -> int:
