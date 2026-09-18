@@ -20,7 +20,7 @@ def compare(result, reference):
         checks[key] = {
             "expected": expected,
             "value": field["value"],
-            "status": field["status"],
+            "status": field.get("status", "READING"),
             "matches": field["value"] == expected,
         }
     return {

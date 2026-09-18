@@ -35,7 +35,7 @@ def main():
                     item = service.ingest(stream, path.name)
                 result = service.extract(item, ExtractOptions(ocr=not args.no_ocr))
                 report.write(result.model_dump_json() + "\n")
-                counts[result.status] += 1
+                counts["EXTRACTED"] += 1
                 counts["cache_hits"] += result.cache_hit
                 counts["ocr_calls"] += result.metrics["ocr_calls_this_request"]
                 counts["vlm_calls"] += result.metrics["vlm_calls_this_request"]

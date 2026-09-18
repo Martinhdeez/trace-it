@@ -25,7 +25,7 @@ def test_incomplete_first_reading_still_gets_second_reader(settings):
     )
     assert result.metrics["ocr_verification_calls"] == 1
     assert result.fields["supplier_tax_id"].value == "B98120774"
-    assert result.fields["gross_amount"].value is None
+    assert result.fields["gross_amount"].value == "100.00"
     assert result.fields["gross_amount"].candidates[0].value == "100.00"
 
 
@@ -60,7 +60,9 @@ def test_visual_auto_escalation_recovers_corroborated_fields_and_jev_cannot_vote
     assert result.metrics["vlm_calls"] == result.metrics["jev_calls"] == 1
     assert result.fields["supplier_tax_id"].value == "B98120774"
     assert result.fields["gross_amount"].value == "1802.90"
-    assert result.fields["payment_iban"].value is None
+    assert result.fields["payment_iban"].value == "ES4414650100951704302211"
+    assert result.fields["payment_iban"].selected_by == "text_judge"
+    assert result.fields["payment_iban"].agreeing_readers == ["visual"]
     assert result.data["committee"]["text_judge"]["visual_vote"] is False
 
 

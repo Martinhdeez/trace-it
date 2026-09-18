@@ -58,20 +58,3 @@ def preserve_unreadable(fields, lines):
             field.value, field.status = None, "UNVERIFIED"
             warnings.append({"code": "UNREADABLE_FIELD", "field": name, "locator": line.id})
     return warnings
-
-
-def withhold_uncertain_values(fields, verification):
-    warnings = []
-    for name, field in fields.items():
-        if (
-            field.status == "OBSERVED"
-            and field.candidates
-            and all(c.evidence.method == "ocr" for c in field.candidates)
-            and not verification.get(name, {}).get("agrees")
-        ):
-            field.status = "UNVERIFIED"
-            warnings.append({"code": "OCR_NOT_CORROBORATED", "field": name})
-        if field.status != "OBSERVED":
-            # Candidate values remain available as evidence, never as canonical business data.
-            field.value = None
-    return warnings

@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.features.ingestion.pdf.extractor import extract_pdf
-from app.features.ingestion.schemas import REQUIRED_INVOICE_FIELDS, ExtractOptions
+from app.features.ingestion.schemas import INVOICE_FIELDS, ExtractOptions
 from app.features.ingestion.tests.conftest import MATERIAL, VALID, NoOCR, NoVLM, lines, pdf_bytes
 
 
@@ -72,7 +72,7 @@ def test_ocr_success_skips_vlm(settings):
     fields, _, _, _, metrics = extract_pdf(
         pdf_bytes(""), ExtractOptions(vlm=True), settings, OCR(), NoVLM()
     )
-    assert all(fields[k].status == "OBSERVED" for k in REQUIRED_INVOICE_FIELDS)
+    assert all(fields[k].status == "OBSERVED" for k in INVOICE_FIELDS)
     assert metrics["ocr_calls"] == 2 and metrics["vlm_calls"] == 0
 
 

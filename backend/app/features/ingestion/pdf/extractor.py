@@ -125,7 +125,7 @@ def extract_pdf(
     for lines in readers.values():
         warnings.extend(parse_invoice(lines, settings.ocr_min_confidence)[1])
     for name, field in fields.items():
-        if field.status != "OBSERVED":
+        if field.status not in {"OBSERVED", "MISSING"}:
             warnings.append({"code": "FIELD_" + field.status, "field": name})
     warnings = list({str(sorted(w.items())): w for w in warnings}.values())
     verification = {

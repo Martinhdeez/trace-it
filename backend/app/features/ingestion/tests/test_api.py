@@ -43,7 +43,7 @@ def test_provider_failure_can_retry_without_poisoned_cache(settings):
     content = pdf_bytes("")
     for _ in range(2):
         result = service.extract(service.ingest(io.BytesIO(content), "scan.pdf"), ExtractOptions())
-        assert result.status == "NEEDS_REVIEW"
+        assert "status" not in result.model_dump()
         assert result.cache_hit is False
         assert any(w["code"] == "OCR_ERROR" for w in result.warnings)
 
@@ -65,7 +65,7 @@ def test_upload_cache_identity_and_get(settings):
         )
         assert first.status_code == 200, first.text
         data = first.json()
-        assert data["status"] == "COMPLETE"
+        assert "status" not in data and "review" not in data
         assert data["cache_hit"] is False
         second = client.post("/v1/extractions", files={"file": ("another.pdf", content)}).json()
         assert second["cache_hit"] is True

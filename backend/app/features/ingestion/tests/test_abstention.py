@@ -11,7 +11,7 @@ from app.features.ingestion.service import ExtractionService
 from .conftest import VALID, NoOCR, NoVLM, lines, pdf_bytes
 
 
-def test_legacy_results_require_reextraction_instead_of_defaulting_to_safe():
+def test_legacy_workflow_fields_are_not_returned_by_the_extraction_api():
     result = ExtractionResult.model_validate(
         {
             "id": "old-id",
@@ -22,8 +22,8 @@ def test_legacy_results_require_reextraction_instead_of_defaulting_to_safe():
             "pipeline_version": "invoice-v1.7.1+xlsx-v1.3",
         }
     )
-    assert result.review.required and result.status == "NEEDS_REVIEW"
-    assert result.review.reasons == ["LEGACY_RESULT_REEXTRACT"]
+    assert "status" not in result.model_dump()
+    assert "review" not in result.model_dump()
 
 
 @pytest.mark.parametrize(
@@ -43,7 +43,7 @@ def test_partial_or_uncertain_text_is_preserved_without_usable_value(text, field
     assert any(w["code"] == "UNREADABLE_FIELD" and w["field"] == field for w in warnings)
 
 
-def test_high_confidence_without_corroboration_is_still_only_a_candidate(settings):
+def test_single_reader_value_is_returned_with_its_provenance(settings):
     class OCR(NoOCR):
         def recognize(self, *args):
             return lines("NIF: B96233419", "ocr", 0.99)
@@ -52,14 +52,14 @@ def test_high_confidence_without_corroboration_is_still_only_a_candidate(setting
     with TestClient(create_app(settings, service)) as client:
         result = client.post("/v1/extractions", files={"file": ("scan.pdf", pdf_bytes(""))}).json()
     field = result["fields"]["supplier_tax_id"]
-    assert field["value"] is None and field["candidates"][0]["value"] == "B96233419"
-    assert result["status"] == "NEEDS_REVIEW"
-    assert result["review"]["required"] is True
-    assert result["review"]["action"] == "HUMAN_REVIEW"
-    assert "supplier_tax_id" in result["review"]["fields"]
+    assert field["value"] == "B96233419"
+    assert field["selected_by"] == "primary"
+    assert field["agreeing_readers"] == ["primary"]
+    assert "status" not in result and "review" not in result
+    assert result["fields"]["payment_iban"]["value"] is None
 
 
-def test_low_confidence_agreement_does_not_validate_ocr(settings):
+def test_low_confidence_is_preserved_as_metadata(settings):
     class OCR(NoOCR):
         def recognize(self, *args):
             return lines(VALID, "ocr", 0.99)
@@ -71,19 +71,19 @@ def test_low_confidence_agreement_does_not_validate_ocr(settings):
     result = service.extract(
         service.ingest(io.BytesIO(pdf_bytes("")), "scan.pdf"), ExtractOptions()
     )
-    assert result.fields["payment_iban"].value is None
-    assert result.review.required
+    assert result.fields["payment_iban"].value == "ES4414650100951704302211"
+    assert min(c.evidence.confidence for c in result.fields["payment_iban"].candidates) == 0.5
 
 
-def test_unlocalized_illegible_region_blocks_an_otherwise_complete_document(settings):
+def test_unlocalized_illegibility_does_not_hide_readable_fields(settings):
     service = ExtractionService(settings, NoOCR(), NoVLM())
     document = pdf_bytes(VALID + "\n[ILLEGIBLE]")
     result = service.extract(service.ingest(io.BytesIO(document), "invoice.pdf"), ExtractOptions())
-    assert result.review.required
-    assert "UNREADABLE_REGION" in result.review.reasons
+    assert result.fields["invoice_number"].value == "F26-1234"
+    assert any(w["code"] == "UNREADABLE_REGION" for w in result.warnings)
 
 
-def test_visual_disagreement_is_preserved_without_selecting_a_plausible_value(settings):
+def test_visual_disagreement_keeps_alternatives_and_returns_a_reading(settings):
     class VLM:
         def transcribe(self, *args):
             return lines(VALID.replace("9517", "8517"), "vlm")
@@ -94,11 +94,12 @@ def test_visual_disagreement_is_preserved_without_selecting_a_plausible_value(se
         service.ingest(io.BytesIO(document), "invoice.pdf"), ExtractOptions(vlm=True)
     )
     field = result.fields["payment_iban"]
-    assert field.status == "AMBIGUOUS" and field.value is None
+    assert field.value == "ES4414650100951704302211"
+    assert field.selected_by == "native"
     assert {c.value for c in field.candidates} == {
         "ES4414650100951704302211",
         "ES4414650100851704302211",
     }
-    assert result.fields["purchase_order_ref"].value is None
+    assert result.fields["purchase_order_ref"].value == "PO-2026-0703"
     assert result.fields["purchase_order_ref"].candidates[0].value == "PO-2026-0703"
-    assert result.review.action == "HUMAN_REVIEW"
+    assert "review" not in result.model_dump()

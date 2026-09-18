@@ -3,7 +3,7 @@
 from collections import defaultdict
 
 from app.common.extraction import ExtractedField
-from app.features.ingestion.schemas import REQUIRED_INVOICE_FIELDS
+from app.features.ingestion.schemas import INVOICE_FIELDS
 
 from .invoice import arithmetic_checks, parse_invoice
 from .uncertainty import preserve_unreadable
@@ -14,7 +14,7 @@ POLICY_VERSION = "committee-v1"
 def reconcile(readers, min_confidence):
     parsed = {name: parse_invoice(lines, min_confidence)[0] for name, lines in readers.items()}
     fields, decisions, warnings = {}, {}, []
-    for name in REQUIRED_INVOICE_FIELDS:
+    for name in INVOICE_FIELDS:
         candidates, votes = [], defaultdict(list)
         statuses = []
         for reader, reading in parsed.items():
@@ -58,7 +58,7 @@ def reconcile(readers, min_confidence):
                 c.evidence.method == "native" for c in field.candidates
             ):
                 field.value, field.status = None, "UNVERIFIED"
-                decisions[name]["reason"] = "arithmetic_requires_review"
+                decisions[name]["reason"] = "arithmetic_disagreement"
     for field in fields.values():
         if field.status != "OBSERVED":
             field.value = None

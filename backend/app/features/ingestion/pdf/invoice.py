@@ -3,7 +3,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from app.common.extraction import Candidate, Evidence, ExtractedField, TextLine
 from app.common.normalization import fold, iban, identifier, invoice_date, money
-from app.features.ingestion.schemas import REQUIRED_INVOICE_FIELDS
+from app.features.ingestion.schemas import INVOICE_FIELDS
 
 from .uncertainty import preserve_unreadable
 
@@ -58,7 +58,7 @@ def parse_invoice(lines: list[TextLine], min_confidence: float = 0.90):
         else:
             expanded.append(line)
     lines = expanded
-    candidates = {name: [] for name in (*REQUIRED_INVOICE_FIELDS, "invoice_number")}
+    candidates = {name: [] for name in (*INVOICE_FIELDS, "invoice_number")}
     warnings = []
     symbol_observations = []
 
@@ -235,7 +235,7 @@ def unresolved(fields):
     # Preserve clearly printed invalid dates/amounts; do not hallucinate a correction.
     return [
         key
-        for key in REQUIRED_INVOICE_FIELDS
+        for key in INVOICE_FIELDS
         if fields[key].status in {"MISSING", "AMBIGUOUS", "LOW_CONFIDENCE", "UNVERIFIED"}
     ]
 

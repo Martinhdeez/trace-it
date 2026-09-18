@@ -4,7 +4,7 @@ import pytest
 
 from app.features.ingestion.pdf.extractor import extract_pdf
 from app.features.ingestion.pdf.invoice import parse_invoice
-from app.features.ingestion.schemas import REQUIRED_INVOICE_FIELDS, ExtractOptions
+from app.features.ingestion.schemas import INVOICE_FIELDS, ExtractOptions
 from app.features.ingestion.tests.conftest import MATERIAL, VALID, NoOCR, NoVLM, lines, pdf_bytes
 
 
@@ -12,7 +12,7 @@ def test_deterministic_no_provider_calls(settings):
     fields, _, warnings, _, metrics = extract_pdf(
         pdf_bytes(VALID), ExtractOptions(vlm=True), settings, NoOCR(), NoVLM()
     )
-    assert all(fields[k].status == "OBSERVED" for k in REQUIRED_INVOICE_FIELDS)
+    assert all(fields[k].status == "OBSERVED" for k in INVOICE_FIELDS)
     assert fields["supplier_tax_id"].value == "B98120774"
     assert metrics["ocr_calls"] == metrics["vlm_calls"] == 0
     assert not warnings
@@ -61,7 +61,7 @@ def test_all_native_invoices(settings):
             continue
         count += 1
         fields, _ = parse_invoice(text_lines)
-        for key in REQUIRED_INVOICE_FIELDS:
+        for key in INVOICE_FIELDS:
             if key == "currency" and fields[key].status == "MISSING":
                 missing_currency += 1
                 continue

@@ -124,9 +124,13 @@ def check_native(path, result, executable, output):
                 and field["value"]
                 else field["value"] in refs
             )
-            if key == "issued_on" and refs == {"INVALID_DATE"} and field["status"] == "INVALID":
+            if (
+                key == "issued_on"
+                and refs == {"INVALID_DATE"}
+                and field.get("status", "READING") == "INVALID"
+            ):
                 equal = True
-            if not refs and key == "invoice_number" and field["status"] == "MISSING":
+            if not refs and key == "invoice_number" and field.get("status", "READING") == "MISSING":
                 pass
             elif not refs:
                 errors.append("REFERENCE_PARSER_UNSUPPORTED")
@@ -136,7 +140,7 @@ def check_native(path, result, executable, output):
                 errors.append("MULTIPLE_REFERENCE_VALUES")
         checks[key] = {
             "value": field["value"],
-            "status": field["status"],
+            "status": field.get("status", "READING"),
             "independent_values": sorted(references.get(key, [])),
             "issues": sorted(set(errors)),
         }

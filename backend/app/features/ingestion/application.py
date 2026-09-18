@@ -41,8 +41,8 @@ def create_app(
         version="0.1.0",
         lifespan=lifespan,
         description=(
-            "PDF/XLSX extraction with provenance. COMPLETE means "
-            "extracted, not approved for payment."
+            "PDF/XLSX text and field extraction with provenance. "
+            "Missing fields are allowed; workflow decisions belong to the caller."
         ),
     )
     app.state.service = service

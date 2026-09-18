@@ -14,11 +14,12 @@ from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.ocr.local import LocalOCR
 from app.features.ingestion.ocr.vision import VisionFallback
 from app.features.ingestion.pdf.extractor import extract_pdf
-from app.features.ingestion.schemas import REQUIRED_INVOICE_FIELDS, ExtractionResult, ExtractOptions
+from app.features.ingestion.readings import field_readings, full_text
+from app.features.ingestion.schemas import ExtractionResult, ExtractOptions
 from app.features.ingestion.store import Store
 from app.features.sources.service import extract_workbook
 
-PIPELINE_VERSION = "invoice-v1.9.0+xlsx-v1.3"
+PIPELINE_VERSION = "invoice-v2.0.0+xlsx-v1.3"
 logger = logging.getLogger(__name__)
 
 
@@ -129,36 +130,10 @@ class ExtractionService:
                     fields, data, warnings, pages, metrics = extract_pdf(
                         content, options, self.settings, self.ocr, self.vlm, self.judge
                     )
-                    complete = all(fields[k].status == "OBSERVED" for k in REQUIRED_INVOICE_FIELDS)
-                    complete = complete and not any(
-                        w["code"]
-                        in {
-                            "OCR_ERROR",
-                            "OCR_DISABLED",
-                            "OCR_EMPTY",
-                            "UNREADABLE_REGION",
-                            "VLM_ERROR",
-                            "JEV_ERROR",
-                        }
-                        for w in warnings
-                    )
                 else:
                     data, warnings = extract_workbook(content, self.settings)
                     fields, pages = {}, []
                     metrics = {"native_pages": 0, "ocr_calls": 0, "vlm_calls": 0}
-                    complete = not any(
-                        w["code"]
-                        in {
-                            "DUPLICATE_CONFLICT",
-                            "FIELD_INVALID",
-                            "FIELD_AMBIGUOUS",
-                            "FIELD_MISSING",
-                            "FIELD_UNVERIFIED",
-                            "FORMULA_UNEVALUATED",
-                            "UNRECOGNIZED_SCHEMA",
-                        }
-                        for w in warnings
-                    )
                 elapsed = round((time.perf_counter() - started) * 1000, 2)
                 data["provenance"] = {
                     "pipeline_version": PIPELINE_VERSION,
@@ -184,21 +159,13 @@ class ExtractionService:
                 )
                 result = ExtractionResult(
                     **item,
-                    status="COMPLETE" if complete else "NEEDS_REVIEW",
-                    fields=fields,
+                    fields=field_readings(fields, data),
+                    text=full_text(data),
                     data=data,
                     warnings=warnings,
                     pages=pages,
                     metrics=metrics,
                     pipeline_version=PIPELINE_VERSION,
-                    review={
-                        "required": not complete,
-                        "action": "CONTINUE" if complete else "HUMAN_REVIEW",
-                        "fields": [
-                            key for key, field in fields.items() if field.status != "OBSERVED"
-                        ],
-                        "reasons": sorted({w["code"] for w in warnings}) if not complete else [],
-                    },
                 )
                 transient = any(
                     w["code"] in {"OCR_ERROR", "VLM_ERROR", "JEV_ERROR"} for w in warnings
