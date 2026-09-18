@@ -1,6 +1,10 @@
 # Validación de la ingesta
 
-Pipeline medido: `invoice-v1.7.1+xlsx-v1.3`. Material fijado al commit `18d43b3`. Los resultados miden extracción, no decisiones de pago ni elegibilidad ante el verificador privado.
+La medición histórica de esta página corresponde a `invoice-v1.7.1+xlsx-v1.3`.
+La versión actual `invoice-v1.8.0+xlsx-v1.3` retiene menos valores canónicos para preservar
+la incertidumbre: ver [medición de abstención](abstention.md). Material fijado al commit
+`18d43b3`. Los resultados miden extracción, no decisiones de pago ni elegibilidad ante el
+verificador privado.
 
 ## Corpus completo
 

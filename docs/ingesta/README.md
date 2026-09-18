@@ -49,7 +49,11 @@ Cada campo contiene `value`, `status`, `origin` y `candidates`. Cada candidato c
 | `LOW_CONFIDENCE` | OCR por debajo del umbral, actualmente 0,90 por línea. |
 | `UNVERIFIED` | Propuesta generativa, separador corregido, lectura OCR no corroborada, inconsistencia aritmética OCR o fórmula pendiente de comprobación. |
 
-`NEEDS_REVIEW` identifica extracción incompleta o incierta. No equivale a la decisión de negocio `ESCALAR` del reto.
+`NEEDS_REVIEW` identifica extracción incompleta o incierta. `review.required=true` y
+`review.action=HUMAN_REVIEW` indican al consumidor que debe solicitar revisión. En facturas,
+los campos inciertos tienen `value=null`, conservando las lecturas en `candidates`.
+No equivale a la decisión de negocio `ESCALAR` del reto. Ver [contrato API](api.md) y
+[evaluación de abstención](abstention.md).
 
 ## Flujo y límites
 
@@ -59,7 +63,7 @@ Cada campo contiene `value`, `status`, `origin` y `candidates`. Cada candidato c
 4. Para páginas sin texto útil, corrupto o con una imagen dominante y campos pendientes: renderizar a 240 DPI, limitar a 18 millones de píxeles, detectar sombras/rayas fuertes, corregir la iluminación o el fondo cuando corresponda, recortar márgenes y ejecutar PP-OCRv5 local. Se mantienen coordenadas respecto al PDF original y las operaciones figuran en la evidencia. Una segunda página escaneada se procesa aunque la primera tenga texto. Si la lectura parece completa, un segundo reconocedor local contrasta los campos: las discrepancias quedan pendientes. No se selecciona un tratamiento por nombre de archivo.
 5. Reconocer etiquetas y formatos del lote. Conservar candidatos incompatibles. Corregir separadores e invisibles de Unicode cuando la transformación es inequívoca; tolerar errores conocidos en etiquetas OCR sin sustituir dígitos de NIF, IBAN, pedido o importes.
 6. XLSX: leer todas las hojas, incluso ocultas, con `openpyxl` en modo de lectura. Detectar cabeceras entre las primeras 25 filas, conservar celdas originales, `xml_numeric_value` y `number_format`, y extraer proveedores, pedidos y asientos cuando el esquema es reconocible. Leer también libros con dimensiones ausentes o incorrectas, comprobando límites sobre las coordenadas reales. Conservar las hojas de normas como texto; no convertirlas automáticamente en reglas ejecutables.
-7. Solo si quedan campos sin resolver y `vlm=true`, consultar el servidor visual configurado. Las propuestas quedan registradas en `data.vision_proposals`. Los campos faltantes propuestos por el modelo quedan `UNVERIFIED`; no se sobrescriben valores observados. Una fecha inválida claramente impresa no se "arregla" mediante un LLM.
+7. Solo si quedan campos sin resolver y `vlm=true`, consultar el servidor visual configurado. Las propuestas quedan registradas en `data.vision_proposals`. Los campos faltantes propuestos por el modelo quedan `UNVERIFIED`. Si la lectura visual contradice un valor previo, se conservan ambos candidatos y el campo queda `AMBIGUOUS`, sin valor canónico. Una fecha inválida claramente impresa no se "arregla" mediante un LLM.
 8. Persistir resultado y estado en SQLite WAL. Los trabajos `RUNNING` vuelven a `QUEUED` al reiniciar. Los fallos OCR/VLM preservan la evidencia y no se almacenan como aciertos de caché: reenviar el archivo permite reintentar.
 
 PDF: máximo 40 páginas; documentos cifrados o corruptos se rechazan. XLSX: máximo 200 MiB descomprimidos, 2.000 miembros ZIP, 500.000 celdas, 25.000 filas y 100 columnas por hoja. Se conservan fórmulas, pero no se ejecutan: un caché de fórmula puede estar desactualizado. Las hojas no reconocidas se devuelven con `UNRECOGNIZED_SCHEMA`.
@@ -104,6 +108,9 @@ Ver [medición y casuísticas](extraction-validation.md). La medición de comple
 Se ha probado GOT-OCR v2 de fal.ai con peticiones reales, comparándolo con las lecturas visuales de los scans difíciles. La clave se lee de `.env` mediante `FAL_KEY` y está excluida de Git. El experimento se ejecuta explícitamente con `python -m app.features.ingesta.tools.compare_fal_ocr`; `--offline` reevalúa las respuestas guardadas sin llamadas ni cargos. El script conserva los identificadores de petición para recuperar trabajos sin volver a enviarlos. Este proveedor no se activa automáticamente en la API. Ver [comparación de OCR](ocr-comparison.md).
 
 ## Decisiones de implementación
+
+Jev se ha evaluado como selector textual de candidatos en un experimento explícito, sin
+integrarlo en la cascada automática. No admite imágenes. Ver [prueba de TypeSafe/Jev](jev.md).
 
 - Reglas y normalización antes de modelos: coste bajo y evidencia estable. Consecuencia: un diseño desconocido puede quedar pendiente aunque una persona lo lea fácilmente.
 - OCR móvil local antes de modelos generativos: pesos pequeños y cero coste de API. Consecuencia: escaneados dañados siguen necesitando revisión o un modelo mayor; la confianza del OCR no es una probabilidad calibrada de corrección.

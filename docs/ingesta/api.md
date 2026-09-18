@@ -19,8 +19,32 @@ Multipart: `file` obligatorio, `ocr=true` y `vlm=false` opcionales. No se pide m
 - `fields`: valores normalizados, estados y candidatos con texto, página y coordenadas.
 - `data`: hojas/celdas de Excel, propuestas visuales y procedencia del procesamiento.
 - `warnings`, `pages`, `metrics`, `pipeline_version`, `cache_hit`.
+- `review`: `required`, `action` (`CONTINUE` o `HUMAN_REVIEW`), `fields` y `reasons`.
 
 Los importes son cadenas decimales. `OBSERVED` es una observación que puede contener errores OCR. Un candidato generativo queda `UNVERIFIED`. Excel conserva hoja, celda, fórmula, caché de fórmula y formato numérico.
+
+Desde `invoice-v1.8.0`, los campos inciertos de facturas tienen `value: null`; las lecturas
+propuestas permanecen en `candidates`. `[ILLEGIBLE]`, caracteres `?`, contradicciones y OCR sin
+corroboración impiden utilizar el valor automáticamente. También es obligatorio el número de
+factura. Si `review.required` es verdadero, el consumidor debe enviar el documento a revisión;
+esta API comunica esa necesidad, pero no implementa la bandeja de revisión ni decide pagos.
+Ejemplo parcial:
+
+```json
+{
+  "status": "NEEDS_REVIEW",
+  "review": {
+    "required": true,
+    "action": "HUMAN_REVIEW",
+    "fields": ["supplier_tax_id"],
+    "reasons": ["UNREADABLE_FIELD", "FIELD_UNVERIFIED"]
+  }
+}
+```
+
+Los resultados históricos sin contrato `review` se presentan con
+`LEGACY_RESULT_REEXTRACT` y requieren volver a subir el original. Sus campos antiguos se
+conservan como histórico y no deben consumirse como una extracción validada por la versión nueva.
 
 `GET /v1/extractions/{id}` recupera el resultado persistido. Subir contenido idéntico con otro nombre reutiliza la extracción y conserva otra identidad documental; no deduplica facturas a efectos de pago.
 
