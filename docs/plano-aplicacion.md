@@ -232,7 +232,8 @@ En el proceso de facturas: ESCALAR (3, requiere persona) > NO_PAGAR (2) > PAGAR 
 - Cada proceso define su lista de símbolos (nombre, tipo, descripción).
 - Un LLM la rellena con salida estructurada: sobre el texto del fichero, o sobre la imagen si es un escaneo. Sin parsers por plantilla.
 - Dos extracciones independientes (proveedores de LLM distintos) deben coincidir. Además, validadores fijos donde apliquen (en facturas: IBAN mod-97, letra del NIF, base + IVA = total).
-- Si no coinciden o un validador falla: estado `REVISION` (P21).
+- Si no coinciden o un validador falla: estado `REVISION` (P21). El fallo de un validador nunca se devuelve al modelo para que lo corrija: aprendería a dar un valor que cuadre en vez del que pone el documento.
+- Cada fichero se extrae una sola vez (por su hash) y los símbolos se guardan; repetir decisiones o auditorías no vuelve a llamar al LLM.
 
 **P21. Discrepancias.** [DECIDIDO]
 - **Al añadir una regla:** si los dos códigos discrepan, o chocan con otra regla o con una decisión validada, el sistema lo detecta, avisa al usuario y la regla **no entra** hasta que se resuelva.
@@ -240,9 +241,41 @@ En el proceso de facturas: ESCALAR (3, requiere persona) > NO_PAGAR (2) > PAGAR 
 
 **P22. Proveedores de LLM.** [DECIDIDO]
 - El sistema no depende de ningún proveedor. Cualquier API (Anthropic, OpenAI, Gemini, local...) se puede usar.
-- Cada papel tiene su propia configuración, cambiable en ejecución: `compilador_a`, `compilador_b`, `extractor_1`, `extractor_2`, `asistente`. Cada uno elige proveedor y modelo.
-- [PROPUESTA] Implementación: LiteLLM, que ya ofrece una única interfaz para todos los proveedores (texto, imagen y salida estructurada). Evita escribir un adaptador por proveedor.
-- Por defecto, los papeles emparejados (`_a`/`_b`, `_1`/`_2`) usan proveedores distintos, para que no se equivoquen igual.
+- Cada papel tiene su propia configuración, cambiable en ejecución: `compilador_a`, `compilador_b`, `extractor_1`, `extractor_2`, `asistente` (y `corrector` en la iteración 2). Cada uno elige una cadena de modelos (el primero y sus sustitutos si falla un proveedor), sus ajustes, reintentos, límite de peticiones y prompt.
+- [DECIDIDO] Implementación: PydanticAI (P23). La configuración sale de presets en el repo y se guarda en la base de datos como versiones que solo se añaden (`config_agente`); cada llamada usa la versión activa de su papel y la anota en la traza. Detalle en `docs/plan-agentes.md`.
+- Por defecto, los papeles emparejados (`_a`/`_b`, `_1`/`_2`) usan proveedores distintos, también en sus modelos de sustitución, para que no se equivoquen igual.
+
+**P23. Framework de agentes: PydanticAI.** [DECIDIDO]
+
+*Contexto.* Los agentes (compilador A y B, asistente, extractores y, en la iteración 2, el corrector) llamaban a los LLM con un cliente propio sobre LiteLLM: salida estructurada validada a mano, un bucle de reparación escrito para cada agente, sin cambio de proveedor si uno cae y tests que parchean el cliente. Queríamos lo mismo en todos los agentes: salida tipada, reintentos acotados con el error devuelto al modelo, cadena de modelos de reserva, límites de uso, coste por llamada y tests sin red. Todo sin atarnos a un proveedor (P22) y sin mover el control del flujo fuera de nuestro código: la máquina de estados de instancias y reglas, la cola del responsable y la idempotencia ya viven en Postgres.
+
+*Alternativas.*
+
+| Opción | Por qué no |
+|---|---|
+| LiteLLM a pelo (lo que había) | Da una interfaz común, pero todo lo demás (validar la salida, reintentar con el error, cadena de reserva, límites, tests) hay que escribirlo en cada agente. Ya teníamos dos bucles de reparación distintos |
+| LangGraph | Su valor es el grafo con estado y persistencia propios. Duplicaría lo que ya está en Postgres y sacaría el control del flujo de nuestro código |
+| Claude Agent SDK / OpenAI Agents SDK | Cada uno pensado para su proveedor; choca con P22 y con que los papeles emparejados usen proveedores distintos |
+| CrewAI | Modela equipos de agentes con roles y tareas que se coordinan solos. Nuestros agentes no conversan entre sí: el flujo lo fija el código y el LLM nunca decide (P7) |
+| **PydanticAI** | Elegido |
+
+*Decisión.* Todos los agentes se escriben con PydanticAI v2 (`pydantic-ai-slim`, extras `openai`, `anthropic`, `google`):
+- un `Agent` por tipo de agente, con `output_type` tipado;
+- `output_validator` + `ModelRetry` donde el error ayuda al modelo a corregirse: el compilador (sandbox y sus propios tests) y el asistente (decisión dentro de los tipos del proceso). Nunca en la extracción (P20);
+- `FallbackModel` con la cadena de modelos de cada papel, `UsageLimits` y `timeout` por petición;
+- la configuración de cada papel vive en presets del repo (`agentes/presets/*.json`) y en versiones que solo se añaden en `config_agente`, editables en ejecución y sin reinicio;
+- cada ejecución deja un evento en `eventos` con la versión de configuración, el modelo que respondió, el hash del prompt, tokens, coste, latencia y reintentos;
+- tests con `FunctionModel`/`TestModel` y `agent.override`, sin llamadas reales.
+No se usan sus grafos, su ejecución durable ni sus tools con aprobación humana: el flujo, el estado y la aprobación ya están en nuestro código y en Postgres.
+
+*Consecuencias.*
+- Desaparecen `features/llm/cliente.py`, `config_llm` y los endpoints `/llm/config`, sustituidos por `config_agente` y `/agentes/.../config` (el frontend cambia de endpoint).
+- Los nombres de modelo pasan del formato de LiteLLM (`anthropic/claude-opus-5`) al de PydanticAI (`anthropic:claude-opus-5`). La clave de Gemini se llama `GOOGLE_API_KEY`.
+- Se puede comparar configuraciones con datos: cada resultado apunta a la versión exacta que lo produjo.
+- Nueva dependencia con cambios frecuentes: se fija la versión (`>=2.45,<3` y `uv.lock`) y la documentación local está en `.context/pydantic-ai/` para no programar contra APIs viejas.
+- Riesgo: si todos los modelos de una cadena fallan, el agente falla en cerrado (la regla no se activa, la instancia queda en `REVISION`), nunca decide.
+
+*Evidencia.* Las APIs usadas están comprobadas en la documentación local de PydanticAI v2 (referencias por sección en `docs/plan-agentes.md` §12). Las comparativas con LangGraph, CrewAI y los SDK de Claude y OpenAI están en esa misma documentación y las escribe Pydantic, así que se leen con su sesgo; la razón de fondo para descartarlas es nuestra arquitectura (P7, P22 y el estado en Postgres), no esas tablas. Las cifras de coste y latencia por etapa saldrán de `GET /procesos/{id}/metricas` sobre `eventos` (plan, §7.4).
 
 ## 5. Funcionalidades de la primera iteración [PROPUESTA; corte de F11 DECIDIDO]
 Objetivo de la iteración 1 (sábado ~14:00): `outcomes.jsonl` del lote 1 correcto y todo el ciclo de reglas funcionando de punta a punta en un proceso.
@@ -271,7 +304,7 @@ Motivo del corte: F11 es lo más difícil de dejar fiable y no hace falta para p
 ### 6.1 Componentes
 | Componente | Responsabilidad | ¿Usa LLM? |
 |---|---|---|
-| Almacén | PostgreSQL: usuarios, procesos, tipos de decisión, símbolos, fuentes, ficheros, instancias, extracciones, reglas, decisiones, hallazgos, eventos, configuración de LLM (versiones: iteración 2) | No |
+| Almacén | PostgreSQL: usuarios, procesos, tipos de decisión, símbolos, fuentes, ficheros, instancias, extracciones, reglas, decisiones, hallazgos, eventos, configuración de los agentes por versiones (`config_agente`); versiones de reglas: iteración 2 | No |
 | Ingesta | Hash, guardado del fichero, extracción de texto | Solo para escaneos (visión) |
 | Conectores | Hojas de cálculo y sistemas externos. El cliente de un sistema externo gestiona autenticación, reintentos, límite de peticiones y cortes (en facturas: el ERP) | No |
 | Extractor de símbolos | Texto de la instancia + fuentes a símbolos con origen | Sí (doble extracción, P20) |
@@ -282,6 +315,8 @@ Motivo del corte: F11 es lo más difícil de dejar fiable y no hace falta para p
 | API + web | Interfaz del responsable | No |
 
 Principio: el LLM nunca está en el camino de la decisión. Solo escribe código de reglas, extrae símbolos y sugiere al responsable.
+
+**Capa de agentes [DECIDIDO, P23].** Los componentes que usan LLM (extractor, compilador, asistente) son agentes de PydanticAI sobre una infraestructura común (`features/llm/`): el modelo de cada llamada se construye desde la versión activa de su papel en `config_agente` (cadena de modelos de reserva, ajustes, reintentos, límites y prompt), y cada ejecución deja un evento en `eventos` con esa versión, el modelo que respondió, tokens, coste y latencia. Cada resultado de un LLM (símbolos por fichero, código por regla) se calcula una vez y se guarda; decidir y auditar no vuelven a llamar al LLM. Plan de ejecución: `docs/plan-agentes.md`.
 
 ### 6.2 Flujo de una instancia
 1. Ingesta: fichero → hash → texto completo guardado.
