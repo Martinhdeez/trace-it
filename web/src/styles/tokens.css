@@ -1,0 +1,115 @@
+@font-face {
+  font-family: Geist;
+  src: url("https://cdn.jsdelivr.net/npm/geist@1.4.2/dist/fonts/geist-sans/Geist-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: Geist;
+  src: url("https://cdn.jsdelivr.net/npm/geist@1.4.2/dist/fonts/geist-sans/Geist-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("https://cdn.jsdelivr.net/npm/geist@1.4.2/dist/fonts/geist-mono/GeistMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("https://cdn.jsdelivr.net/npm/geist@1.4.2/dist/fonts/geist-mono/GeistMono-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* interior.dev OTP docs, light. Geist is their face — chosen on purpose. */
+@theme {
+  --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+
+  --color-canvas: #f4f4f2;
+  --color-shell: #ffffff;
+  --color-sidebar: #f4f4f2;
+  --color-surface: #ffffff;
+  --color-paper: #fffcf6;
+  --color-well: #ecece8;
+  --color-hairline: #ebebe9;
+  --color-ink: #131313;
+  --color-muted: #73726c;
+  --color-faint: #a3a29c;
+  --color-focus: #4568ff;
+
+  --color-pagar: #1f7a45;
+  --color-pagar-soft: #eef6f0;
+  --color-escalar: #b4561f;
+  --color-escalar-soft: #f8efe8;
+  --color-ocr: #73726c;
+  --color-ocr-soft: #f0efea;
+  --color-nopagar: #b42318;
+  --color-nopagar-soft: #f7eceb;
+
+  --radius-shell: 20px;
+  --radius-card: 16px;
+  --radius-pill: 999px;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.45;
+    letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  button {
+    transition: transform 160ms var(--ease-out), background-color 160ms var(--ease-out),
+      color 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+  }
+
+  button:active {
+    transform: scale(0.97);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  mark {
+    background: #ece6c4;
+    color: inherit;
+    padding: 0 0.08em;
+  }
+}
