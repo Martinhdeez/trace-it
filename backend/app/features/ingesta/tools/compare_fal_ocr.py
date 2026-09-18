@@ -168,7 +168,7 @@ async def main():
         warnings.extend(transcript_warnings(transcript))
         result = {"file_id": name, "fields": {k: v.model_dump() for k, v in fields.items()}}
         compared = compare(result, refs[name])
-        local_comparison = compare(local[name], refs[name])
+        local_comparison = compare(local[name], refs[name]) if name in local else None
         report = {
             "file_id": name,
             "seconds": response["seconds"],
@@ -185,7 +185,7 @@ async def main():
             "fal_matches",
             sum(c["matches"] for c in compared["checks"].values()),
             "local_matches",
-            sum(c["matches"] for c in local_comparison["checks"].values()),
+            sum(c["matches"] for c in local_comparison["checks"].values()) if local_comparison else None,
             "seconds",
             response["seconds"],
             flush=True,
