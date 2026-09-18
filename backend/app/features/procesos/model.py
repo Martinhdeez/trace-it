@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base, created_at
@@ -28,7 +28,9 @@ class Simbolo(Base):
 
 class TipoDecision(Base):
     """A possible outcome. Highest `prioridad` wins when several rules fire; the one marked
-    `por_defecto` applies when none does."""
+    `por_defecto` applies when none does. A decision of a type marked `requiere_persona` goes
+    to the human queue for a responsable to resolve. Names are free: each process defines
+    its own types."""
 
     __tablename__ = "tipos_decision"
 
@@ -36,3 +38,4 @@ class TipoDecision(Base):
     nombre: Mapped[str] = mapped_column(primary_key=True)
     prioridad: Mapped[int]
     por_defecto: Mapped[bool] = mapped_column(default=False)
+    requiere_persona: Mapped[bool] = mapped_column(default=False, server_default=false())

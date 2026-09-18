@@ -8,9 +8,10 @@ class SimboloIO(BaseModel):
 
 
 class TipoDecisionIO(BaseModel):
-    nombre: str = Field(examples=["ESCALAR"])
+    nombre: str
     prioridad: int  # highest wins when several rules fire
     por_defecto: bool = False  # applies when no rule fires
+    requiere_persona: bool = False  # goes to the human queue for a responsable
 
 
 class ProcesoIn(BaseModel):

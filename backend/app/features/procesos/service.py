@@ -34,7 +34,12 @@ async def obtener(session: AsyncSession, proceso_id: int) -> ProcesoDetalle:
         nombre=proceso.nombre,
         descripcion=proceso.descripcion,
         tipos_decision=[
-            TipoDecisionIO(nombre=t.nombre, prioridad=t.prioridad, por_defecto=t.por_defecto)
+            TipoDecisionIO(
+                nombre=t.nombre,
+                prioridad=t.prioridad,
+                por_defecto=t.por_defecto,
+                requiere_persona=t.requiere_persona,
+            )
             for t in tipos
         ],
         simbolos=[
@@ -46,6 +51,8 @@ async def obtener(session: AsyncSession, proceso_id: int) -> ProcesoDetalle:
 async def crear(session: AsyncSession, datos: ProcesoIn) -> ProcesoDetalle:
     if sum(t.por_defecto for t in datos.tipos_decision) != 1:
         raise ConflictError("Debe haber exactamente un tipo de decisión por defecto")
+    if any(t.por_defecto and t.requiere_persona for t in datos.tipos_decision):
+        raise ConflictError("El tipo por defecto no puede requerir persona")
     if await session.scalar(select(Proceso).where(Proceso.nombre == datos.nombre)):
         raise ConflictError(f"Ya existe un proceso llamado {datos.nombre!r}")
     proceso = Proceso(nombre=datos.nombre, descripcion=datos.descripcion)

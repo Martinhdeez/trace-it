@@ -24,7 +24,7 @@ async def test_proceso_regla_flujo() -> None:
             json={
                 "nombre": f"facturas-{sufijo}",
                 "tipos_decision": [
-                    {"nombre": "ESCALAR", "prioridad": 3},
+                    {"nombre": "ESCALAR", "prioridad": 3, "requiere_persona": True},
                     {"nombre": "NO_PAGAR", "prioridad": 2},
                     {"nombre": "PAGAR", "prioridad": 1, "por_defecto": True},
                 ],
@@ -37,6 +37,7 @@ async def test_proceso_regla_flujo() -> None:
         assert r.status_code == 201, r.text
         proceso = r.json()
         assert [t["nombre"] for t in proceso["tipos_decision"]] == ["ESCALAR", "NO_PAGAR", "PAGAR"]
+        assert [t["requiere_persona"] for t in proceso["tipos_decision"]] == [True, False, False]
         assert len(proceso["simbolos"]) == 2
 
         r = await api.post(
@@ -57,3 +58,23 @@ async def test_proceso_regla_flujo() -> None:
 
         r = await api.post(f"/reglas/{regla['id']}/activar", headers=cabeceras)
         assert r.status_code == 409, r.text
+
+
+async def test_por_defecto_no_puede_requerir_persona() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        r = await api.post(
+            "/procesos",
+            json={
+                "nombre": f"conflicto-{uuid.uuid4().hex[:8]}",
+                "tipos_decision": [
+                    {
+                        "nombre": "REVISAR",
+                        "prioridad": 1,
+                        "por_defecto": True,
+                        "requiere_persona": True,
+                    }
+                ],
+            },
+        )
+        assert r.status_code == 409, r.text
+        assert r.json()["code"] == "conflict"
