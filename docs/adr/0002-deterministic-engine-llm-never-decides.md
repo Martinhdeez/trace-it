@@ -48,13 +48,13 @@ requires published rules to execute deterministically.
   compiler and the assistant, not the engine. See the PR that introduced this registry.
 
 ## Evidence
-- `backend/app/features/decisiones/motor.py` (`decidir`): pure, runs all rules, priority
+- `backend/app/features/decisions/engine.py` (`decide`): pure, runs all rules, priority
   combination, failed rule or same-priority conflict goes to a `requires_human` type.
-  8 tests in `decisiones/tests/test_motor.py`.
-- `decisiones/tests/test_reglas_v3.py`: the 16 hand-written v3 rules run through the same
+  8 tests in `decisions/tests/test_engine.py`.
+- `decisions/tests/test_rules_v3.py`: the 16 hand-written v3 rules run through the same
   engine and sandbox.
-- Assistant (`agentes/asistente.py`) only suggests; the person resolves via
-  `POST /instancias/{id}/resolver`, stored as a new row.
+- Assistant (`agents/assistant.py`) only suggests; the person resolves via
+  `POST /instances/{id}/resolve`, stored as a new row.
 
 ## Related
 ADR 0001, 0003, 0004, 0009. Plan P7, P19, P22; `docs/plan-agentes.md` §7.2.

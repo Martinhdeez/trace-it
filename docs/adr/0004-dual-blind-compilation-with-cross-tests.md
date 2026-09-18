@@ -43,21 +43,21 @@ generated function before the batch 2 deadline, and one wrong outcome fails the 
 - Cost: two compilations per rule change, never per instance.
 - Two agents that misread an ambiguous text the same way still pass; the impact report
   before activation (ADR 0008) is the backstop.
-- **Known gap:** the engine today runs only code A (`motor.decidir` calls
-  `ejecutar(regla.codigo_a, ...)`), starts one subprocess per instance and rule, and sends
+- **Known gap:** the engine today runs only code A (`engine.decide` calls
+  `run(rule.code_a, ...)`), starts one subprocess per instance and rule, and sends
   a failed rule to the highest `requires_human` type (ESCALAR) instead of REVIEW. Fix
-  pending in a PR for Mateo: run A and B with one `ejecutar_lote` per rule and code,
+  pending in a PR for Mateo: run A and B with one `run_batch` per rule and code,
   compare, REVIEW on failure or disagreement.
 
 ## Evidence
-- `agentes/compilador.py`: `_agente` (blind agent and repair loop), `validar` (pure
-  cross-check), `compilar` (A and B via `asyncio.gather`).
-- 8 unit tests in `agentes/tests/test_compilador.py`: agreement; cross-test failure;
+- `agents/compiler.py`: `_agent` (blind agent and repair loop), `validate` (pure
+  cross-check), `compile_rule` (A and B via `asyncio.gather`).
+- 8 unit tests in `agents/tests/test_compiler.py`: agreement; cross-test failure;
   history disagreement; runtime error; `others` excludes the instance itself; end to end
   (both agents get the same context); one self-repair round whose repair message contains
   only the agent's own work; still broken after 2 repair rounds returns 502.
-- `reglas/service.activar` refuses a rule whose report is not `valida`.
-- Engine cost of the fix, measured locally (macOS, `sandbox.ejecutar_lote`): today ~20 ms
+- `rules/service.activate` refuses a rule whose report is not `valid`.
+- Engine cost of the fix, measured locally (macOS, `sandbox.run_batch`): today ~20 ms
   per case per rule with one subprocess each (≈2 min for 540 files × 12 rules, blocking the
   API); one batch per rule runs 540 cases in ~40 ms (~0.27 s with the full `others` list),
   so running both codes stays well under a second per rule.

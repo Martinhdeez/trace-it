@@ -25,7 +25,7 @@ and configuration at runtime, and those changes must never be lost by reloading 
 
 ## Decision
 - A **process pack** is a folder `processes/<pack>/` with `process.json` (today one file
-  per process: `procesos/pago-facturas.json`, `procesos/gastos-viaje.json`):
+  per process: `processes/invoice-payment.json`, `processes/travel-expenses.json`):
   - `name`, `description`: the description states the domain conventions every rule
     inherits (normalisation, units, tolerances, missing values). Compilers and the
     assistant receive it as shared context.
@@ -39,7 +39,7 @@ and configuration at runtime, and those changes must never be lost by reloading 
     Invoice pack: `engine` (the challenge reference expects the process output), `block`,
     `keep` (ADR 0009).
     `users` roles: `manager` (resolves escalations, approves rule and process changes) and
-    `operator`. Code still says `responsable`/`operador` until the rename lands.
+    `operator`.
   - `sources.json` (**proposed**): connectors per source, credentials by `.env` name only.
 - **Loader contract:** validate the whole pack first and reject it whole if invalid;
   idempotent; adds what is missing; a rule whose text changed enters as a new **draft**;
@@ -57,13 +57,13 @@ and configuration at runtime, and those changes must never be lost by reloading 
 - Export and `make load PROCESS=<pack>` are not implemented yet.
 
 ## Evidence
-- Loader and validation: `procesos/definicion.py` (`Definicion._coherente`,
-  `cargar_definicion`); 3 tests in `procesos/tests/test_definicion.py`.
+- Loader and validation: `processes/definition.py` (`Definition._consistent`,
+  `load_definition`); 3 tests in `processes/tests/test_definition.py`.
 - Invoice pack: 16 rules, 12 symbols, 3 decision types (ESCALAR 3 requires human,
   NO_PAGAR 2, PAGAR 1 default). A quick parser over the 471 text PDFs gave 433 PAGAR,
   36 NO_PAGAR, 2 ESCALAR, consistent with the trap analysis
   (`.artifacts/specs/2026-09-18-analisis-caja-v3.md`); 29 scans pending.
-- `make setup` loads the invoice pack; `gastos-viaje.json` loads with the same code.
+- `make setup` loads the invoice pack; `travel-expenses.json` loads with the same code.
 
 ## Related
 ADR 0001, 0003, 0009, 0011, 0014, 0015. Plan P11, P12, P19; `docs/process-packs.md`.

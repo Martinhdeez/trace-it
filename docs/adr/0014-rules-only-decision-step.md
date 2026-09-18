@@ -55,7 +55,7 @@ compiler agents receive it as shared context (ADR 0003, 0004, 0007).
   the process version (ADR 0015).
 
 ## Evidence
-- `decisiones/motor.py` (`decidir`): pure function over rule results, priorities and the
+- `decisions/engine.py` (`decide`): pure function over rule results, priorities and the
   default type; no database, clock, network or LLM.
 - Known gap: `decidir` sends rule failures, unknown types and priority ties to the highest
   `requires_human` type (ESCALAR for invoices); failures must go to REVIEW (ADR 0004).

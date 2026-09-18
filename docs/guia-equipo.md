@@ -8,19 +8,19 @@ Qué construimos y por qué: `docs/plano-aplicacion.md`. Quién hace qué: `docs
 Requisitos: Docker y [uv](https://docs.astral.sh/uv/).
 
 ```bash
-make setup      # .env, Postgres + backend, migraciones y proceso "Pago de facturas" con sus usuarios
+make setup      # .env, Postgres + backend, migraciones y proceso "Invoice payment" con sus usuarios
 ```
-API en http://localhost:8000/docs (con el 8000 ocupado: `BACKEND_PORT=8001 make setup`). Entra con `martin@trace-it.local` (responsable).
+API en http://localhost:8000/docs (con el 8000 ocupado: `BACKEND_PORT=8001 make setup`). Entra con `martin@trace-it.local` (`manager`).
 
 | Comando | Qué hace |
 |---|---|
-| `make compilar` | Compila las reglas en borrador (necesita claves de LLM en `.env`) |
+| `make compile` | Compila las reglas en borrador (necesita claves de LLM en `.env`) |
 | `make erp` | Arranca el ERP del reto |
 | `make test` | Tests del backend contra el Postgres local |
 | `make down` | Para los contenedores (los datos se quedan) |
 | `make reset-db` | **Borra la base de datos** |
 
-Los procesos son ficheros JSON en `procesos/` (formato en `procesos/README.md`). `make setup` se puede repetir: no duplica nada ni toca reglas activas.
+Los procesos son ficheros JSON en `processes/` (formato en `processes/README.md`). `make setup` se puede repetir: no duplica nada ni toca reglas activas.
 
 ## 1. Git
 
@@ -87,15 +87,15 @@ backend/
     core/                 # infraestructura: configuración, base de datos
     common/               # utilidades compartidas: errores
     features/
-      usuarios/           # usuarios y usuario actual (cabecera X-Usuario-Id)
-      procesos/           # procesos, símbolos, tipos de decisión
-      ingesta/            # ficheros e instancias, extracción de texto
-      fuentes/            # fuentes de verdad: hojas de cálculo y sistemas externos (ERP)
-      extraccion/         # símbolos con doble extracción LLM
-      reglas/             # reglas: alta, estados, activación
-      agentes/            # agentes (compilador A/B, asistente), sandbox, config por versiones, presets y prompts
-      decisiones/         # motor, histórico, auditoría, colas, exportar
-      trazas/             # eventos de traza
+      users/              # usuarios y usuario actual (cabecera X-User-Id)
+      processes/          # procesos, símbolos, tipos de decisión
+      ingestion/          # ficheros e instancias, extracción de texto
+      sources/            # fuentes de verdad: hojas de cálculo y sistemas externos (ERP)
+      extraction/         # símbolos con doble extracción LLM
+      rules/              # reglas: alta, estados, activación
+      agents/             # agentes (compilador A/B, asistente), sandbox, config por versiones, presets y prompts
+      decisions/          # motor, histórico, auditoría, colas, exportar
+      traces/             # eventos de traza
       llm/                # runtime de PydanticAI: modelo desde la config, ejecución y traza
 ```
 
@@ -107,20 +107,20 @@ backend/
 | `service.py` | Lógica de negocio. Recibe la sesión de base de datos |
 | `router.py` | Endpoints. Finos: validan, llaman al servicio y devuelven |
 | `tests/` | Tests de esa funcionalidad (`test_*.py`) |
-| otros | Piezas propias, con nombre claro: `motor.py`, `sandbox.py`, `erp.py`… |
+| otros | Piezas propias, con nombre claro: `engine.py`, `sandbox.py`, `erp.py`… |
 
 Reglas:
 - Un router **no** hace consultas SQL: llama al servicio.
 - Una funcionalidad puede importar el `model.py` o el `service.py` de otra, pero nunca su `router.py`.
 - Los errores se lanzan con las clases de `app/common/exceptions.py` (`NotFoundError`, `ConflictError`…). La API los convierte en respuestas JSON.
 - Lo que aún no está hecho lanza `NotImplementedYetError` (la API responde 501). Así el contrato existe y el frontend puede trabajar contra él.
-- Los nombres de dominio van en español (`proceso`, `regla`, `instancia`), igual que en los documentos.
+- Todo el código va en inglés (identificadores, base de datos, API, mensajes, prompts): ver `docs/CONVENTIONS.md` y su glosario.
 
 ### Agentes (LLM)
 Todos los agentes usan PydanticAI v2. Arquitectura, configuración por versiones y tareas: `docs/plan-agentes.md`.
 - Toda llamada a un LLM pasa por `features/llm/ejecutar.py`, con un papel de `config_agente`: así queda en la traza con su versión de configuración, coste y latencia.
-- Los prompts son ficheros en `features/agentes/prompts/`. Los datos del caso van en el mensaje, nunca en el prompt.
-- En la extracción, un validador que falla manda la instancia a `REVISION`; nunca se devuelve al modelo con `ModelRetry`.
+- Los prompts son ficheros en `features/agents/prompts/`. Los datos del caso van en el mensaje, nunca en el prompt.
+- En la extracción, un validador que falla manda la instancia a `REVIEW`; nunca se devuelve al modelo con `ModelRetry`.
 - Tests sin red: `FunctionModel`/`TestModel` con `agente.override(...)`.
 - **Antes de escribir código de PydanticAI, consulta `.context/pydantic-ai/`** (empieza por `START-HERE.md` y `SECTIONS.md`, y abre solo la sección que necesites). Vale para personas y para asistentes de código: la API cambió mucho en la v2 y lo que recuerda un modelo suele ser de la v1. `llms-full.txt` (5,5 MB, la documentación entera) no está en el repo: descárgalo de https://ai.pydantic.dev/llms-full.txt si lo necesitas para buscar.
 
@@ -163,9 +163,9 @@ cd .context/500-sombras-de-alberto && make erp
 ## 4. Quién toca qué
 | Persona | Carpetas |
 |---|---|
-| Martín | `features/agentes/` (compilador, sandbox, asistente, config de agentes), `features/llm/` |
-| Mateo | `features/reglas/`, `features/decisiones/` (motor, auditoría, API), `features/procesos/`, `features/usuarios/` |
-| Álvaro | `features/ingesta/`, `features/fuentes/` (Excel, ERP), `features/extraccion/` |
+| Martín | `features/agents/` (compilador, sandbox, asistente, config de agentes), `features/llm/` |
+| Mateo | `features/rules/`, `features/decisions/` (motor, auditoría, API), `features/processes/`, `features/users/` |
+| Álvaro | `features/ingestion/`, `features/sources/` (Excel, ERP), `features/extraction/` |
 | Carlos | `frontend/` |
 | Varsovia | `docs/`, ADRs, demo |
 

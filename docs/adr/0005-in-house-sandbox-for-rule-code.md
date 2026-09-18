@@ -40,7 +40,7 @@ and the blind double compilation (ADR 0004) reduce but do not close that path.
 - **Static check** before running: imports only from `decimal, datetime, re, math,
   unicodedata`; no `open, exec, eval, compile, getattr, globals, __import__...`; no name or
   attribute starting with `_`; no frame attributes (`gi_frame`, `f_globals`, `tb_frame`...);
-  must define `evaluate` (`evaluar` in the current code).
+  must define `evaluate`.
 - **Restricted runtime:** builtins without forbidden names; `__import__` returns allowed
   modules as namespaces of their public, non-module attributes (so `re.enum.sys` does not
   exist); stdout captured; fresh namespace and decimal context per case.
