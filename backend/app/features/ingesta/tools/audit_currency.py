@@ -97,7 +97,10 @@ def main():
     def check(item):
         path = args.input / "facturas" / item["file_id"]
         result = subprocess.run(
-            [executable, "-enc", "UTF-8", str(path), "-"], capture_output=True, check=True, timeout=20
+            [executable, "-enc", "UTF-8", str(path), "-"],
+            capture_output=True,
+            check=True,
+            timeout=20,
         )
         text = result.stdout.decode("utf-8")
         item["pdftotext_markers"] = MARKERS.findall(text)
@@ -131,11 +134,16 @@ def main():
         "pages": dict(Counter(x["pages"] for x in missing)),
         "matched_orders": sum(bool(x["matched_order"]) for x in missing),
         "matching_order_totals": sum(x["order_total_matches"] for x in missing),
-        "same_supplier_eur_evidence": sum("EUR" in x["same_supplier_explicit_currencies"] for x in missing),
+        "same_supplier_eur_evidence": sum(
+            "EUR" in x["same_supplier_explicit_currencies"] for x in missing
+        ),
         "workbook_currency_mentions": workbook_markers,
         "workbook_number_formats": dict(formats),
         "workbook_sha256": hashlib.sha256(workbook_path.read_bytes()).hexdigest(),
-        "interpretation": "Use policy and matching-document evidence to infer batch currency; numeric matches alone do not establish currency.",
+        "interpretation": (
+            "Use policy and matching-document evidence to infer batch "
+            "currency; numeric matches alone do not establish currency."
+        ),
     }
     (args.output / "summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"

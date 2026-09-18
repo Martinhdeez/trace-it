@@ -57,7 +57,9 @@ def main():
     }
     reports = []
     for name in args.files:
-        content = ((REPOSITORY_ROOT / ".context/500-sombras-de-alberto/facturas") / name).read_bytes()
+        content = (
+            (REPOSITORY_ROOT / ".context/500-sombras-de-alberto/facturas") / name
+        ).read_bytes()
         size = native_pages(content, settings)[0]["size"]
         for variant, pixels in variants(render(content, 1, settings)).items():
             stream = io.BytesIO()

@@ -42,7 +42,9 @@ def main():
                 issues.update(w["code"] for w in result.warnings)
             except Exception as exc:
                 counts["FAILED"] += 1
-                report.write(json.dumps({"file_id": path.name, "error": str(exc)}, ensure_ascii=False) + "\n")
+                report.write(
+                    json.dumps({"file_id": path.name, "error": str(exc)}, ensure_ascii=False) + "\n"
+                )
     elapsed = time.perf_counter() - started
     summary = {
         "files": len(files),

@@ -23,7 +23,11 @@ def compare(result, reference):
             "status": field["status"],
             "matches": field["value"] == expected,
         }
-    return {"file_id": result["file_id"], "checks": checks, "not_verifiable": reference["not_verifiable"]}
+    return {
+        "file_id": result["file_id"],
+        "checks": checks,
+        "not_verifiable": reference["not_verifiable"],
+    }
 
 
 def main():
@@ -42,7 +46,9 @@ def main():
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     references = json.loads(args.labels.read_text(encoding="utf-8"))
-    service = ExtractionService(replace(Settings(), ocr_dpi=args.dpi)) if not args.extractions else None
+    service = (
+        ExtractionService(replace(Settings(), ocr_dpi=args.dpi)) if not args.extractions else None
+    )
     existing = (
         {}
         if service
@@ -61,7 +67,9 @@ def main():
                 raise ValueError(f"Reference checksum mismatch: {path.name}")
             if service:
                 with path.open("rb") as source:
-                    result = service.extract(service.ingest(source, path.name), ExtractOptions()).model_dump()
+                    result = service.extract(
+                        service.ingest(source, path.name), ExtractOptions()
+                    ).model_dump()
             else:
                 result = existing[path.name]
                 if result["sha256"] != sha:
@@ -72,9 +80,15 @@ def main():
             for check in report["checks"].values():
                 counts["labeled_fields"] += 1
                 counts["matching_values"] += check["matches"]
-                counts["wrong_nonnull_values"] += not check["matches"] and check["value"] is not None
-                counts["wrong_observed_values"] += not check["matches"] and check["status"] == "OBSERVED"
-                counts["matching_observed_values"] += check["matches"] and check["status"] == "OBSERVED"
+                counts["wrong_nonnull_values"] += (
+                    not check["matches"] and check["value"] is not None
+                )
+                counts["wrong_observed_values"] += (
+                    not check["matches"] and check["status"] == "OBSERVED"
+                )
+                counts["matching_observed_values"] += (
+                    check["matches"] and check["status"] == "OBSERVED"
+                )
     (args.output / "comparison.json").write_text(
         json.dumps(reports, indent=2, ensure_ascii=False), encoding="utf-8"
     )
@@ -82,7 +96,10 @@ def main():
         "files": len(reports),
         "seconds": round(time.perf_counter() - started, 3),
         **counts,
-        "note": "Development labels transcribed visually by assistant; not independent human or organizer ground truth.",
+        "note": (
+            "Development labels transcribed visually by assistant; not "
+            "independent human or organizer ground truth."
+        ),
     }
     (args.output / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))

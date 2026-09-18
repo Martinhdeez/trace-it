@@ -1,6 +1,6 @@
 """File-by-file audit: independent Poppler transcription, field checks, and XLSX XML cells.
 
-This is a consistency audit, not a claim of ground-truth accuracy or visual review of every native PDF.
+This consistency audit is not ground truth or a visual review of every native PDF.
 """
 
 import argparse
@@ -25,11 +25,21 @@ FIELDS = {
     "payment_iban": r"\bIBAN\)?\s*[:.-]?\s*([A-Z]{2}\d{2}(?:[ -]*\d){10,30})",
     "purchase_order_ref": r"\b(PO-\d{4}-\d{4})(?!\d)",
     "net_amount": r"^(?:BASE(?: IMPONIBLE)?|IMPORTE BASE|SUBTOTAL)[ .:]*((?:EUR\s*)?[\d.,]+)",
-    "vat_amount": r"^(?:CUOTA\s+)?I\.?\s*V\.?\s*A\.?\s*\(?\s*\d+(?:[.,]\d+)?\s*%\)?[ .:]*((?:EUR\s*)?[\d.,]+)",
+    "vat_amount": (
+        r"^(?:CUOTA\s+)?I\.?\s*V\.?\s*A\.?\s*\(?\s*"
+        r"\d+(?:[.,]\d+)?\s*%\)?[ .:]*((?:EUR\s*)?[\d.,]+)"
+    ),
     "vat_rate": r"^(?:CUOTA\s+)?I\.?\s*V\.?\s*A\.?\s*\(?\s*(\d+(?:[.,]\d+)?)\s*%",
     "gross_amount": r"^(?:TOTAL(?: A PAGAR| FACTURA)?|IMPORTE TOTAL)[ .:]*((?:EUR\s*)?[\d.,]+)",
-    "issued_on": r"\bFECHA(?:\s+(?:DE EMISION|FACTURA))?\s*[:.]?\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2} DE [A-Z]+ DE \d{4})",
-    "invoice_number": r"^(?:(?:N[Oº°]\s+DE|REF)\s+)?(?:FACTURA(?: SIMPLIFICADA)?(?: N[Oº°])?|INVOICE)\s*[:#]?\s*([A-Z0-9]+[-/][A-Z0-9/-]+)",
+    "issued_on": (
+        r"\bFECHA(?:\s+(?:DE EMISION|"
+        r"FACTURA))?\s*[:.]?\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|"
+        r"\d{4}-\d{2}-\d{2}|\d{1,2} DE [A-Z]+ DE \d{4})"
+    ),
+    "invoice_number": (
+        r"^(?:(?:N[Oº°]\s+DE|REF)\s+)?(?:FACTURA(?: SIMPLIFICADA)?(?: "
+        r"N[Oº°])?|INVOICE)\s*[:#]?\s*([A-Z0-9]+[-/][A-Z0-9/-]+)"
+    ),
 }
 
 
@@ -47,7 +57,10 @@ def number(value):
 
 def check_native(path, result, executable, output):
     run = subprocess.run(
-        [executable, "-layout", "-enc", "UTF-8", str(path), "-"], capture_output=True, check=True, timeout=30
+        [executable, "-layout", "-enc", "UTF-8", str(path), "-"],
+        capture_output=True,
+        check=True,
+        timeout=30,
     )
     text = run.stdout.decode("utf-8")
     (output / "text" / (path.name + ".txt")).write_text(text, encoding="utf-8")
@@ -55,7 +68,9 @@ def check_native(path, result, executable, output):
     for line in text.splitlines():
         upper = unicodedata.normalize("NFKC", line.strip()).upper()
         upper = "".join(c for c in upper if unicodedata.category(c) != "Cf")
-        upper = "".join(c for c in unicodedata.normalize("NFD", upper) if not unicodedata.combining(c))
+        upper = "".join(
+            c for c in unicodedata.normalize("NFD", upper) if not unicodedata.combining(c)
+        )
         if upper.startswith(("CLIENTE", "DESTINATARIO")):
             continue
         for key, pattern in FIELDS.items():
@@ -67,7 +82,20 @@ def check_native(path, result, executable, output):
                     value = "INVALID_DATE"
                     if " DE " in raw:
                         day, month, year = raw.split(" DE ")
-                        names = "ENERO FEBRERO MARZO ABRIL MAYO JUNIO JULIO AGOSTO SEPTIEMBRE OCTUBRE NOVIEMBRE DICIEMBRE".split()
+                        names = [
+                            "ENERO",
+                            "FEBRERO",
+                            "MARZO",
+                            "ABRIL",
+                            "MAYO",
+                            "JUNIO",
+                            "JULIO",
+                            "AGOSTO",
+                            "SEPTIEMBRE",
+                            "OCTUBRE",
+                            "NOVIEMBRE",
+                            "DICIEMBRE",
+                        ]
                         raw = f"{year}-{names.index(month) + 1:02}-{int(day):02}"
                     for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%Y-%m-%d"):
                         try:
@@ -84,14 +112,16 @@ def check_native(path, result, executable, output):
     for key, field in result["fields"].items():
         errors = []
         for candidate in field["candidates"]:
-            if candidate["evidence"]["method"] == "native":
-                if compact(candidate["evidence"]["text"]) not in compact(text):
-                    errors.append("EVIDENCE_NOT_IN_INDEPENDENT_TEXT")
+            if candidate["evidence"]["method"] == "native" and compact(
+                candidate["evidence"]["text"]
+            ) not in compact(text):
+                errors.append("EVIDENCE_NOT_IN_INDEPENDENT_TEXT")
         if key in references:
             refs = references[key]
             equal = (
                 number(field["value"]) in {number(v) for v in refs}
-                if key in {"net_amount", "vat_amount", "gross_amount", "vat_rate"} and field["value"]
+                if key in {"net_amount", "vat_amount", "gross_amount", "vat_rate"}
+                and field["value"]
                 else field["value"] in refs
             )
             if key == "issued_on" and refs == {"INVALID_DATE"} and field["status"] == "INVALID":
@@ -124,13 +154,16 @@ def check_workbook(path, result):
     ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
     relns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
     emitted = {
-        s["name"]: {c["cell"]: c for row in s["rows"] for c in row["cells"]} for s in result["data"]["sheets"]
+        s["name"]: {c["cell"]: c for row in s["rows"] for c in row["cells"]}
+        for s in result["data"]["sheets"]
     }
     sheets = []
     with zipfile.ZipFile(path) as archive:
         shared = []
         if "xl/sharedStrings.xml" in archive.namelist():
-            shared = ["".join(si.itertext()) for si in ET.fromstring(archive.read("xl/sharedStrings.xml"))]
+            shared = [
+                "".join(si.itertext()) for si in ET.fromstring(archive.read("xl/sharedStrings.xml"))
+            ]
         rels = {
             r.attrib["Id"]: r.attrib["Target"]
             for r in ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
@@ -157,7 +190,8 @@ def check_workbook(path, result):
                     continue
                 actual = emitted[name].get(coord)
                 equal = actual is not None and (
-                    Decimal(actual.get("xml_numeric_value") or str(actual["raw"])) == Decimal(expected)
+                    Decimal(actual.get("xml_numeric_value") or str(actual["raw"]))
+                    == Decimal(expected)
                     if kind == "n" and formula is None
                     else str(actual["raw"]) == expected
                 )
@@ -166,7 +200,9 @@ def check_workbook(path, result):
                         "cell": coord,
                         "source_raw": expected,
                         "api_raw": actual["raw"] if actual else None,
-                        "api_xml_numeric_value": actual.get("xml_numeric_value") if actual else None,
+                        "api_xml_numeric_value": actual.get("xml_numeric_value")
+                        if actual
+                        else None,
                         "matches": equal,
                     }
                 )
@@ -252,7 +288,8 @@ def main():
     if not executable:
         raise RuntimeError("pdftotext is required")
     results = {
-        r["file_id"]: r for r in map(json.loads, args.extractions.read_text(encoding="utf-8").splitlines())
+        r["file_id"]: r
+        for r in map(json.loads, args.extractions.read_text(encoding="utf-8").splitlines())
     }
     files = sorted(args.input.rglob("*.pdf")) + sorted(args.input.rglob("*.xlsx"))
     labels = {r["file_id"]: r for r in json.loads(args.scan_labels.read_text(encoding="utf-8"))}
@@ -287,7 +324,10 @@ def main():
         "methods": dict(Counter(r["method"] for r in reviews)),
         "pdf_field_issues": dict(
             Counter(
-                issue for r in reviews for f in r.get("field_checks", {}).values() for issue in f["issues"]
+                issue
+                for r in reviews
+                for f in r.get("field_checks", {}).values()
+                for issue in f["issues"]
             )
         ),
         "xlsx_cells_checked": sum(s["cells_checked"] for r in reviews for s in r.get("sheets", [])),
@@ -298,9 +338,14 @@ def main():
         "xlsx_canonical_mismatches": sum(
             not c["matches"] for r in reviews for c in r.get("canonical_checks", [])
         ),
-        "scan_labeled_fields": sum(len(r["comparison"]["checks"]) for r in reviews if r.get("comparison")),
+        "scan_labeled_fields": sum(
+            len(r["comparison"]["checks"]) for r in reviews if r.get("comparison")
+        ),
         "scan_matching_values": sum(
-            c["matches"] for r in reviews if r.get("comparison") for c in r["comparison"]["checks"].values()
+            c["matches"]
+            for r in reviews
+            if r.get("comparison")
+            for c in r["comparison"]["checks"].values()
         ),
         "scan_wrong_observed_values": sum(
             not c["matches"] and c["status"] == "OBSERVED"
@@ -308,7 +353,11 @@ def main():
             if r.get("comparison")
             for c in r["comparison"]["checks"].values()
         ),
-        "note": "Poppler and XML consistency audit; scan development labels transcribed visually by assistant, not independent organizer ground truth.",
+        "note": (
+            "Poppler and XML consistency audit; scan development labels "
+            "transcribed visually by assistant, not independent "
+            "organizer ground truth."
+        ),
     }
     (args.output / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))

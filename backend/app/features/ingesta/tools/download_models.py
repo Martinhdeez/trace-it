@@ -16,12 +16,24 @@ PROFILES = {
         "rec": ("PaddlePaddle/PP-OCRv6_small_rec_onnx", "b8f84f0b80c529de40b4fbb3544b84fa7233a513"),
     },
     "v5-latin": {
-        "det": ("PaddlePaddle/PP-OCRv5_mobile_det_onnx", "df0bd9dee2bc627e80a2a1798ccab35a332e22d6"),
-        "rec": ("PaddlePaddle/latin_PP-OCRv5_mobile_rec_onnx", "89d3a50e2c27e2e7cceeab0e944c25c807d5db4f"),
+        "det": (
+            "PaddlePaddle/PP-OCRv5_mobile_det_onnx",
+            "df0bd9dee2bc627e80a2a1798ccab35a332e22d6",
+        ),
+        "rec": (
+            "PaddlePaddle/latin_PP-OCRv5_mobile_rec_onnx",
+            "89d3a50e2c27e2e7cceeab0e944c25c807d5db4f",
+        ),
     },
     "v5-server": {
-        "det": ("PaddlePaddle/PP-OCRv5_mobile_det_onnx", "df0bd9dee2bc627e80a2a1798ccab35a332e22d6"),
-        "rec": ("PaddlePaddle/PP-OCRv5_server_rec_onnx", "b70df217f4fd99d14f970bad092cebe7d74cc4d1"),
+        "det": (
+            "PaddlePaddle/PP-OCRv5_mobile_det_onnx",
+            "df0bd9dee2bc627e80a2a1798ccab35a332e22d6",
+        ),
+        "rec": (
+            "PaddlePaddle/PP-OCRv5_server_rec_onnx",
+            "b70df217f4fd99d14f970bad092cebe7d74cc4d1",
+        ),
     },
 }
 
@@ -50,7 +62,9 @@ def main():
     parser.add_argument("--profile", choices=PROFILES, default="v5-latin")
     parser.add_argument("--output", type=Path)
     parser.add_argument(
-        "--no-verifier", action="store_true", help="Download only the candidate profile for experiments"
+        "--no-verifier",
+        action="store_true",
+        help="Download only the candidate profile for experiments",
     )
     args = parser.parse_args()
     target = args.output or Settings().model_dir

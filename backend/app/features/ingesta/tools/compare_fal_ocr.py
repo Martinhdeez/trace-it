@@ -39,10 +39,14 @@ async def main():
     parser.add_argument("--crop-to-local-evidence", action="store_true")
     parser.add_argument("--formatted", action="store_true")
     parser.add_argument(
-        "--offline", action="store_true", help="Re-evaluate saved responses without network requests"
+        "--offline",
+        action="store_true",
+        help="Re-evaluate saved responses without network requests",
     )
     parser.add_argument(
-        "--local-extractions", type=Path, help="Local extraction JSONL; required only for evidence crops"
+        "--local-extractions",
+        type=Path,
+        help="Local extraction JSONL; required only for evidence crops",
     )
     args = parser.parse_args()
     if args.crop_to_local_evidence and not args.offline and args.local_extractions is None:
@@ -61,12 +65,16 @@ async def main():
         r["file_id"]: r
         for r in map(
             json.loads,
-            args.local_extractions.read_text(encoding="utf-8").splitlines() if args.local_extractions else [],
+            args.local_extractions.read_text(encoding="utf-8").splitlines()
+            if args.local_extractions
+            else [],
         )
     }
     reports = []
     for name in args.files:
-        content = ((REPOSITORY_ROOT / ".context/500-sombras-de-alberto/facturas") / name).read_bytes()
+        content = (
+            (REPOSITORY_ROOT / ".context/500-sombras-de-alberto/facturas") / name
+        ).read_bytes()
         size = native_pages(content, Settings())[0]["size"]
         png = (
             (args.output / (name + ".input.png")).read_bytes()
@@ -102,12 +110,17 @@ async def main():
         destination = args.output / (name + ".response.json")
         if destination.exists():
             response = json.loads(destination.read_text(encoding="utf-8"))
-            if response["input_sha256"] != fingerprint or response.get("do_format", False) != args.formatted:
+            if (
+                response["input_sha256"] != fingerprint
+                or response.get("do_format", False) != args.formatted
+            ):
                 raise ValueError("Use a new output directory for changed inputs")
             print(name, "cached", flush=True)
         else:
             if args.offline:
-                raise ValueError(f"No saved response for {name}; offline mode cannot submit requests")
+                raise ValueError(
+                    f"No saved response for {name}; offline mode cannot submit requests"
+                )
             started = time.perf_counter()
             request_file = args.output / (name + ".request.json")
             if request_file.exists():
@@ -124,7 +137,9 @@ async def main():
                 handle = await fal_client.submit_async(
                     MODEL,
                     arguments={
-                        "input_image_urls": ["data:image/png;base64," + base64.b64encode(png).decode()],
+                        "input_image_urls": [
+                            "data:image/png;base64," + base64.b64encode(png).decode()
+                        ],
                         "do_format": args.formatted,
                         "multi_page": False,
                     },
@@ -143,8 +158,10 @@ async def main():
                 )
                 print(name, "request", request_id, flush=True)
 
-            async def retrieve():
-                while not isinstance(await fal_client.status_async(MODEL, request_id), fal_client.Completed):
+            async def retrieve(request_id=request_id):
+                while not isinstance(
+                    await fal_client.status_async(MODEL, request_id), fal_client.Completed
+                ):
                     await asyncio.sleep(1)
                 return await fal_client.result_async(MODEL, request_id)
 
@@ -157,7 +174,9 @@ async def main():
                 "seconds": round(time.perf_counter() - started, 3),
                 "result": result,
             }
-            destination.write_text(json.dumps(response, ensure_ascii=False, indent=2), encoding="utf-8")
+            destination.write_text(
+                json.dumps(response, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
         outputs = response["result"]["outputs"]
         if not isinstance(outputs, list) or not all(isinstance(s, str) for s in outputs):
             raise ValueError("Unexpected GOT output schema")
@@ -185,7 +204,9 @@ async def main():
             "fal_matches",
             sum(c["matches"] for c in compared["checks"].values()),
             "local_matches",
-            sum(c["matches"] for c in local_comparison["checks"].values()) if local_comparison else None,
+            sum(c["matches"] for c in local_comparison["checks"].values())
+            if local_comparison
+            else None,
             "seconds",
             response["seconds"],
             flush=True,
