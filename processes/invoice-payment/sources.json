@@ -1,0 +1,55 @@
+{
+  "sources": {
+    "erp": {
+      "type": "http",
+      "base_url": {"env": "TRACE_ERP_URL", "default": "http://127.0.0.1:8009"},
+      "format": {"type": "xml", "encoding": "iso-8859-1", "error_code_path": "codigo"},
+      "auth": {
+        "type": "form_token",
+        "login_path": "/erp/login",
+        "credentials": {"usuario": "TRACE_ERP_USER", "clave": "TRACE_ERP_PASSWORD"},
+        "token_path": "token",
+        "token_header": "X-ERP-Token",
+        "lifetime_seconds": 900,
+        "lifetime_path": "caduca_en_segundos",
+        "max_uses": 300,
+        "max_uses_path": "usos_maximos",
+        "renew_margin_seconds": 60,
+        "renew_margin_uses": 10,
+        "expired_codes": ["SES-401"]
+      },
+      "pagination": {
+        "path": "/erp/asientos",
+        "page_param": "pagina",
+        "first_page": 1,
+        "page_size": 20,
+        "records_path": "asientos/asiento",
+        "total_path": "meta/total",
+        "pages_path": "meta/paginas"
+      },
+      "key": "entry_id",
+      "fields": {
+        "entry_id": {"source": "id"},
+        "date": {"source": "fecha", "convert": "date_dmy"},
+        "supplier_id": {"source": "proveedor"},
+        "nif": {"source": "nif"},
+        "purchase_order": {"source": "pedido"},
+        "amount": {"source": "importe", "convert": "decimal_comma"},
+        "status": {"source": "estado"}
+      },
+      "retry": {
+        "max_attempts": 6,
+        "retry_statuses": [500, 502, 503, 504],
+        "transient_codes": ["ORA-00600"],
+        "backoff_seconds": 0.2,
+        "backoff_max_seconds": 5
+      },
+      "rate_limit": {"requests_per_second": 6, "max_retry_after_seconds": 30},
+      "timeouts": {"connect_seconds": 3, "read_seconds": 15},
+      "status": {
+        "path": "/erp/estado",
+        "fields": {"entries": "asientos", "update_loaded": "actualizacion_cargada"}
+      }
+    }
+  }
+}
