@@ -50,16 +50,14 @@ frontend/
 ## Reparto
 | Persona | Bloque | Entregable |
 |---|---|---|
-| Martín | H0 contratos (esquema, firmas, endpoints). Después: compilador, sandbox, motor y auditoría. Responsable del filtro | `compilador.py`, `sandbox.py`, `motor.py`, `auditoria.py` |
-| Álvaro | Conectores. ERP: login y renovación de token, reintento de ORA-00600, respeto de 429/Retry-After, límite de peticiones propio, paginación completa, foto local. Excel: hojas a tablas, normalización (espacios finales, P007 duplicado) | `conectores/erp.py`, `conectores/excel.py` |
-| Mateo | Ingesta (hash, `pdftotext`, render de escaneos a 300 dpi) y extracción (dos extractores, validadores IBAN/NIF/importes, paso a `REVISION`). `llm.py` con LiteLLM | `ingesta.py`, `extraccion.py`, `llm.py` |
-| Varsovia | Contenido del proceso: lista de símbolos y **texto de cada regla de la norma v3** (tipo y decisión). Hoja de resultados esperados a partir de nuestro análisis para verificar. Prompt del asistente de escalado. Después: ADRs y `albertitos_plan.pdf` | Reglas en texto, hoja de verificación |
-| Carlos | Frontend contra los endpoints de H0 (con datos simulados hasta H1): procesos, instancias con su traza, alta de regla con informe de validación y discrepancias, cola de `ESCALAR` y `REVISION`, botón de exportar | `frontend/` |
-
-El escalado asistido (`escalado.py`) lo coge quien termine antes (Martín o Mateo).
+| Martín | H0 contratos. Compilador (dos agentes, tests cruzados), sandbox, escalado asistido. Texto de las reglas de la norma v3. Responsable del filtro | `compilador.py`, `sandbox.py`, `escalado.py`, reglas v3 |
+| Mateo | Core de ejecución: `llm.py` (LiteLLM, configuración por papel), extracción de símbolos (doble extracción, validadores, `REVISION`), motor, auditoría, endpoints de la API | `llm.py`, `extraccion.py`, `motor.py`, `auditoria.py`, `main.py` |
+| Álvaro | Todo lo que entra: ingesta (hash, `pdftotext`, render/OCR de escaneos), conector del ERP (token, ORA-00600, 429/Retry-After, límite propio, paginación, foto local), conector del Excel (normalización) | `ingesta.py`, `conectores/erp.py`, `conectores/excel.py` |
+| Varsovia | Producto e ideas: demo, ADRs, `albertitos_plan.pdf`, hoja de resultados esperados para verificar | Guion de demo, ADRs |
+| Carlos | Frontend contra los endpoints de H0 (datos simulados hasta H1): procesos, instancias con traza, alta de regla con informe, colas `ESCALAR`/`REVISION`, exportar | `frontend/` |
 
 ## Ruta crítica y riesgos
-1. **Texto de las reglas de la norma v3 (Varsovia + Martín, antes de H1).** Decidir qué produce cada anomalía (NO_PAGAR o ESCALAR) es el mayor riesgo para el filtro. Hay casos pendientes en `.artifacts/specs/2026-09-18-reglas-sistema.md`. Preguntar a un mentor con ejemplos concretos.
+1. **Texto de las reglas de la norma v3 (Martín, con Varsovia revisando, antes de H1).** Decidir qué produce cada anomalía (NO_PAGAR o ESCALAR) es el mayor riesgo para el filtro. Hay casos pendientes en `.artifacts/specs/2026-09-18-reglas-sistema.md`. Preguntar a un mentor con ejemplos concretos.
 2. **Escaneos (29).** Además de la doble extracción, se revisan a mano antes de H2.
 3. **Verificación final antes de exportar:**
    - Una línea por fichero.
