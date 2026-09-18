@@ -1,29 +1,29 @@
 """Every table registered on `Base.metadata`, for Alembic."""
 
 from app.core.database import Base
-from app.features.decisiones.model import Decision, Hallazgo
-from app.features.extraccion.model import Extraccion
-from app.features.fuentes.model import Fuente
-from app.features.ingesta.model import Fichero, Instancia
-from app.features.llm.model import ConfigLLM
-from app.features.procesos.model import Proceso, Simbolo, TipoDecision
-from app.features.reglas.model import Regla
-from app.features.trazas.model import Evento
-from app.features.usuarios.model import Usuario
+from app.features.decisions.model import Decision, Finding
+from app.features.extraction.model import Extraction
+from app.features.ingestion.model import File, Instance
+from app.features.llm.model import LLMConfig
+from app.features.processes.model import DecisionType, Process, Symbol
+from app.features.rules.model import Rule
+from app.features.sources.model import Source
+from app.features.traces.model import Event
+from app.features.users.model import User
 
 __all__ = [
     "Base",
-    "ConfigLLM",
     "Decision",
-    "Evento",
-    "Extraccion",
-    "Fichero",
-    "Fuente",
-    "Hallazgo",
-    "Instancia",
-    "Proceso",
-    "Regla",
-    "Simbolo",
-    "TipoDecision",
-    "Usuario",
+    "DecisionType",
+    "Event",
+    "Extraction",
+    "File",
+    "Finding",
+    "Instance",
+    "LLMConfig",
+    "Process",
+    "Rule",
+    "Source",
+    "Symbol",
+    "User",
 ]

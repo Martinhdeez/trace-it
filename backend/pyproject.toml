@@ -43,8 +43,14 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["app"]
-markers = ["integration: requires official local material", "ocr: requires downloaded OCR weights"]
+testpaths = ["app", "tests", "evals"]
+addopts = "-m 'not llm'"
+markers = [
+    "e2e: end to end against the challenge data (golden outcomes, API flow with the database)",
+    "llm: calls real LLM providers; opt-in with `make eval-compiler`",
+    "integration: requires official local material",
+    "ocr: requires downloaded OCR weights",
+]
 
 [build-system]
 requires = ["hatchling"]
