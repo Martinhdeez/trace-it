@@ -51,4 +51,4 @@ to relational data (processes, rules, decisions). Everything must start with one
   `processes`, `rules`, `traces`, `users`.
 
 ## Related
-ADR 0006, 0011. Plan §6; `docs/guia-equipo.md`.
+ADR 0006, 0011. Plan §6; `docs/team-guide.md`.

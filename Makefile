@@ -1,4 +1,4 @@
-# trace-it: quick start. See docs/guia-equipo.md.
+# trace-it: quick start. See docs/team-guide.md.
 .PHONY: setup compile erp test test-db test-e2e eval-compiler check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json

@@ -54,7 +54,7 @@ records which priorities it used.
 
 ## Evidence
 - `processes/definition.py` (`load_definition`): `session.merge(DecisionType(...))`,
-  `session.merge(Simbolo(...))`, `proceso.descripcion = datos.descripcion`.
+  `session.merge(Symbol(...))`, `process.description = data.description`.
 - `decisions/model.py`: `Decision.rules_hash` identifies the rule set only.
 - `decisions/engine.py` (`hash_rules`): hash over rule id and rule hash.
 

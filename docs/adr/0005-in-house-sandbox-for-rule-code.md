@@ -36,7 +36,7 @@ and the blind double compilation (ADR 0004) reduce but do not close that path.
     user with its network.
 
 ## Decision
-`agentes/sandbox.py`:
+`agents/sandbox.py`:
 - **Static check** before running: imports only from `decimal, datetime, re, math,
   unicodedata`; no `open, exec, eval, compile, getattr, globals, __import__...`; no name or
   attribute starting with `_`; no frame attributes (`gi_frame`, `f_globals`, `tb_frame`...);
@@ -58,7 +58,7 @@ and the blind double compilation (ADR 0004) reduce but do not close that path.
 - Memory limit only on Linux (macOS has no `RLIMIT_AS`).
 
 ## Evidence
-- 24 tests in `agentes/tests/test_sandbox.py` (6 functions, parametrised): valid rule;
+- 24 tests in `agents/tests/test_sandbox.py` (6 functions, parametrised): valid rule;
   malformed results and exceptions; forbidden code rejected before running (dunder and
   underscore names, frame attributes, non-allowlisted imports); `re.enum.sys` is not
   reachable; infinite loop killed by timeout; one bad case in a batch fails only that case.
@@ -66,4 +66,4 @@ and the blind double compilation (ADR 0004) reduce but do not close that path.
   case gets its own subprocess (`ejecutar`).
 
 ## Related
-ADR 0003, 0004, 0010 (compiled extractors would reuse it). Plan P8; `docs/plan-agentes.md` §5.
+ADR 0003, 0004, 0010 (compiled extractors would reuse it). Plan P8; `docs/agents-plan.md` §5.

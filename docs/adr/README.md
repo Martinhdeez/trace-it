@@ -2,7 +2,7 @@
 
 Each file records one architecture decision: its context, the alternatives we weighed, what
 we decided, what we accept losing, and the evidence. ADR 0001 is the founding decision and
-wins over any draft document (`docs/plano-aplicacion.md`, `docs/plan-agentes.md`,
+wins over any draft document (`docs/application-blueprint.md`, `docs/agents-plan.md`,
 `.artifacts/`).
 
 ## Index
