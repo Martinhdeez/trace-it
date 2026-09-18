@@ -1,17 +1,17 @@
-# trace-it: arranque rápido. Ver docs/guia-equipo.md.
-.PHONY: setup compilar erp test down reset-db
+# trace-it: quick start. See docs/guia-equipo.md.
+.PHONY: setup compile erp test down reset-db
 
-CARGAR = docker compose exec -T backend python -m app.cli cargar /procesos/pago-facturas.json
+LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 
 setup:
 	test -f .env || cp .env.example .env
 	docker compose up -d --build --wait
 	docker compose exec -T backend alembic upgrade head
-	$(CARGAR)
-	@echo "Listo: API en http://localhost:$${BACKEND_PORT:-8000}/docs"
+	$(LOAD)
+	@echo "Ready: API at http://localhost:$${BACKEND_PORT:-8000}/docs"
 
-compilar:  # needs LLM keys in .env
-	$(CARGAR) --compilar
+compile:  # needs LLM keys in .env
+	$(LOAD) --compile
 
 erp:
 	test -f .context/500-sombras-de-alberto/alberto_erp.py || git submodule update --init .context/500-sombras-de-alberto
@@ -25,5 +25,5 @@ down:
 	docker compose down
 
 reset-db:
-	@echo "AVISO: borra la base de datos (procesos, reglas, decisiones, usuarios). Luego: make setup"
+	@echo "WARNING: deletes the database (processes, rules, decisions, users). Then: make setup"
 	docker compose down -v

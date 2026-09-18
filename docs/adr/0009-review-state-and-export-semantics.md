@@ -68,15 +68,15 @@ expects ESCALAR. Two files with the same name also produced two lines.
   to decide by hand, move it to REVIEW first.
 - **Known gaps** (fixes pending in a PR for Mateo): the engine sends a failed rule to the
   highest `requires_human` type (ESCALAR) instead of REVIEW, runs only code A, and starts
-  one subprocess per instance and rule (`motor.decidir`, ADR 0004). `exportar` implements
+  one subprocess per instance and rule (`engine.decide`, ADR 0004). `export` implements
   only the `engine` policy; `final` is not implemented.
 
 ## Evidence
-- PR #17 implements the `engine` case: `Decision.tipo_humana` (`resolucion` |
-  `correccion_revision`), new `exportar`; tests `test_ejecutar_revisar_y_exportar` (an
-  escalated instance resolved as NO_PAGAR still exports ESCALAR) and `test_exportar_un_nombre_repetido_da_una_sola_linea`; 56 tests green
+- PR #17 implements the `engine` case: `Decision.human_kind` (`resolution` |
+  `review_correction`), new `export`; tests `test_run_review_and_export` (an
+  escalated instance resolved as NO_PAGAR still exports ESCALAR) and `test_export_a_duplicate_name_gives_a_single_line`; 56 tests green
   on that branch.
-- `ingesta/model.py`: `ESTADOS_INSTANCIA = ("PENDIENTE", "REVISION", "DECIDIDA")`.
+- `ingestion/model.py`: `INSTANCE_STATUSES = ("PENDING", "REVIEW", "DECIDED")`.
 
 ## Related
 ADR 0001, 0002, 0004, 0007, 0008, 0010, 0014. Plan P4, P21; `docs/process-packs.md`

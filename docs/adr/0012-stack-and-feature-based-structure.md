@@ -47,8 +47,8 @@ to relational data (processes, rules, decisions). Everything must start with one
 ## Evidence
 - `docker-compose.yml`, `Makefile`, `backend/pyproject.toml`, `backend/alembic/`.
 - `uv run pytest -q` on `dev` at `2b0fe4e` against local Postgres: **110 passed in 14 s**.
-- Feature folders today: `agentes`, `decisiones`, `extraccion`, `fuentes`, `ingesta`, `llm`,
-  `procesos`, `reglas`, `trazas`, `usuarios`.
+- Feature folders today: `agents`, `decisions`, `extraction`, `sources`, `ingestion`, `llm`,
+  `processes`, `rules`, `traces`, `users`.
 
 ## Related
 ADR 0006, 0011. Plan §6; `docs/guia-equipo.md`.

@@ -14,7 +14,7 @@ engine decides or how it is exported.
 Today only rules are versioned (states draft/active/retired, a hash of text + both codes),
 and each decision stores the hash of the rule set it applied (ADR 0008). Everything else is
 edited in place: the pack loader upserts decision types and symbols with `session.merge` and
-overwrites the description (`procesos/definicion.cargar_definicion`). Reloading a pack with
+overwrites the description (`processes/definition.load_definition`). Reloading a pack with
 a new priority silently changes how every future instance is decided, and no past decision
 records which priorities it used.
 
@@ -53,10 +53,10 @@ records which priorities it used.
 - Listing versions and activating an older one in the UI (F9) builds on this.
 
 ## Evidence
-- `procesos/definicion.py` (`cargar_definicion`): `session.merge(TipoDecision(...))`,
+- `processes/definition.py` (`load_definition`): `session.merge(DecisionType(...))`,
   `session.merge(Simbolo(...))`, `proceso.descripcion = datos.descripcion`.
-- `decisiones/model.py`: `Decision.reglas_hash` identifies the rule set only.
-- `decisiones/motor.py` (`hash_reglas`): hash over rule id and rule hash.
+- `decisions/model.py`: `Decision.rules_hash` identifies the rule set only.
+- `decisions/engine.py` (`hash_rules`): hash over rule id and rule hash.
 
 ## Related
 ADR 0001, 0007, 0008, 0014. Plan P13, P15; F9.

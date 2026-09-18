@@ -2,14 +2,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
-PAPELES = ("compilador_a", "compilador_b", "extractor_1", "extractor_2", "asistente")
+ROLES = ("compiler_a", "compiler_b", "extractor_1", "extractor_2", "assistant")
 
 
-class ConfigLLM(Base):
+class LLMConfig(Base):
     """Provider and model per role, in LiteLLM format ("anthropic/claude-opus-5").
     Changeable at runtime (P22)."""
 
-    __tablename__ = "config_llm"
+    __tablename__ = "llm_config"
 
-    papel: Mapped[str] = mapped_column(primary_key=True)
-    modelo: Mapped[str]
+    role: Mapped[str] = mapped_column(primary_key=True)
+    model: Mapped[str]

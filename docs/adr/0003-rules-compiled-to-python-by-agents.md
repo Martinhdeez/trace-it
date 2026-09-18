@@ -8,7 +8,7 @@ status: accepted
 Rules are written in natural language by the business (the invoice pack has 16 rules for
 norma v3; norma v4 arrives on Saturday 18:00, and a live change is possible on Sunday).
 Rules are added, removed and reworded all the time, and the application must serve any
-process (a second pack, `gastos-viaje`, exists to prove it) without code changes. ADR 0002
+process (a second pack, `travel-expenses`, exists to prove it) without code changes. ADR 0002
 requires rules to execute deterministically.
 
 ## Alternatives considered
@@ -47,7 +47,7 @@ def evaluate(instance: dict, sources: dict[str, list[dict]], others: list[dict])
   rule PAY when the approved rule says NO_PAGAR.
 - The process description (shared conventions: normalisation, units, tolerances, missing
   values) is given to the compiler with every rule, so rules do not repeat it.
-- Compilation runs when a rule is created or changed (`POST /reglas/{id}/compilar`, chained
+- Compilation runs when a rule is created or changed (`POST /rules/{id}/compile`, chained
   by the UI; 30-60 s because of LLM calls).
 
 ## Consequences
@@ -59,12 +59,12 @@ def evaluate(instance: dict, sources: dict[str, list[dict]], others: list[dict])
   code by hand.
 
 ## Evidence
-- Contract enforced by the sandbox: `_validar` in `agentes/sandbox.py` rejects any result
-  that is not exactly `{"salta": bool, "motivo": str}` (current Spanish names).
-- Compiler prompt and context: `agentes/compilador.py` (`SISTEMA`, `_contexto`).
-- Decision from the rule, not the code: `motor.decidir` reads `regla.decision`.
+- Contract enforced by the sandbox: `_validate` in `agents/sandbox.py` rejects any result
+  that is not exactly `{"fires": bool, "reason": str}`.
+- Compiler prompt and context: `agents/compiler.py` (`SYSTEM`, `_context`).
+- Decision from the rule, not the code: `engine.decide` reads `rule.decision`.
 - The 16 v3 rules hand-written against the same contract pass through the real sandbox
-  and engine (`decisiones/tests/test_reglas_v3.py`, 5 tests).
+  and engine (`decisions/tests/test_rules_v3.py`, 5 tests).
 
 ## Related
 ADR 0002, 0004, 0005, 0007. Plan P1, P8, P18, P19.

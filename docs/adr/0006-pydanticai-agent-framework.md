@@ -50,8 +50,8 @@ and rule state machines, the manager's queue and idempotency already live in Pos
   and approval are ours.
 
 ## Consequences
-- `features/llm/cliente.py`, `config_llm` and `/llm/config` go away; the frontend moves to
-  `/agentes/.../config`. Model names change from `anthropic/x` to `anthropic:x`.
+- `features/llm/client.py`, `llm_config` and `/llm/config` go away; the frontend moves to
+  `/agents/.../config`. Model names change from `anthropic/x` to `anthropic:x`.
 - If every model in a chain fails, the agent fails closed: rule stays draft, instance stays
   in REVIEW, never a decision.
 - Behaviour marked "unconfirmed" in `docs/plan-agentes.md` §11 (e.g. whether timeouts reach
@@ -60,7 +60,7 @@ and rule state machines, the manager's queue and idempotency already live in Pos
 ## Evidence
 - APIs checked against the local PydanticAI v2 docs (`.context/pydantic-ai/`), references
   in `docs/plan-agentes.md` §12.
-- Cost and latency per stage will come from `GET /procesos/{id}/metricas` over `eventos`
+- Cost and latency per stage will come from `GET /processes/{id}/metrics` over `events`
   (plan §7.4); not measured yet.
 
 ## Related

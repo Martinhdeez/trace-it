@@ -28,9 +28,9 @@ wins over any draft document (`docs/plano-aplicacion.md`, `docs/plan-agentes.md`
 ## Glossary
 - **Rule finding:** the result of one rule on one instance (`fires`, `reason`).
 - **Audit finding:** a past decision that a newer process version would decide
-  differently. Stored in the table currently named `hallazgos`.
+  differently. Stored in the table `findings`.
 - **Manager:** the human role that approves rule and process changes and owns the final
-  decision of escalated cases. Not "approver" or "responsable" (code: `responsable`).
+  decision of escalated cases. Not "approver" or "responsable".
 - **Engine decision / final decision / exported decision:** the process output; the
   manager's decision for an escalated case; the one written to the export, chosen by the
   `exported_decision` policy (ADR 0009).

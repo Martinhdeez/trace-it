@@ -26,7 +26,7 @@ and a shadow backfill that never overwrites history.
 Terminology (glossary in the README): a **rule finding** is the result of one rule on one
 instance (`fires`, `reason`); an **audit finding** is a past decision that a newer process
 version would decide differently. This ADR stores the first per decision and produces the
-second; the table named `hallazgos` stores audit findings.
+second; the table `findings` stores audit findings.
 
 ## Decision
 - **Files** are identified by the SHA-256 of their content and never modified. A modified
@@ -57,12 +57,12 @@ second; the table named `hallazgos` stores audit findings.
 - History grows without bound; acceptable at hackathon scale.
 
 ## Evidence
-- `ingesta/model.py`: `Fichero` keyed by hash ("a modified file is a new file").
-- `decisiones/model.py`: `Decision` append-only, `Hallazgo` (table `hallazgos`) stores audit findings and never changes the past.
-- `decisiones/auditoria.py` (`comprobar`, `registrar_hallazgos`) and
-  `reglas/service._aplicar` (conflicts refuse the change); 5 tests in
-  `decisiones/tests/test_auditoria.py`.
-- `decisiones/service.resolver`: a person's decision is a new row, never an edit.
+- `ingestion/model.py`: `File` keyed by hash ("a modified file is a new file").
+- `decisions/model.py`: `Decision` append-only, `Finding` (table `findings`) stores audit findings and never changes the past.
+- `decisions/audit.py` (`check`, `record_findings`) and
+  `rules/service._apply` (conflicts refuse the change); 5 tests in
+  `decisions/tests/test_audit.py`.
+- `decisions/service.resolve`: a person's decision is a new row, never an edit.
 
 ## Related
 ADR 0001, 0004, 0009, 0010, 0015. Plan P2, P13, P14, P15, P16; PR #16.
