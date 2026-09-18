@@ -69,7 +69,7 @@ feat(reglas): add cross-test runner for compiled rules
 fix(erp): retry on ORA-00600 before renewing token
 docs: add team guide
 test(motor): cover priority when several rules fire
-chore: bump litellm
+chore: bump pydantic-ai
 ```
 Tipos: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`. El ámbito entre paréntesis es la carpeta de la feature.
 
@@ -93,10 +93,10 @@ backend/
       fuentes/            # fuentes de verdad: hojas de cálculo y sistemas externos (ERP)
       extraccion/         # símbolos con doble extracción LLM
       reglas/             # reglas: alta, estados, activación
-      agentes/            # compilador (dos agentes), sandbox, asistente de escalado
+      agentes/            # agentes (compilador A/B, asistente), sandbox, config por versiones, presets y prompts
       decisiones/         # motor, histórico, auditoría, colas, exportar
       trazas/             # eventos de traza
-      llm/                # cliente LiteLLM y modelo por papel
+      llm/                # runtime de PydanticAI: modelo desde la config, ejecución y traza
 ```
 
 ### Dentro de cada funcionalidad
@@ -115,6 +115,14 @@ Reglas:
 - Los errores se lanzan con las clases de `app/common/exceptions.py` (`NotFoundError`, `ConflictError`…). La API los convierte en respuestas JSON.
 - Lo que aún no está hecho lanza `NotImplementedYetError` (la API responde 501). Así el contrato existe y el frontend puede trabajar contra él.
 - Los nombres de dominio van en español (`proceso`, `regla`, `instancia`), igual que en los documentos.
+
+### Agentes (LLM)
+Todos los agentes usan PydanticAI v2. Arquitectura, configuración por versiones y tareas: `docs/plan-agentes.md`.
+- Toda llamada a un LLM pasa por `features/llm/ejecutar.py`, con un papel de `config_agente`: así queda en la traza con su versión de configuración, coste y latencia.
+- Los prompts son ficheros en `features/agentes/prompts/`. Los datos del caso van en el mensaje, nunca en el prompt.
+- En la extracción, un validador que falla manda la instancia a `REVISION`; nunca se devuelve al modelo con `ModelRetry`.
+- Tests sin red: `FunctionModel`/`TestModel` con `agente.override(...)`.
+- **Antes de escribir código de PydanticAI, consulta `.context/pydantic-ai/`** (empieza por `START-HERE.md` y `SECTIONS.md`, y abre solo la sección que necesites). Vale para personas y para asistentes de código: la API cambió mucho en la v2 y lo que recuerda un modelo suele ser de la v1. `llms-full.txt` (5,5 MB, la documentación entera) no está en el repo: descárgalo de https://ai.pydantic.dev/llms-full.txt si lo necesitas para buscar.
 
 ## 3. Arrancar en local
 
@@ -155,7 +163,7 @@ cd .context/500-sombras-de-alberto && make erp
 ## 4. Quién toca qué
 | Persona | Carpetas |
 |---|---|
-| Martín | `features/agentes/` (compilador, sandbox, asistente), `features/llm/` |
+| Martín | `features/agentes/` (compilador, sandbox, asistente, config de agentes), `features/llm/` |
 | Mateo | `features/reglas/`, `features/decisiones/` (motor, auditoría, API), `features/procesos/`, `features/usuarios/` |
 | Álvaro | `features/ingesta/`, `features/fuentes/` (Excel, ERP), `features/extraccion/` |
 | Carlos | `frontend/` |
