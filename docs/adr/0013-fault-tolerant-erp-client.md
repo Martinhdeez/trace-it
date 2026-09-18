@@ -1,5 +1,5 @@
 ---
-status: proposed  # owner: Álvaro
+status: accepted
 ---
 
 # Read the ERP only through a fault-tolerant client into a versioned local snapshot
@@ -62,10 +62,16 @@ runtime; values are fixed after load testing against the challenge ERP.
 - Combined with model fallback chains (ADR 0006), this is the resilience story for the demo.
 
 ## Evidence
-- Behaviour table and client rules: `.artifacts/specs/2026-09-18-reglas-sistema.md` §4, §8.
-- Counts: `.artifacts/specs/2026-09-18-analisis-caja-v3.md` (516 entries: 507 PENDIENTE,
-  9 PAGADA). Implemented in `features/sources/http_connector.py`, configured by
-  `processes/invoice-payment/sources.json`; see `docs/sources-http.md`.
+- Implemented in `features/sources/http_connector.py`, configured by
+  `processes/invoice-payment/sources.json`; see `docs/sources-http.md`. Points 1-7 and 9
+  are done; the circuit breaker (8) is bounded retries plus "the previous snapshot stays
+  current" rather than a breaker with a cool-down.
+- `sources/tests/test_erp_sync.py` against the real challenge ERP as a subprocess: 516
+  entries in 26 pages, `ORA-00600` retried, 429 honoured, token renewed by uses, a failed
+  sync keeps the previous snapshot, a batch-2 update diffed. `make demo`: 516 rows, 26
+  pages, 2-3 retries, 1 login, about 5 s.
+- Behaviour table: `.artifacts/archive/2026-09-18-reglas-sistema.md` §4; counts:
+  `.artifacts/specs/batch1-analysis.md` (516 entries: 507 PENDIENTE, 9 PAGADA).
 
 ## Related
-ADR 0006, 0007 (`sources.json`), 0008. Plan P6, P16; `docs/mvp-plan.md` (owner Álvaro).
+ADR 0007 (`sources.json`), 0008. `docs/sources-http.md`.

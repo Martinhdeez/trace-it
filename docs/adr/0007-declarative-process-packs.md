@@ -1,5 +1,5 @@
 ---
-status: accepted  # policies: accepted, not implemented; sources.json: proposed
+status: accepted
 ---
 
 # Keep all domain knowledge in declarative process packs
@@ -17,30 +17,30 @@ and configuration at runtime, and those changes must never be lost by reloading 
 - **Everything only in the database, edited through the UI.**
   - Pros: one source of truth at runtime.
   - Cons: not reproducible from git; a fresh machine starts empty; no review via PRs.
-- **YAML files as the runtime source.** Discarded in `.artifacts/specs/2026-09-18-reglas-sistema.md`
+- **YAML files as the runtime source.** Discarded in `.artifacts/archive/2026-09-18-reglas-sistema.md`
   §6: runtime changes would mean editing files.
 - **Pack files for bootstrap + database for runtime, with export back (chosen).**
   - Pros: reproducible and reviewable; runtime changes without restarts; round trip.
   - Cons: two places to look; the loader must define who wins.
 
 ## Decision
-- A **process pack** is a folder `processes/<pack>/` with `process.json` (today one file
-  per process: `processes/invoice-payment.json`, `processes/travel-expenses.json`):
+- A **process pack** is `processes/<name>.json` plus an optional folder `processes/<name>/`
+  for what does not fit in it (`sources.json`, hand-written rule code):
   - `name`, `description`: the description states the domain conventions every rule
     inherits (normalisation, units, tolerances, missing values). Compilers and the
     assistant receive it as shared context.
-  - `decision_types`: `[{name, priority, is_default, requires_human}]`, exactly one default,
-    and the default cannot require a human. No decision name is hardcoded.
-  - `symbols`: `[{name, type, description}]`; `rules`: `[{text, kind, decision}]`;
-    optional `users` with roles.
-  - `policies` (accepted, not implemented yet): `exported_decision` (`engine`: the
-    process output; `final`: the manager's final decision when there is one),
-    `unresolved_review` (`block` | a decision type), `unresolved_escalation` (`keep`).
-    Invoice pack: `engine` (the challenge reference expects the process output), `block`,
-    `keep` (ADR 0009).
-    `users` roles: `manager` (resolves escalations, approves rule and process changes) and
-    `operator`.
-  - `sources.json` (**proposed**): connectors per source, credentials by `.env` name only.
+  - `decision_types`: `[{name, priority, is_default, requires_human}]`: exactly one default,
+    which cannot require a human; distinct priorities; at least one type that requires a
+    human, where the engine sends what it cannot decide (ADR 0016). No decision name is
+    hardcoded.
+  - `symbols`: `[{name, type, description}]`; `rules`: `[{text, type, decision, code?}]`,
+    where `code` names a file with hand-written `evaluate` code, so a process runs before any
+    model is configured; optional `users` with roles `manager` (resolves escalations,
+    approves rule changes) and `operator`.
+  - `<name>/sources.json`: one HTTP connector per source (ADR 0013), credentials by `.env`
+    variable name only. Read on every sync.
+  - Export policies (`exported_decision: engine | final`) were designed in ADR 0009 and not
+    implemented: the export is the engine's decision (ADR 0016).
 - **Loader contract:** validate the whole pack first and reject it whole if invalid;
   idempotent; adds what is missing; a rule whose text changed enters as a new **draft**;
   active rules are never modified or removed by a load. Changes to decision types, symbols
@@ -51,19 +51,19 @@ and configuration at runtime, and those changes must never be lost by reloading 
 
 ## Consequences
 - New process = new pack; a new kind of source is the only code to write.
-- **Known gap:** the loader today still overwrites decision types, symbols and the
-  description with the file's values (`session.merge`). That contradicts "loading never
-  overrides runtime decisions"; ADR 0015 versions them with the whole process.
-- Export and `make load PROCESS=<pack>` are not implemented yet.
+- **Known gap:** the loader still overwrites decision types, symbols and the description
+  with the file's values (`session.merge`). That contradicts "loading never overrides
+  runtime decisions"; ADR 0015 (proposed) versions them with the whole process.
+- Export back to pack JSON is not implemented.
 
 ## Evidence
 - Loader and validation: `processes/definition.py` (`Definition._consistent`,
-  `load_definition`); 3 tests in `processes/tests/test_definition.py`.
-- Invoice pack: 16 rules, 12 symbols, 3 decision types (ESCALAR 3 requires human,
-  NO_PAGAR 2, PAGAR 1 default). A quick parser over the 471 text PDFs gave 433 PAGAR,
-  36 NO_PAGAR, 2 ESCALAR, consistent with the trap analysis
-  (`.artifacts/specs/2026-09-18-analisis-caja-v3.md`); 29 scans pending.
+  `load_definition`); 5 tests in `processes/tests/test_definition.py`, 4 in `test_api.py`.
+- Invoice pack: 16 rules with hand-written code, 12 symbols, 3 decision types (ESCALAR 3
+  requires human, NO_PAGAR 2, PAGAR 1 default). `make demo` over the 500 files of batch 1:
+  433 PAGAR, 36 NO_PAGAR, 31 ESCALAR (29 of them scans without a text layer), identical to
+  the golden reference on all 471 text PDFs.
 - `make setup` loads the invoice pack; `travel-expenses.json` loads with the same code.
 
 ## Related
-ADR 0001, 0003, 0009, 0011, 0014, 0015. Plan P11, P12, P19; `docs/process-packs.md`.
+ADR 0001, 0003, 0013, 0014, 0015, 0016. `processes/README.md`.

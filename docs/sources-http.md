@@ -16,7 +16,6 @@ challenge ERP is its first configuration. ADR 0013 records why it works this way
 | `uv run python -m app.cli sources sync ../processes/invoice-payment.json [--source erp]` | Same, from `backend/` |
 | `POST /processes/{process_id}/sources/{name}/sync` | Same, from the API. Returns counts, retries and the diff. `502 source_unavailable` if the sync failed |
 | `GET /processes/{process_id}/sources/{name}/diff` | Latest snapshot against the one before it: `added`, `removed`, `changed` (`key -> field -> [before, after]`) |
-| `uv run python -m app.cli sources fallback ../processes/invoice-payment.json` | Hand-made snapshot, see below |
 
 `sources.json` is read again on every sync. A changed rate limit, retry count or timeout
 applies to the next sync without a restart. Credentials live only in `.env`: `sources.json`
@@ -34,7 +33,7 @@ environment wins over `.env`.
 - **Traced.** Every sync writes a `sync_source` event with pages, requests, retries,
   logins, 429s, transient errors by code, timeouts, invalid responses, unconvertible values,
   duration, the row hash, the status fields and the diff summary.
-- **Origin.** `erp:<ISO timestamp>|<base url>` for an API snapshot, `erp:manual-fallback`
+- **Origin.** `erp:<ISO timestamp>|<base url>` for an API snapshot
   for the hand-made one.
 
 ## Format
@@ -104,14 +103,6 @@ or `python3 alberto_erp.py --lote2 <csv>`), then sync again. The response and th
 endpoint list the added, removed and changed entries. The trace shows
 `status.update_loaded == "SI"`.
 
-## Hand-made fallback (`erp:manual-fallback`)
-
-`sources fallback` builds the `erp` rows from the data embedded in `alberto_erp.py`. The
-file is read as text, never imported or modified. The rows match what the API returns
-after conversion, and a test checks that. The fallback is for tests and for emergencies
-only, for example running rules R13 to R15 while the ERP is down. **The final delivery
-must use a snapshot downloaded from the API**, because the norm requires checking the ERP,
-and the ERP changes during the weekend while the embedded data does not.
 
 ## Not generic yet
 

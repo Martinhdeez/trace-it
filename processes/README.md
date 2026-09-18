@@ -1,39 +1,50 @@
 # Processes
 
-Each JSON file in this folder defines a complete decision process. trace-it knows nothing about invoices: the invoice payment process is just one more file (`invoice-payment.json`).
+Each JSON file in this folder defines a complete decision process (a process pack, ADR 0007). trace-it knows nothing about invoices: the invoice payment process is just one more file, `invoice-payment.json`.
 
 ## Loading a process
 
 ```bash
 make setup                                                          # loads invoice-payment.json
+make activate                                                       # activates its hand-written rules
 cd backend && uv run python -m app.cli load ../processes/travel-expenses.json
 cd backend && uv run python -m app.cli load ../processes/invoice-payment.json --compile  # needs LLM keys
 ```
 
-Also from the API: `POST /processes/definition` with the same JSON as the body.
+`POST /processes/definition` with the same JSON as the body is the only way to create a process over the API; there is no other creation endpoint. A definition that fails validation is rejected without touching the database: 422 over HTTP, an error message from the CLI.
 
-Loading can be repeated safely:
-- the process is looked up by `name`; if it does not exist, it is created;
+Loading is idempotent (`backend/app/features/processes/definition.py`):
+- the process is looked up by `name` and created if missing; its `description` is updated;
 - decision types and symbols are created or updated by `name`;
-- a rule enters as `draft` only if the process does not already have one with the same text; existing rules (active ones too) are not touched. To change a rule, change its text: it enters as a new draft;
+- a rule enters as `draft` only if the process has no rule with the same text; existing rules, active ones included, are never touched. To change a rule, change its text: it enters as a new draft;
 - users are created by `email` if they do not exist.
 
-`--compile` compiles every draft not yet validated with the two agents and prints one line per rule. If one fails, it carries on with the others. `--activate` activates every draft whose code is validated; with the hand-written rules in `rules-v3/`, `load ... --activate` runs the invoice process without any model.
+`--compile` compiles every draft without validated code with the two agents and prints one line per rule; one failure does not stop the others. `--activate` activates every draft whose code is validated.
 
 ## Format
 
 | Field | Required | What it is |
 |---|---|---|
 | `name` | yes | Unique name of the process |
-| `description` | no | Free text. The agents (compiler and assistant) receive it as the context of every rule: put the shared conventions here (normalisation, units, what to do when a value is missing) |
-| `decision_types` | yes | `[{name, priority, is_default, requires_human}]`. The highest `priority` wins when several rules fire. Exactly one `is_default` (applies when none fires), and that one cannot be `requires_human` |
-| `symbols` | no | `[{name, type, description}]`: the data extraction fills in for each instance and the rules read |
-| `rules` | no | `[{text, type, decision, code}]`. `type`: `requirement` (fires if it does not hold) or `prohibition` (fires if it holds). `decision`: one of the `decision_types`. `code` (optional): path, relative to the definition, of a file with hand-written code that defines `evaluate(instance, sources, others)`; the rule then arrives validated and needs no compiler. Only the CLI resolves it, never `POST /processes/definition` |
+| `description` | no | Free text. The compiler and the assistant receive it with every rule: put the conventions shared by all rules here (normalisation, units, what to do when a value is missing) |
+| `decision_types` | yes | `[{name, priority, is_default, requires_human}]`. The highest `priority` wins when several rules fire. Exactly one `is_default` (applies when none fires) and it cannot be `requires_human`. Priorities must be distinct. At least one type must be `requires_human` |
+| `symbols` | no | `[{name, type, description}]`: what extraction fills in for each instance and the rules read |
+| `rules` | no | `[{text, type, decision, code}]`. `type`: `requirement` (fires if it does not hold) or `prohibition` (fires if it holds). `decision`: one of the `decision_types`. `code` (optional): path, relative to the definition, of a file defining `evaluate(instance, sources, others)`; see `rules-v3/` below |
 | `users` | no | `[{name, email, role}]`, `role`: `manager` or `operator` |
 
-A definition with repeated types, symbols or rule texts, without exactly one default type, or with a rule whose decision does not exist is rejected without touching the database.
+Rejected: repeated types, symbols or rule texts; no default type or more than one; a default that requires a human; two types sharing a priority; no `requires_human` type; a rule whose decision does not exist.
+
+When a rule's code fails at runtime, or two fired types tie on priority, the engine decides the highest-priority `requires_human` type with the reason (`RULE_ERROR ...` / `RULE_CONFLICT ...`), so a person sees the case and the default is never produced with a rule unevaluated (ADR 0016). That is why every process needs such a type.
 
 Names inside a definition (process, decision types, symbols, sources) are the process's own data. Write them in English, except where an external contract fixes them: the invoice process keeps `PAGAR`, `NO_PAGAR` and `ESCALAR` because the challenge's `outcomes.jsonl` requires them verbatim.
+
+## `rules-v3/`: hand-written code
+
+The invoice rules point at `rules-v3/r01-...py` to `r16-...py`, one file per rule in the order of the JSON. A rule that arrives with its code passes the sandbox's static check and is stored validated (`report.origin = "hand-written"`), so `--activate` runs the whole process without any model. Only the CLI resolves `code` paths, never `POST /processes/definition` (a client-supplied path would read any file the backend can); over HTTP such a rule is refused with 409. The compiler can regenerate the same rules from their texts, and `make eval-compiler` compares its output with these files. Where each rule comes from: `docs/invoice-payment-rules.md`.
+
+## `invoice-payment/sources.json`: source connectors
+
+A pack may carry `<pack-name>/sources.json` with the connector configuration of its sources of truth. The invoice pack configures `erp` as an HTTP source: login, paged XML, field mapping, retries, rate limit. `make erp-sync` or `POST /processes/{id}/sources/erp/sync` download it into a new snapshot. Format and behaviour: `docs/sources-http.md`.
 
 ## Minimal example: travel expenses
 
@@ -60,4 +71,4 @@ Names inside a definition (process, decision types, symbols, sources) are the pr
 }
 ```
 
-An 800 € report without a receipt fires both rules and ends up in `ESCALATE` (priority 3 > 2).
+An 800 € report without a receipt fires both rules and ends up in `ESCALATE` (priority 3 > 2). Its rules have no `code`, so they wait for `--compile`.

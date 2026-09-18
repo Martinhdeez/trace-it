@@ -127,7 +127,7 @@ async def main() -> None:
     parser.add_argument(
         "--book", type=Path, default=CHALLENGE / "FINAL_v7_DEFINITIVO_ahorasi.xlsx"
     )
-    parser.add_argument("--cutoff", default="2026-09-19", help="`parameters.cut_off_date`")
+    parser.add_argument("--cutoff", default="2026-09-18", help="`parameters.cut_off_date`")
     parser.add_argument("--output", type=Path, default=ROOT / "output")
     parser.add_argument("--limit", type=int, help="only the first N invoices")
     args = parser.parse_args()

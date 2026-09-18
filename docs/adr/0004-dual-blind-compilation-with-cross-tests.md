@@ -35,32 +35,31 @@ generated function before the batch 2 deadline, and one wrong outcome fails the 
 5. The rule can be activated only if the report is valid; otherwise the previous rule stays
    active and the manager clarifies the text and recompiles. We do not auto-pick a winner:
    a failing test does not say whether the code or the test is wrong.
-6. At runtime both codes run; if they disagree or one fails, the instance goes to REVIEW
-   with the reason. A failure or disagreement is our doubt, never an outcome: it is not
-   mapped to a decision type such as ESCALAR (ADR 0009, 0014).
+6. The cross-check happens at compile time only. At runtime the rule runs **one** code,
+   agent A's (`Rule.code`); B's code and tests stay in the rule's report as the evidence
+   that validated it. A code that fails at runtime escalates the instance with the reason
+   (ADR 0016). Running both codes per instance was tried and dropped: it doubled the
+   sandbox cost for a disagreement the compile-time check already rules out.
 
 ## Consequences
 - Cost: two compilations per rule change, never per instance.
 - Two agents that misread an ambiguous text the same way still pass; the impact report
   before activation (ADR 0008) is the backstop.
-- **Known gap:** the engine today runs only code A (`engine.decide` calls
-  `run(rule.code_a, ...)`), starts one subprocess per instance and rule, and sends
-  a failed rule to the highest `requires_human` type (ESCALAR) instead of REVIEW. Fix
-  pending in a PR for Mateo: run A and B with one `run_batch` per rule and code,
-  compare, REVIEW on failure or disagreement.
+- A hand-written rule (`processes/rules-v3/`) has no second implementation: its report says
+  `origin: hand-written` and it is trusted because a person wrote and tested it.
 
 ## Evidence
-- `agents/compiler.py`: `_agent` (blind agent and repair loop), `validate` (pure
-  cross-check), `compile_rule` (A and B via `asyncio.gather`).
-- 8 unit tests in `agents/tests/test_compiler.py`: agreement; cross-test failure;
-  history disagreement; runtime error; `others` excludes the instance itself; end to end
-  (both agents get the same context); one self-repair round whose repair message contains
-  only the agent's own work; still broken after 2 repair rounds returns 502.
+- `agents/compiler.py`: the `compiler` Agent whose output validator runs the sandbox check
+  and the agent's own tests (a failure becomes a `ModelRetry`, ADR 0006), `validate` (pure
+  cross-check), `compile_rule` (A and B via `asyncio.gather`, B kept in
+  `report["alternative"]`).
+- 8 unit tests in `agents/tests/test_compiler.py` with scripted models: agreement;
+  cross-test failure; history disagreement; runtime error; `others` excludes the instance
+  itself; end to end (both agents get the same context); one self-repair round whose retry
+  prompt contains only the agent's own error; still broken after 2 repair rounds returns 502.
 - `rules/service.activate` refuses a rule whose report is not `valid`.
-- Engine cost of the fix, measured locally (macOS, `sandbox.run_batch`): today ~20 ms
-  per case per rule with one subprocess each (≈2 min for 540 files × 12 rules, blocking the
-  API); one batch per rule runs 540 cases in ~40 ms (~0.27 s with the full `others` list),
-  so running both codes stays well under a second per rule.
+- Engine cost, measured on the 500 invoices of batch 1 (`make demo`, Linux): 16 rules,
+  one subprocess per rule, one code each: 1 s for the whole run.
 
 ## Related
-ADR 0003, 0005, 0006, 0008, 0009, 0014. Plan P9, P21; `docs/agents-plan.md` §3.1.
+ADR 0003, 0005, 0006, 0008, 0014, 0016.

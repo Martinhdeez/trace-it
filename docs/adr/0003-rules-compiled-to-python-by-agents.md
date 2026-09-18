@@ -13,7 +13,7 @@ requires rules to execute deterministically.
 
 ## Alternatives considered
 - **Closed catalogue of primitives / rule DSL (rules as data: `equals`, `in_source`,
-  `tolerance`...).** Proposed in `.artifacts/specs/2026-09-18-reglas-sistema.md` §6.
+  `tolerance`...).** Proposed in `.artifacts/archive/2026-09-18-reglas-sistema.md` §6.
   - Pros: no generated code to secure; easy to render and diff; no LLM needed at runtime
     or at compile time.
   - Cons: every new kind of rule (duplicate across instances, cross-source discrepancy,

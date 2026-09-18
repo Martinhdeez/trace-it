@@ -1,5 +1,5 @@
 ---
-status: proposed  # pending Mateo's confirmation (owner of ADR 0001)
+status: accepted
 ---
 
 # Combine rule findings by decision-type priority only; process context never enters the automatic decision
@@ -33,10 +33,11 @@ compiler agents receive it as shared context (ADR 0003, 0004, 0007).
 ## Decision
 - The automatic decision is a pure function of the rule findings and the process's decision
   types: no rule fires → the default type; one or more fire → the type with the highest
-  `priority` among them. A tie between different types at the top priority, or a rule that
-  names an unknown type, is a configuration conflict and is not decided silently.
-- A rule that fails to run, or whose two codes disagree, sends the instance to REVIEW
-  (ADR 0004, 0009); it is never mapped to a decision type such as ESCALAR.
+  `priority` among them. A tie between different types at the top priority is a
+  configuration conflict and is not decided silently: the case escalates with the reason.
+- A rule that fails to run escalates the instance too: the case decides the process's
+  highest-priority `requires_human` type with `RULE_ERROR` as the reason (ADR 0016). Never
+  the default, never silently.
 - Process context (the description) feeds the compiler agents and the escalation assistant
   (explaining a case to the manager, proposing a rule). It never enters the automatic
   decision.
@@ -55,10 +56,9 @@ compiler agents receive it as shared context (ADR 0003, 0004, 0007).
   the process version (ADR 0015).
 
 ## Evidence
-- `decisions/engine.py` (`decide`): pure function over rule results, priorities and the
-  default type; no database, clock, network or LLM.
-- Known gap: `decidir` sends rule failures, unknown types and priority ties to the highest
-  `requires_human` type (ESCALAR for invoices); failures must go to REVIEW (ADR 0004).
+- `decisions/engine.py` (`decide`, `Outcomes`): pure function over rule results and the
+  process's priorities, default and escalation type; no database, clock, network or LLM.
+  `test_engine.py` pins the default, the priority order, the tie and the failed rule.
 
 ## Related
-ADR 0001 (refined), 0002, 0003, 0004, 0007, 0008, 0009, 0015.
+ADR 0001 (refined), 0002, 0003, 0004, 0007, 0008, 0015, 0016.

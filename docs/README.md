@@ -1,16 +1,18 @@
 # Documentation
 
-Start with [CONVENTIONS.md](CONVENTIONS.md): everything is written in English, and its glossary maps the Spanish terms of earlier code and documents to the ones in use now.
+Start with the [root README](../README.md) for what the system does, then:
 
 | Document | What it is |
 |---|---|
-| [CONVENTIONS.md](CONVENTIONS.md) | Language, naming and glossary. New code must follow it |
-| [adr/0001-configurable-decision-process.md](adr/0001-configurable-decision-process.md) | Accepted design: a configurable decision process with reviewed learning |
-| [process-packs.md](process-packs.md) | How a use case is configured as a process pack |
-| [invoice-payment-rules.md](invoice-payment-rules.md) | Where each rule of the invoice process comes from |
-| [team-guide.md](team-guide.md) | Team guide: git, backend structure, running it |
-| [application-blueprint.md](application-blueprint.md) | Application blueprint, working draft |
-| [mvp-plan.md](mvp-plan.md) | MVP plan and who does what |
-| [agents-plan.md](agents-plan.md) | Agents on PydanticAI |
-| [tasks-mateo.md](tasks-mateo.md) | Mateo's tasks |
-| [../processes/README.md](../processes/README.md) | Format of a process definition |
+| [CONVENTIONS.md](CONVENTIONS.md) | Language, naming and the contracts every feature shares |
+| [team-guide.md](team-guide.md) | Git flow, backend layout, running and testing locally |
+| [adr/README.md](adr/README.md) | Architecture decision records. ADR 0001 wins over everything else |
+| [invoice-payment-rules.md](invoice-payment-rules.md) | Where each of the 16 invoice rules comes from, and the team decisions behind them |
+| [sources-http.md](sources-http.md) | The HTTP source connector (the ERP): configuration and guarantees |
+| [ingestion/README.md](ingestion/README.md) | Document ingestion: PDF, OCR, workbook |
+| [../processes/README.md](../processes/README.md) | Format of a process pack |
+| [../tools/README.md](../tools/README.md) | The demo stand-ins that run the whole corpus |
+| [../backend/tests/golden/README.md](../backend/tests/golden/README.md) | The golden outcomes for batch 1 |
+
+Superseded plans and analyses are archived under [`.artifacts/`](../.artifacts/). They are
+history, not guidance.

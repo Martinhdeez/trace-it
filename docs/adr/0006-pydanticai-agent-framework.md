@@ -1,22 +1,23 @@
 ---
-status: accepted  # implementation in progress (docs/agents-plan.md §9, tasks 1-8)
+status: accepted
 ---
 
 # Build every agent on PydanticAI
 
 ## Context
-The agents (compilers A and B, escalation assistant, symbol extractors, and later a
-corrector) call LLMs through our own client over LiteLLM (`features/llm/client.py`).
-Each agent validates structured output by hand and has its own repair loop; there is no
-fallback when a provider fails (a 502); tests monkeypatch the client. We want the same
-things in every agent: typed output, bounded retries that return the error to the model,
-a model fallback chain, usage limits, cost per call and tests without network. We must not
-depend on one provider (P22), and control of the flow must stay in our code: the instance
-and rule state machines, the manager's queue and idempotency already live in PostgreSQL.
+The agents (compilers A and B and the escalation assistant) first called LLMs through our
+own client over LiteLLM, with a model per role in an `llm_config` table. Each agent
+validated structured output by hand and had its own repair loop; tests monkeypatched the
+client; two concurrent agents sharing one database session needed an identity-map
+workaround just to read their model name. We want the same things in every agent: typed
+output, bounded retries that return the error to the model, cost per call and tests
+without network. We must not depend on one provider, and control of the flow must stay in
+our code: the instance and rule state machines, the manager's queue and idempotency live
+in PostgreSQL.
 
 ## Alternatives considered
-- **Raw LiteLLM (current).**
-  - Pros: one interface for all providers; already working.
+- **Raw LiteLLM (the first version).**
+  - Pros: one interface for all providers; it worked.
   - Cons: validation, retry-with-error, fallback, limits and test doubles written per agent;
     we already had two different repair loops.
 - **LangGraph.**
@@ -37,31 +38,35 @@ and rule state machines, the manager's queue and idempotency already live in Pos
   - Cons: a fast-moving dependency; its comparison pages are written by Pydantic.
 
 ## Decision
-- `pydantic-ai-slim[openai,anthropic,google]>=2.45,<3`, pinned by `uv.lock`.
-- One `Agent` per agent type; model, settings, retries and prompt come from the active
-  configuration version of its role (ADR 0011) on every call.
-- `ModelRetry` only where the error helps the model fix itself: compiler (sandbox and its
-  own tests), assistant (decision must be a process type). **Never in extraction**
-  (ADR 0010).
-- A single entry point (`llm.ejecutar`) runs agents and writes one trace event per run:
-  config version, role, model that actually answered, prompt hash, tokens, cost, latency,
-  retries, result.
-- Not used: graphs, durable execution, deferred tools with human approval. Flow, state
+- `pydantic-ai-slim[anthropic,google,openai]>=2`, pinned by `uv.lock`.
+- One `Agent` per agent type (`compiler.compiler`, `assistant.assistant`), created once
+  with its instructions and `output_type`; the model is chosen per run from the role's
+  setting (`TRACE_COMPILER_A_MODEL`, `TRACE_COMPILER_B_MODEL`, `TRACE_ASSISTANT_MODEL`,
+  `provider:model` names). The two compilers are one Agent run with two roles.
+- `ModelRetry` only where the error helps the model fix itself, in output validators:
+  compiler (sandbox check and the agent's own tests, `retries=2`), assistant (decision must
+  be a process type, `retries=1`). Never in extraction (ADR 0010).
+- A single entry point (`agents/llm.run`) runs an agent for a role and returns the output
+  with a trace (role, model that answered, requests, retries, tokens, cost, latency) that
+  the caller records as an event. Every PydanticAI failure becomes one `AgentError` (502).
+- Not used yet: `FallbackModel` chains, `UsageLimits`, graphs or deferred tools. Flow, state
   and approval are ours.
 
 ## Consequences
-- `features/llm/client.py`, `llm_config` and `/llm/config` go away; the frontend moves to
-  `/agents/.../config`. Model names change from `anthropic/x` to `anthropic:x`.
-- If every model in a chain fails, the agent fails closed: rule stays draft, instance stays
-  in REVIEW, never a decision.
-- Behaviour marked "unconfirmed" in `docs/agents-plan.md` §11 (e.g. whether timeouts reach
-  `FallbackModel` as `ModelAPIError`) must be checked by tests in task 2.
+- `features/llm`, the `llm_config` table and `/llm/config` are gone; a model change is an
+  environment variable and a restart. Versioned agent configuration stays proposed
+  (ADR 0011).
+- When the model fails or gives nothing valid within the retries, the agent fails closed:
+  the rule stays a draft, the assistant answers 502, no decision changes.
+- Tests never need a key: `tests/support/models.py` scripts a `FunctionModel` per role.
 
 ## Evidence
-- APIs checked against the local PydanticAI v2 docs (`.context/pydantic-ai/`), references
-  in `docs/agents-plan.md` §12.
-- Cost and latency per stage will come from `GET /processes/{id}/metrics` over `events`
-  (plan §7.4); not measured yet.
+- `agents/llm.py`, `agents/compiler.py`, `agents/assistant.py`; 3 compiler tests and 5
+  assistant tests on scripted models (`agents/tests/`), including one self-repair round and
+  the 502 after the retries run out.
+- Real-model runs are opt-in: `make eval-compiler` compiles the 16 invoice rules and
+  compares them with the hand-written code (`backend/evals/`). Not run yet without keys.
 
 ## Related
-ADR 0002, 0004, 0010, 0011, 0013 (resilience). Plan P22, P23; `docs/agents-plan.md`.
+ADR 0002, 0004, 0010, 0011. The earlier migration plan is archived in
+`.artifacts/archive/agents-plan.md`.

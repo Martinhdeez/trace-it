@@ -28,4 +28,5 @@ Measured numbers (say how they were measured), tests that pin the behaviour and 
 references (`backend/app/features/...`). Keep measurements apart from estimates.
 
 ## Related
-Other ADRs, plan decisions (P-numbers in `docs/application-blueprint.md`), pull requests.
+Other ADRs, pull requests. P-numbers refer to the archived
+`.artifacts/archive/application-blueprint.md`.

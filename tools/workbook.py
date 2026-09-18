@@ -1,7 +1,7 @@
 """Read the challenge workbook into source rows.
 
-Stand-in, like `erp.py`. Two things matter here and will matter just as much in the real
-loader:
+Stand-in for a spreadsheet connector; the ERP already has one in `features/sources`. Two
+things matter here and will matter just as much in the real loader:
 
 - Headers are mapped to the names the rules use: `ProveedorID` -> `supplier_id`,
   `Importe_Total` -> `total_amount`, `Razon Social` -> `company_name`. Every rule in the

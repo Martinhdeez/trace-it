@@ -34,21 +34,22 @@ to relational data (processes, rules, decisions). Everything must start with one
 - **Layout:** `backend/app/features/<feature>/` with its own `model.py`, `schemas.py`,
   `service.py`, `router.py` and `tests/`, one owner per feature. Features talk through
   services and models, not each other's routers.
-- **Conventions:** English for code, docs and domain names from now on (process, rule,
-  instance, symbol, decision type, source, finding, `requires_human`, PENDING / REVIEW /
-  DECIDED, `manager`). Spanish names remain in the code until the rename lands (branch
-  `chore/english`).
+- **Conventions:** English for code, docs and domain names (process, rule, instance,
+  symbol, decision type, source, finding, `requires_human`, PENDING / DECIDED, `manager`);
+  see `docs/CONVENTIONS.md`.
 
 ## Consequences
 - Contributors need Docker for Postgres; there is no in-memory database for tests.
-- Sandbox work and LLM calls must stay off the event loop (`asyncio.to_thread`).
-- Until the rename lands, docs cite Spanish identifiers in parentheses.
+- Sandbox work must stay off the event loop (`asyncio.to_thread`).
+- The migration history was squashed into one `0001` once the schema settled; a local
+  database from before needs `make reset-db && make setup`.
 
 ## Evidence
 - `docker-compose.yml`, `Makefile`, `backend/pyproject.toml`, `backend/alembic/`.
-- `uv run pytest -q` on `dev` at `2b0fe4e` against local Postgres: **110 passed in 14 s**.
-- Feature folders today: `agents`, `decisions`, `extraction`, `sources`, `ingestion`, `llm`,
-  `processes`, `rules`, `traces`, `users`.
+- `uv run pytest -q` on `dev` at `d3745e9` against local Postgres, e2e included:
+  **258 passed in 53 s**.
+- Feature folders: `agents`, `decisions`, `ingestion`, `processes`, `rules`, `sources`,
+  `users`; shared code in `app/core` (settings, database, events) and `app/common`.
 
 ## Related
-ADR 0006, 0011. Plan §6; `docs/team-guide.md`.
+ADR 0006, 0011. `docs/team-guide.md`.

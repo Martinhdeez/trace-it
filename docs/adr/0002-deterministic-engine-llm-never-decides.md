@@ -42,19 +42,21 @@ requires published rules to execute deterministically.
 - Coverage depends on the rules. Anything the rules do not describe gets the default
   outcome; a process that wants "doubt means a person" must say so in a rule.
 - An LLM outage cannot change a decision: compilation fails closed (the previous rule stays
-  active), extraction leaves the instance in REVIEW, the assistant returns 502.
+  active), an unread instance stays PENDING, the assistant returns 502. A rule whose code
+  cannot run at decision time escalates the case with the reason (ADR 0016).
 - ADR 0001 describes a separate decision step that weighs findings together with process
   context. Today that step is the priority combination only; process context reaches the
-  compiler and the assistant, not the engine. See the PR that introduced this registry.
+  compiler and the assistant, not the engine (ADR 0014).
 
 ## Evidence
-- `backend/app/features/decisions/engine.py` (`decide`): pure, runs all rules, priority
-  combination, failed rule or same-priority conflict goes to a `requires_human` type.
-  8 tests in `decisions/tests/test_engine.py`.
+- `backend/app/features/decisions/engine.py` (`decide`): pure, runs all rules once over the
+  whole dataset, priority combination; a failed rule or a same-priority tie decides the
+  process's escalation type with the reason. 10 tests in `decisions/tests/test_engine.py`,
+  5 against the real sandbox in `test_sandbox_integration.py`.
 - `decisions/tests/test_rules_v3.py`: the 16 hand-written v3 rules run through the same
   engine and sandbox.
 - Assistant (`agents/assistant.py`) only suggests; the person resolves via
   `POST /instances/{id}/resolve`, stored as a new row.
 
 ## Related
-ADR 0001, 0003, 0004, 0009. Plan P7, P19, P22; `docs/agents-plan.md` §7.2.
+ADR 0001, 0003, 0004, 0014, 0016.

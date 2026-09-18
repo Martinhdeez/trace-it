@@ -1,5 +1,5 @@
 ---
-status: accepted  # implementation pending
+status: proposed
 ---
 
 # Snapshot the whole process as an immutable version on every activation
@@ -11,7 +11,7 @@ more than its rules: decision types (names, priorities, default, `requires_human
 the description (context for the compilers) and policies (ADR 0007) all change what the
 engine decides or how it is exported.
 
-Today only rules are versioned (states draft/active/retired, a hash of text + both codes),
+Today only rules are versioned (states draft/active/retired, a hash of text + code),
 and each decision stores the hash of the rule set it applied (ADR 0008). Everything else is
 edited in place: the pack loader upserts decision types and symbols with `session.merge` and
 overwrites the description (`processes/definition.load_definition`). Reloading a pack with
@@ -59,4 +59,4 @@ records which priorities it used.
 - `decisions/engine.py` (`hash_rules`): hash over rule id and rule hash.
 
 ## Related
-ADR 0001, 0007, 0008, 0014. Plan P13, P15; F9.
+ADR 0001, 0007, 0008, 0014.

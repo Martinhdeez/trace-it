@@ -1,5 +1,5 @@
 ---
-status: accepted  # agent config versions: implementation in progress (agents-plan task 1)
+status: proposed
 ---
 
 # Separate bootstrap files, versioned runtime configuration and secrets
@@ -11,16 +11,18 @@ LLM result must say exactly which configuration and prompt produced it, so confi
 can be compared with data. A fresh machine must reproduce a known setup with one command.
 API keys and ERP credentials must never reach git or the database.
 
-Today `config_llm` holds one model per role and is overwritten in place; the prompts are
-Python constants (`SISTEMA`) in each agent module.
+Today the model per role is a setting (`TRACE_COMPILER_A_MODEL`, ..., ADR 0006) read at
+start, and the prompts are Python constants (`SYSTEM`) in each agent module. Good enough
+for the hackathon; this ADR is what replaces it when tuning at runtime matters.
 
 ## Alternatives considered
 - **Environment variables / settings file only.**
   - Pros: simple; twelve-factor.
   - Cons: a change needs a restart; no history; no link from a result to its config.
-- **Mutable config row per role (current `config_llm`).**
-  - Pros: already there.
-  - Cons: overwriting loses experiments; old traces point to a config that no longer exists.
+- **Mutable config row per role (the first version, `llm_config`).**
+  - Pros: editable through the API.
+  - Cons: overwriting loses experiments; old traces point to a config that no longer
+    exists; reading it inside concurrent agents needed a session workaround. Removed.
 - **Prompts stored only in the database.**
   - Pros: editable at runtime.
   - Cons: not reviewable in PRs; lost on a reset.
@@ -55,10 +57,8 @@ Three layers:
 - A role without an active version refuses to run ("run make setup").
 
 ## Evidence
-- Current state: `features/llm/model.py` (`LLMConfig`), `features/llm/client.py`.
-- Design and endpoints: `docs/agents-plan.md` §4; layers table: `docs/process-packs.md`.
-- Planned tests (task 1): versions and activation against Postgres, partial unique index,
-  idempotent preset, export → apply gives the same config, invalid config → 422.
+- Current state: `app/core/config.py` (`Settings`), `agents/llm.py` (`model_for`).
+- Earlier design and endpoints: `.artifacts/archive/agents-plan.md` §4.
 
 ## Related
-ADR 0006, 0007, 0012. Plan P22, P23.
+ADR 0006, 0007, 0012.

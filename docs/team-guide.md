@@ -1,172 +1,87 @@
 # trace-it: team guide
 
-How we work in the trace-it repo: branches, commits, backend structure and how to run it.
-What we are building and why: `docs/application-blueprint.md`. Who does what: `docs/mvp-plan.md`.
+How we work in this repo: branches, backend layout, running it. What the system is and why: the root `README.md` and `docs/adr/`.
 
-## Quick start
+## Git
 
-Requirements: Docker and [uv](https://docs.astral.sh/uv/).
+`main` is the stable branch, the one we show; it only receives merges from `dev`. `dev` is where features come together, only through pull requests. Work happens on `feat/<topic>`, `fix/<problem>` or `docs/<topic>` branches (short, lowercase, hyphenated).
 
-```bash
-make setup      # .env, Postgres + backend, migrations and the "Invoice payment" process with its users
-```
-API at http://localhost:8000/docs (if port 8000 is taken: `BACKEND_PORT=8001 make setup`). Sign in as `martin@trace-it.local` (`manager`).
+1. Branch from an up-to-date `dev`: `git switch dev && git pull && git switch -c feat/erp-client`.
+2. Small commits in Conventional Commits form, English, imperative, scope = feature folder: `feat(rules): add impact check`, `fix(sources): retry on ORA-00600`, `docs: update team guide`. Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`.
+3. Before the PR: `git fetch && git rebase origin/dev`, then `make check`.
+4. `git push -u origin feat/erp-client && gh pr create --base dev --fill`. Someone else reviews. **Squash merge**: each feature lands in `dev` as one commit. Delete the branch.
 
-| Command | What it does |
-|---|---|
-| `make compile` | Compiles the draft rules (needs LLM keys in `.env`) |
-| `make erp` | Starts the challenge ERP |
-| `make test` | Backend tests against the local Postgres |
-| `make down` | Stops the containers (the data stays) |
-| `make reset-db` | **Deletes the database** |
+Never push directly to `dev` or `main`; never `--force` on shared branches (`--force-with-lease` on your own). No secrets in the repo: keys live in `.env`, which is ignored. One PR = one feature. If you change a shared contract (a model, a schema, a signature another feature calls), say so in the group first.
 
-Processes are JSON files in `processes/` (format in `processes/README.md`). `make setup` can be repeated: it duplicates nothing and does not touch active rules.
+## Backend layout
 
-## 1. Git
-
-### Branches
-| Branch | What for | Who writes to it |
-|---|---|---|
-| `main` | Stable version, the one we show | Only merged from `dev` when everything works |
-| `dev` | Integration: every feature comes together here | Only through pull requests |
-| `feat/<feature>` | A new feature | One person (or a pair) |
-| `fix/<problem>` | A fix | Whoever fixes it |
-| `docs/<topic>` | Documentation only | Anyone |
-
-Short, lowercase, hyphenated names: `feat/erp-client`, `feat/rule-compiler`, `fix/vat-rounding`.
-
-### Flow
-1. Always start from an up-to-date `dev`:
-   ```bash
-   git switch dev && git pull
-   git switch -c feat/erp-client
-   ```
-2. Small, frequent commits (see the format below).
-3. Before opening the PR, bring in the latest `dev` and check that everything passes:
-   ```bash
-   git fetch && git rebase origin/dev
-   cd backend && uv run ruff check . && uv run ruff format --check . && uv run pytest
-   ```
-4. Push the branch and open a pull request against `dev`:
-   ```bash
-   git push -u origin feat/erp-client
-   gh pr create --base dev --fill
-   ```
-5. Someone else reviews and approves. It is merged with **squash merge**, so each feature lands in `dev` as a single commit.
-6. Delete the branch after merging.
-
-### Rules
-- Never push directly to `dev` or `main`.
-- Never `git push --force` on shared branches. On your own branch, only `--force-with-lease`.
-- No secrets in the repo: keys go in `.env`, which is not committed. See `.env.example`.
-- One PR = one feature. If it grows too much, split it.
-- If you touch a shared contract (a model, schema or signature of another module), tell the group first.
-
-### Commit format
-Conventional Commits, in English, in the imperative:
-```
-feat(rules): add cross-test runner for compiled rules
-fix(sources): retry on ORA-00600 before renewing token
-docs: add team guide
-test(decisions): cover priority when several rules fire
-chore: bump pydantic-ai
-```
-Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`. The scope in parentheses is the feature folder.
-
-## 2. Backend structure
-
-Organized **by feature**, not by file type. Everything for a feature lives in its folder.
+Organised by feature, not by file type (ADR 0012).
 
 ```
 backend/
-  pyproject.toml          # dependencies (uv)
-  alembic/                # database migrations
+  pyproject.toml              # dependencies (uv)
+  alembic/versions/           # one migration: 0001_initial_schema.py
   app/
-    main.py               # creates the FastAPI app and mounts the routers
-    models.py             # imports every model (Alembic needs it)
-    core/                 # infrastructure: configuration, database
-    common/               # shared utilities: errors
+    main.py                   # FastAPI app, routers, TraceError -> {"code", "message"}
+    models.py                 # imports every model (Alembic needs it)
+    cli.py                    # `load <pack.json> [--compile] [--activate]`, `sources sync <pack.json>`
+    core/                     # config.py (Settings, TRACE_*), database.py, events.py (trace table + record())
+    common/exceptions.py      # TraceError and its subclasses
     features/
-      users/              # users and current user (X-User-Id header)
-      processes/          # processes, symbols, decision types
-      ingestion/          # files and instances, text extraction
-      sources/            # sources of truth: spreadsheets and external systems (ERP)
-      extraction/         # symbols with double LLM extraction
-      rules/              # rules: creation, statuses, activation
-      agents/             # agents (compiler A/B, assistant), sandbox, versioned config, presets and prompts
-      decisions/          # engine, history, audit, queues, export
-      traces/             # trace events
-      llm/                # PydanticAI runtime: model from config, run and trace
+      users/                  # users, roles manager/operator, X-User-Id
+      processes/              # process, decision types, symbols; definition.py loads a pack
+      rules/                  # rule life cycle draft -> active -> retired; compile, impact
+      decisions/              # engine.py (pure), service.py (run, queue, resolve, export), audit.py
+      instances/              # files, instances, symbols.py (stored shape <-> rule shape)
+      sources/                # sources of truth, snapshots; http_connector.py (the ERP)
+      agents/                 # llm.py (PydanticAI seam), compiler.py, assistant.py, sandbox.py
+  tests/
+    support/                  # challenge.py, pack.py, fakes.py, models.py, prepare_db.py
+    golden/                   # expected outcomes of batch 1 (README there)
+    e2e/                      # golden engine run, API flow
+  evals/                      # opt-in compiler evaluation against the hand-written rules
 ```
 
-### Inside each feature
-| File | What it holds |
+Inside a feature: `model.py` (SQLAlchemy tables), `schemas.py` (Pydantic in/out), `service.py` (logic, takes the session), `router.py` (thin: validate, call the service, return), `tests/`. A router runs no SQL. A feature imports another's `model.py` or `service.py`, never its `router.py`. Errors are `TraceError` subclasses (`app/common/exceptions.py`); the API maps them to status codes. Naming and vocabulary: `docs/CONVENTIONS.md`.
+
+Agents (compiler A/B, assistant) run on PydanticAI: ADR 0006 and `features/agents/llm.py`. The model per role comes from `Settings` (`TRACE_*_MODEL`). Tests script the model with `FunctionModel` (`tests/support/models.py`): no network, no keys. Before writing PydanticAI code, read `.context/pydantic-ai/START-HERE.md`: the v2 API differs from what a model remembers.
+
+## Running locally
+
+Requirements: Docker, [uv](https://docs.astral.sh/uv/), `pdftotext` (poppler) for the demo and the golden tests.
+
+| Command | What it does |
 |---|---|
-| `model.py` | Tables (SQLAlchemy) |
-| `schemas.py` | API input and output (Pydantic) |
-| `service.py` | Business logic. Receives the database session |
-| `router.py` | Endpoints. Thin: validate, call the service and return |
-| `tests/` | That feature's tests (`test_*.py`) |
-| others | Feature-specific pieces with clear names: `engine.py`, `sandbox.py`, `erp.py`… |
+| `make setup` | `.env` from the example, Postgres + backend (`docker compose`), migrations, loads `processes/invoice-payment.json`. Repeatable. API at http://localhost:8000/docs (`BACKEND_PORT=8001 make setup` if 8000 is taken) |
+| `make erp` | Starts the challenge ERP from the submodule (port 8009). Keep it running in another terminal |
+| `make erp-sync` | Downloads the ERP into a new snapshot (`docs/sources-http.md`) |
+| `make activate` | Activates every draft rule whose code is validated: the hand-written `rules-v3/` need no model |
+| `make compile` | Compiles the draft rules with the two agents (needs LLM keys) |
+| `make demo` | The whole invoice process over the 500 challenge PDFs, through the API: `output/outcomes.jsonl` (`tools/README.md`) |
+| `make test` | Unit tests (`-m "not e2e and not llm"`) |
+| `make test-e2e` | Golden outcomes of batch 1 and the API flow (needs the challenge submodule) |
+| `make check` | `ruff check`, `ruff format --check`, then `test` and `test-e2e`. Run before every PR |
+| `make eval-compiler` | Opt-in, calls real LLMs: compiles the 16 rules and compares with `rules-v3/`; report in `backend/evals/reports/` |
+| `make down` | Stops the containers; data stays |
+| `make reset-db` | Deletes the database volume. Then `make setup` |
 
-Rules:
-- A router does **not** run SQL queries: it calls the service.
-- A feature may import another feature's `model.py` or `service.py`, but never its `router.py`.
-- Errors are raised with the classes in `app/common/exceptions.py` (`NotFoundError`, `ConflictError`…). The API turns them into JSON responses.
-- Whatever is not done yet raises `NotImplementedYetError` (the API answers 501). That way the contract exists and the frontend can work against it.
-- All code is in English (identifiers, database, API, messages, prompts): see `docs/CONVENTIONS.md` and its glossary.
+Without Docker for the backend (faster loop): `docker compose up db -d`, then in `backend/`: `uv sync`, `uv run alembic upgrade head`, `uv run uvicorn app.main:app --reload`.
 
-### Agents (LLM)
-Every agent uses PydanticAI v2. Architecture, versioned configuration and tasks: `docs/agents-plan.md`.
-- Every LLM call goes through `features/llm/run.py`, with an `agent_config` role: that way it lands in the trace with its configuration version, cost and latency.
-- Prompts are files in `features/agents/prompts/`. Case data goes in the message, never in the prompt.
-- In extraction, a failing validator sends the instance to `REVIEW`; it is never fed back to the model with `ModelRetry`.
-- Tests without network: `FunctionModel`/`TestModel` with `agent.override(...)`.
-- **Before writing PydanticAI code, check `.context/pydantic-ai/`** (start with `START-HERE.md` and `SECTIONS.md`, and open only the section you need). This applies to people and to coding assistants: the API changed a lot in v2 and what a model remembers is usually v1. `llms-full.txt` (5.5 MB, the whole documentation) is not in the repo: download it from https://ai.pydantic.dev/llms-full.txt if you need it for searching.
+## Environment
 
-## 3. Running locally
+`.env.example` lists everything; `make setup` copies it to `.env`.
 
-Requirements: Docker and [uv](https://docs.astral.sh/uv/).
-
-```bash
-cp .env.example .env              # add your LLM keys
-docker compose up --build         # Postgres + backend at http://localhost:8000
-```
-- API docs: http://localhost:8000/docs
-- Migrations are applied automatically when the backend starts.
-- If port 8000 is taken: `BACKEND_PORT=8001 docker compose up --build`.
-
-Working on the backend without Docker (faster for tests):
-```bash
-docker compose up db -d
-cd backend
-uv sync
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload
-uv run pytest
-uv run ruff check . && uv run ruff format .
-```
-
-Challenge ERP (in another terminal):
-```bash
-cd .context/500-sombras-de-alberto && make erp
-```
-
-### Changing the database
-1. Edit or create your feature's `model.py`. If the table is new, import it in `app/models.py`.
-2. Generate the migration and **review it** before pushing:
-   ```bash
-   uv run alembic revision --autogenerate -m "add column x to rules"
-   ```
-3. If two people generate migrations at the same time, there will be two "heads". Resolve it with `uv run alembic merge heads` and tell the group.
-
-## 4. Who touches what
-| Person | Folders |
+| Variable | Purpose |
 |---|---|
-| Martín | `features/agents/` (compiler, sandbox, assistant, agent config), `features/llm/` |
-| Mateo | `features/rules/`, `features/decisions/` (engine, audit, API), `features/processes/`, `features/users/` |
-| Álvaro | `features/ingestion/`, `features/sources/` (workbook, ERP), `features/extraction/` |
-| Carlos | `frontend/` |
-| Varsovia | `docs/`, ADRs, demo |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` | LLM providers. Only `make compile`, `make eval-compiler` and the assistant need them |
+| `TRACE_ERP_USER`, `TRACE_ERP_PASSWORD`, `TRACE_ERP_URL` | The ERP connector, named in `processes/invoice-payment/sources.json`. Docker sets the URL to `host.docker.internal:8009` |
+| `TRACE_COMPILER_A_MODEL`, `TRACE_COMPILER_B_MODEL`, `TRACE_ASSISTANT_MODEL` | One model per agent role, `provider:model`. Defaults in `app/core/config.py`; A and B must differ (ADR 0004) |
+| `TRACE_DATABASE_URL` | Set by Docker; the Makefile overrides it for tests |
 
-If you need to change something in someone else's folder, talk to them first.
+## Database and migrations
+
+The migration history was squashed into `alembic/versions/0001_initial_schema.py`. An existing local database predates it: `make reset-db && make setup`.
+
+To change a table: edit the feature's `model.py` (a new table must be imported in `app/models.py`), then in `backend/`: `uv run alembic revision --autogenerate -m "add x to rules"`. Read the generated file before committing. Two branches generating migrations at once leave two heads: `uv run alembic merge heads` and tell the group.
+
+Tests use their own database, `TEST_DB_URL` in the `Makefile` (default `trace_test` on the same Postgres). `make test` recreates it empty on every run (`tests/support/prepare_db.py`) and applies the migrations, so tests never touch the database `make setup` filled for the demo.

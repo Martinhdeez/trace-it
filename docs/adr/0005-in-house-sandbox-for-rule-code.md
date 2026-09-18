@@ -46,8 +46,11 @@ and the blind double compilation (ADR 0004) reduce but do not close that path.
   exist); stdout captured; fresh namespace and decimal context per case.
 - **Separate process:** `python -I -S -B`, empty environment, temp cwd, wall timeout (kill),
   `RLIMIT_CPU`, `RLIMIT_FSIZE=0`, and on Linux `RLIMIT_AS` 512 MB.
-- **Batch execution** (`ejecutar_lote`): one subprocess for many cases; a bad case fails
-  alone; a malformed result is an error, never "did not fire".
+- **Batch execution:** one subprocess for many cases; a bad case fails alone; a malformed
+  result is an error, never "did not fire". `run_batch` takes explicit cases (compiler
+  tests); `run_dataset` takes the instances plus the shared sources and population once,
+  and the child derives each instance's `others`, so 500 instances cross the process
+  boundary in one payload instead of 500 copies of the whole batch.
 
 ## Consequences
 - No network, PID or filesystem namespace today. Accepted for code our own compilers write
@@ -62,8 +65,10 @@ and the blind double compilation (ADR 0004) reduce but do not close that path.
   malformed results and exceptions; forbidden code rejected before running (dunder and
   underscore names, frame attributes, non-allowlisted imports); `re.enum.sys` is not
   reachable; infinite loop killed by timeout; one bad case in a batch fails only that case.
-- Measured locally (macOS): one batch of 540 cases in ~0.1 s; ~20 ms per case when each
-  case gets its own subprocess (`ejecutar`).
+- Measured on batch 1 (Linux): 500 instances × 16 rules through `run_dataset` in 1 s
+  (`make demo`); `test_500_instances_run_each_rule_once` pins one subprocess per rule.
+  Repeating the population per case (the earlier `run_batch` path) hit the 512 MB limit
+  at 500 instances and escalated every invoice, which is why `run_dataset` exists.
 
 ## Related
-ADR 0003, 0004, 0010 (compiled extractors would reuse it). Plan P8; `docs/agents-plan.md` §5.
+ADR 0003, 0004, 0016.

@@ -1,8 +1,14 @@
 ---
-status: accepted  # `engine` export merged in PR #17; `final` and REVIEW on rule failure pending
+status: superseded
+superseded_by: 0016
 ---
 
 # Treat REVIEW as an internal state and export the decision the process policy names
+
+> Superseded by ADR 0016 on 2026-09-19. The REVIEW state and `human_kind` are gone: a
+> rule that cannot be evaluated escalates the case to the process's human decision type,
+> and the export is the engine's decision. Kept as the record of why export follows the
+> engine and why one line per file name.
 
 ## Context
 The challenge has a binary filter: exactly one line per file of both batches, and every
