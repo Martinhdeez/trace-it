@@ -2,12 +2,14 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Miralmar: Vite",
+      "name": "Frontend · simulador",
+      "detail": "Frontend solo, con datos del lote 1 en memoria. No necesita backend.",
       "type": "node",
       "request": "launch",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
-      "cwd": "${workspaceFolder}/web",
+      "cwd": "${workspaceFolder}/frontend",
+      "env": { "VITE_API_MODE": "mock" },
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"],
       "serverReadyAction": {
@@ -17,17 +19,56 @@
       }
     },
     {
-      "name": "Miralmar: Chrome",
+      "name": "Frontend · backend real",
+      "detail": "Cada llamada va al backend; lo que aún responde 501 cae al simulador.",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
+      "cwd": "${workspaceFolder}/frontend",
+      "env": { "VITE_API_MODE": "auto" },
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "serverReadyAction": {
+        "pattern": "Local:\\s+(https?://\\S+)",
+        "uriFormat": "%s",
+        "action": "openExternally"
+      }
+    },
+    {
+      "name": "Frontend · Chrome",
       "type": "chrome",
       "request": "launch",
       "url": "http://127.0.0.1:5173",
-      "webRoot": "${workspaceFolder}/web/src"
+      "webRoot": "${workspaceFolder}/frontend/src"
+    },
+    {
+      "name": "Backend · uvicorn",
+      "detail": "FastAPI con recarga. Necesita Postgres: lanza antes la tarea «db: up».",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--reload", "--port", "8000"],
+      "cwd": "${workspaceFolder}/backend",
+      "env": {
+        "TRACE_DATABASE_URL": "postgresql+psycopg://trace:trace@127.0.0.1:5432/trace",
+        "TRACE_ERP_URL": "http://127.0.0.1:8009"
+      },
+      "console": "integratedTerminal",
+      "preLaunchTask": "db: up",
+      "justMyCode": false
     }
   ],
   "compounds": [
     {
-      "name": "Launch Miralmar",
-      "configurations": ["Miralmar: Vite", "Miralmar: Chrome"],
+      "name": "▶ Demo (frontend + Chrome)",
+      "detail": "Lo que se enseña: frontend con el lote 1 cargado.",
+      "configurations": ["Frontend · simulador", "Frontend · Chrome"],
+      "stopAll": true
+    },
+    {
+      "name": "▶ Todo (backend + frontend + Chrome)",
+      "configurations": ["Backend · uvicorn", "Frontend · backend real", "Frontend · Chrome"],
       "stopAll": true
     }
   ]
