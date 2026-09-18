@@ -13,11 +13,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.agents import sandbox
-from app.features.decisions.engine import decide_batch
+from app.features.decisions.engine import decide_dataset
 from app.features.decisions.model import ENGINE, Finding
 from app.features.decisions.service import (
-    _cases,
     _current_sources,
+    _dataset,
     _instances,
     _latest_decisions,
     _outcomes,
@@ -80,9 +80,16 @@ async def check(session: AsyncSession, process_id: int, proposed: list[Rule]) ->
     latest = await _latest_decisions(session, instances)
     # nothing decided yet, or nothing to decide it with, is skipped
     decided = [i for i in instances if latest.get(i.id) is not None and i.symbols is not None]
-    cases = _cases(instances, decided, sources)
+    dataset, population = _dataset(instances, decided)
     verdicts = await asyncio.to_thread(
-        decide_batch, proposed, outcomes.priorities, outcomes.default, cases, sandbox.run_batch
+        decide_dataset,
+        proposed,
+        outcomes.priorities,
+        outcomes.default,
+        dataset,
+        sources,
+        population,
+        sandbox.run_dataset,
     )
 
     unchanged = 0

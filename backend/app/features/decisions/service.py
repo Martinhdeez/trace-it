@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError, NotFoundError
 from app.features.agents import sandbox
-from app.features.decisions.engine import decide_batch
+from app.features.decisions.engine import decide_dataset
 from app.features.decisions.model import ENGINE, Decision, Finding
 from app.features.decisions.schemas import (
     DecisionOut,
@@ -105,21 +105,19 @@ def _out(instance: Instance, decision: Decision | None) -> InstanceOut:
     )
 
 
-def _cases(
-    instances: list[Instance], selected: list[Instance], sources: dict[str, Any]
-) -> list[tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]]:
-    """The rule contract's arguments for each selected instance: its symbols as plain values,
-    the sources, and every other instance with symbols. Each entry of `others` carries
-    `_instance` so a rule can name the duplicate it found."""
-    flat = {
-        i.id: {**flatten_symbols(i.symbols), "_instance": i.name}
+def _dataset(
+    instances: list[Instance], selected: list[Instance]
+) -> tuple[list[tuple[int, dict[str, Any]]], list[tuple[int, dict[str, Any]]]]:
+    """What the engine needs, without repeating the shared context per instance: the symbols
+    of each selected instance as plain values, and the whole population it may compare
+    itself against. Each population entry carries `_instance` so a rule can name the
+    duplicate it found; the engine leaves an instance out of its own `others`."""
+    population = [
+        (i.id, {**flatten_symbols(i.symbols), "_instance": i.name})
         for i in instances
         if i.symbols is not None
-    }
-    return [
-        (flatten_symbols(i.symbols), sources, [s for iid, s in flat.items() if iid != i.id])
-        for i in selected
     ]
+    return [(i.id, flatten_symbols(i.symbols)) for i in selected], population
 
 
 async def run(session: AsyncSession, process_id: int) -> RunSummary:
@@ -145,10 +143,17 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
     sources = await _current_sources(session, process_id)
     instances = await _instances(session, process_id)
     pending = [i for i in instances if i.status == "PENDING" and i.symbols is not None]
-    cases = _cases(instances, pending, sources)
+    dataset, population = _dataset(instances, pending)
     # One subprocess per rule and code, off the event loop (ADR 0004).
     verdicts = await asyncio.to_thread(
-        decide_batch, rules, outcomes.priorities, outcomes.default, cases, sandbox.run_batch
+        decide_dataset,
+        rules,
+        outcomes.priorities,
+        outcomes.default,
+        dataset,
+        sources,
+        population,
+        sandbox.run_dataset,
     )
 
     count: Counter[str] = Counter()

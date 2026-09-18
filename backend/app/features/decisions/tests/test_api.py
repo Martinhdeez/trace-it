@@ -82,6 +82,18 @@ def fake_batch(code: str, cases: list) -> list:
     return [fake_sandbox(code, *case) for case in cases]
 
 
+def fake_dataset(code: str, instances: list, sources: dict, population: list) -> list:
+    return [
+        fake_sandbox(
+            instance=instance,
+            code=code,
+            sources=sources,
+            others=[symbols for other_id, symbols in population if other_id != instance_id],
+        )
+        for instance_id, instance in instances
+    ]
+
+
 async def seed(process_id: int) -> None:
     """Everything Álvaro's ingestion and Martín's compiler will produce later."""
     async with session_factory() as session:
@@ -146,7 +158,7 @@ async def create_process(api: AsyncClient, suffix: str, role: str) -> tuple[int,
 
 
 async def test_run_review_and_export(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await create_process(api, uuid.uuid4().hex[:8], "manager")
@@ -232,7 +244,7 @@ async def test_run_review_and_export(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_resolve_rejects_a_decision_not_in_the_process(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await create_process(api, uuid.uuid4().hex[:8], "operator")
@@ -252,7 +264,7 @@ async def test_resolve_rejects_a_decision_not_in_the_process(
 async def test_export_a_duplicate_name_gives_a_single_line(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await create_process(api, uuid.uuid4().hex[:8], "operator")
@@ -297,7 +309,7 @@ async def test_export_a_duplicate_name_gives_a_single_line(
 async def test_a_priority_tie_at_runtime_goes_to_review(monkeypatch: pytest.MonkeyPatch) -> None:
     """The loader refuses two types with one priority; one inserted directly is still caught:
     the instance goes to REVIEW with the reason, and no decision is written."""
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, _ = await create_process(api, uuid.uuid4().hex[:8], "operator")
@@ -348,14 +360,17 @@ def test_flat_symbols_are_refused_on_write() -> None:
         Instance(name="x.pdf", symbols={"nif": "B96233419"})
 
 
-def recording(seen: list, batch: Any = fake_batch) -> Any:
-    """`batch` that also keeps every case it was handed."""
+def recording(seen: list, dataset: Any = fake_dataset) -> Any:
+    """`dataset` that also keeps what each instance's rule code was handed."""
 
-    def run_batch(code: str, cases: list) -> list:
-        seen.extend(cases)
-        return batch(code, cases)
+    def run_dataset(code: str, instances: list, sources: dict, population: list) -> list:
+        seen.extend(
+            (symbols, sources, [other for oid, other in population if oid != instance_id])
+            for instance_id, symbols in instances
+        )
+        return dataset(code, instances, sources, population)
 
-    return run_batch
+    return run_dataset
 
 
 def assert_flat(case: tuple) -> None:
@@ -371,7 +386,7 @@ def assert_flat(case: tuple) -> None:
 async def test_rule_code_gets_flat_values(monkeypatch: pytest.MonkeyPatch) -> None:
     """The database holds {value, origin}; rule code only ever sees the values."""
     seen: list = []
-    monkeypatch.setattr(sandbox, "run_batch", recording(seen))
+    monkeypatch.setattr(sandbox, "run_dataset", recording(seen))
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, _ = await create_process(api, uuid.uuid4().hex[:8], "operator")
         assert (await api.post(f"/processes/{process_id}/run")).status_code == 200
