@@ -50,6 +50,34 @@ Flip fact: whether norm v4 arrives as natural-language text (favors 5 + 13) or a
 - Team: 3 back/data (user also drives filter + product), 1 product (winning ideas after filter), 1 frontend. ~36 h, AI-assisted.
 - Cost is a plus, not a limit: add saving mechanisms (cache, tiered models) without risking accuracy.
 
+## Product shape (draft, 2026-09-18)
+One engine, three surfaces:
+- **Engine (worker + CLI):** ingest folder → extract → verify → decide → outcomes.jsonl. State in SQLite, idempotent by file hash.
+- **Alberto's console (web):** queue of invoices needing a human, escalations with reasons, full trace of any decision.
+- **Memory:** every human confirmation or rule change carries a "why", linked to the invoice that caused it; searchable later.
+
+### Rules: deterministic but easy to change (user requirement)
+- Code holds a small catalog of tested check primitives (field present, equals master data, amount within tolerance, arithmetic, valid date, ERP status, unique by key).
+- Config (versioned, editable at runtime from the web; YAML was discarded, see specs/2026-09-18-reglas-sistema.md) combines primitives with parameters into rules, each emitting an anomaly code; a separate outcome policy maps codes to PAGAR / NO_PAGAR / ESCALAR with precedence.
+- A profile per invoice type or context bundles fields, data sources, rule set and outcome policy.
+- Every decision records the rules version; a rule change replays past decisions and shows the impact before it is applied.
+- An LLM may draft config from norm text, a human approves; never at runtime.
+- Limit: a genuinely new kind of check needs a new primitive (code); everything else is config.
+
+### Iteration 1 (Fri night → Sat ~14:00): correct outcomes + traces
+1. Ingest with content hash (dedupe, resumable).
+2. Extraction: pdftotext + normalization (strip zero-width chars) for text PDFs; vision LLM with JSON schema for scans; two independent extractions must agree, otherwise human confirmation.
+3. ERP client: login/renew token, retry ORA-00600, honor Retry-After, full download to a local snapshot.
+4. Deterministic rules engine (norm v3) emitting anomaly codes; outcome from a versioned table.
+5. SQLite state machine + event log (step, input, output, latency, retries, cost).
+6. CLI: `run`, `status`, `trace <file>`, `export`.
+7. Minimal web: invoice list, trace detail, confirmation queue with mandatory "why".
+
+### Iteration 2 (Sat afternoon/evening): change and memory
+Batch 2 + norm v4 as a new rules version, impact diff and selective reprocessing, question answering over memory, failure injection demo, measured cost/throughput.
+
+### Iteration 3 (Sun morning): albertitos_plan.pdf, demo script, bonus polish.
+
 ## Open questions
 - Team size, skills, hours available, who defends.
 - LLM budget / API keys; is using the Maisa platform expected or rewarded?
