@@ -12,10 +12,10 @@ Desde la raíz, con Python 3.12 y uv:
 cd backend
 uv sync --locked --group dev
 uv run python -m app.features.ingesta.tools.download_models
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+uv run uvicorn app.features.ingesta.application:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-Abrir <http://127.0.0.1:8000/docs>. PDF nativo y Excel funcionan sin descargar modelos. Este servicio local no necesita Postgres; el arranque con Docker del producto completo todavía no está implementado en esta rama.
+Abrir <http://127.0.0.1:8000/docs>. PDF nativo y Excel funcionan sin descargar modelos. La ingesta independiente no necesita Postgres. El backend general de dev se conserva: `uvicorn app.main:app` arranca sus routers; la ingesta aún no está conectada a sus procesos e instancias.
 
 ## Organización por funcionalidades
 

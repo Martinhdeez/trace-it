@@ -1,6 +1,6 @@
 # API de ingesta
 
-Desde `backend/`: `uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1`.
+Desde `backend/`: `uv run uvicorn app.features.ingesta.application:create_app --factory --host 127.0.0.1 --port 8000 --workers 1`.
 
 Swagger en `/docs`, referencia en `/redoc` y contrato en `/openapi.json`. Rutas agrupadas bajo `Ingestion`.
 
@@ -43,6 +43,6 @@ Tras reiniciar se recuperan los trabajos en curso. Un fallo transitorio del prov
 | 422 | Entrada, tamaño, estructura o formato no admitido. |
 | 500 | Fallo interno; detalle técnico en el log. |
 
-Los errores de aplicación devuelven `{"detail":"mensaje"}`; la validación de parámetros de FastAPI puede devolver una lista en `detail`.
+Los errores de aplicación siguen dev: `{"code":"invalid_document","message":"mensaje"}`; la validación de parámetros de FastAPI puede devolver una lista en `detail`.
 
 `GET /health` informa de configuración y modelos; no prueba inferencia remota. Un proceso Uvicorn por directorio de datos. Una exposición externa requiere autenticación y límites de carga en el proxy.

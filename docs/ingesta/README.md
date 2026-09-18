@@ -9,7 +9,7 @@ Desde `backend/`, con Python 3.12 y `uv`:
 ```powershell
 uv sync --locked --group dev
 uv run python -m app.features.ingesta.tools.download_models
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+uv run uvicorn app.features.ingesta.application:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
 ```
 
 Abrir http://127.0.0.1:8000/docs. La descarga de modelos se hace una vez; el servicio OCR funciona después sin conexión. Las revisiones de Hugging Face están fijadas en `scripts/download_models.py`, y los hashes quedan en `.models/manifest.json` y `.models/verify/manifest.json`. El lector latino móvil y el verificador local ocupan juntos unos 102 MB de pesos ONNX.

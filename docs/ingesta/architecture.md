@@ -4,7 +4,7 @@
 
 La referencia es [la guía del equipo](../guia-equipo.md). `backend/app/features/ingesta/` contiene recepción, PDF, OCR, cola y evidencia. `features/fuentes/` contiene Excel y su servicio público. Cada funcionalidad conserva sus tests. Evidencia, normalización y errores comunes viven en `app/common/`.
 
-El router valida y llama al servicio. `ingesta.service` consume `fuentes.service`, sin importar routers ajenos. `app/main.py` expone la aplicación local; `ingesta.application.create_app` concentra composición y ciclo de vida para la integración posterior.
+El router valida y llama al servicio. `ingesta.service` consume `fuentes.service`, sin importar routers ajenos. `app/main.py` conserva el arranque general de dev. `ingesta.application.create_app` ofrece la API independiente con composición y ciclo de vida propios; sus rutas aún no están montadas en la aplicación general.
 
 `ingesta/pdf/invoice.py` es un adaptador determinista de campos de factura de los formatos observados. No implementa los símbolos genéricos por proceso de `features/extraccion/`. Conserva texto completo y evidencia para esa integración.
 
@@ -30,7 +30,7 @@ SQLite WAL guarda resultados y cola; los originales permanecen en disco. Un proc
 1. **Persistencia:** el plano prevé SQLAlchemy, sesiones y Alembic sobre Postgres. Hay que acordar la integración de esta cola SQLite aislada.
 2. **Extracción:** P20 pide dos extracciones LLM independientes por proceso. Esta entrega implementa la cascada determinista solicitada y un adaptador visual opcional; no cumple todavía P20.
 3. **Estados y nombres:** falta acordar la traducción de `COMPLETE`/`NEEDS_REVIEW` a instancias y `REVISION`. Los campos técnicos actuales están en inglés y no sustituyen los símbolos configurables por proceso.
-4. **Contratos compartidos:** `app/main.py`, `app/common/` y las rutas HTTP se presentan para revisión. No hay Docker, ERP, autenticación ni migraciones en esta entrega.
+4. **Contratos compartidos:** Se conservan `app/main.py`, los errores comunes y las migraciones de dev. La API de ingesta queda separada, pendiente de vinculación a procesos/instancias y autenticación; ERP no está implementado en esta feature.
 5. **Calidad OCR:** quedan errores observados en documentos pendientes. Las referencias visuales requieren validación humana independiente.
 
 Corresponde publicar `data-ingestion` y revisar un PR contra `dev`, sin push directo ni integración automática. El nombre de esta rama se conserva por instrucción del usuario; para nuevas ramas la guía recomienda `feat/<funcionalidad>`. El equipo decide el squash al integrar.
@@ -41,4 +41,4 @@ Corresponde publicar `data-ingestion` y revisar un PR contra `dev`, sin push dir
 - [Ruff: formato](https://docs.astral.sh/ruff/formatter/) y [configuración](https://docs.astral.sh/ruff/configuration/): configuración versionada, imports ordenados y comprobación automática.
 - [PyPA: src y flat layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/): se evaluó `src`; prevalece `backend/app` según el equipo, con instalación editable y lockfile.
 
-Formato: cuatro espacios, comillas dobles, 110 columnas y LF. `.editorconfig`, `.gitattributes` y Ruff mantienen el criterio entre Windows y CI.
+Formato: cuatro espacios, comillas dobles, 100 columnas y LF. `.editorconfig`, `.gitattributes` y Ruff mantienen el criterio entre Windows y CI.
