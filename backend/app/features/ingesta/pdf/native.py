@@ -20,9 +20,9 @@ def native_pages(content: bytes, settings: Settings):
             raise ValueError("PDF page count exceeds limit or document is empty")
         for index, page in enumerate(document):
             lines = []
-            for block in page.get_text("dict", flags=pymupdf.TEXTFLAGS_DICT & ~pymupdf.TEXT_PRESERVE_IMAGES)[
-                "blocks"
-            ]:
+            for block in page.get_text(
+                "dict", flags=pymupdf.TEXTFLAGS_DICT & ~pymupdf.TEXT_PRESERVE_IMAGES
+            )["blocks"]:
                 for line in block.get("lines", []):
                     raw = "".join(span["text"] for span in line["spans"])
                     if raw.strip():
@@ -37,7 +37,9 @@ def native_pages(content: bytes, settings: Settings):
                         )
             lines.sort(key=lambda line: (round(line.bbox[1], 1), line.bbox[0]))
             image_area = sum(
-                abs((r[2] - r[0]) * (r[3] - r[1])) for image in page.get_image_info() for r in [image["bbox"]]
+                abs((r[2] - r[0]) * (r[3] - r[1]))
+                for image in page.get_image_info()
+                for r in [image["bbox"]]
             )
             pages.append(
                 {
@@ -56,5 +58,7 @@ def render(content: bytes, page_number: int, settings: Settings):
         scale = settings.ocr_dpi / 72
         area = max(1, page.rect.width * page.rect.height)
         scale = min(scale, (settings.max_image_pixels / area) ** 0.5)
-        pixmap = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False, colorspace=pymupdf.csRGB)
+        pixmap = page.get_pixmap(
+            matrix=pymupdf.Matrix(scale, scale), alpha=False, colorspace=pymupdf.csRGB
+        )
         return pixmap.tobytes("png")

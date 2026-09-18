@@ -35,9 +35,14 @@ class LocalOCR:
     def verify(self, png: bytes, page: int, point_size: tuple[float, float]):
         with self.lock:
             if self.verifier is None:
-                self.verifier = LocalOCR(replace(self.settings, model_dir=self.settings.model_dir / "verify"))
+                self.verifier = LocalOCR(
+                    replace(self.settings, model_dir=self.settings.model_dir / "verify")
+                )
         lines = self.verifier.recognize(png, page, point_size)
-        return [line.model_copy(update={"id": line.id.replace(":ocr:", ":ocr-verify:")}) for line in lines]
+        return [
+            line.model_copy(update={"id": line.id.replace(":ocr:", ":ocr-verify:")})
+            for line in lines
+        ]
 
     def recognize(self, png: bytes, page: int, point_size: tuple[float, float]):
         png, preprocessing, _ = prepare_ocr_image(png)
@@ -63,7 +68,7 @@ class LocalOCR:
         if not result.txts:
             return []
         entries = []
-        for box, text, confidence in zip(result.boxes, result.txts, result.scores):
+        for box, text, confidence in zip(result.boxes, result.txts, result.scores, strict=True):
             x0, y0 = box.min(axis=0)
             x1, y1 = box.max(axis=0)
             x0, x1, y0, y1 = x0 + left, x1 + left, y0 + top, y1 + top
@@ -129,15 +134,24 @@ class LocalOCR:
         import onnxruntime as ort
         from rapidocr import OCRVersion, RapidOCR
 
-        if self.settings.ocr_use_cuda and "CUDAExecutionProvider" not in ort.get_available_providers():
+        if (
+            self.settings.ocr_use_cuda
+            and "CUDAExecutionProvider" not in ort.get_available_providers()
+        ):
             raise ProviderUnavailable("CUDA requested but onnxruntime CUDA provider is unavailable")
         params = {key: str(path.resolve()) for key, path in paths.items()}
-        metadata = yaml.safe_load((self.settings.model_dir / "det/inference.yml").read_text(encoding="utf-8"))
+        metadata = yaml.safe_load(
+            (self.settings.model_dir / "det/inference.yml").read_text(encoding="utf-8")
+        )
         normalize = next(
-            t["NormalizeImage"] for t in metadata["PreProcess"]["transform_ops"] if "NormalizeImage" in t
+            t["NormalizeImage"]
+            for t in metadata["PreProcess"]["transform_ops"]
+            if "NormalizeImage" in t
         )
         post = metadata["PostProcess"]
-        version = OCRVersion.PPOCRV6 if "v6" in metadata["Global"]["model_name"] else OCRVersion.PPOCRV5
+        version = (
+            OCRVersion.PPOCRV6 if "v6" in metadata["Global"]["model_name"] else OCRVersion.PPOCRV5
+        )
         params.update(
             {
                 "Global.use_cls": False,

@@ -20,7 +20,11 @@ def test_deterministic_no_provider_calls(settings):
 
 def test_preserve_wrong_arithmetic_dont_call_models(settings):
     fields, _, warnings, _, metrics = extract_pdf(
-        pdf_bytes(VALID.replace("312,90", "300,00")), ExtractOptions(vlm=True), settings, NoOCR(), NoVLM()
+        pdf_bytes(VALID.replace("312,90", "300,00")),
+        ExtractOptions(vlm=True),
+        settings,
+        NoOCR(),
+        NoVLM(),
     )
     assert fields["vat_amount"].value == "300.00"
     assert {w["code"] for w in warnings} >= {"VAT_MISMATCH", "TOTAL_MISMATCH"}
@@ -36,7 +40,9 @@ def test_mixed_pdf_processes_scanned_page_after_complete_native(settings):
 
     with pymupdf.open(stream=pdf_bytes(VALID), filetype="pdf") as doc:
         doc.new_page()
-        fields, _, _, pages, metrics = extract_pdf(doc.tobytes(), ExtractOptions(), settings, OCR(), NoVLM())
+        fields, _, _, pages, metrics = extract_pdf(
+            doc.tobytes(), ExtractOptions(), settings, OCR(), NoVLM()
+        )
     assert metrics["ocr_calls"] == 1
     assert fields["supplier_tax_id"].status == "AMBIGUOUS"
     assert pages[0]["method"] == "native" and pages[1]["method"] == "ocr"

@@ -25,7 +25,12 @@ def extract_pdf(
             or text.count("\ufffd") / max(1, chars) > 0.02
             or (page["image_ratio"] > 0.5 and bool(set(unresolved(fields)) - {"currency"}))
         )
-        report = {"page": number, "native_chars": chars, "method": "native", "ocr_needed": needs_ocr}
+        report = {
+            "page": number,
+            "native_chars": chars,
+            "method": "native",
+            "ocr_needed": needs_ocr,
+        }
         if chars:
             metrics["native_pages"] += 1
         png = None
@@ -47,7 +52,9 @@ def extract_pdf(
                         "code": "OCR_ERROR",
                         "page": number,
                         "error_type": type(exc).__name__,
-                        "message": "OCR unavailable or failed; retry after checking provider configuration",
+                        "message": (
+                            "OCR unavailable or failed; retry after checking provider configuration"
+                        ),
                     }
                 )
         elif needs_ocr:
@@ -64,12 +71,15 @@ def extract_pdf(
     targets = [
         key
         for key in REQUIRED_INVOICE_FIELDS
-        if fields[key].candidates and all(c.evidence.method == "ocr" for c in fields[key].candidates)
+        if fields[key].candidates
+        and all(c.evidence.method == "ocr" for c in fields[key].candidates)
     ]
     if (
         targets
         and hasattr(ocr, "verify")
-        and all(fields[key].status == "OBSERVED" for key in REQUIRED_INVOICE_FIELDS if key != "currency")
+        and all(
+            fields[key].status == "OBSERVED" for key in REQUIRED_INVOICE_FIELDS if key != "currency"
+        )
     ):
         confirmed_lines = []
         try:
@@ -80,13 +90,18 @@ def extract_pdf(
                 metrics["ocr_calls"] += 1
                 metrics["ocr_verification_calls"] += 1
                 confirmed_lines.extend(
-                    ocr.verify(render(content, page["number"], settings), page["number"], page["size"])
+                    ocr.verify(
+                        render(content, page["number"], settings), page["number"], page["size"]
+                    )
                 )
             check_fields, _ = parse_invoice(confirmed_lines, settings.ocr_min_confidence)
             all_lines.extend(confirmed_lines)
             for key in targets:
                 original, check = fields[key], check_fields[key]
-                agrees = check.value == original.value and check.status in {"OBSERVED", "LOW_CONFIDENCE"}
+                agrees = check.value == original.value and check.status in {
+                    "OBSERVED",
+                    "LOW_CONFIDENCE",
+                }
                 verification[key] = {
                     "agrees": agrees,
                     "candidates": [c.model_dump() for c in check.candidates],

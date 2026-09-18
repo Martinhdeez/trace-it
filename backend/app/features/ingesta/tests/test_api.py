@@ -60,7 +60,9 @@ def test_upload_cache_identity_and_get(settings):
     service = ExtractionService(settings, NoOCR(), NoVLM())
     with TestClient(create_app(settings, service)) as client:
         content = pdf_bytes(VALID)
-        first = client.post("/v1/extractions", files={"file": ("á.pdf", content, "application/pdf")})
+        first = client.post(
+            "/v1/extractions", files={"file": ("á.pdf", content, "application/pdf")}
+        )
         assert first.status_code == 200, first.text
         data = first.json()
         assert data["status"] == "COMPLETE"
@@ -76,8 +78,14 @@ def test_upload_cache_identity_and_get(settings):
 
 def test_bad_uploads(settings):
     with TestClient(create_app(settings, ExtractionService(settings, NoOCR(), NoVLM()))) as client:
-        for name, content in [("empty.pdf", b""), ("fake.pdf", b"hello"), ("bad.pdf", b"%PDF-broken")]:
-            assert client.post("/v1/extractions", files={"file": (name, content)}).status_code == 422
+        for name, content in [
+            ("empty.pdf", b""),
+            ("fake.pdf", b"hello"),
+            ("bad.pdf", b"%PDF-broken"),
+        ]:
+            assert (
+                client.post("/v1/extractions", files={"file": (name, content)}).status_code == 422
+            )
 
 
 def test_internal_error_is_not_blame_on_document(settings, monkeypatch):
@@ -108,10 +116,13 @@ def test_api_does_not_ask_for_currency(settings):
     with TestClient(create_app(settings, ExtractionService(settings, NoOCR(), NoVLM()))) as client:
         schema = client.get("/openapi.json").json()
         for path in ("/v1/extractions", "/v1/batches"):
-            ref = schema["paths"][path]["post"]["requestBody"]["content"]["multipart/form-data"]["schema"][
-                "$ref"
-            ]
-            assert "currency" not in schema["components"]["schemas"][ref.rsplit("/", 1)[-1]]["properties"]
+            ref = schema["paths"][path]["post"]["requestBody"]["content"]["multipart/form-data"][
+                "schema"
+            ]["$ref"]
+            assert (
+                "currency"
+                not in schema["components"]["schemas"][ref.rsplit("/", 1)[-1]]["properties"]
+            )
 
 
 def test_batch_persists_and_runs(settings):
@@ -119,7 +130,10 @@ def test_batch_persists_and_runs(settings):
     with TestClient(create_app(settings, service)) as client:
         response = client.post(
             "/v1/batches",
-            files=[("files", ("one.pdf", pdf_bytes(VALID))), ("files", ("two.pdf", pdf_bytes(VALID)))],
+            files=[
+                ("files", ("one.pdf", pdf_bytes(VALID))),
+                ("files", ("two.pdf", pdf_bytes(VALID))),
+            ],
         )
         assert response.status_code == 202, response.text
         for _ in range(100):

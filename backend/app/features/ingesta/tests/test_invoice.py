@@ -96,7 +96,10 @@ def test_ocr_arithmetic_conflict_preserves_digits_but_requires_verification():
 
 def test_amount_does_not_consume_number_in_explanatory_prose():
     fields, warnings = parse_invoice(
-        lines("TOTAL consultar pedido 2026\nNo bloquear conciliacion por diferencias inferiores a 1 EUR")
+        lines(
+            "TOTAL consultar pedido 2026\nNo bloquear conciliacion por "
+            "diferencias inferiores a 1 EUR"
+        )
     )
     assert fields["gross_amount"].status == "MISSING"
     assert fields["currency"].status == "MISSING"

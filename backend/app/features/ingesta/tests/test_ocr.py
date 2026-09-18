@@ -22,7 +22,9 @@ def test_ocr_verification_controls_false_completeness(settings, variant):
                 raise RuntimeError("provider unavailable")
             if variant == "missing":
                 return lines(VALID.replace("IBAN:", "unreadable:"), "ocr", 0.99)
-            return lines(VALID.replace("9517", "8517") if variant == "disagree" else VALID, "ocr", 0.99)
+            return lines(
+                VALID.replace("9517", "8517") if variant == "disagree" else VALID, "ocr", 0.99
+            )
 
     engine = OCR()
     fields, data, warnings, _, metrics = extract_pdf(
@@ -64,7 +66,9 @@ def test_ocr_success_skips_vlm(settings):
         def recognize(self, *args):
             return lines(VALID, "ocr", 0.99)
 
-    fields, _, _, _, metrics = extract_pdf(pdf_bytes(""), ExtractOptions(vlm=True), settings, OCR(), NoVLM())
+    fields, _, _, _, metrics = extract_pdf(
+        pdf_bytes(""), ExtractOptions(vlm=True), settings, OCR(), NoVLM()
+    )
     assert all(fields[k].status == "OBSERVED" for k in REQUIRED_INVOICE_FIELDS)
     assert metrics["ocr_calls"] == 1 and metrics["vlm_calls"] == 0
 
@@ -87,7 +91,8 @@ def test_vlm_proposals_remain_unverified(settings):
 
 @pytest.mark.ocr
 @pytest.mark.skipif(
-    not (MATERIAL.parents[1] / ".models/manifest.json").exists(), reason="Download OCR weights first"
+    not (MATERIAL.parents[1] / ".models/manifest.json").exists(),
+    reason="Download OCR weights first",
 )
 def test_real_local_ocr(settings):
     import pymupdf
@@ -138,7 +143,9 @@ def test_shadow_and_vertical_stripe_regressions(settings):
         ("scan_026.pdf", "vertical_background_subtraction"),
     ):
         content = (MATERIAL / "facturas" / name).read_bytes()
-        fields, _, warnings, _, metrics = extract_pdf(content, ExtractOptions(), settings, engine, NoVLM())
+        fields, _, warnings, _, metrics = extract_pdf(
+            content, ExtractOptions(), settings, engine, NoVLM()
+        )
         for key, expected in refs[name]["fields"].items():
             assert fields[key].value == expected, (name, key, fields[key])
             assert fields[key].status == "OBSERVED", (name, key, fields[key])
