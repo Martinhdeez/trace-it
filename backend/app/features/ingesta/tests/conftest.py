@@ -2,11 +2,12 @@ from pathlib import Path
 
 import pymupdf
 import pytest
-from tracepay.ingestion.config import Settings
-from tracepay.ingestion.models import TextLine
-from tracepay.ingestion.normalize import clean_text
 
-MATERIAL = Path(__file__).resolve().parents[2] / ".context/500-sombras-de-alberto"
+from app.common.extraction import TextLine
+from app.common.normalization import clean_text
+from app.features.ingesta.config import Settings
+
+MATERIAL = Path(__file__).resolve().parents[5] / ".context/500-sombras-de-alberto"
 
 
 @pytest.fixture

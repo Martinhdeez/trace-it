@@ -1,8 +1,9 @@
 import re
 from decimal import ROUND_HALF_UP, Decimal
 
-from tracepay.ingestion.models import REQUIRED_INVOICE_FIELDS, Candidate, Evidence, ExtractedField, TextLine
-from tracepay.ingestion.normalize import fold, iban, identifier, invoice_date, money
+from app.common.extraction import Candidate, Evidence, ExtractedField, TextLine
+from app.common.normalization import fold, iban, identifier, invoice_date, money
+from app.features.ingesta.schemas import REQUIRED_INVOICE_FIELDS
 
 AMOUNT = r"(?<![\w.,])[-+]?\d(?:[\d.,\u00a0 ]*\d)?(?![\w.,])"
 DATE = r"\d{1,2}[/.\-]\d{1,2}[/.\-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+de\s+\w+\s+de\s+\d{4}"

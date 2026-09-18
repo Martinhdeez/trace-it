@@ -1,5 +1,6 @@
 import pytest
-from tracepay.ingestion.normalize import invoice_date, money
+
+from app.common.normalization import invoice_date, money
 
 
 @pytest.mark.parametrize(

@@ -1,5 +1,5 @@
-from tracepay.ingestion.ocr.transcript import remote_lines, transcript_warnings
-from tracepay.ingestion.pdf.invoice import parse_invoice
+from app.features.ingesta.ocr.transcript import remote_lines, transcript_warnings
+from app.features.ingesta.pdf.invoice import parse_invoice
 
 
 def test_remote_fragmented_headings_keep_raw_and_remain_unverified():

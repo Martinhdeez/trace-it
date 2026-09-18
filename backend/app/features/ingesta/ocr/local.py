@@ -6,10 +6,10 @@ from dataclasses import replace
 import yaml
 from PIL import Image
 
-from tracepay.ingestion.config import Settings
-from tracepay.ingestion.models import TextLine
-from tracepay.ingestion.normalize import clean_text
-from tracepay.ingestion.ocr.preprocessing import prepare_ocr_image
+from app.common.extraction import TextLine
+from app.common.normalization import clean_text
+from app.features.ingesta.config import Settings
+from app.features.ingesta.ocr.preprocessing import prepare_ocr_image
 
 from .errors import ProviderUnavailable
 
@@ -123,7 +123,9 @@ class LocalOCR:
             "Rec.rec_keys_path": self.settings.model_dir / "rec/keys.txt",
         }
         if any(not p.exists() for p in paths.values()):
-            raise ProviderUnavailable("OCR models missing; run python -m scripts.ingestion.download_models")
+            raise ProviderUnavailable(
+                "OCR models missing; run python -m app.features.ingesta.tools.download_models"
+            )
         import onnxruntime as ort
         from rapidocr import OCRVersion, RapidOCR
 

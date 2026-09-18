@@ -1,7 +1,7 @@
-from tracepay.ingestion.config import Settings
-from tracepay.ingestion.models import REQUIRED_INVOICE_FIELDS, ExtractOptions
-from tracepay.ingestion.ocr.local import LocalOCR
-from tracepay.ingestion.ocr.vision import VisionFallback
+from app.features.ingesta.config import Settings
+from app.features.ingesta.ocr.local import LocalOCR
+from app.features.ingesta.ocr.vision import VisionFallback
+from app.features.ingesta.schemas import REQUIRED_INVOICE_FIELDS, ExtractOptions
 
 from .invoice import parse_invoice, unresolved
 from .native import native_pages, render

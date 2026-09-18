@@ -1,7 +1,7 @@
 import pytest
-from tracepay.ingestion.pdf.invoice import parse_invoice
 
-from tests.ingestion.conftest import VALID, lines
+from app.features.ingesta.pdf.invoice import parse_invoice
+from app.features.ingesta.tests.conftest import VALID, lines
 
 
 @pytest.mark.parametrize(

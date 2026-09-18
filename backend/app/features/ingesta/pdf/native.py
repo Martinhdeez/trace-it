@@ -2,9 +2,9 @@ import threading
 
 import pymupdf
 
-from tracepay.ingestion.config import Settings
-from tracepay.ingestion.models import TextLine
-from tracepay.ingestion.normalize import clean_text
+from app.common.extraction import TextLine
+from app.common.normalization import clean_text
+from app.features.ingesta.config import Settings
 
 # MuPDF is not thread-safe. Keep document access/rendering short and serialized;
 # OCR runs outside this lock and has its own bounded session.

@@ -2,10 +2,10 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from tracepay.ingestion.models import REQUIRED_INVOICE_FIELDS, ExtractOptions
-from tracepay.ingestion.pdf.extractor import extract_pdf
 
-from tests.ingestion.conftest import MATERIAL, VALID, NoOCR, NoVLM, lines, pdf_bytes
+from app.features.ingesta.pdf.extractor import extract_pdf
+from app.features.ingesta.schemas import REQUIRED_INVOICE_FIELDS, ExtractOptions
+from app.features.ingesta.tests.conftest import MATERIAL, VALID, NoOCR, NoVLM, lines, pdf_bytes
 
 
 @pytest.mark.parametrize("variant", ["agree", "disagree", "missing", "failure"])
@@ -86,11 +86,14 @@ def test_vlm_proposals_remain_unverified(settings):
 
 
 @pytest.mark.ocr
-@pytest.mark.skipif(not Path(".models/manifest.json").exists(), reason="Download OCR weights first")
+@pytest.mark.skipif(
+    not (MATERIAL.parents[1] / ".models/manifest.json").exists(), reason="Download OCR weights first"
+)
 def test_real_local_ocr(settings):
     import pymupdf
-    from tracepay.ingestion.ocr.local import LocalOCR
-    from tracepay.ingestion.pdf.native import render
+
+    from app.features.ingesta.ocr.local import LocalOCR
+    from app.features.ingesta.pdf.native import render
 
     native = pdf_bytes(VALID)
     raster = render(native, 1, settings)
@@ -99,7 +102,11 @@ def test_real_local_ocr(settings):
         page.insert_image(page.rect, stream=raster)
         scanned = doc.tobytes()
     fields, _, warnings, _, metrics = extract_pdf(
-        scanned, ExtractOptions(), settings, LocalOCR(replace(settings, model_dir=Path(".models"))), NoVLM()
+        scanned,
+        ExtractOptions(),
+        settings,
+        LocalOCR(replace(settings, model_dir=(MATERIAL.parents[1] / ".models"))),
+        NoVLM(),
     )
     assert not any(w["code"] == "OCR_ERROR" for w in warnings)
     assert metrics["ocr_calls"] == 2 and metrics["ocr_verification_calls"] == 1
@@ -111,13 +118,13 @@ def test_real_local_ocr(settings):
 @pytest.mark.ocr
 @pytest.mark.integration
 @pytest.mark.skipif(
-    not MATERIAL.exists() or not Path(".models/verify/manifest.json").exists(),
+    not MATERIAL.exists() or not (MATERIAL.parents[1] / ".models/verify/manifest.json").exists(),
     reason="Requires official scans and both OCR models",
 )
 def test_shadow_and_vertical_stripe_regressions(settings):
     import json
 
-    from tracepay.ingestion.ocr.local import LocalOCR
+    from app.features.ingesta.ocr.local import LocalOCR
 
     refs = {
         r["file_id"]: r
@@ -125,7 +132,7 @@ def test_shadow_and_vertical_stripe_regressions(settings):
             (Path(__file__).parent / "fixtures/scans-reviewed.json").read_text(encoding="utf-8")
         )
     }
-    engine = LocalOCR(replace(settings, model_dir=Path(".models")))
+    engine = LocalOCR(replace(settings, model_dir=(MATERIAL.parents[1] / ".models")))
     for name, operation in (
         ("scan_025.pdf", "local_illumination_normalization"),
         ("scan_026.pdf", "vertical_background_subtraction"),

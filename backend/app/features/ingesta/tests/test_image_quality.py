@@ -2,7 +2,8 @@ import io
 
 import numpy as np
 from PIL import Image, ImageDraw
-from tracepay.ingestion.ocr.preprocessing import prepare_ocr_image
+
+from app.features.ingesta.ocr.preprocessing import prepare_ocr_image
 
 
 def png(image):

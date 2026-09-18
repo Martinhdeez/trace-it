@@ -1,11 +1,11 @@
 from collections import Counter
 
 import pytest
-from tracepay.ingestion.models import REQUIRED_INVOICE_FIELDS, ExtractOptions
-from tracepay.ingestion.pdf.extractor import extract_pdf
-from tracepay.ingestion.pdf.invoice import parse_invoice
 
-from tests.ingestion.conftest import MATERIAL, VALID, NoOCR, NoVLM, lines, pdf_bytes
+from app.features.ingesta.pdf.extractor import extract_pdf
+from app.features.ingesta.pdf.invoice import parse_invoice
+from app.features.ingesta.schemas import REQUIRED_INVOICE_FIELDS, ExtractOptions
+from app.features.ingesta.tests.conftest import MATERIAL, VALID, NoOCR, NoVLM, lines, pdf_bytes
 
 
 def test_deterministic_no_provider_calls(settings):
@@ -45,7 +45,7 @@ def test_mixed_pdf_processes_scanned_page_after_complete_native(settings):
 @pytest.mark.integration
 @pytest.mark.skipif(not MATERIAL.exists(), reason="Initialize official submodule")
 def test_all_native_invoices(settings):
-    from tracepay.ingestion.pdf.native import native_pages
+    from app.features.ingesta.pdf.native import native_pages
 
     count, invalid, missing_currency = 0, Counter(), 0
     for path in (MATERIAL / "facturas").glob("*.pdf"):

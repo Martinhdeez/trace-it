@@ -7,7 +7,8 @@ from pathlib import Path
 
 import yaml
 from huggingface_hub import hf_hub_download
-from tracepay.ingestion.config import Settings
+
+from app.features.ingesta.config import Settings
 
 PROFILES = {
     "v6-small": {

@@ -2,11 +2,17 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+
 
 @dataclass(frozen=True)
 class Settings:
-    data_dir: Path = field(default_factory=lambda: Path(os.getenv("TRACEPAY_DATA_DIR", ".data")))
-    model_dir: Path = field(default_factory=lambda: Path(os.getenv("TRACEPAY_MODEL_DIR", ".models")))
+    data_dir: Path = field(
+        default_factory=lambda: Path(os.getenv("TRACEPAY_DATA_DIR", str(REPOSITORY_ROOT / ".data")))
+    )
+    model_dir: Path = field(
+        default_factory=lambda: Path(os.getenv("TRACEPAY_MODEL_DIR", str(REPOSITORY_ROOT / ".models")))
+    )
     max_file_bytes: int = 25 * 1024 * 1024
     max_pages: int = 40
     max_image_pixels: int = 18_000_000

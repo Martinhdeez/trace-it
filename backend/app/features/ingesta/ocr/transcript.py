@@ -3,8 +3,8 @@
 import re
 from collections import Counter
 
-from tracepay.ingestion.models import TextLine
-from tracepay.ingestion.normalize import clean_text
+from app.common.extraction import TextLine
+from app.common.normalization import clean_text
 
 
 def remote_lines(transcript: str, page: int, point_size):
