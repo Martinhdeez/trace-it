@@ -33,7 +33,7 @@ decidir(reglas, prioridades: dict[str, int], por_defecto: str,
 - `GET /procesos/{id}/instancias?estado=` y `GET /instancias/{id}`. El detalle incluye símbolos, el histórico de decisiones con el resultado de cada regla y los eventos.
 - `GET /procesos/{id}/cola`: instancias en `REVISION` más las que tienen una decisión cuyo tipo tiene `requiere_persona`. Filtro opcional `?tipo=`. Ningún nombre de decisión fijo en el código: los tipos son del proceso (`TipoDecision.requiere_persona`, añadido en el PR #5).
 - `POST /instancias/{id}/resolver` con `{decision, motivo}`: decisión nueva con autor = usuario actual. El histórico solo añade filas, nunca edita.
-- `GET /procesos/{id}/exportar`: `outcomes.jsonl`, una línea `{"file_id", "result"}` por instancia. Devuelve 409 si queda alguna instancia `PENDIENTE` o en `REVISION`.
+- `GET /procesos/{id}/exportar`: una línea por instancia con su nombre y su decisión. El formato del reto (`outcomes.jsonl`) es `{"file_id": nombre, "result": decisión}`; el código no sabe nada de facturas, solo usa esos dos nombres de campo. Devuelve 409 si queda alguna instancia `PENDIENTE` o en `REVISION`.
 
 ### 3. `feat/auditoria` — `features/decisiones/auditoria.py` + comprobación al activar
 - `comprobar(session, proceso_id, regla_nueva)` vuelve a ejecutar las reglas activas + la nueva sobre los símbolos guardados de todas las instancias decididas. No relee PDFs ni llama al ERP.
@@ -41,7 +41,7 @@ decidir(reglas, prioridades: dict[str, int], por_defecto: str,
   - sin cambio;
   - cambio (una decisión del motor que cambiaría);
   - conflicto (contradice una decisión validada por una persona).
-- Para PAGAR o NO_PAGAR que cambiarían, genera hallazgos (`pagada_indebidamente`, `no_pagada_debiendo`). Nunca modifica el pasado.
+- Para cada decisión pasada que cambiaría, genera un hallazgo con la decisión registrada y la que saldría ahora (en facturas: pagada indebidamente, no pagada debiendo). Ningún nombre de decisión fijo en el código. Nunca modifica el pasado.
 - `reglas.service.activar` lo usa: si hay conflictos, 409 y la regla no entra.
 - `GET /procesos/{id}/hallazgos`.
 

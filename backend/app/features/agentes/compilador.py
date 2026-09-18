@@ -26,7 +26,7 @@ from app.features.trazas.service import registrar
 # A test case, as written by an agent from the rule text alone:
 # {"nombre": str, "instancia": {...}, "fuentes": {...}, "otras": [...], "salta": bool}
 Test = dict[str, Any]
-# (file name of the instance, {symbol: value})
+# (instance name, {symbol: value})
 Historico = list[tuple[str, dict[str, Any]]]
 
 PAPELES = ("compilador_a", "compilador_b")
@@ -78,16 +78,17 @@ Contrato del código (campo `codigo`, solo código Python, sin markdown):
 - `instancia`: {símbolo: valor} de la instancia evaluada.
 - `fuentes`: {nombre_fuente: [fila, ...]}, cada fila un dict {columna: valor}.
 - `otras`: lista de las demás instancias del proceso, cada una {símbolo: valor} más la clave \
-"_instancia" (su nombre de fichero). Úsala solo si la regla habla de otras instancias \
+"_instancia" (su nombre). Úsala solo si la regla habla de otras instancias \
 (duplicados, acumulados...).
 - Función pura y determinista: sin red, disco, reloj, aleatoriedad ni estado global. \
 Solo se permiten estos imports: decimal, datetime, re, math, unicodedata.
 - Tipo de regla: `requisito` = algo que debe cumplirse; salta cuando NO se cumple. \
 `prohibicion` = algo que no debe darse; salta cuando SÍ se cumple.
-- Dinero: compara con Decimal(str(valor)). Usa tolerancia solo si la regla la indica.
+- Importes y otros decimales: compara con Decimal(str(valor)). Usa tolerancia solo si la \
+regla la indica.
 - Los valores pueden faltar o ser None: trátalo de forma explícita y según la regla.
-- `motivo`: código corto en MAYÚSCULAS_CON_GUIONES_BAJOS (p. ej. "IBAN_NO_COINCIDE"). \
-Cuando no salta, un motivo como "OK".
+- `motivo`: código corto en MAYÚSCULAS_CON_GUIONES_BAJOS (p. ej. "VALOR_NO_COINCIDE", \
+"LIMITE_SUPERADO"). Cuando no salta, un motivo como "OK".
 
 Tests (campo `tests`, al menos 6): cada uno con `nombre`, `instancia_json` (objeto JSON), \
 `fuentes_json` (objeto JSON), `otras_json` (lista JSON) y `salta` (lo que debe devolver la \

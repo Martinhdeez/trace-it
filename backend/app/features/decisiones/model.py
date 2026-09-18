@@ -32,6 +32,6 @@ class Hallazgo(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     decision_id: Mapped[int] = mapped_column(ForeignKey("decisiones.id"))
     regla_id: Mapped[int | None] = mapped_column(ForeignKey("reglas.id"))
-    tipo: Mapped[str]  # pagada_indebidamente, no_pagada_debiendo, ...
+    tipo: Mapped[str]  # kind of error; e.g. in the invoice process: pagada_indebidamente
     detalle: Mapped[str | None]
     creado: Mapped[created_at]
