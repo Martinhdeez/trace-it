@@ -7,6 +7,7 @@ import time
 import uuid
 from pathlib import Path
 
+from app.common.exceptions import NotFoundError
 from app.features.fuentes.service import extract_workbook
 from app.features.ingesta.config import Settings
 from app.features.ingesta.ocr.local import LocalOCR
@@ -31,6 +32,23 @@ class ExtractionService:
         self.stop = threading.Event()
         self.threads = []
         self.slots = threading.BoundedSemaphore(settings.workers)
+
+    def get_result(self, extraction_id: str):
+        result = self.store.result(extraction_id)
+        if result is None:
+            raise NotFoundError("Extraction not found")
+        return result
+
+    def get_batch(self, batch_id: str):
+        batch = self.store.batch(batch_id)
+        if batch is None:
+            raise NotFoundError("Batch not found")
+        return batch
+
+    def submit_batch(self, items: list[dict], options: ExtractOptions):
+        ident = uuid.uuid4().hex
+        self.store.submit_batch(ident, items, options, self.settings.max_queued_files)
+        return {"id": ident, "files": len(items), "status_url": f"/v1/batches/{ident}"}
 
     def ingest(self, stream, filename):
         filename = filename or "upload"
