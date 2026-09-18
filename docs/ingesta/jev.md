@@ -1,5 +1,7 @@
 # Evaluación de TypeSafe / Jev
 
+> Medición histórica anterior a `invoice-v1.9.0`. La integración y evaluación actuales están en [comité](committee.md) y [auditoría del corpus](corpus-audit.md).
+
 La clave funciona y se guarda en `.env` como `TYPESAFE_API_KEY`, fuera de Git. La prueba
 usa HTTP directamente, sin añadir dependencias: `POST https://api.typesafe.ai/v1/systemone`,
 con el modelo fijado a `jev-1.13.0`.

@@ -1,5 +1,7 @@
 # Gemini: comparación sobre los escaneos difíciles
 
+> Medición histórica anterior a `invoice-v1.9.0`. La integración y evaluación actuales están en [comité](committee.md) y [auditoría del corpus](corpus-audit.md).
+
 Se ejecutaron peticiones reales con `gemini-3.1-flash-lite`, usando la clave local `GEMINI_API_KEY`. Los cinco PNG completos tienen exactamente el mismo SHA-256 que los usados en el experimento GOT original. No se enviaron etiquetas esperadas, valores del Excel ni respuestas de otros modelos.
 
 ## Resultados

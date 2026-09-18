@@ -1,5 +1,7 @@
 # Abstención y revisión de OCR
 
+> Medición histórica anterior a `invoice-v1.9.0`. La integración y evaluación actuales están en [comité](committee.md) y [auditoría del corpus](corpus-audit.md).
+
 Pipeline: `invoice-v1.8.0+xlsx-v1.3`. Un fragmento ilegible no se completa por plausibilidad,
 checksum o coincidencia con el maestro de proveedores. El texto original y las propuestas
 se conservan como evidencia; un campo incierto no expone un valor canónico utilizable.
