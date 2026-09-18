@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from app.features.agents.sandbox import SandboxError, check, run, run_batch
+from app.features.agents.sandbox import SandboxError, check, run, run_batch, run_dataset
 
 VALID = """
 from decimal import Decimal
@@ -84,3 +84,19 @@ def test_one_bad_case_in_a_batch_only_fails_that_case():
     assert ok1 == {"fires": False, "reason": "total 50"}
     assert isinstance(bad, SandboxError) and "KeyError" in bad.message
     assert ok2 == {"fires": True, "reason": "total 500"}
+
+
+def test_dataset_derives_others_without_sending_them_per_case():
+    code = rule(
+        'return {"fires": len(others) == 2 and all(o["id"] != instance["id"] for o in others), '
+        '"reason": ",".join(o["name"] for o in others)}'
+    )
+    population = [
+        (1, {"id": 1, "name": "a"}),
+        (2, {"id": 2, "name": "b"}),
+        (3, {"id": 3, "name": "c"}),
+    ]
+
+    results = run_dataset(code, [(2, {"id": 2})], {}, population)
+
+    assert results == [{"fires": True, "reason": "a,c"}]

@@ -19,9 +19,10 @@ activate:  # put into the process every rule whose code is already validated
 # The whole process over the challenge corpus -> output/outcomes.jsonl. Needs `make erp`
 # running in another terminal, and writes to the database `make setup` filled.
 demo:
+	test -f .env || cp .env.example .env
 	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
-	cd backend && uv run python -m app.cli load ../processes/invoice-payment.json --activate
-	cd backend && uv run python ../tools/demo_run.py
+	cd backend && set -a && . ../.env && set +a && uv run python -m app.cli load ../processes/invoice-payment.json --activate
+	cd backend && set -a && . ../.env && set +a && uv run python ../tools/demo_run.py
 
 erp:
 	test -f .context/500-sombras-de-alberto/alberto_erp.py || git submodule update --init .context/500-sombras-de-alberto

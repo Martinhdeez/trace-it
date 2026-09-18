@@ -52,7 +52,12 @@ async def ingest(process_id: int, invoices: Path, book: Path, cutoff: str, limit
             if extractor.is_scan(text):
                 symbols, scans = {}, scans + 1
             else:
-                symbols = {k: v for k, v in extractor.symbols(path.name, text).items() if v}
+                # Stored with provenance: rule code only ever sees the values (ADR 0008).
+                symbols = {
+                    name: {"value": value, "origin": "pdf-text"}
+                    for name, value in extractor.symbols(path.name, text).items()
+                    if value
+                }
                 read += 1
             digest = hashlib.sha256(content).hexdigest()
             session.add(File(hash=digest, name=path.name, content=content, text=text))
@@ -72,7 +77,12 @@ async def decide(process_id: int, output: Path):
         r = await api.post(f"/processes/{process_id}/sources/erp/sync")
         if r.status_code != 200:
             sys.exit(f"the ERP sync failed ({r.status_code}): {r.text[:300]}\nIs `make erp` up?")
-        print(f"erp sync: {r.json()}")
+        sync = r.json()
+        stats = sync["stats"]
+        print(
+            f"erp sync: {sync['rows']} rows, {stats['pages']} pages, "
+            f"{stats['retries']} retries, {stats['logins']} logins, {stats['duration_ms']}ms"
+        )
 
         started = time.monotonic()
         r = await api.post(f"/processes/{process_id}/run")

@@ -20,6 +20,10 @@ Case = tuple[dict[str, Any], dict[str, list[dict[str, Any]]], list[dict[str, Any
 # case in one subprocess. Returns, per case, {"fires": bool, "reason": str} or the exception
 # for that case; raises when the whole batch fails.
 RunBatch = Callable[[str, list[Case]], list[Any]]
+DatasetEntry = tuple[int, dict[str, Any]]
+RunDataset = Callable[
+    [str, list[DatasetEntry], dict[str, list[dict[str, Any]]], list[DatasetEntry]], list[Any]
+]
 
 
 @dataclass(frozen=True)
@@ -71,6 +75,25 @@ def _run_code(code: str | None, cases: list[Case], run_batch: RunBatch) -> list[
         return answers
     except Exception as error:  # noqa: BLE001 - any failure is the same to the engine
         return [error] * len(cases)
+
+
+def _run_code_dataset(
+    code: str | None,
+    instances: list[DatasetEntry],
+    sources: dict[str, list[dict[str, Any]]],
+    population: list[DatasetEntry],
+    run_dataset: RunDataset,
+) -> list[Any]:
+    """One code over a shared dataset. A batch failure affects every requested instance."""
+    try:
+        if not code:
+            raise ValueError("rule is active without both codes")
+        answers = run_dataset(code, instances, sources, population)
+        if len(answers) != len(instances):
+            raise ValueError(f"{len(answers)} results for {len(instances)} instances")
+        return answers
+    except Exception as error:  # noqa: BLE001 - any failure is the same to the engine
+        return [error] * len(instances)
 
 
 def _compare(rule: Rule, answers_a: list[Any], answers_b: list[Any]) -> list[RuleResult]:
@@ -147,6 +170,33 @@ def decide_batch(
     return [
         _combine(rules, [r[k] for r in by_rule], priorities, default, rules_hash)
         for k in range(len(cases))
+    ]
+
+
+def decide_dataset(
+    rules: Sequence[Rule],
+    priorities: dict[str, int],
+    default: str,
+    instances: list[DatasetEntry],
+    sources: dict[str, list[dict[str, Any]]],
+    population: list[DatasetEntry],
+    run_dataset: RunDataset,
+) -> list[Verdict]:
+    """Apply all rules without repeating the shared sources and population per instance."""
+    if not instances:
+        return []
+    by_rule = [
+        _compare(
+            rule,
+            _run_code_dataset(rule.code_a, instances, sources, population, run_dataset),
+            _run_code_dataset(rule.code_b, instances, sources, population, run_dataset),
+        )
+        for rule in rules
+    ]
+    rules_hash = hash_rules(rules)
+    return [
+        _combine(rules, [r[k] for r in by_rule], priorities, default, rules_hash)
+        for k in range(len(instances))
     ]
 
 
