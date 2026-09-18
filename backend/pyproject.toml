@@ -31,7 +31,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["app", "tests"]
+testpaths = ["app", "tests", "evals"]
 addopts = "-m 'not llm'"
 markers = [
     "e2e: end to end against the challenge data (golden outcomes, API flow with the database)",
