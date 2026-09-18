@@ -22,6 +22,8 @@ uv run ruff format --check .
 uv run pytest -q
 ```
 
+La suite general incluye pruebas de procesos que necesitan Postgres y el entorno indicado en la guía. Para comprobar esta entrega aisladamente: `uv run pytest -q app/features/ingesta/tests app/features/fuentes/tests`. La prueba asíncrona de procesos de dev falla actualmente con ProactorEventLoop en Windows; no está oculta ni modificada por la ingesta.
+
 Para aplicar formato: `uv run ruff format .`. Ruff y `.editorconfig` fijan espaciado, imports y finales de línea. No reformatear archivos ajenos como efecto secundario de una feature.
 
 CI ejecuta lint, formato y tests sin pesos ni credenciales en Windows y Linux. La regresión real OCR se ejecuta localmente con los pesos y el submódulo; no equivale a una validación humana del corpus. Los experimentos remotos se lanzan explícitamente y pueden consumir saldo.

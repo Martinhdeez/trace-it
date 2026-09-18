@@ -1,0 +1,101 @@
+{
+  "model": "gemini-3.1-flash-lite",
+  "reference": "assistant visual transcription; human verification pending",
+  "cases": [
+    {
+      "file_id": "scan_021.pdf",
+      "matching_values": 8,
+      "labeled_fields": 8,
+      "image_sha256": "1ce595a8f41e1d9df0f1f9e0a83dfd18cd94beb0f1adba905934b6031d1c8f22",
+      "model_version": "gemini-3.1-flash-lite",
+      "seconds": 2.441,
+      "response_id": "BautauqTFIOUkdUP28LduAo"
+    },
+    {
+      "file_id": "scan_022.pdf",
+      "matching_values": 10,
+      "labeled_fields": 10,
+      "image_sha256": "f899c4b8e1c7cd2b116313603d055c557f6e057f1eb02e2f13c1ec6bf06bbd8b",
+      "model_version": "gemini-3.1-flash-lite",
+      "seconds": 2.154,
+      "response_id": "B6utatG6IKjl7M8Pyc6a6AQ"
+    },
+    {
+      "file_id": "scan_023.pdf",
+      "matching_values": 8,
+      "labeled_fields": 9,
+      "image_sha256": "449ec38e261829ac09d2a6047f3fb7a8ce6cf1c2e8274a6114e80cf9375f114e",
+      "model_version": "gemini-3.1-flash-lite",
+      "seconds": 2.782,
+      "response_id": "CautatmFMMyV3boPreaGsQU"
+    },
+    {
+      "file_id": "scan_025.pdf",
+      "matching_values": 10,
+      "labeled_fields": 10,
+      "image_sha256": "b38cff759598c96ba724a40372bf6fdb104c013e95f7b2d5b94d36b9c62be567",
+      "model_version": "gemini-3.1-flash-lite",
+      "seconds": 7.609,
+      "response_id": "DKutap6WNsyV3boPp4iV2Q0"
+    },
+    {
+      "file_id": "scan_026.pdf",
+      "matching_values": 10,
+      "labeled_fields": 10,
+      "image_sha256": "3adaafe647cdf2e576f22e9eb0c5146fb96517f4aa3fad333943c82bc38e81ec",
+      "model_version": "gemini-3.1-flash-lite",
+      "seconds": 2.632,
+      "response_id": "Fautatj8ENHPnsEP8bCf0AE"
+    }
+  ],
+  "matching_values": 46,
+  "labeled_fields": 47,
+  "wrong_nonnull_values": 1,
+  "seconds_total": 17.618,
+  "seconds_median": 2.632,
+  "input_tokens": 5945,
+  "output_tokens": 1012,
+  "not_verified_fields": {
+    "scan_021.pdf": [
+      "supplier_tax_id",
+      "invoice_number"
+    ],
+    "scan_023.pdf": [
+      "payment_iban"
+    ]
+  },
+  "provider_failures": {
+    "gemini-3.8-flash": 503,
+    "gemini-2.5-flash": 404,
+    "gemini-3.1-pro-preview": 429
+  },
+  "estimated_usd_full_pages": 0.00300425,
+  "region_attempt": {
+    "file_id": "scan_023.pdf",
+    "matching_values": 8,
+    "usage": {
+      "promptTokenCount": 1182,
+      "candidatesTokenCount": 204,
+      "totalTokenCount": 1386,
+      "promptTokensDetails": [
+        {
+          "modality": "IMAGE",
+          "tokenCount": 1085
+        },
+        {
+          "modality": "TEXT",
+          "tokenCount": 97
+        }
+      ],
+      "serviceTier": "standard"
+    },
+    "seconds": 1.784,
+    "supplier_tax_id": {
+      "value": null,
+      "status": "MISSING",
+      "candidates": [],
+      "origin": "DOCUMENT"
+    },
+    "payment_iban_candidate": "ES1800815290070001234567"
+  }
+}

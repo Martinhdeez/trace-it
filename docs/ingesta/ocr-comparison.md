@@ -8,6 +8,7 @@ Se compararon `scan_021`, `022`, `023`, `025` y `026`; no existe `scan_024.pdf` 
 | Ruta local v1.7.1 con corrección de iluminación/bandas y contraste local | 42/47 |
 | GOT-OCR v2, páginas originales, parser actual | 12/47 |
 | GOT-OCR v2, correcciones y recortes, parser actual | 29/47 |
+| Gemini 3.1 Flash-Lite, páginas originales | 46/47 |
 
 El local actual obtiene 7/8, 7/10, 8/9, 10/10 y 10/10 respectivamente. Estas cifras evalúan OCR **más extracción de campos**, sobre casos de desarrollo. No son un ranking universal de modelos ni una evaluación independiente.
 
@@ -30,5 +31,7 @@ uv run python -m app.features.ingesta.tools.compare_fal_ocr --output ../reports/
 ## Selección y trabajo pendiente
 
 Se conserva PP-OCRv5 local como ruta inicial; GOT no lo sustituye con estos resultados. Las propuestas generativas siguen sin verificar.
+
+La prueba posterior con la API directa de Gemini mejora la recuperación a 46/47, con un NIF discrepante y un IBAN no verificable. El recorte del NIF logra abstención en el carácter ilegible. Ver [resultados y límites de Gemini](gemini-ocr.md).
 
 Todavía no se han ejecutado comparaciones de PaddleOCR-VL-1.6, LightOnOCR-2 ni del router visual de fal. Tampoco están implementados el trabajador GPU separado, la cascada por campo/región ni el aprendizaje de correcciones. Su evaluación debe partir de referencias humanas, medir errores aceptados y abstenciones, y reservar documentos completos fuera del desarrollo.

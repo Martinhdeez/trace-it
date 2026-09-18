@@ -41,6 +41,7 @@ docs/ingesta/                # uso, integración, mediciones y límites
 - [Contrato HTTP y ejemplos](docs/ingesta/api.md)
 - [Integración y diferencias pendientes con dev](docs/ingesta/architecture.md)
 - [Validación y límites conocidos](docs/ingesta/extraction-validation.md)
+- [Comparación real de Gemini, OCR local y GOT](docs/ingesta/gemini-ocr.md)
 - [Contribuir y comprobar cambios](CONTRIBUTING.md)
 
 El material oficial se conserva como submódulo en `.context/500-sombras-de-alberto`. Modelos, credenciales, resultados de ejecución y datos locales están excluidos de Git.
