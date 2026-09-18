@@ -17,7 +17,7 @@ from app.common.exceptions import ConflictError, NotFoundError, TraceError
 from app.features.decisiones.model import Decision
 from app.features.ingesta.model import Fichero, Instancia
 from app.features.llm.cliente import completar
-from app.features.procesos.model import TipoDecision
+from app.features.procesos.model import Proceso, TipoDecision
 from app.features.reglas.model import Regla
 from app.features.trazas.service import registrar
 
@@ -37,8 +37,10 @@ that fired. Be brief and factual. Write in Spanish.
 - regla_propuesta: ONE new rule, in Spanish, that would resolve this case and similar future \
 ones automatically. It must be general enough to cover similar cases but not broader: name \
 the exact symbols it uses (by their name) and where each comes from, with precise conditions \
-(thresholds, comparisons, lists), so a code agent can implement it without ambiguity. Do not \
-restate an existing rule. Follow how people resolved past cases when they are relevant.
+(thresholds, comparisons, lists), so a code agent can implement it without ambiguity. Follow the \
+conventions in descripcion_proceso (normalisation, units, tolerances, missing values) and do \
+not restate them in the rule. Do not restate an existing rule. Follow how people resolved \
+past cases when they are relevant.
 - tipo_propuesto: "requisito" if the rule states a condition that must hold, \
 "prohibicion" if it states a condition that must not happen."""
 
@@ -95,8 +97,11 @@ async def _contexto(
         .limit(MAX_RESOLUCIONES)
     )
 
+    proceso = await session.get(Proceso, pid)
     saltaron = [r for r in (ultima.resultados if ultima else []) if r.get("salta")]
     contexto = {
+        # conventions every rule of the process follows; the proposed rule must too
+        "descripcion_proceso": proceso.descripcion if proceso else "",
         "tipos_decision": tipos,
         "tipos_requieren_persona": con_persona,
         "caso": {
