@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: setup compile erp test test-db test-e2e eval-compiler check down reset-db
+.PHONY: setup compile erp erp-sync test test-db test-e2e eval-compiler check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 
@@ -16,6 +16,10 @@ compile:  # needs LLM keys in .env
 erp:
 	test -f .context/500-sombras-de-alberto/alberto_erp.py || git submodule update --init .context/500-sombras-de-alberto
 	cd .context/500-sombras-de-alberto && python3 alberto_erp.py
+
+erp-sync:  # needs `make erp` running; writes a new erp snapshot (docs/sources-http.md)
+	cd backend && uv run python -m app.cli sources sync ../processes/invoice-payment.json
+
 
 # Tests use their own database (recreated each run), never the one `make setup` fills.
 TEST_DB_URL ?= postgresql+psycopg://trace:trace@localhost:5432/trace_test

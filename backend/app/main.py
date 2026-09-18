@@ -8,6 +8,7 @@ from app.features.decisions.router import router as decisions_router
 from app.features.llm.router import router as llm_router
 from app.features.processes.router import router as processes_router
 from app.features.rules.router import router as rules_router
+from app.features.sources.router import router as sources_router
 from app.features.users.router import router as users_router
 
 app = FastAPI(
@@ -43,5 +44,6 @@ for router in (
     decisions_router,
     llm_router,
     agents_router,
+    sources_router,
 ):
     app.include_router(router)
