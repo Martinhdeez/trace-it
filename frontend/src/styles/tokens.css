@@ -64,10 +64,12 @@
 }
 
 @layer base {
+  /* The console pins itself to the viewport with `h-dvh`; the landing scrolls
+     the document like any other page. */
   html,
   body,
   #root {
-    height: 100%;
+    min-height: 100%;
   }
 
   body {

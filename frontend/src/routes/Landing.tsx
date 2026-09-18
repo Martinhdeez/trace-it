@@ -10,7 +10,7 @@ const ease = [0.23, 1, 0.32, 1] as const
 
 export function Landing() {
   return (
-    <div className="h-full overflow-y-auto bg-canvas">
+    <div className="bg-canvas">
       <Header />
       <main>
         <Opening />

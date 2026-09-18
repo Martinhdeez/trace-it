@@ -165,19 +165,22 @@ function ruleOutcomes(firingRule: number, code: string): RuleOutcome[] {
 
 const instances: Row[] = classifiedInvoices.map((invoice, index) => {
   const scanned = imageOnly.has(invoice.fileId)
+  // A scan nobody could read agrees with neither extractor, so it waits in REVISION.
+  // Anything else without a result is simply still pending, and blocks the export.
   const unreadable = scanned && invoice.result !== 'ESCALAR'
+  const undecided = unreadable || invoice.result === null
   const { code, rule } = reasonFor(invoice.reason)
   const reason = unreadable ? 'LECTURA_NO_FIABLE' : invoice.result === 'PAGAR' ? '' : code
   const instance: Instance = {
     id: index + 1,
     nombre: invoice.fileId,
-    estado: unreadable ? 'REVISION' : 'DECIDIDA',
-    decision: unreadable ? null : invoice.result,
+    estado: unreadable ? 'REVISION' : undecided ? 'PENDIENTE' : 'DECIDIDA',
+    decision: undecided ? null : invoice.result,
   }
-  const decisions: DecisionRecord[] = unreadable
+  const decisions: DecisionRecord[] = undecided
     ? []
     : [
-        {
+      {
           id: index + 1,
           decision: invoice.result ?? 'ESCALAR',
           motivo: reason || null,
