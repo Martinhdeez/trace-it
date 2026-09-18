@@ -26,7 +26,7 @@ Nombres cortos, en minúsculas y con guiones: `feat/cliente-erp`, `feat/compilad
 3. Antes de abrir el PR, traer lo último de `dev` y comprobar que todo pasa:
    ```bash
    git fetch && git rebase origin/dev
-   uv run ruff check . && uv run pytest
+   cd backend && uv run ruff check . && uv run ruff format --check . && uv run pytest
    ```
 4. Subir la rama y abrir un pull request contra `dev`:
    ```bash
@@ -71,7 +71,7 @@ backend/
       usuarios/           # usuarios y usuario actual (cabecera X-Usuario-Id)
       procesos/           # procesos, símbolos, tipos de decisión
       ingesta/            # ficheros e instancias, extracción de texto
-      fuentes/            # Excel y ERP
+      fuentes/            # fuentes de verdad: hojas de cálculo y sistemas externos (ERP)
       extraccion/         # símbolos con doble extracción LLM
       reglas/             # reglas: alta, estados, activación
       agentes/            # compilador (dos agentes), sandbox, asistente de escalado
