@@ -28,7 +28,7 @@ from tests.golden import golden
 from tests.support import challenge, pack
 
 REPORTS = Path(__file__).parent / "reports"
-KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "google": "GEMINI_API_KEY"}
+KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "google": "GOOGLE_API_KEY"}
 MAX_LISTED = 8
 Case = tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]
 
