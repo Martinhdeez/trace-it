@@ -36,16 +36,18 @@ generated function before the batch 2 deadline, and one wrong outcome fails the 
    active and the manager clarifies the text and recompiles. We do not auto-pick a winner:
    a failing test does not say whether the code or the test is wrong.
 6. At runtime both codes run; if they disagree or one fails, the instance goes to REVIEW
-   with the reason.
+   with the reason. A failure or disagreement is our doubt, never an outcome: it is not
+   mapped to a decision type such as ESCALAR (ADR 0009, 0014).
 
 ## Consequences
 - Cost: two compilations per rule change, never per instance.
 - Two agents that misread an ambiguous text the same way still pass; the impact report
   before activation (ADR 0008) is the backstop.
 - **Known gap:** the engine today runs only code A (`motor.decidir` calls
-  `ejecutar(regla.codigo_a, ...)`), one subprocess per instance and rule, and sends a
-  failed rule to the highest `requires_human` type instead of REVIEW. Fix pending: run A
-  and B with one `ejecutar_lote` per rule and code, compare, REVIEW on disagreement.
+  `ejecutar(regla.codigo_a, ...)`), starts one subprocess per instance and rule, and sends
+  a failed rule to the highest `requires_human` type (ESCALAR) instead of REVIEW. Fix
+  pending in a PR for Mateo: run A and B with one `ejecutar_lote` per rule and code,
+  compare, REVIEW on failure or disagreement.
 
 ## Evidence
 - `agentes/compilador.py`: `_agente` (blind agent and repair loop), `validar` (pure
@@ -61,4 +63,4 @@ generated function before the batch 2 deadline, and one wrong outcome fails the 
   so running both codes stays well under a second per rule.
 
 ## Related
-ADR 0003, 0005, 0006, 0008. Plan P9, P21; `docs/plan-agentes.md` §3.1.
+ADR 0003, 0005, 0006, 0008, 0009, 0014. Plan P9, P21; `docs/plan-agentes.md` §3.1.
