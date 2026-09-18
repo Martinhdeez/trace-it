@@ -1,0 +1,18 @@
+{
+  "nombre": "Gastos de viaje",
+  "descripcion": "Aprueba o rechaza cada nota de gastos de un viaje de empresa.",
+  "tipos_decision": [
+    {"nombre": "REVISAR", "prioridad": 3, "requiere_persona": true},
+    {"nombre": "RECHAZAR", "prioridad": 2},
+    {"nombre": "APROBAR", "prioridad": 1, "por_defecto": true}
+  ],
+  "simbolos": [
+    {"nombre": "empleado", "tipo": "texto", "descripcion": "Email del empleado que viaja."},
+    {"nombre": "importe", "tipo": "numero", "descripcion": "Total de la nota en euros."},
+    {"nombre": "tiene_ticket", "tipo": "booleano", "descripcion": "La nota adjunta justificante."}
+  ],
+  "reglas": [
+    {"texto": "`tiene_ticket` es verdadero.", "tipo": "requisito", "decision": "RECHAZAR"},
+    {"texto": "`importe` es mayor que 500.", "tipo": "prohibicion", "decision": "REVISAR"}
+  ]
+}

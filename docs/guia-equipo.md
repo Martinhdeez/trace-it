@@ -3,6 +3,25 @@
 Cómo trabajamos en el repo de trace-it: ramas, commits, estructura del backend y cómo arrancarlo.
 Qué construimos y por qué: `docs/plano-aplicacion.md`. Quién hace qué: `docs/plan-mvp.md`.
 
+## Arranque rápido
+
+Requisitos: Docker y [uv](https://docs.astral.sh/uv/).
+
+```bash
+make setup      # .env, Postgres + backend, migraciones y proceso "Pago de facturas" con sus usuarios
+```
+API en http://localhost:8000/docs (con el 8000 ocupado: `BACKEND_PORT=8001 make setup`). Entra con `martin@trace-it.local` (responsable).
+
+| Comando | Qué hace |
+|---|---|
+| `make compilar` | Compila las reglas en borrador (necesita claves de LLM en `.env`) |
+| `make erp` | Arranca el ERP del reto |
+| `make test` | Tests del backend contra el Postgres local |
+| `make down` | Para los contenedores (los datos se quedan) |
+| `make reset-db` | **Borra la base de datos** |
+
+Los procesos son ficheros JSON en `procesos/` (formato en `procesos/README.md`). `make setup` se puede repetir: no duplica nada ni toca reglas activas.
+
 ## 1. Git
 
 ### Ramas
