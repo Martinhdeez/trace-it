@@ -31,7 +31,7 @@ decidir(reglas, prioridades: dict[str, int], por_defecto: str,
 ### 2. `feat/decisiones-api` — servicio y endpoints
 - `POST /procesos/{id}/ejecutar`: para cada instancia `PENDIENTE` con símbolos, llama al motor con las fuentes vigentes (última carga por nombre). Guarda una fila en `decisiones` (autor `motor`) o pasa la instancia a `REVISION`. Devuelve el recuento por decisión.
 - `GET /procesos/{id}/instancias?estado=` y `GET /instancias/{id}`. El detalle incluye símbolos, el histórico de decisiones con el resultado de cada regla y los eventos.
-- `GET /procesos/{id}/cola?tipo=ESCALAR|REVISION`.
+- `GET /procesos/{id}/cola`: instancias en `REVISION` más las que tienen una decisión cuyo tipo tiene `requiere_persona`. Filtro opcional `?tipo=`. Ningún nombre de decisión fijo en el código: los tipos son del proceso (`TipoDecision.requiere_persona`, añadido en el PR #5).
 - `POST /instancias/{id}/resolver` con `{decision, motivo}`: decisión nueva con autor = usuario actual. El histórico solo añade filas, nunca edita.
 - `GET /procesos/{id}/exportar`: `outcomes.jsonl`, una línea `{"file_id", "result"}` por instancia. Devuelve 409 si queda alguna instancia `PENDIENTE` o en `REVISION`.
 
@@ -46,7 +46,7 @@ decidir(reglas, prioridades: dict[str, int], por_defecto: str,
 - `GET /procesos/{id}/hallazgos`.
 
 ### 4. `feat/seed-facturas` — script que crea el proceso "Pago de facturas"
-Tipos ESCALAR(3), NO_PAGAR(2), PAGAR(1, por defecto) y su lista de símbolos. Martín pasa la lista a partir del borrador de reglas de la norma v3.
+Tipos ESCALAR(3, `requiere_persona`), NO_PAGAR(2), PAGAR(1, por defecto) y su lista de símbolos. Martín pasa la lista a partir del borrador de reglas de la norma v3.
 
 ## Criterio de hecho en cada PR
 - `uv run ruff check .` y `uv run pytest` en verde.
