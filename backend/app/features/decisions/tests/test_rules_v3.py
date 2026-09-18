@@ -100,15 +100,13 @@ DECISIONS = [
     "NO_PAGAR", "ESCALAR",
 ]  # fmt: skip
 RULES = [
-    Rule(id=n, text=f"R{n:02d}", decision=DECISIONS[n - 1], code_a=code, hash=f"h{n}")
+    Rule(id=n, text=f"R{n:02d}", decision=DECISIONS[n - 1], code_a=code, code_b=code, hash=f"h{n}")
     for n, code in enumerate(RULES_V3, 1)
 ]
 
 
 def decide_invoice(instance: dict, sources: dict, others: list) -> str:
-    return decide(
-        RULES, PRIORITIES, "PAGAR", "ESCALAR", instance, sources, others, sandbox.run
-    ).decision
+    return decide(RULES, PRIORITIES, "PAGAR", instance, sources, others, sandbox.run_batch).decision
 
 
 def test_the_whole_process_on_the_three_reference_invoices() -> None:

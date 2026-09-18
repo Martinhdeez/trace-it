@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from collections import Counter
@@ -9,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError, NotFoundError
 from app.features.agents import sandbox
-from app.features.decisions.engine import decide
+from app.features.decisions.engine import decide_batch
 from app.features.decisions.model import ENGINE, Decision, Finding
 from app.features.decisions.schemas import (
     DecisionOut,
@@ -48,12 +49,6 @@ class Outcomes:
     default: str
     human: list[str]
 
-    @property
-    def escalate(self) -> str:
-        """Where the engine puts a case it could not decide: the highest-priority outcome
-        that needs a person."""
-        return max(self.human, key=lambda name: self.priorities[name])
-
 
 async def _outcomes(session: AsyncSession, process_id: int) -> Outcomes:
     types = list(
@@ -65,11 +60,6 @@ async def _outcomes(session: AsyncSession, process_id: int) -> Outcomes:
     if default is None:
         raise ConflictError("The process has no default decision type")
     human = [t.name for t in types if t.requires_human]
-    if not human:
-        raise ConflictError(
-            "The process has no decision type with `requires_human`: "
-            "the engine would have nowhere to put a case it cannot decide"
-        )
     return Outcomes({t.name: t.priority for t in types}, default, human)
 
 
@@ -119,6 +109,11 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
 
     Runs against the rules active now and the latest load of each source. A rule never
     reads the clock: anything like a cut-off date is a row in a source of truth.
+
+    An instance without symbols is not run and keeps its status: PENDING while extraction
+    has not filled them, REVIEW when ingestion already sent it there (the two extractions
+    disagreed). An instance whose rule results cannot be trusted goes to REVIEW with the
+    reason and gets no decision row (fail closed, ADR 0004, 0009, 0014).
     """
     await get_process(session, process_id)
     outcomes = await _outcomes(session, process_id)
@@ -133,27 +128,39 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
     instances = await _instances(session, process_id)
     # Each entry of `others` carries `_instance` so a rule can name the duplicate it found.
     symbols = {i.id: {**i.symbols, "_instance": i.name} for i in instances if i.symbols is not None}
+    pending = [i for i in instances if i.status == "PENDING" and i.symbols is not None]
+    cases = [
+        (i.symbols, sources, [s for iid, s in symbols.items() if iid != i.id]) for i in pending
+    ]
+    # One subprocess per rule and code, off the event loop (ADR 0004).
+    verdicts = await asyncio.to_thread(
+        decide_batch, rules, outcomes.priorities, outcomes.default, cases, sandbox.run_batch
+    )
 
     count: Counter[str] = Counter()
-    for instance in instances:
-        if instance.status != "PENDING" or instance.symbols is None:
+    review = 0
+    for instance, verdict in zip(pending, verdicts, strict=True):
+        results = [asdict(r) for r in verdict.results]
+        if verdict.decision is None:
+            instance.status = "REVIEW"
+            instance.review_reason = verdict.reason
+            traces.record(
+                session,
+                "review",
+                instance_id=instance.id,
+                data={
+                    "reason": verdict.reason,
+                    "rules_hash": verdict.rules_hash,
+                    "results": results,
+                },
+            )
+            review += 1
             continue
-        others = [s for iid, s in symbols.items() if iid != instance.id]
-        verdict = decide(
-            rules,
-            outcomes.priorities,
-            outcomes.default,
-            outcomes.escalate,
-            instance.symbols,
-            sources,
-            others,
-            sandbox.run,
-        )
         session.add(
             Decision(
                 instance_id=instance.id,
                 decision=verdict.decision,
-                results=[asdict(r) for r in verdict.results],
+                results=results,
                 rules_hash=verdict.rules_hash,
                 author=ENGINE,
                 reason=verdict.reason or None,
@@ -169,7 +176,7 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
         count[verdict.decision] += 1
 
     await session.commit()
-    return RunSummary(decided=sum(count.values()), by_decision=dict(count))
+    return RunSummary(decided=sum(count.values()), by_decision=dict(count), review=review)
 
 
 async def list_instances(

@@ -41,6 +41,9 @@ class Definition(ProcessIn):
         types = {t.name for t in self.decision_types}
         if len(types) != len(self.decision_types):
             raise ValueError("Duplicate decision types")
+        if len({t.priority for t in self.decision_types}) != len(self.decision_types):
+            # Two types firing together at the same priority cannot be ranked.
+            raise ValueError("Two decision types share a priority")
         if sum(t.is_default for t in self.decision_types) != 1:
             raise ValueError("There must be exactly one default decision type")
         if any(t.is_default and t.requires_human for t in self.decision_types):
