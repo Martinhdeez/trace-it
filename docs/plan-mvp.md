@@ -36,10 +36,10 @@ Ver `docs/guia-equipo.md` (organizado por funcionalidades en `backend/app/featur
 | Persona | Bloque | Entregable |
 |---|---|---|
 | Martín | Agentes: compilador (dos agentes, tests cruzados), sandbox, asistente de escalado (el corrector de F12 es de la iteración 2); cliente LLM. Texto de las reglas de la norma v3. Responsable del filtro | `features/agentes/`, `features/llm/`, reglas v3 |
-| Mateo | Reglas y decisiones: ciclo de vida de reglas, motor, API de decisiones, auditoría y hallazgos, seed del proceso; procesos y usuarios. Tareas en `docs/tareas-mateo.md` | `features/reglas/`, `features/decisiones/`, `features/procesos/`, `features/usuarios/` |
+| Mateo | Reglas y decisiones: ciclo de vida de reglas, motor, API de decisiones, auditoría y hallazgos; procesos y usuarios. Tareas en `docs/tareas-mateo.md` | `features/reglas/`, `features/decisiones/`, `features/procesos/`, `features/usuarios/` |
 | Álvaro | Todo lo que entra: ingesta (hash, `pdftotext`, render/OCR de escaneos), extracción de símbolos (doble extracción con el cliente LLM, validadores), conector del ERP (token, ORA-00600, 429/Retry-After, límite propio, paginación, foto local), conector del Excel (normalización) | `features/ingesta/`, `features/extraccion/`, `features/fuentes/` |
 | Varsovia | Producto e ideas: demo, ADRs, `albertitos_plan.pdf`, hoja de resultados esperados para verificar | Guion de demo, ADRs |
-| Carlos | Frontend contra los endpoints de H0 (datos simulados hasta H1): procesos, instancias con traza, alta de regla con informe, cola del responsable (tipos con `requiere_persona` y `REVISION`), exportar | `frontend/` |
+| Carlos | Frontend contra los endpoints de H0 (datos simulados hasta H1): procesos, instancias con traza, alta de regla que encadena crear → compilar mostrando el progreso (compilar tarda 30-60 s) y el informe, cola del responsable (tipos con `requiere_persona` y `REVISION`), exportar | `frontend/` |
 
 ## Ruta crítica y riesgos
 1. **Texto de las reglas de la norma v3 (Martín, con Varsovia revisando, antes de H1).** Decidir qué produce cada anomalía (NO_PAGAR o ESCALAR) es el mayor riesgo para el filtro. Hay casos pendientes en `.artifacts/specs/2026-09-18-reglas-sistema.md`. Preguntar a un mentor con ejemplos concretos.

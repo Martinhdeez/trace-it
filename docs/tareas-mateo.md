@@ -34,6 +34,8 @@ decidir(reglas, prioridades: dict[str, int], por_defecto: str,
 - `GET /procesos/{id}/cola`: instancias en `REVISION` más las que tienen una decisión cuyo tipo tiene `requiere_persona`. Filtro opcional `?tipo=`. Ningún nombre de decisión fijo en el código: los tipos son del proceso (`TipoDecision.requiere_persona`, añadido en el PR #5).
 - `POST /instancias/{id}/resolver` con `{decision, motivo}`: decisión nueva con autor = usuario actual. El histórico solo añade filas, nunca edita.
 - `GET /procesos/{id}/exportar`: una línea por instancia con su nombre y su decisión. El formato del reto (`outcomes.jsonl`) es `{"file_id": nombre, "result": decisión}`; el código no sabe nada de facturas, solo usa esos dos nombres de campo. Devuelve 409 si queda alguna instancia `PENDIENTE` o en `REVISION`.
+  - **Qué decisión se exporta [DECIDIDO]:** la última decisión del **motor**. Las decisiones de una persona llevan un tipo: `resolucion` (resuelve un caso cuyo tipo tiene `requiere_persona`; nunca cambia lo exportado, P4) o `correccion_revision` (corrige una instancia que estaba en `REVISION`; se exporta si no hay decisión del motor).
+  - **Nombres repetidos [DECIDIDO]:** se exporta solo la instancia más reciente de cada `nombre` y se avisa si había repetidos.
 
 ### 3. `feat/auditoria` — `features/decisiones/auditoria.py` + comprobación al activar
 - `comprobar(session, proceso_id, regla_nueva)` vuelve a ejecutar las reglas activas + la nueva sobre los símbolos guardados de todas las instancias decididas. No relee PDFs ni llama al ERP.
@@ -45,8 +47,8 @@ decidir(reglas, prioridades: dict[str, int], por_defecto: str,
 - `reglas.service.activar` lo usa: si hay conflictos, 409 y la regla no entra.
 - `GET /procesos/{id}/hallazgos`.
 
-### 4. `feat/seed-facturas` — script que crea el proceso "Pago de facturas"
-Tipos ESCALAR(3, `requiere_persona`), NO_PAGAR(2), PAGAR(1, por defecto) y su lista de símbolos. Martín pasa la lista a partir del borrador de reglas de la norma v3.
+### 4. ~~`feat/seed-facturas`~~ — hecho
+Lo cubre el setup rápido (PR #11): `procesos/pago-facturas.json` + `make setup`.
 
 ## Criterio de hecho en cada PR
 - `uv run ruff check .` y `uv run pytest` en verde.
