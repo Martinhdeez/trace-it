@@ -61,7 +61,9 @@ def extract_workbook(content: bytes, settings: WorkbookLimits):
             # floats, and check real coordinates even if <dimension> is misleading.
             ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
             for member in members:
-                if not member.filename.startswith("xl/worksheets/") or not member.filename.endswith(".xml"):
+                if not member.filename.startswith("xl/worksheets/") or not member.filename.endswith(
+                    ".xml"
+                ):
                     continue
                 cells = {}
                 with archive.open(member) as stream:
@@ -81,11 +83,15 @@ def extract_workbook(content: bytes, settings: WorkbookLimits):
     except zipfile.BadZipFile as exc:
         raise ValueError("Expected an XLSX workbook") from exc
     try:
-        formulas = load_workbook(io.BytesIO(content), read_only=True, data_only=False, keep_links=False)
+        formulas = load_workbook(
+            io.BytesIO(content), read_only=True, data_only=False, keep_links=False
+        )
     except (KeyError, OSError) as exc:
         raise ValueError("Missing or invalid XLSX workbook parts") from exc
     try:
-        values = load_workbook(io.BytesIO(content), read_only=True, data_only=True, keep_links=False)
+        values = load_workbook(
+            io.BytesIO(content), read_only=True, data_only=True, keep_links=False
+        )
     except Exception:
         formulas.close()
         raise
@@ -103,14 +109,16 @@ def extract_workbook(content: bytes, settings: WorkbookLimits):
             lexical_values = numeric_xml.get(sheet._worksheet_path, {})
             rows = []
             cached_rows = values[sheet.title].iter_rows()
-            for row_number, (row, cached_row) in enumerate(zip(sheet.iter_rows(), cached_rows), 1):
+            for row_number, (row, cached_row) in enumerate(
+                zip(sheet.iter_rows(), cached_rows, strict=True), 1
+            ):
                 total_cells += len(row)
                 if row_number > settings.max_excel_rows or len(row) > settings.max_excel_cols:
                     raise ValueError(f"Sheet dimensions exceed limit: {sheet.title}")
                 if total_cells > settings.max_excel_cells:
                     raise ValueError("Workbook cell count exceeds limit")
                 cells = []
-                for cell, cached in zip(row, cached_row):
+                for cell, cached in zip(row, cached_row, strict=True):
                     if cell.value is None:
                         continue
                     raw, val = cell.value, cell.value
@@ -118,7 +126,9 @@ def extract_workbook(content: bytes, settings: WorkbookLimits):
                         val = cached.value
                         warnings.append(
                             {
-                                "code": "FORMULA_CACHED_VALUE" if val is not None else "FORMULA_UNEVALUATED",
+                                "code": "FORMULA_CACHED_VALUE"
+                                if val is not None
+                                else "FORMULA_UNEVALUATED",
                                 "locator": f"{sheet.title}!{cell.coordinate}",
                             }
                         )
@@ -191,7 +201,12 @@ def extract_workbook(content: bytes, settings: WorkbookLimits):
                                 value = iban(raw)
                             elif name == "supplier_tax_id":
                                 value = identifier(raw)
-                            elif name in {"supplier_ref", "purchase_order_ref", "state", "currency"}:
+                            elif name in {
+                                "supplier_ref",
+                                "purchase_order_ref",
+                                "state",
+                                "currency",
+                            }:
                                 value = clean_text(raw).upper()
                         except ValueError as exc:
                             value, status, error = None, "INVALID", str(exc)
@@ -204,11 +219,16 @@ def extract_workbook(content: bytes, settings: WorkbookLimits):
                             raw=str(cell["raw"]),
                             error=error,
                             evidence=Evidence(
-                                locator=f"{sheet.title}!{cell['cell']}", text=str(cell["raw"]), method="xlsx"
+                                locator=f"{sheet.title}!{cell['cell']}",
+                                text=str(cell["raw"]),
+                                method="xlsx",
                             ),
                         )
                         field = ExtractedField(
-                            value=value, status=status, candidates=[candidate], origin="AUTHORITATIVE_SOURCE"
+                            value=value,
+                            status=status,
+                            candidates=[candidate],
+                            origin="AUTHORITATIVE_SOURCE",
                         )
                     fields.setdefault(name, []).append(field)
                 flattened = {}
@@ -217,7 +237,8 @@ def extract_workbook(content: bytes, settings: WorkbookLimits):
                     field = populated[0] if populated else alternatives[0]
                     if len({f.value for f in populated}) > 1:
                         field = ExtractedField(
-                            status="AMBIGUOUS", candidates=[c for f in populated for c in f.candidates]
+                            status="AMBIGUOUS",
+                            candidates=[c for f in populated for c in f.candidates],
                         )
                     flattened[key] = field.model_dump()
                 required = {
@@ -228,10 +249,16 @@ def extract_workbook(content: bytes, settings: WorkbookLimits):
                 for key in required:
                     flattened.setdefault(key, ExtractedField().model_dump())
                 if role in {"purchase_orders", "ledger"} and not any(
-                    flattened.get(key, {}).get("value") for key in ("supplier_ref", "supplier_tax_id")
+                    flattened.get(key, {}).get("value")
+                    for key in ("supplier_ref", "supplier_tax_id")
                 ):
                     flattened.setdefault("supplier_ref", ExtractedField().model_dump())
-                record = {"role": role, "sheet": sheet.title, "row": row["row"], "fields": flattened}
+                record = {
+                    "role": role,
+                    "sheet": sheet.title,
+                    "row": row["row"],
+                    "fields": flattened,
+                }
                 primary = (
                     "purchase_order_ref"
                     if role == "purchase_orders"

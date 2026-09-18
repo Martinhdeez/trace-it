@@ -45,7 +45,11 @@ def test_workbook_preserves_formulas_duplicates_and_missing(settings):
     data, warnings = extract_workbook(stream.getvalue(), settings)
     assert len(data["records"]) == 3
     assert data["records"][0]["fields"]["supplier_tax_id"]["value"] == "J40112358"
-    assert {w["code"] for w in warnings} >= {"DUPLICATE_IDENTICAL", "FORMULA_UNEVALUATED", "FIELD_MISSING"}
+    assert {w["code"] for w in warnings} >= {
+        "DUPLICATE_IDENTICAL",
+        "FORMULA_UNEVALUATED",
+        "FIELD_MISSING",
+    }
 
 
 def test_workbook_conflicting_headers_and_limits(settings):
@@ -72,4 +76,7 @@ def test_order_sheet_missing_required_column_is_not_complete(settings):
     fields = data["records"][0]["fields"]
     assert fields["state"]["status"] == "MISSING"
     assert fields["supplier_ref"]["status"] == "MISSING"
-    assert {w["field"] for w in warnings if w["code"] == "FIELD_MISSING"} == {"state", "supplier_ref"}
+    assert {w["field"] for w in warnings if w["code"] == "FIELD_MISSING"} == {
+        "state",
+        "supplier_ref",
+    }

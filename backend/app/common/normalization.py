@@ -6,8 +6,22 @@ from decimal import Decimal, InvalidOperation
 INVISIBLE = dict.fromkeys(map(ord, "\u200b\u200c\u200d\ufeff\u2060\u00ad"), None)
 MONTHS = dict(
     zip(
-        "enero febrero marzo abril mayo junio julio agosto septiembre octubre noviembre diciembre".split(),
+        [
+            "enero",
+            "febrero",
+            "marzo",
+            "abril",
+            "mayo",
+            "junio",
+            "julio",
+            "agosto",
+            "septiembre",
+            "octubre",
+            "noviembre",
+            "diciembre",
+        ],
         range(1, 13),
+        strict=True,
     )
 )
 
@@ -19,7 +33,9 @@ def clean_text(value: str) -> str:
 
 def fold(value: str) -> str:
     value = clean_text(value)
-    return "".join(c for c in unicodedata.normalize("NFD", value) if not unicodedata.combining(c)).upper()
+    return "".join(
+        c for c in unicodedata.normalize("NFD", value) if not unicodedata.combining(c)
+    ).upper()
 
 
 def identifier(value: str) -> str:
@@ -49,7 +65,10 @@ def money(value: str) -> str:
         decimal_sep = "," if unsigned.rfind(",") > unsigned.rfind(".") else "."
         thousands = "." if decimal_sep == "," else ","
         left, right = unsigned.rsplit(decimal_sep, 1)
-        if not re.fullmatch(rf"\d{{1,3}}(?:{re.escape(thousands)}\d{{3}})+", left) or len(right) != 2:
+        if (
+            not re.fullmatch(rf"\d{{1,3}}(?:{re.escape(thousands)}\d{{3}})+", left)
+            or len(right) != 2
+        ):
             raise ValueError("Invalid grouping")
         unsigned = left.replace(thousands, "") + "." + right
     elif "," in unsigned or "." in unsigned:
