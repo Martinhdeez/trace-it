@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: setup compile erp erp-sync test test-db test-e2e eval-compiler check down reset-db
+.PHONY: setup compile activate demo erp erp-sync test test-db test-e2e eval-compiler check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 
@@ -12,6 +12,16 @@ setup:
 
 compile:  # needs LLM keys in .env
 	$(LOAD) --compile
+
+activate:  # put into the process every rule whose code is already validated
+	$(LOAD) --activate
+
+# The whole process over the challenge corpus -> output/outcomes.jsonl. Needs `make erp`
+# running in another terminal, and writes to the database `make setup` filled.
+demo:
+	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
+	cd backend && uv run python -m app.cli load ../processes/invoice-payment.json --activate
+	cd backend && uv run python ../tools/demo_run.py
 
 erp:
 	test -f .context/500-sombras-de-alberto/alberto_erp.py || git submodule update --init .context/500-sombras-de-alberto
