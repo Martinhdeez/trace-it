@@ -1,4 +1,5 @@
 import json
+import logging
 from collections import Counter
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -27,6 +28,8 @@ from app.features.reglas.model import Regla
 from app.features.trazas import service as trazas
 from app.features.trazas.model import Evento
 from app.features.usuarios.model import Usuario
+
+log = logging.getLogger(__name__)
 
 
 async def _instancia(session: AsyncSession, instancia_id: int) -> Instancia:
@@ -231,6 +234,7 @@ async def resolver(
             resultados=[],  # a person decides on the evidence, not by running the rules
             reglas_hash=anterior.reglas_hash if anterior else "",
             autor=usuario.nombre,
+            tipo_humana="correccion_revision" if instancia.estado == "REVISION" else "resolucion",
             motivo=datos.motivo,
         )
     )
@@ -245,26 +249,60 @@ async def resolver(
     return await obtener_instancia(session, instancia_id)
 
 
-async def exportar(session: AsyncSession, proceso_id: int) -> str:
-    """`outcomes.jsonl` for the challenge: one line per instance, nothing else.
+async def exportar(session: AsyncSession, proceso_id: int) -> tuple[str, list[str]]:
+    """`outcomes.jsonl` for the challenge: one line per instance name, nothing else.
 
-    `file_id` is the filename exactly as it was supplied, accents included.
+    Returns the body and the names shared by several instances. `file_id` is the filename
+    exactly as it was supplied, accents included. What is exported is the process output:
+    the engine's latest decision or, when the engine has none, a person's correction of an
+    instance that was in REVISION. A person's `resolucion` never changes it (P4).
     """
     await obtener_proceso(session, proceso_id)
-    instancias = await _instancias(session, proceso_id)
-    ultimas = await _ultimas_decisiones(session, instancias)
-    sin_decidir = [i.nombre for i in instancias if i.id not in ultimas]
+    # Two files can share a name: only the most recent instance of each name is exported.
+    por_nombre: dict[str, Instancia] = {}
+    veces: Counter[str] = Counter()
+    for instancia in await _instancias(session, proceso_id):  # ordered by id
+        por_nombre[instancia.nombre] = instancia
+        veces[instancia.nombre] += 1
+    repetidos = [nombre for nombre, n in veces.items() if n > 1]
+    if repetidos:
+        log.warning("Proceso %s: nombres repetidos al exportar: %s", proceso_id, repetidos)
+    instancias = list(por_nombre.values())
+
+    abiertas = [i.nombre for i in instancias if i.estado in ("PENDIENTE", "REVISION")]
+    if abiertas:
+        raise ConflictError(
+            f"{len(abiertas)} instancias pendientes o en revisión: {', '.join(abiertas[:5])}"
+        )
+
+    motor: dict[int, Decision] = {}
+    correcciones: dict[int, Decision] = {}
+    if instancias:
+        filas = await session.scalars(
+            select(Decision)
+            .where(Decision.instancia_id.in_([i.id for i in instancias]))
+            .order_by(Decision.id)
+        )
+        for fila in filas:
+            if fila.autor == "motor":
+                motor[fila.instancia_id] = fila
+            elif fila.tipo_humana == "correccion_revision":
+                correcciones[fila.instancia_id] = fila
+    exportada = {**correcciones, **motor}
+
+    sin_decidir = [i.nombre for i in instancias if i.id not in exportada]
     if sin_decidir:
         raise ConflictError(
             f"{len(sin_decidir)} instancias sin decidir: {', '.join(sin_decidir[:5])}"
         )
-    return "\n".join(
+    cuerpo = "\n".join(
         json.dumps(
-            {"file_id": i.nombre, "result": ultimas[i.id].decision},
+            {"file_id": i.nombre, "result": exportada[i.id].decision},
             ensure_ascii=False,
         )
         for i in instancias
     )
+    return cuerpo, repetidos
 
 
 async def listar_hallazgos(session: AsyncSession, proceso_id: int) -> list[HallazgoOut]:

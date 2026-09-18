@@ -60,7 +60,7 @@ FACTURAS = {
         "iban": "ES3900815290070012345678",
         "pedido": "PO-2026-0813",
     },
-    "FA-9999_sin_leer.pdf": None,  # ingested but not extracted yet
+    "FA-9999_sin_leer.pdf": None,  # the two extractions disagreed: REVISION
 }
 
 
@@ -77,7 +77,12 @@ async def sembrar(proceso_id: int) -> None:
             session.add(Fichero(hash=digest, nombre=nombre, contenido=b"%PDF", texto=""))
             session.add(
                 Instancia(
-                    proceso_id=proceso_id, fichero_hash=digest, nombre=nombre, simbolos=simbolos
+                    proceso_id=proceso_id,
+                    fichero_hash=digest,
+                    nombre=nombre,
+                    simbolos=simbolos,
+                    estado="PENDIENTE" if simbolos else "REVISION",
+                    motivo_revision=None if simbolos else "Las dos extracciones no coinciden",
                 )
             )
         session.add(Fuente(proceso_id=proceso_id, nombre="proveedores", origen="x", filas=[]))
@@ -129,13 +134,13 @@ async def test_ejecutar_revisar_y_exportar(monkeypatch: pytest.MonkeyPatch) -> N
         proceso_id = r.json()["id"]
         await sembrar(proceso_id)
 
-        # The engine decides everything that has symbols. The unread invoice is left alone.
+        # The engine decides everything that has symbols. The one in REVISION is left alone.
         r = await api.post(f"/procesos/{proceso_id}/ejecutar")
         assert r.status_code == 200, r.text
         resumen = r.json()
         assert resumen["por_decision"] == {"PAGAR": 1, "NO_PAGAR": 1, "ESCALAR": 1}
 
-        r = await api.get(f"/procesos/{proceso_id}/instancias", params={"estado": "PENDIENTE"})
+        r = await api.get(f"/procesos/{proceso_id}/instancias", params={"estado": "REVISION"})
         assert [i["nombre"] for i in r.json()] == ["FA-9999_sin_leer.pdf"]
 
         # The export refuses to invent a result for an instance nobody decided.
@@ -163,7 +168,8 @@ async def test_ejecutar_revisar_y_exportar(monkeypatch: pytest.MonkeyPatch) -> N
         }
         assert [e["paso"] for e in detalle["eventos"]] == ["decision"]
 
-        # A person resolves it. The engine's decision stays exactly as it was.
+        # A person resolves it. The engine's decision stays exactly as it was, and it is still
+        # what gets exported (P4): the challenge expects the process output.
         r = await api.post(
             f"/instancias/{escalada}/resolver",
             json={"decision": "NO_PAGAR", "motivo": "IBAN no verificado con el proveedor"},
@@ -171,24 +177,25 @@ async def test_ejecutar_revisar_y_exportar(monkeypatch: pytest.MonkeyPatch) -> N
         )
         assert r.status_code == 200, r.text
         historico = r.json()["decisiones"]
-        assert [(d["autor"], d["decision"]) for d in historico] == [
-            ("motor", "ESCALAR"),
-            ("Ana", "NO_PAGAR"),
+        assert [(d["autor"], d["decision"], d["tipo_humana"]) for d in historico] == [
+            ("motor", "ESCALAR", None),
+            ("Ana", "NO_PAGAR", "resolucion"),
         ]
         assert r.json()["decision"] == "NO_PAGAR"
 
-        # She also decides the one that was never extracted.
-        pendiente = next(
+        # She also corrects the one in REVISION: our own doubt, so her decision is exported.
+        revision = next(
             i["id"]
             for i in (await api.get(f"/procesos/{proceso_id}/instancias")).json()
             if i["nombre"] == "FA-9999_sin_leer.pdf"
         )
         r = await api.post(
-            f"/instancias/{pendiente}/resolver",
-            json={"decision": "ESCALAR", "motivo": "El PDF no se puede leer"},
+            f"/instancias/{revision}/resolver",
+            json={"decision": "NO_PAGAR", "motivo": "Leído a mano: el pedido ya está pagado"},
             headers=cabeceras,
         )
         assert r.status_code == 200, r.text
+        assert r.json()["decisiones"][-1]["tipo_humana"] == "correccion_revision"
 
         r = await api.get(f"/procesos/{proceso_id}/exportar")
         assert r.status_code == 200, r.text
@@ -196,11 +203,12 @@ async def test_ejecutar_revisar_y_exportar(monkeypatch: pytest.MonkeyPatch) -> N
         assert salida == [
             {"file_id": "factura_1217.pdf", "result": "PAGAR"},
             {"file_id": "FA-1016_papelería.pdf", "result": "NO_PAGAR"},
-            {"file_id": "FA-5044_mensajería2.pdf", "result": "NO_PAGAR"},
-            {"file_id": "FA-9999_sin_leer.pdf", "result": "ESCALAR"},
+            {"file_id": "FA-5044_mensajería2.pdf", "result": "ESCALAR"},
+            {"file_id": "FA-9999_sin_leer.pdf", "result": "NO_PAGAR"},
         ]
         # The file_id must survive byte for byte, accents included.
         assert "papeler\\u00eda" not in r.text
+        assert "X-Nombres-Repetidos" not in r.headers
 
 
 async def test_resolver_rechaza_una_decision_que_no_es_del_proceso(
@@ -239,3 +247,66 @@ async def test_resolver_rechaza_una_decision_que_no_es_del_proceso(
         )
         assert r.status_code == 409, r.text
         assert r.json()["code"] == "conflict"
+
+
+async def test_exportar_un_nombre_repetido_da_una_sola_linea(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sandbox, "ejecutar", fake_sandbox)
+    sufijo = uuid.uuid4().hex[:8]
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        r = await api.post(
+            "/usuarios", json={"nombre": "Ana", "email": f"ana-{sufijo}@x.com", "rol": "operador"}
+        )
+        cabeceras = {"X-Usuario-Id": str(r.json()["id"])}
+        r = await api.post(
+            "/procesos",
+            json={
+                "nombre": f"facturas-{sufijo}",
+                "tipos_decision": [
+                    {"nombre": "ESCALAR", "prioridad": 3, "requiere_persona": True},
+                    {"nombre": "NO_PAGAR", "prioridad": 2},
+                    {"nombre": "PAGAR", "prioridad": 1, "por_defecto": True},
+                ],
+                "simbolos": [],
+            },
+        )
+        proceso_id = r.json()["id"]
+        await sembrar(proceso_id)
+        # A second, different file with the same name arrives later: it is the one exported.
+        async with session_factory() as session:
+            digest = uuid.uuid4().hex
+            session.add(Fichero(hash=digest, nombre="factura_1217.pdf", contenido=b"%PDF"))
+            session.add(
+                Instancia(
+                    proceso_id=proceso_id,
+                    fichero_hash=digest,
+                    nombre="factura_1217.pdf",
+                    simbolos=FACTURAS["FA-1016_papelería.pdf"],  # its order was already paid
+                )
+            )
+            await session.commit()
+
+        r = await api.post(f"/procesos/{proceso_id}/ejecutar")
+        assert r.json()["por_decision"] == {"PAGAR": 1, "NO_PAGAR": 2, "ESCALAR": 1}
+        revision = next(
+            i["id"]
+            for i in (await api.get(f"/procesos/{proceso_id}/instancias")).json()
+            if i["estado"] == "REVISION"
+        )
+        r = await api.post(
+            f"/instancias/{revision}/resolver",
+            json={"decision": "PAGAR", "motivo": "Leído a mano"},
+            headers=cabeceras,
+        )
+        assert r.status_code == 200, r.text
+
+        r = await api.get(f"/procesos/{proceso_id}/exportar")
+        assert r.status_code == 200, r.text
+        salida = [json.loads(linea) for linea in r.text.splitlines()]
+        assert len(salida) == 4
+        assert [s for s in salida if s["file_id"] == "factura_1217.pdf"] == [
+            {"file_id": "factura_1217.pdf", "result": "NO_PAGAR"}
+        ]
+        assert json.loads(r.headers["X-Nombres-Repetidos"]) == ["factura_1217.pdf"]

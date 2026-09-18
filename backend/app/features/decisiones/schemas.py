@@ -8,6 +8,7 @@ class DecisionOut(BaseModel):
     id: int
     decision: str
     autor: str  # "motor" or the person's name
+    tipo_humana: str | None  # a person's decision: "resolucion" or "correccion_revision"
     motivo: str | None
     resultados: list[dict[str, Any]]  # per rule: regla_id, hash, salta, motivo
     reglas_hash: str
