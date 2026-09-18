@@ -5,6 +5,8 @@ from app.common.extraction import Candidate, Evidence, ExtractedField, TextLine
 from app.common.normalization import fold, iban, identifier, invoice_date, money
 from app.features.ingesta.schemas import REQUIRED_INVOICE_FIELDS
 
+from .uncertainty import preserve_unreadable
+
 AMOUNT = r"(?<![\w.,])[-+]?\d(?:[\d.,\u00a0 ]*\d)?(?![\w.,])"
 DATE = r"\d{1,2}[/.\-]\d{1,2}[/.\-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+de\s+\w+\s+de\s+\d{4}"
 VAT = r"I\s*\.?\s*V\s*\.?\s*A\s*\.?"
@@ -225,6 +227,7 @@ def parse_invoice(lines: list[TextLine], min_confidence: float = 0.90):
             ):
                 field.status = "UNVERIFIED"
                 warnings.append({"code": "OCR_ARITHMETIC_UNVERIFIED", "field": key})
+    warnings.extend(preserve_unreadable(fields, lines))
     return fields, warnings
 
 
