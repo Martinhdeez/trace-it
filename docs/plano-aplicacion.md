@@ -24,7 +24,7 @@ La aplicación mejora con el uso. Cada decisión humana sobre un caso no cubiert
 | Instancia | Cada caso que el proceso decide | Una factura PDF |
 | Símbolo | Dato con nombre que usan las reglas | `nif`, `iban`, `pedido`, `importe`, `estado_erp` |
 | Regla | Condición determinista sobre símbolos que produce una decisión o un motivo | "IBAN de la factura ≠ IBAN del maestro" |
-| Tipo de decisión | Salidas posibles del proceso | PAGAR, NO_PAGAR, ESCALAR |
+| Tipo de decisión | Salidas posibles del proceso. Las define cada proceso, con su prioridad, cuál es la de por defecto y cuáles requieren a una persona (`requiere_persona`) | PAGAR, NO_PAGAR, ESCALAR (esta última con `requiere_persona`) |
 | Responsable | Persona que decide lo que las reglas no cubren | Manager / Alberto |
 
 ## 3. Ciclo de vida de un proceso
@@ -197,18 +197,25 @@ No hace falta como funcionalidad propia: basta con ejecutar una versión y luego
 Firma única para todas las reglas y todos los procesos:
 ```python
 def evaluar(instancia: dict, fuentes: dict[str, list[dict]], otras: list[dict]) -> dict:
-    # devuelve {"salta": bool, "motivo": str, "decision": str}
+    # devuelve {"salta": bool, "motivo": str}
 ```
 - `instancia`: símbolos de la instancia.
 - `fuentes`: tablas ya cargadas (proveedores, pedidos, foto local del ERP).
 - `otras`: símbolos del resto de instancias del proceso (para reglas como "pedido duplicado").
 Función pura: sin red, sin disco, sin reloj.
+La decisión no la devuelve el código: la fija la regla en su definición (campo `decision`), que la aprueba una persona. El código solo dice si salta y por qué.
 
 **P19. Tipos de regla y combinación.** [DECIDIDO]
 Se ejecutan todas las reglas sobre cada instancia. Hay dos tipos:
 - **Requisito:** algo que tiene que cumplirse. Si no se cumple, la regla salta. Ejemplo: "el IBAN coincide con el del maestro".
 - **Prohibición:** algo que, si se cumple, impide pagar. Si se cumple, la regla salta. Ejemplo: "el ERP dice PAGADA".
-Cada regla declara qué decisión produce cuando salta. Si no salta ninguna: PAGAR. Si saltan varias: precedencia fija ESCALAR > NO_PAGAR (P7).
+Cada regla declara qué decisión produce cuando salta. Si no salta ninguna: la decisión por defecto del proceso. Si saltan varias: gana la de mayor prioridad.
+
+**Tipos de decisión configurables por proceso [DECIDIDO].** Ningún nombre de decisión está fijo en el código. Cada proceso define sus tipos con:
+- `prioridad`: gana la mayor si saltan varias reglas;
+- `por_defecto`: exactamente uno, se aplica si no salta ninguna;
+- `requiere_persona`: las instancias con esa decisión van a la cola del responsable y el asistente propone cómo resolverlas.
+En el proceso de facturas: ESCALAR (3, requiere persona) > NO_PAGAR (2) > PAGAR (1, por defecto).
 
 **P20. Extracción de símbolos.** [DECIDIDO]
 - Cada proceso define su lista de símbolos (nombre, tipo, descripción).
