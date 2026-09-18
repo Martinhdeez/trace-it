@@ -19,7 +19,6 @@ class Decision(Base):
         JSONB
     )  # per rule: id, hash, salta, motivo
     reglas_hash: Mapped[str]  # hash of the rule set applied
-    contexto: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)  # {"ahora": date}
     autor: Mapped[str]  # "motor" or a person's name
     motivo: Mapped[str | None]
     creada: Mapped[created_at]

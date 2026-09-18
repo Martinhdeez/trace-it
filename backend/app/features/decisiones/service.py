@@ -1,9 +1,7 @@
 import json
 from collections import Counter
 from dataclasses import asdict, dataclass
-from datetime import datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,8 +26,6 @@ from app.features.reglas.model import Regla
 from app.features.trazas import service as trazas
 from app.features.trazas.model import Evento
 from app.features.usuarios.model import Usuario
-
-MADRID = ZoneInfo("Europe/Madrid")
 
 
 async def _instancia(session: AsyncSession, instancia_id: int) -> Instancia:
@@ -117,9 +113,8 @@ def _out(instancia: Instancia, decision: Decision | None) -> InstanciaOut:
 async def ejecutar(session: AsyncSession, proceso_id: int) -> ResumenEjecucion:
     """Decide every PENDIENTE instance that already has its symbols.
 
-    Runs against the rules active now and the latest load of each source. The processing
-    date is stamped once for the whole run and stored with each decision, so replaying it
-    later gives the same answer.
+    Runs against the rules active now and the latest load of each source. A rule never
+    reads the clock: anything like a cut-off date is a row in a source of truth.
     """
     await obtener_proceso(session, proceso_id)
     salidas = await _salidas(session, proceso_id)
@@ -136,7 +131,6 @@ async def ejecutar(session: AsyncSession, proceso_id: int) -> ResumenEjecucion:
     simbolos = {
         i.id: {**i.simbolos, "_instancia": i.nombre} for i in instancias if i.simbolos is not None
     }
-    contexto = {"ahora": datetime.now(MADRID).date().isoformat()}
 
     cuenta: Counter[str] = Counter()
     for instancia in instancias:
@@ -151,8 +145,6 @@ async def ejecutar(session: AsyncSession, proceso_id: int) -> ResumenEjecucion:
             instancia.simbolos,
             fuentes,
             otras,
-            contexto,
-            # The sandbox takes `contexto` as its fifth argument; pending on features/agentes.
             sandbox.ejecutar,
         )
         session.add(
@@ -161,7 +153,6 @@ async def ejecutar(session: AsyncSession, proceso_id: int) -> ResumenEjecucion:
                 decision=veredicto.decision,
                 resultados=[asdict(r) for r in veredicto.resultados],
                 reglas_hash=veredicto.reglas_hash,
-                contexto=contexto,
                 autor="motor",
                 motivo=veredicto.motivo or None,
             )
@@ -176,9 +167,7 @@ async def ejecutar(session: AsyncSession, proceso_id: int) -> ResumenEjecucion:
         cuenta[veredicto.decision] += 1
 
     await session.commit()
-    return ResumenEjecucion(
-        decididas=sum(cuenta.values()), por_decision=dict(cuenta), contexto=contexto
-    )
+    return ResumenEjecucion(decididas=sum(cuenta.values()), por_decision=dict(cuenta))
 
 
 async def listar_instancias(
@@ -240,7 +229,6 @@ async def resolver(
             decision=datos.decision,
             resultados=[],  # a person decides on the evidence, not by running the rules
             reglas_hash=anterior.reglas_hash if anterior else "",
-            contexto=anterior.contexto if anterior else {},
             autor=usuario.nombre,
             motivo=datos.motivo,
         )

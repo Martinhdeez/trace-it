@@ -32,13 +32,13 @@ ASIENTOS = [
 REGLAS_V3 = {
     "iban_distinto": (
         "ESCALAR",
-        lambda i, f, o, c: (
+        lambda i, f, o: (
             i["iban"] != next(p for p in f["proveedores"] if p["nif"] == i["nif"])["iban"]
         ),
     ),
     "pedido_ya_pagado": (
         "NO_PAGAR",
-        lambda i, f, o, c: (
+        lambda i, f, o: (
             next(a for a in f["erp"] if a["pedido"] == i["pedido"])["estado"] == "PAGADA"
         ),
     ),
@@ -64,8 +64,8 @@ FACTURAS = {
 }
 
 
-def fake_sandbox(codigo: str, instancia: dict, fuentes: dict, otras: list, contexto: dict) -> dict:
-    salta = REGLAS_V3[codigo][1](instancia, fuentes, otras, contexto)
+def fake_sandbox(codigo: str, instancia: dict, fuentes: dict, otras: list) -> dict:
+    salta = REGLAS_V3[codigo][1](instancia, fuentes, otras)
     return {"salta": salta, "motivo": codigo if salta else ""}
 
 
@@ -134,7 +134,6 @@ async def test_ejecutar_revisar_y_exportar(monkeypatch: pytest.MonkeyPatch) -> N
         assert r.status_code == 200, r.text
         resumen = r.json()
         assert resumen["por_decision"] == {"PAGAR": 1, "NO_PAGAR": 1, "ESCALAR": 1}
-        assert resumen["contexto"]["ahora"]
 
         r = await api.get(f"/procesos/{proceso_id}/instancias", params={"estado": "PENDIENTE"})
         assert [i["nombre"] for i in r.json()] == ["FA-9999_sin_leer.pdf"]
@@ -157,7 +156,6 @@ async def test_ejecutar_revisar_y_exportar(monkeypatch: pytest.MonkeyPatch) -> N
         decision = detalle["decisiones"][0]
         assert decision["autor"] == "motor"
         assert decision["motivo"] == "iban_distinto"
-        assert decision["contexto"]["ahora"] == resumen["contexto"]["ahora"]
         # Every rule's answer is recorded, not just the one that fired.
         assert {(r["motivo"], r["salta"]) for r in decision["resultados"]} == {
             ("iban_distinto", True),

@@ -11,7 +11,6 @@ class DecisionOut(BaseModel):
     motivo: str | None
     resultados: list[dict[str, Any]]  # per rule: regla_id, hash, salta, motivo
     reglas_hash: str
-    contexto: dict[str, Any]
     creada: datetime
 
 
@@ -44,4 +43,3 @@ class ResolverIn(BaseModel):
 class ResumenEjecucion(BaseModel):
     decididas: int
     por_decision: dict[str, int] = Field(examples=[{"PAGAR": 431, "NO_PAGAR": 9, "ESCALAR": 60}])
-    contexto: dict[str, Any]

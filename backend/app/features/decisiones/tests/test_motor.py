@@ -17,14 +17,18 @@ REGLAS_V3 = {
     "iban_distinto": (
         "prohibicion",
         "ESCALAR",
-        lambda i, f, o, c: i["iban"] != _proveedor(f, i["nif"])["iban"],
+        lambda i, f, o: i["iban"] != _proveedor(f, i["nif"])["iban"],
     ),
     "pedido_ya_pagado": (
         "prohibicion",
         "NO_PAGAR",
-        lambda i, f, o, c: _asiento(f, i["pedido"])["estado"] == "PAGADA",
+        lambda i, f, o: _asiento(f, i["pedido"])["estado"] == "PAGADA",
     ),
-    "fecha_futura": ("requisito", "ESCALAR", lambda i, f, o, c: i["fecha"] > c["ahora"]),
+    "fecha_futura": (
+        "requisito",
+        "ESCALAR",
+        lambda i, f, o: i["fecha"] > f["parametros"][0]["fecha_corte"],
+    ),
 }
 
 PROVEEDORES = [
@@ -36,8 +40,8 @@ ASIENTOS = [
     {"pedido": "PO-2026-0474", "estado": "PAGADA"},
     {"pedido": "PO-2026-0813", "estado": "PENDIENTE"},
 ]
-FUENTES = {"proveedores": PROVEEDORES, "erp": ASIENTOS}
-CONTEXTO = {"ahora": "2026-09-19"}
+PARAMETROS = [{"fecha_corte": "2026-09-19"}]  # a rule never reads the clock (P18)
+FUENTES = {"proveedores": PROVEEDORES, "erp": ASIENTOS, "parametros": PARAMETROS}
 
 # factura_1217.pdf: everything matches and the order is unpaid.
 LIMPIA = {
@@ -79,9 +83,9 @@ def reglas(*nombres: str) -> list[Regla]:
     ]
 
 
-def ejecutar(codigo: str, instancia: dict, fuentes: dict, otras: list, contexto: dict) -> dict:
+def ejecutar(codigo: str, instancia: dict, fuentes: dict, otras: list) -> dict:
     """Stand-in for `agentes.sandbox.ejecutar` until it exists. Raises, like the real one."""
-    salta = REGLAS_V3[codigo][2](instancia, fuentes, otras, contexto)
+    salta = REGLAS_V3[codigo][2](instancia, fuentes, otras)
     return {"salta": salta, "motivo": codigo if salta else ""}
 
 
@@ -94,7 +98,6 @@ def decidir_factura(activas: list[Regla], instancia: dict[str, Any], **extra: An
         instancia,
         FUENTES,
         [],
-        CONTEXTO,
         extra.get("ejecutar", ejecutar),
     )
 
@@ -147,7 +150,6 @@ def test_empate_de_prioridad_entre_decisiones_distintas_se_escala() -> None:
         {**IBAN_NUEVO, "pedido": "PO-2026-0474"},
         FUENTES,
         [],
-        CONTEXTO,
         ejecutar,
     )
 
@@ -155,8 +157,8 @@ def test_empate_de_prioridad_entre_decisiones_distintas_se_escala() -> None:
     assert "CONFLICTO_REGLAS" in veredicto.motivo
 
 
-def test_la_fecha_de_proceso_llega_por_contexto() -> None:
-    """Rules are pure: 'today' is an input, so a past decision replays identically."""
+def test_la_fecha_de_corte_llega_por_una_fuente() -> None:
+    """Rules are pure: they never read the clock, so a past decision replays identically."""
     activas = reglas("fecha_futura")
     futura = {**LIMPIA, "fecha": "2027-01-01"}
 
