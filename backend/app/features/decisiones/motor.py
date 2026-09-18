@@ -11,8 +11,8 @@ from typing import Any
 
 from app.features.reglas.model import Regla
 
-# Martín's sandbox: runs `evaluar(instancia, fuentes, otras, contexto)` from `codigo` and
-# returns {"salta": bool, "motivo": str}. Raises on any error, timeout or malformed result.
+# Martín's sandbox: runs `evaluar(instancia, fuentes, otras)` from `codigo` and returns
+# {"salta": bool, "motivo": str}. Raises on any error, timeout or malformed result.
 Ejecutar = Callable[..., dict[str, Any]]
 
 
@@ -48,7 +48,6 @@ def decidir(
     instancia: dict[str, Any],
     fuentes: dict[str, list[dict[str, Any]]],
     otras: list[dict[str, Any]],
-    contexto: dict[str, Any],
     ejecutar: Ejecutar,
 ) -> Veredicto:
     """Apply every rule in `reglas` to one instance.
@@ -63,7 +62,7 @@ def decidir(
 
     for regla in reglas:
         try:
-            respuesta = ejecutar(regla.codigo_a, instancia, fuentes, otras, contexto)
+            respuesta = ejecutar(regla.codigo_a, instancia, fuentes, otras)
             salta, motivo = bool(respuesta["salta"]), str(respuesta.get("motivo", ""))
         except Exception as error:  # noqa: BLE001 - any failure is the same to the engine
             fallo = f"ERROR_REGLA {regla.id}: {type(error).__name__}: {error}"
