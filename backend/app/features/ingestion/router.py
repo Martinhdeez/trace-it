@@ -6,7 +6,7 @@ from typing import Annotated
 from xml.etree.ElementTree import ParseError
 
 import pymupdf
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from openpyxl.utils.exceptions import InvalidFileException
 
@@ -14,17 +14,21 @@ from app.common.exceptions import TraceError
 
 from .config import Settings
 from .errors import InvalidDocumentError
+from .runtime import current_service
 from .schemas import ExtractionResult, ExtractOptions
 from .service import ExtractionService
 
 logger = logging.getLogger(__name__)
 
 
-def create_router(settings: Settings, service: ExtractionService) -> APIRouter:
-    router = APIRouter(tags=["Ingestion"])
+def create_router(
+    settings: Settings | None = None, service: ExtractionService | None = None
+) -> APIRouter:
+    router = APIRouter(tags=["ingestion"])
 
-    @router.post("/v1/extractions", response_model=ExtractionResult)
+    @router.post("/v1/extractions", response_model=ExtractionResult, operation_id="extractDocument")
     async def extract(
+        request: Request,
         file: Annotated[
             UploadFile,
             File(description="Original PDF or XLSX; business fields are read from its contents."),
@@ -43,10 +47,11 @@ def create_router(settings: Settings, service: ExtractionService) -> APIRouter:
             Form(description="Allow Jev recommendations; omitted enables the configured judge."),
         ] = None,
     ):
+        engine = service or current_service(request)
         try:
-            item = await run_in_threadpool(service.ingest, file.file, file.filename)
+            item = await run_in_threadpool(engine.ingest, file.file, file.filename)
             return await run_in_threadpool(
-                service.extract, item, ExtractOptions(ocr=ocr, vlm=vlm, jev=jev)
+                engine.extract, item, ExtractOptions(ocr=ocr, vlm=vlm, jev=jev)
             )
         except ValueError as exc:
             raise InvalidDocumentError(str(exc)) from exc
@@ -58,12 +63,17 @@ def create_router(settings: Settings, service: ExtractionService) -> APIRouter:
         finally:
             await file.close()
 
-    @router.get("/v1/extractions/{extraction_id}", response_model=ExtractionResult)
-    def get_result(extraction_id: str):
-        return service.get_result(extraction_id)
+    @router.get(
+        "/v1/extractions/{extraction_id}",
+        response_model=ExtractionResult,
+        operation_id="getDocumentExtraction",
+    )
+    def get_result(extraction_id: str, request: Request):
+        return (service or current_service(request)).get_result(extraction_id)
 
-    @router.post("/v1/batches", status_code=202)
+    @router.post("/v1/batches", status_code=202, operation_id="submitDocumentBatch")
     async def submit_batch(
+        request: Request,
         files: Annotated[
             list[UploadFile],
             File(description="Original PDF or XLSX; business fields are read from its contents."),
@@ -82,25 +92,28 @@ def create_router(settings: Settings, service: ExtractionService) -> APIRouter:
             Form(description="Allow Jev recommendations; omitted enables the configured judge."),
         ] = None,
     ):
+        engine = service or current_service(request)
         try:
-            if not 1 <= len(files) <= settings.max_batch_files:
-                raise InvalidDocumentError(f"Upload 1-{settings.max_batch_files} files per batch")
+            if not 1 <= len(files) <= engine.settings.max_batch_files:
+                raise InvalidDocumentError(
+                    f"Upload 1-{engine.settings.max_batch_files} files per batch"
+                )
             names = [file.filename for file in files]
             if len(names) != len(set(names)):
                 raise InvalidDocumentError("Duplicate file names within a batch")
             items = []
             for file in files:
-                items.append(await run_in_threadpool(service.ingest, file.file, file.filename))
+                items.append(await run_in_threadpool(engine.ingest, file.file, file.filename))
             options = ExtractOptions(ocr=ocr, vlm=vlm, jev=jev)
-            return await run_in_threadpool(service.submit_batch, items, options)
+            return await run_in_threadpool(engine.submit_batch, items, options)
         except ValueError as exc:
             raise InvalidDocumentError(str(exc)) from exc
         finally:
             for file in files:
                 await file.close()
 
-    @router.get("/v1/batches/{batch_id}")
-    def get_batch(batch_id: str):
-        return service.get_batch(batch_id)
+    @router.get("/v1/batches/{batch_id}", operation_id="getDocumentBatch")
+    def get_batch(batch_id: str, request: Request):
+        return (service or current_service(request)).get_batch(batch_id)
 
     return router
