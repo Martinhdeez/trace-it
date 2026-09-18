@@ -43,3 +43,29 @@ class ResolverIn(BaseModel):
 class ResumenEjecucion(BaseModel):
     decididas: int
     por_decision: dict[str, int] = Field(examples=[{"PAGAR": 431, "NO_PAGAR": 9, "ESCALAR": 60}])
+
+
+class CambioOut(BaseModel):
+    instancia_id: int
+    nombre: str
+    antes: str
+    despues: str
+    autor_anterior: str
+    motivo: str
+
+
+class ImpactoOut(BaseModel):
+    """What a rule change would do to the decisions already taken."""
+
+    sin_cambio: int
+    cambios: list[CambioOut]  # the engine decided it and would now decide otherwise
+    conflictos: list[CambioOut]  # a person decided it and the rules would contradict them
+
+
+class HallazgoOut(BaseModel):
+    id: int
+    decision_id: int
+    regla_id: int | None
+    tipo: str
+    detalle: str | None
+    creado: datetime
