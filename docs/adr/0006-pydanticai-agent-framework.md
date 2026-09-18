@@ -6,7 +6,7 @@ status: accepted  # implementation in progress (docs/agents-plan.md §9, tasks 1
 
 ## Context
 The agents (compilers A and B, escalation assistant, symbol extractors, and later a
-corrector) call LLMs through our own client over LiteLLM (`features/llm/cliente.py`).
+corrector) call LLMs through our own client over LiteLLM (`features/llm/client.py`).
 Each agent validates structured output by hand and has its own repair loop; there is no
 fallback when a provider fails (a 502); tests monkeypatch the client. We want the same
 things in every agent: typed output, bounded retries that return the error to the model,
