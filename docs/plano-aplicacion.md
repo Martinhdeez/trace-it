@@ -110,8 +110,8 @@ Detalle en P13 a P16.
 
 ## 4. Preguntas abiertas (con recomendación)
 
-**P1. ¿Qué forma tiene una regla nueva?** [ABIERTO]
-Recomendación: el agente propone la regla en dos formas, texto legible y condición estructurada sobre símbolos (por ejemplo, `iva_aplicado = 0.16 → NO_PAGAR`). En ejecución solo se evalúa la forma estructurada, sin LLM. Así la regla es determinista y reproducible. El LLM propone; nunca decide en ejecución.
+**P1. ¿Qué forma tiene una regla nueva?** [DECIDIDO]
+La regla se escribe en texto. La aplicación genera por debajo el código que la aplica, de forma automática. Ver P8.
 
 **P2. ¿Una regla nueva se aplica también al pasado?** [DECIDIDO]
 Sí, como comprobación: antes de activarla se ejecuta contra todas las decisiones registradas (ver 3.6). El responsable confirma viendo el impacto.
@@ -121,8 +121,10 @@ Si dos reglas dan decisiones distintas para el mismo caso, el choque se escala a
 
 **P4. ESCALAR y el filtro del reto.** [DECIDIDO]
 - ESCALAR es una salida válida del proceso: una regla puede dar ESCALAR como solución correcta. La resolución posterior del responsable se guarda aparte y no cambia esa salida.
-- **Cada entrega lleva asignada una versión concreta de reglas.** Así se sabe con qué reglas se hizo cada entrega, y el aprendizaje posterior no la altera.
-- El versionado completo es de la iteración 2. [ABIERTO] Cómo cubrir esto en la iteración 1.
+- Se sabe con qué reglas se tomó cada decisión, así que el aprendizaje posterior no altera lo ya decidido.
+- El versionado completo es de la iteración 2.
+- `outcomes.jsonl` es solo una exportación para enviar al reto, no un concepto de la aplicación. Basta con poder exportarlo. [DECIDIDO]
+- [PROPUESTA] En la iteración 1, cada decisión guarda el hash del código de cada regla aplicada. Es barato y, en la iteración 2, permite asociar las decisiones antiguas a su versión.
 
 **P5. ¿Quién valida el proceso generado al crearlo?** [ABIERTO]
 Recomendación: el usuario revisa los símbolos, las reglas y los tipos de decisión extraídos antes de la primera ejecución. Cada regla muestra de dónde sale (hoja del Excel, frase del texto). Si un error de lectura pasa aquí, se repite en todas las instancias.
@@ -138,16 +140,25 @@ Decisión:
 - El "agente decisor" es ese motor, sin LLM.
 - El LLM solo interviene después: explica la decisión y, si la instancia se escala, propone decisión y regla (3.4).
 
-**P8. ¿Código libre o lenguaje de reglas?** [ABIERTO]
-Recomendación: híbrido.
-- El compilador escribe primero la regla como condición estructurada sobre símbolos, usando un catálogo pequeño de primitivas (igual a, dentro de tolerancia, existe en fuente, fecha válida, único por clave...).
-- Esa forma se lee, se compara entre versiones y no necesita sandbox.
-- Solo si la regla no cabe en las primitivas, el compilador genera código Python puro, que se ejecuta aislado.
-- Casi todas las reglas de la norma v3 caben en primitivas.
+**P8. ¿Código libre o lenguaje de reglas?** [DECIDIDO: código libre]
+- El agente compilador genera **código Python** para cada regla, de forma totalmente automática.
+- Motivo: las reglas cambian todo el tiempo (se añaden, se quitan, se modifican) y la aplicación debe seguir funcionando sin que nadie toque su código. Además debe servir para otros problemas distintos de las facturas. Un catálogo cerrado de primitivas obligaría a programar cada tipo de regla nuevo.
+- Se descarta el catálogo de primitivas (reglas como datos) por ese motivo.
 
-**P9. ¿Cómo se sabe que el código generado es correcto?** [PROPUESTA]
-- **Cada decisión humana se convierte en un caso de prueba.** Cada escalado resuelto y cada error corregido quedan como ejemplo etiquetado. El conjunto de pruebas crece con el uso, y ninguna regla nueva puede romper una decisión ya validada sin que el responsable lo vea.
-- **Opcional: doble compilación.** Dos compilaciones independientes de la misma regla (otro modelo u otro prompt) se ejecutan sobre el histórico. Si coinciden en todos los casos, se acepta. Si no, se muestra la diferencia al responsable. Cuesta poco y detecta errores de interpretación de la regla.
+[PROPUESTA] Ejecución segura del código generado (lo ha escrito un LLM):
+- Comprobación estática antes de aceptarlo: solo imports permitidos (`decimal`, `datetime`, `re`, `math`, `unicodedata`) y nada de `open`, `exec`, `eval`, `__import__` ni acceso a red.
+- Ejecución en un proceso aparte, con tiempo máximo, sin red y sin disco.
+- La función recibe los símbolos y devuelve un resultado con forma fija: `{cumple, motivo, decision}`. Si devuelve otra cosa, falla o se pasa de tiempo, la instancia se escala con motivo `ERROR_REGLA` y se avisa. Nunca se decide sin esa regla.
+
+**P9. ¿Cómo se sabe que el código generado es correcto?** [DECIDIDO]
+1. Dos agentes independientes (a ser posible, modelos distintos). Cada uno escribe, solo a partir del texto de la regla, su código y sus tests: código A + tests A, código B + tests B. Ninguno ve lo del otro.
+2. **Todos los tests se pasan por los dos códigos**: el cruce (A con tests B, B con tests A) detecta diferencias de interpretación; los tests propios detectan errores de programación.
+3. Los dos códigos deben coincidir en todas las instancias del histórico.
+4. El responsable revisa el impacto y activa.
+5. En producción se ejecutan los dos códigos. Si no coinciden en una instancia, se escala con `DISCREPANCIA_REGLA`.
+
+Si un test falla, no se sabe quién tiene razón (código o test). Lo resuelve el responsable, normalmente aclarando el texto de la regla y recompilando. Coste: dos compilaciones por cambio de regla, no por instancia.
+Límite: si los dos agentes malinterpretan igual un texto ambiguo, pasa. Lo cubre la revisión del impacto (paso 4).
 
 **P10. ¿Y si la regla nueva usa un símbolo que no se guardó?** [ABIERTO]
 Por ejemplo, una regla nueva sobre el "recargo financiero" necesita un campo que antes no se extraía.
@@ -182,6 +193,39 @@ Ninguno de los dos automáticamente. Se marca como conflicto y lo resuelve el re
 **P17. ¿Comparar dos versiones cualesquiera?** [DESCARTADO]
 No hace falta como funcionalidad propia: basta con ejecutar una versión y luego otra.
 
+**P18. Datos que recibe la función de una regla.** [DECIDIDO]
+Firma única para todas las reglas y todos los procesos:
+```python
+def evaluar(instancia: dict, fuentes: dict[str, list[dict]], otras: list[dict]) -> dict:
+    # devuelve {"salta": bool, "motivo": str, "decision": str}
+```
+- `instancia`: símbolos de la instancia.
+- `fuentes`: tablas ya cargadas (proveedores, pedidos, foto local del ERP).
+- `otras`: símbolos del resto de instancias del proceso (para reglas como "pedido duplicado").
+Función pura: sin red, sin disco, sin reloj.
+
+**P19. Tipos de regla y combinación.** [DECIDIDO]
+Se ejecutan todas las reglas sobre cada instancia. Hay dos tipos:
+- **Requisito:** algo que tiene que cumplirse. Si no se cumple, la regla salta. Ejemplo: "el IBAN coincide con el del maestro".
+- **Prohibición:** algo que, si se cumple, impide pagar. Si se cumple, la regla salta. Ejemplo: "el ERP dice PAGADA".
+Cada regla declara qué decisión produce cuando salta. Si no salta ninguna: PAGAR. Si saltan varias: precedencia fija ESCALAR > NO_PAGAR (P7).
+
+**P20. Extracción de símbolos.** [DECIDIDO]
+- Cada proceso define su lista de símbolos (nombre, tipo, descripción).
+- Un LLM la rellena con salida estructurada: sobre el texto del PDF, o sobre la imagen si es un escaneo. Sin parsers por plantilla.
+- Dos extracciones independientes (proveedores distintos) deben coincidir. Además, validadores fijos donde apliquen: IBAN mod-97, letra del NIF, base + IVA = total.
+- Si no coinciden o un validador falla: estado `REVISION` (P21).
+
+**P21. Discrepancias.** [DECIDIDO]
+- **Al añadir una regla:** si los dos códigos discrepan, o chocan con otra regla o con una decisión validada, el sistema lo detecta, avisa al usuario y la regla **no entra** hasta que se resuelva.
+- [PROPUESTA] **En ejecución:** si las dos extracciones no coinciden, o los dos códigos de una regla ya aceptada discrepan en una instancia nueva, la instancia pasa a `REVISION`. `REVISION` es un estado interno, no una decisión: no es ESCALAR. No se puede exportar `outcomes.jsonl` mientras quede alguna instancia en `REVISION`.
+
+**P22. Proveedores de LLM.** [DECIDIDO]
+- El sistema no depende de ningún proveedor. Cualquier API (Anthropic, OpenAI, Gemini, local...) se puede usar.
+- Cada papel tiene su propia configuración, cambiable en ejecución: `compilador_a`, `compilador_b`, `extractor_1`, `extractor_2`, `asistente`. Cada uno elige proveedor y modelo.
+- [PROPUESTA] Implementación: LiteLLM, que ya ofrece una única interfaz para todos los proveedores (texto, imagen y salida estructurada). Evita escribir un adaptador por proveedor.
+- Por defecto, los papeles emparejados (`_a`/`_b`, `_1`/`_2`) usan proveedores distintos, para que no se equivoquen igual.
+
 ## 5. Funcionalidades de la primera iteración [PROPUESTA; corte de F11 DECIDIDO]
 Objetivo de la iteración 1 (sábado ~14:00): `outcomes.jsonl` del lote 1 correcto y todo el ciclo de reglas funcionando de punta a punta en un proceso.
 
@@ -191,15 +235,14 @@ Objetivo de la iteración 1 (sábado ~14:00): `outcomes.jsonl` del lote 1 correc
 | F2 | Ingesta | Subir ficheros. Se identifican por hash; se guardan tal cual con el texto completo extraído (texto del PDF u OCR/visión para escaneos) | Sí |
 | F3 | Conectores | Excel (maestros) y ERP (API tolerante a fallos). Cada descarga del ERP se guarda como un ingreso | Sí |
 | F4 | Extracción de símbolos | Saca de cada instancia los símbolos que usan las reglas, con su origen | Sí |
-| F5 | Reglas y compilador | Alta de una regla en texto; el agente compilador genera código y pruebas; se valida y se activa como versión nueva | Sí |
+| F5 | Reglas y compilador | Alta de una regla en texto; dos agentes generan código y tests; tests cruzados, coincidencia sobre el histórico; se activa si no hay discrepancias (P9, P21) | Sí |
 | F6 | Motor | Ejecuta todas las reglas activas sobre cada instancia, aplica la precedencia y registra la decisión. Sin LLM | Sí |
 | F7 | Histórico y auditoría | Registro de todas las decisiones. Al activar una versión, se reejecuta sobre el histórico: cambios, conflictos y hallazgos | Sí |
 | F8 | Escalado asistido | Cola de escalados. El agente sugiere decisión, razonamiento y regla; el responsable acepta o escribe la suya | Sí |
 | F9 | Versionado | Lista lineal de versiones; activar una anterior | Iteración 2 [DECIDIDO] |
-| F10 | Exportar | Genera `outcomes.jsonl` y registra con qué reglas se hizo la entrega | Sí |
+| F10 | Exportar | Botón para descargar `outcomes.jsonl` con las decisiones actuales | Sí |
 | F11 | Crear proceso desde datos | A partir de todos los datos subidos y texto libre, deriva símbolos, reglas y tipos de decisión | Iteración 2 |
 | F12 | Autocorrección por revisión | El manager marca un error en una decisión y explica por qué; el agente propone el cambio de regla | Iteración 2 |
-| F13 | Doble compilación | Dos compilaciones independientes de cada regla deben coincidir sobre el histórico | Si sobra tiempo |
 
 Motivo del corte: F11 es lo más difícil de dejar fiable y no hace falta para pasar el filtro. En v1, las reglas de la norma v3 se dan de alta una a una por F5. Así el mismo flujo del producto genera la entrega.
 
