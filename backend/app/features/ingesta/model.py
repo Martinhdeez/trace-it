@@ -23,7 +23,8 @@ class Fichero(Base):
 
 
 class Instancia(Base):
-    """One case the process decides. `nombre` is the exact `file_id` of the export."""
+    """One case the process decides. `nombre` identifies it in exports (the challenge's
+    `outcomes.jsonl` calls it `file_id`)."""
 
     __tablename__ = "instancias"
     __table_args__ = (
