@@ -19,7 +19,7 @@ from app.features.fuentes.model import Fuente
 from app.features.ingesta.model import Instancia
 from app.features.llm import cliente
 from app.features.llm.model import ConfigLLM
-from app.features.procesos.model import Simbolo
+from app.features.procesos.model import Proceso, Simbolo
 from app.features.reglas.model import Regla
 from app.features.trazas.service import registrar
 
@@ -90,6 +90,11 @@ regla la indica.
 - `motivo`: código corto en MAYÚSCULAS_CON_GUIONES_BAJOS (p. ej. "VALOR_NO_COINCIDE", \
 "LIMITE_SUPERADO"). Cuando no salta, un motivo como "OK".
 
+Descripción del proceso: si el contexto la trae, contiene convenciones que valen para todas \
+las reglas del proceso (normalización de claves, unidades de importes, tolerancias, qué hacer \
+si falta un valor...). Aplícalas siempre y antes que tus propias suposiciones. Si contradicen \
+el texto de la regla, manda el texto de la regla.
+
 Tests (campo `tests`, al menos 6): cada uno con `nombre`, `instancia_json` (objeto JSON), \
 `fuentes_json` (objeto JSON), `otras_json` (lista JSON) y `salta` (lo que debe devolver la \
 regla). Cubre casos en que salta y en que no, y los límites y excepciones que el texto de la \
@@ -97,9 +102,15 @@ regla menciona. Los tests deben pasar con tu propio código."""
 
 
 def _contexto(
-    regla: Regla, simbolos: list[Simbolo], fuentes: dict[str, list[dict[str, Any]]]
+    regla: Regla,
+    simbolos: list[Simbolo],
+    fuentes: dict[str, list[dict[str, Any]]],
+    descripcion: str,
 ) -> str:
     lineas = [
+        "Descripción del proceso (convenciones comunes a todas sus reglas):",
+        descripcion or "(sin descripción)",
+        "",
         f"Regla ({regla.tipo}): {regla.texto}",
         "",
         "Símbolos de cada instancia (nombre, tipo, descripción):",
@@ -265,10 +276,11 @@ def validar(
 
 async def _leer(
     session: AsyncSession, proceso_id: int
-) -> tuple[dict[str, list[dict[str, Any]]], Historico, list[ConfigLLM]]:
-    """Current sources (latest load per name), the process history, and both agents' LLM
-    config preloaded: the two agents run concurrently on one session, and `completar`'s
-    `session.get` must then hit the identity map instead of the connection."""
+) -> tuple[str, dict[str, list[dict[str, Any]]], Historico, list[ConfigLLM]]:
+    """The process description, current sources (latest load per name), the process history,
+    and both agents' LLM config preloaded: the two agents run concurrently on one session,
+    and `completar`'s `session.get` must then hit the identity map instead of the connection."""
+    descripcion = await session.scalar(select(Proceso.descripcion).where(Proceso.id == proceso_id))
     cargas = await session.scalars(
         select(Fuente)
         .where(Fuente.proceso_id == proceso_id)
@@ -287,7 +299,7 @@ async def _leer(
         if simbolos
     ]
     configs = list(await session.scalars(select(ConfigLLM).where(ConfigLLM.papel.in_(PAPELES))))
-    return fuentes, historico, configs
+    return descripcion or "", fuentes, historico, configs
 
 
 async def compilar(session: AsyncSession, regla: Regla, simbolos: list[Simbolo]) -> Compilacion:
@@ -298,8 +310,8 @@ async def compilar(session: AsyncSession, regla: Regla, simbolos: list[Simbolo])
 
     plus tests. Then every test runs against both codes, and both codes run on the
     process history. The result is reported, never silently accepted."""
-    fuentes, historico, _configs = await _leer(session, regla.proceso_id)  # keep refs alive
-    contexto = _contexto(regla, simbolos, fuentes)
+    descripcion, fuentes, historico, _configs = await _leer(session, regla.proceso_id)
+    contexto = _contexto(regla, simbolos, fuentes, descripcion)  # `_configs`: keep refs alive
     (codigo_a, tests_a, traza_a), (codigo_b, tests_b, traza_b) = await asyncio.gather(
         *(_agente(session, papel, contexto) for papel in PAPELES)
     )

@@ -1,6 +1,6 @@
 {
   "nombre": "Gastos de viaje",
-  "descripcion": "Aprueba o rechaza cada nota de gastos de un viaje de empresa.",
+  "descripcion": "Aprueba o rechaza cada nota de gastos de un viaje de empresa. Convenciones de todas las reglas: importe está en euros y se compara con Decimal(str(importe)); si falta un símbolo que la regla necesita (None), la regla no salta.",
   "tipos_decision": [
     {"nombre": "REVISAR", "prioridad": 3, "requiere_persona": true},
     {"nombre": "RECHAZAR", "prioridad": 2},

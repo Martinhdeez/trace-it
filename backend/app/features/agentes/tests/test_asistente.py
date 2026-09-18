@@ -42,6 +42,9 @@ SUGERENCIA = {
 }
 
 
+DESCRIPCION = "Importes en céntimos enteros; si falta un valor, la regla no salta."
+
+
 @pytest.fixture
 async def caso(request):
     """A process with an escalated instance, a past human resolution and a pending one. The
@@ -49,7 +52,7 @@ async def caso(request):
     escalar = getattr(request, "param", "ESCALAR")
     sufijo = uuid.uuid4().hex[:8]
     async with session_factory() as s:
-        proceso = Proceso(nombre=f"asistente-{sufijo}")
+        proceso = Proceso(nombre=f"asistente-{sufijo}", descripcion=DESCRIPCION)
         s.add(proceso)
         await s.flush()
         s.add_all(
@@ -125,6 +128,7 @@ async def test_sugiere_y_registra_evento(caso, monkeypatch) -> None:
     assert sugerencia == asistente.Sugerencia(**SUGERENCIA)
 
     contexto = json.loads(llamadas[0][1]["content"])
+    assert contexto["descripcion_proceso"] == DESCRIPCION
     assert contexto["tipos_decision"] == ["ESCALAR", "NO_PAGAR", "PAGAR"]
     assert contexto["tipos_requieren_persona"] == ["ESCALAR"]
     assert contexto["motivo_escalado"]["reglas_que_saltaron"][0]["texto"].startswith("Si importe")

@@ -169,13 +169,14 @@ def llm(monkeypatch: pytest.MonkeyPatch) -> dict:
         return Respuesta(contenido=contenido, modelo=f"falso/{papel}", coste=0.01, latencia_ms=5)
 
     async def leer(session, proceso_id):
-        return {"proveedores": [{"cif": "B1", "iban": "ES1"}]}, HISTORICO, []
+        return DESCRIPCION, {"proveedores": [{"cif": "B1", "iban": "ES1"}]}, HISTORICO, []
 
     monkeypatch.setattr(compilador.cliente, "completar", completar)
     monkeypatch.setattr(compilador, "_leer", leer)
     return guion
 
 
+DESCRIPCION = "Importes en céntimos enteros; si falta un valor, la regla no salta."
 REGLA = SimpleNamespace(id=7, proceso_id=1, texto="Si importe > 1000, escalar", tipo="prohibicion")
 SIMBOLOS = [SimpleNamespace(nombre="importe", tipo="numero", descripcion="total factura")]
 
@@ -201,6 +202,7 @@ async def test_compilar_extremo_a_extremo(llm: dict) -> None:
     assert ctx_a == ctx_b
     assert "prohibicion" in ctx_a["content"] and "importe (numero)" in ctx_a["content"]
     assert '"iban": "ES1"' in ctx_a["content"]
+    assert DESCRIPCION in ctx_a["content"]
     eventos = [e for e in sesion.añadidos if e.paso == "compilar_regla"]
     assert [e.datos["papel"] for e in eventos] == ["compilador_a", "compilador_b"]
     assert all(e.datos["reparaciones"] == 0 and e.coste == 0.01 for e in eventos)
@@ -219,6 +221,7 @@ async def test_compilar_autorreparacion(llm: dict) -> None:
     # A only ever saw its own broken answer and the sandbox error, never B's work.
     reparacion = llm["mensajes"]["compilador_a"][1]
     assert "sandbox" in reparacion[-1]["content"]
+    assert DESCRIPCION in reparacion[1]["content"]  # its own context, kept in the repair round
     assert all(m["role"] != "assistant" or "def evaluar(:" in m["content"] for m in reparacion)
     assert resultado.informe["valida"] is True
 

@@ -25,7 +25,7 @@ La carga se puede repetir sin miedo:
 | Campo | Obligatorio | Qué es |
 |---|---|---|
 | `nombre` | sí | Nombre único del proceso |
-| `descripcion` | no | Texto libre |
+| `descripcion` | no | Texto libre. Los agentes (compilador y asistente) lo reciben como contexto de cada regla: pon aquí las convenciones comunes (normalización, unidades, qué hacer si falta un valor) |
 | `tipos_decision` | sí | `[{nombre, prioridad, por_defecto, requiere_persona}]`. Gana la mayor `prioridad` si saltan varias reglas. Exactamente uno `por_defecto` (se aplica si no salta ninguna), y ese no puede `requiere_persona` |
 | `simbolos` | no | `[{nombre, tipo, descripcion}]`: los datos que la extracción rellena en cada instancia y que leen las reglas |
 | `reglas` | no | `[{texto, tipo, decision}]`. `tipo`: `requisito` (salta si no se cumple) o `prohibicion` (salta si se cumple). `decision`: uno de los `tipos_decision` |
@@ -40,7 +40,7 @@ Se rechaza (sin tocar la base de datos) una definición con tipos, símbolos o t
 ```json
 {
   "nombre": "Gastos de viaje",
-  "descripcion": "Aprueba o rechaza cada nota de gastos de un viaje de empresa.",
+  "descripcion": "Aprueba o rechaza cada nota de gastos de un viaje de empresa. Convenciones de todas las reglas: importe está en euros y se compara con Decimal(str(importe)); si falta un símbolo que la regla necesita (None), la regla no salta.",
   "tipos_decision": [
     {"nombre": "REVISAR", "prioridad": 3, "requiere_persona": true},
     {"nombre": "RECHAZAR", "prioridad": 2},
