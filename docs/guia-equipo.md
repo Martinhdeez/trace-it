@@ -68,13 +68,14 @@ backend/
     core/                 # infraestructura: configuración, base de datos
     common/               # utilidades compartidas: errores
     features/
+      usuarios/           # usuarios y usuario actual (cabecera X-Usuario-Id)
       procesos/           # procesos, símbolos, tipos de decisión
       ingesta/            # ficheros e instancias, extracción de texto
       fuentes/            # Excel y ERP
       extraccion/         # símbolos con doble extracción LLM
-      reglas/             # reglas, compilador (dos agentes), sandbox
+      reglas/             # reglas: alta, estados, activación
+      agentes/            # compilador (dos agentes), sandbox, asistente de escalado
       decisiones/         # motor, histórico, auditoría, colas, exportar
-      escalado/           # sugerencia del asistente para escalados
       trazas/             # eventos de traza
       llm/                # cliente LiteLLM y modelo por papel
 ```
@@ -106,6 +107,7 @@ docker compose up --build         # Postgres + backend en http://localhost:8000
 ```
 - Documentación de la API: http://localhost:8000/docs
 - Las migraciones se aplican solas al arrancar el backend.
+- Si el puerto 8000 está ocupado: `BACKEND_PORT=8001 docker compose up --build`.
 
 Trabajar sin Docker para el backend (más rápido para tests):
 ```bash
@@ -134,9 +136,9 @@ cd .context/500-sombras-de-alberto && make erp
 ## 4. Quién toca qué
 | Persona | Carpetas |
 |---|---|
-| Martín | `features/reglas/` (compilador, sandbox), `features/escalado/` |
-| Mateo | `features/llm/`, `features/extraccion/`, `features/decisiones/` (motor, auditoría), routers |
-| Álvaro | `features/ingesta/`, `features/fuentes/` (Excel, ERP) |
+| Martín | `features/agentes/` (compilador, sandbox, asistente), `features/llm/` |
+| Mateo | `features/reglas/`, `features/decisiones/` (motor, auditoría, API), `features/procesos/`, `features/usuarios/` |
+| Álvaro | `features/ingesta/`, `features/fuentes/` (Excel, ERP), `features/extraccion/` |
 | Carlos | `frontend/` |
 | Varsovia | `docs/`, ADRs, demo |
 
