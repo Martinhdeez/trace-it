@@ -8,8 +8,8 @@ from app.common.normalization import clean_text
 
 
 def remote_lines(transcript: str, page: int, point_size):
-    # Rebuild only headings, never identifier digits. All resulting fields stay
-    # UNVERIFIED because a generative transcript has no calibrated confidence.
+    # Rebuild only headings, never identifier digits. A generative transcript
+    # has no calibrated confidence and needs another reader's corroboration.
     labels = [
         (r"N\s*I\s*F", "NIF"),
         (r"I\s*B\s*A\s*N", "IBAN"),

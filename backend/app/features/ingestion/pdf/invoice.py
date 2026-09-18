@@ -243,13 +243,20 @@ def unresolved(fields):
 def arithmetic_checks(fields):
     warnings = []
     keys = ("net_amount", "vat_rate", "vat_amount", "gross_amount")
-    if all(fields[k].status == "OBSERVED" and fields[k].value is not None for k in keys):
-        base, rate, vat, total = (Decimal(fields[k].value) for k in keys)
+    available = {
+        key: Decimal(fields[key].value)
+        for key in keys
+        if fields[key].status == "OBSERVED" and fields[key].value is not None
+    }
+    if all(key in available for key in ("net_amount", "vat_rate", "vat_amount")):
+        base, rate, vat = (available[key] for key in ("net_amount", "vat_rate", "vat_amount"))
         expected = (base * rate / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         if abs(expected - vat) > Decimal("0.01"):
             warnings.append(
                 {"code": "VAT_MISMATCH", "expected": str(expected), "observed": str(vat)}
             )
+    if all(key in available for key in ("net_amount", "vat_amount", "gross_amount")):
+        base, vat, total = (available[key] for key in ("net_amount", "vat_amount", "gross_amount"))
         if abs(base + vat - total) > Decimal("0.01"):
             warnings.append(
                 {"code": "TOTAL_MISMATCH", "expected": str(base + vat), "observed": str(total)}

@@ -1,26 +1,57 @@
+"""Route incomplete document readings through local, visual and textual experts."""
+
 from app.features.ingestion.config import Settings
+from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.ocr.local import LocalOCR
 from app.features.ingestion.ocr.vision import VisionFallback
-from app.features.ingestion.schemas import REQUIRED_INVOICE_FIELDS, ExtractOptions
+from app.features.ingestion.schemas import ExtractOptions
 
+from .committee import POLICY_VERSION, reconcile
 from .invoice import parse_invoice, unresolved
 from .native import native_pages, render
-from .uncertainty import preserve_unreadable, withhold_uncertain_values
 
 
 def extract_pdf(
-    content: bytes, options: ExtractOptions, settings: Settings, ocr: LocalOCR, vlm: VisionFallback
+    content: bytes,
+    options: ExtractOptions,
+    settings: Settings,
+    ocr: LocalOCR,
+    vlm: VisionFallback,
+    judge=None,
 ):
     pages = native_pages(content, settings)
-    all_lines = [line for page in pages for line in page["lines"]]
-    fields, _ = parse_invoice(all_lines, settings.ocr_min_confidence)
-    stage_warnings, page_reports = [], []
-    metrics = {"native_pages": 0, "ocr_calls": 0, "vlm_calls": 0}
+    readers = {"native": [line for page in pages for line in page["lines"]]}
+    fields, _ = parse_invoice(readers["native"], settings.ocr_min_confidence)
+    warnings, page_reports, images = [], [], {}
+    metrics = {
+        "native_pages": 0,
+        "ocr_calls": 0,
+        "ocr_verification_calls": 0,
+        "vlm_calls": 0,
+        "jev_calls": 0,
+    }
+
+    def image(page):
+        number = page["number"]
+        if number not in images:
+            images[number] = render(content, number, settings)
+        return images[number]
+
+    def failure(code, stage, exc, page=None):
+        warnings.append(
+            {
+                "code": code,
+                "stage": stage,
+                "page": page,
+                "error_type": type(exc).__name__,
+                "message": "Reader unavailable; existing evidence preserved",
+            }
+        )
+
     for page in pages:
         number, lines = page["number"], page["lines"]
         text = "\n".join(line.text for line in lines)
         chars = len(text.strip())
-        # A native cover sheet does not excuse skipping another scanned page.
         needs_ocr = (
             chars < 40
             or text.count("\ufffd") / max(1, chars) > 0.02
@@ -32,160 +63,100 @@ def extract_pdf(
             "method": "native",
             "ocr_needed": needs_ocr,
         }
-        if chars:
-            metrics["native_pages"] += 1
-        png = None
+        metrics["native_pages"] += int(bool(chars))
         if needs_ocr and options.ocr:
-            try:
-                png = render(content, number, settings)
-                metrics["ocr_calls"] += 1
-                recognized = ocr.recognize(png, number, page["size"])
-                if recognized:
-                    # Keep native observations. Duplicate corroboration is not a conflict;
-                    # different observations remain ambiguous rather than overwriting each other.
-                    all_lines.extend(recognized)
-                    report["method"] = "native+ocr" if chars else "ocr"
-                else:
-                    stage_warnings.append({"code": "OCR_EMPTY", "page": number})
-            except Exception as exc:
-                stage_warnings.append(
-                    {
-                        "code": "OCR_ERROR",
-                        "page": number,
-                        "error_type": type(exc).__name__,
-                        "message": (
-                            "OCR unavailable or failed; retry after checking provider configuration"
-                        ),
-                    }
-                )
+            for reader, method in (("primary", "recognize"), ("secondary", "verify")):
+                if not hasattr(ocr, method):
+                    continue
+                try:
+                    metrics["ocr_calls"] += 1
+                    metrics["ocr_verification_calls"] += int(reader == "secondary")
+                    recognized = getattr(ocr, method)(image(page), number, page["size"])
+                    # Reader-prefixed locators keep identical region IDs distinguishable.
+                    recognized = [
+                        line.model_copy(update={"id": reader + ":" + line.id})
+                        for line in recognized
+                    ]
+                    readers.setdefault(reader, []).extend(recognized)
+                    if recognized:
+                        report["method"] = "native+ocr" if chars else "ocr"
+                    else:
+                        warnings.append({"code": "OCR_EMPTY", "page": number, "stage": reader})
+                except Exception as exc:
+                    failure("OCR_ERROR", reader, exc, number)
         elif needs_ocr:
-            stage_warnings.append({"code": "OCR_DISABLED", "page": number})
-        fields, _ = parse_invoice(all_lines, settings.ocr_min_confidence)
+            warnings.append({"code": "OCR_DISABLED", "page": number})
         page_reports.append(report)
 
-    fields, warnings = parse_invoice(all_lines, settings.ocr_min_confidence)
-    metrics["ocr_verification_calls"] = 0
-    verification = {}
-    # A high recognition score did not protect against wrong digits in this
-    # corpus. Independently transcribe otherwise-complete scanned invoices;
-    # do not spend a second OCR pass on pages already requiring review.
-    targets = [
-        key
-        for key in REQUIRED_INVOICE_FIELDS
-        if fields[key].candidates
-        and all(c.evidence.method == "ocr" for c in fields[key].candidates)
-    ]
-    if (
-        targets
-        and hasattr(ocr, "verify")
-        and all(
-            fields[key].status == "OBSERVED" for key in REQUIRED_INVOICE_FIELDS if key != "currency"
-        )
-    ):
-        confirmed_lines = []
-        try:
-            target_pages = {c.evidence.page for key in targets for c in fields[key].candidates}
-            for page in pages:
-                if page["number"] not in target_pages:
-                    continue
-                metrics["ocr_calls"] += 1
-                metrics["ocr_verification_calls"] += 1
-                confirmed_lines.extend(
-                    ocr.verify(
-                        render(content, page["number"], settings), page["number"], page["size"]
-                    )
-                )
-            check_fields, _ = parse_invoice(confirmed_lines, settings.ocr_min_confidence)
-            all_lines.extend(confirmed_lines)
-            for key in targets:
-                original, check = fields[key], check_fields[key]
-                agrees = check.value == original.value and check.status == "OBSERVED"
-                verification[key] = {
-                    "agrees": agrees,
-                    "candidates": [c.model_dump() for c in check.candidates],
-                }
-                if not agrees:
-                    if check.value is not None and check.value != original.value:
-                        original.candidates.extend(check.candidates)
-                        original.value, original.status = None, "AMBIGUOUS"
-                    else:
-                        original.status = "UNVERIFIED"
-                    warnings.append({"code": "OCR_NOT_CORROBORATED", "field": key})
-        except Exception as exc:
-            for key in targets:
-                fields[key].status = "UNVERIFIED"
-            stage_warnings.append(
-                {
-                    "code": "OCR_ERROR",
-                    "stage": "verification",
-                    "error_type": type(exc).__name__,
-                    "message": "OCR verification unavailable; primary evidence preserved",
-                }
-            )
-    # VLM can transcribe only after deterministic extraction/OCR has been exhausted.
-    vision_targets = set(unresolved(fields)) - {"currency"}
-    vision_targets.update(
-        key
-        for key, value in fields.items()
-        if value.status == "INVALID"
-        and value.candidates
-        and all(c.evidence.method == "ocr" for c in value.candidates)
+    fields, decisions, _ = reconcile(readers, settings.ocr_min_confidence)
+    vision_enabled = options.vlm is True or (
+        options.vlm is None and getattr(vlm, "configured", False)
     )
-    vision_proposals = {}
-    if options.vlm and vision_targets:
+    # Native missing currency does not justify guessing with a model. On scanned
+    # pages any unresolved field, including currency, can trigger image inspection.
+    needs_vision = bool(set(unresolved(fields)) - {"currency"}) or (
+        any(report["ocr_needed"] for report in page_reports)
+        and any(field.status != "OBSERVED" for field in fields.values())
+    )
+    if vision_enabled and needs_vision:
         for page in pages:
             try:
                 metrics["vlm_calls"] += 1
-                generated = vlm.transcribe(
-                    render(content, page["number"], settings), page["number"], page["size"]
-                )
-                generated_fields, generated_warnings = parse_invoice(
-                    generated, settings.ocr_min_confidence
-                )
-                stage_warnings.extend(generated_warnings)
-                all_lines.extend(generated)
-                for key, original in fields.items():
-                    proposed = generated_fields[key]
-                    if (
-                        original.value is not None
-                        and proposed.value is not None
-                        and original.value != proposed.value
-                    ):
-                        original.candidates.extend(proposed.candidates)
-                        original.value, original.status = None, "AMBIGUOUS"
-                        stage_warnings.append({"code": "MODEL_DISAGREEMENT", "field": key})
-                for key in vision_targets:
-                    if generated_fields[key].candidates:
-                        vision_proposals.setdefault(key, []).extend(
-                            c.model_dump() for c in generated_fields[key].candidates
-                        )
-                    if fields[key].status == "MISSING" and generated_fields[key].candidates:
-                        fields[key] = generated_fields[key]
-                        fields[key].status = "UNVERIFIED"
-                stage_warnings.append({"code": "VLM_REQUIRES_VERIFICATION", "page": page["number"]})
+                generated = vlm.transcribe(image(page), page["number"], page["size"])
+                readers.setdefault("visual", []).extend(generated)
             except Exception as exc:
-                stage_warnings.append(
-                    {
-                        "code": "VLM_ERROR",
-                        "page": page["number"],
-                        "error_type": type(exc).__name__,
-                        "message": "Vision fallback failed; original evidence preserved",
-                    }
-                )
-    # A later reading reporting illegibility must not be hidden by an earlier plausible guess.
-    warnings.extend(preserve_unreadable(fields, all_lines))
-    warnings.extend(withhold_uncertain_values(fields, verification))
-    for key, field in fields.items():
+                failure("VLM_ERROR", "visual", exc, page["number"])
+        fields, decisions, _ = reconcile(readers, settings.ocr_min_confidence)
+
+    judge = judge or TextJudge(settings)
+    judge_enabled = options.jev is True or (
+        options.jev is None and getattr(judge, "configured", False)
+    )
+    judgment = {}
+    if judge_enabled and ("primary" in readers or "visual" in readers) and unresolved(fields):
+        try:
+            metrics["jev_calls"] += 1
+            judgment = judge.select(readers, fields)
+        except Exception as exc:
+            failure("JEV_ERROR", "text_judge", exc)
+    # Jev recommendations never overwrite image evidence or become another vote.
+    fields, decisions, final_warnings = reconcile(readers, settings.ocr_min_confidence)
+    warnings.extend(final_warnings)
+    for lines in readers.values():
+        warnings.extend(parse_invoice(lines, settings.ocr_min_confidence)[1])
+    for name, field in fields.items():
         if field.status != "OBSERVED":
-            warnings.append({"code": "FIELD_" + field.status, "field": key})
+            warnings.append({"code": "FIELD_" + field.status, "field": name})
+    warnings = list({str(sorted(w.items())): w for w in warnings}.values())
+    verification = {
+        name: {
+            "agrees": field.status == "OBSERVED",
+            "candidates": [
+                c.model_dump()
+                for c in field.candidates
+                if c.evidence.locator.startswith("secondary:")
+            ],
+        }
+        for name, field in fields.items()
+    }
     return (
         fields,
         {
-            "lines": [line.model_dump() for line in all_lines],
-            "vision_proposals": vision_proposals,
+            "lines": [line.model_dump() for lines in readers.values() for line in lines],
+            "vision_proposals": {
+                name: [c.model_dump() for c in field.candidates if c.evidence.method == "vlm"]
+                for name, field in fields.items()
+                if any(c.evidence.method == "vlm" for c in field.candidates)
+            },
             "ocr_verification": verification,
+            "committee": {
+                "policy": POLICY_VERSION,
+                "readers": list(readers),
+                "fields": decisions,
+                "text_judge": judgment,
+            },
         },
-        warnings + stage_warnings,
+        warnings,
         page_reports,
         metrics,
     )

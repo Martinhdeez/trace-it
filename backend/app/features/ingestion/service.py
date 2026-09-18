@@ -9,26 +9,28 @@ from contextlib import suppress
 from pathlib import Path
 
 from app.common.exceptions import NotFoundError
-from app.features.sources.service import extract_workbook
 from app.features.ingestion.config import Settings
+from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.ocr.local import LocalOCR
 from app.features.ingestion.ocr.vision import VisionFallback
 from app.features.ingestion.pdf.extractor import extract_pdf
 from app.features.ingestion.schemas import REQUIRED_INVOICE_FIELDS, ExtractionResult, ExtractOptions
 from app.features.ingestion.store import Store
+from app.features.sources.service import extract_workbook
 
-PIPELINE_VERSION = "invoice-v1.8.0+xlsx-v1.3"
+PIPELINE_VERSION = "invoice-v1.9.0+xlsx-v1.3"
 logger = logging.getLogger(__name__)
 
 
 class ExtractionService:
-    def __init__(self, settings: Settings, ocr=None, vlm=None):
+    def __init__(self, settings: Settings, ocr=None, vlm=None, judge=None):
         self.settings = settings
         self.objects = settings.data_dir / "objects"
         self.objects.mkdir(parents=True, exist_ok=True)
         self.store = Store(settings.data_dir / "tracepay.sqlite3")
         self.ocr = ocr or LocalOCR(settings)
         self.vlm = vlm or VisionFallback(settings)
+        self.judge = judge or TextJudge(settings)
         self.locks = [threading.Lock() for _ in range(64)]
         self.stop = threading.Event()
         self.threads = []
@@ -94,8 +96,12 @@ class ExtractionService:
             "dpi": self.settings.ocr_dpi,
             "confidence": self.settings.ocr_min_confidence,
             "cuda": self.settings.ocr_use_cuda,
-            "vlm_model": self.settings.vlm_model if options.vlm else None,
-            "vlm_endpoint": self.settings.vlm_url if options.vlm else None,
+            "vlm_model": self.settings.vlm_model if options.vlm is not False else None,
+            "vlm_endpoint": self.settings.vlm_url if options.vlm is not False else None,
+            "gemini_model": self.settings.gemini_model if options.vlm is not False else None,
+            "vision_configured": getattr(self.vlm, "configured", False),
+            "jev_model": self.settings.jev_model if options.jev is not False else None,
+            "jev_configured": getattr(self.judge, "configured", False),
         }
         return hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
 
@@ -113,6 +119,7 @@ class ExtractionService:
                     "request_ms": round((time.perf_counter() - started) * 1000, 2),
                     "ocr_calls_this_request": 0,
                     "vlm_calls_this_request": 0,
+                    "jev_calls_this_request": 0,
                 }
                 self.store.save(result)
                 return result
@@ -120,11 +127,19 @@ class ExtractionService:
                 content = (self.objects / item["sha256"]).read_bytes()
                 if item["kind"] == "invoice":
                     fields, data, warnings, pages, metrics = extract_pdf(
-                        content, options, self.settings, self.ocr, self.vlm
+                        content, options, self.settings, self.ocr, self.vlm, self.judge
                     )
                     complete = all(fields[k].status == "OBSERVED" for k in REQUIRED_INVOICE_FIELDS)
                     complete = complete and not any(
-                        w["code"] in {"OCR_ERROR", "OCR_DISABLED", "OCR_EMPTY", "UNREADABLE_REGION"}
+                        w["code"]
+                        in {
+                            "OCR_ERROR",
+                            "OCR_DISABLED",
+                            "OCR_EMPTY",
+                            "UNREADABLE_REGION",
+                            "VLM_ERROR",
+                            "JEV_ERROR",
+                        }
                         for w in warnings
                     )
                 else:
@@ -150,6 +165,12 @@ class ExtractionService:
                     "options": options.model_dump(),
                     "ocr_models": self.ocr.signature() if metrics["ocr_calls"] else None,
                     "ocr_dpi": self.settings.ocr_dpi if metrics["ocr_calls"] else None,
+                    "visual_model": (self.settings.vlm_model or self.settings.gemini_model)
+                    if metrics["vlm_calls"]
+                    else None,
+                    "text_judge_model": self.settings.jev_model
+                    if metrics.get("jev_calls")
+                    else None,
                 }
                 metrics.update(
                     {
@@ -157,6 +178,7 @@ class ExtractionService:
                         "request_ms": elapsed,
                         "ocr_calls_this_request": metrics["ocr_calls"],
                         "vlm_calls_this_request": metrics["vlm_calls"],
+                        "jev_calls_this_request": metrics.get("jev_calls", 0),
                         "bytes": len(content),
                     }
                 )
@@ -178,7 +200,9 @@ class ExtractionService:
                         "reasons": sorted({w["code"] for w in warnings}) if not complete else [],
                     },
                 )
-                transient = any(w["code"] in {"OCR_ERROR", "VLM_ERROR"} for w in warnings)
+                transient = any(
+                    w["code"] in {"OCR_ERROR", "VLM_ERROR", "JEV_ERROR"} for w in warnings
+                )
                 self.store.save(result, None if transient else key)
                 return result
 

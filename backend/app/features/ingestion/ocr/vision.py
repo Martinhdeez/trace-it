@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import threading
 
 import httpx
@@ -8,16 +9,51 @@ from app.common.normalization import clean_text
 from app.features.ingestion.config import Settings
 
 from .errors import ProviderUnavailable
+from .gemini import GENERATION, PROMPT, generate, output_text
+from .journal import recorded_call
+from .transcript import remote_lines, transcript_warnings
 
 
 class VisionFallback:
-    """Optional local OpenAI-compatible vision server. Generative output stays UNVERIFIED."""
+    """Configured image reader; its output requires corroboration by the committee."""
 
     def __init__(self, settings: Settings):
         self.settings = settings
         self.lock = threading.Lock()
 
+    @property
+    def configured(self):
+        return bool(
+            (self.settings.vlm_url and self.settings.vlm_model)
+            or (self.settings.gemini_api_key and self.settings.gemini_model)
+        )
+
     def transcribe(self, png: bytes, page: int, point_size: tuple[float, float]):
+        if not self.settings.vlm_url and self.settings.gemini_api_key:
+
+            def call():
+                with httpx.Client(
+                    timeout=self.settings.vlm_timeout, follow_redirects=False
+                ) as client:
+                    response = generate(
+                        client, self.settings.gemini_model, self.settings.gemini_api_key, [png]
+                    )
+                transcript = output_text(response)
+                if transcript_warnings(transcript):
+                    raise ProviderUnavailable("Repetitive visual transcript")
+                return response
+
+            response = recorded_call(
+                self.settings.data_dir / "provider-journal" / "gemini",
+                {
+                    "model": self.settings.gemini_model,
+                    "prompt": PROMPT,
+                    "generation": GENERATION,
+                    "image": hashlib.sha256(png).hexdigest(),
+                },
+                call,
+            )
+            return remote_lines(output_text(response), page, point_size)
         if not self.settings.vlm_url or not self.settings.vlm_model:
             raise ProviderUnavailable("VLM is not configured")
         prompt = (
@@ -51,17 +87,39 @@ class VisionFallback:
                 }
             ],
         }
-        with (
-            self.lock,
-            httpx.Client(timeout=self.settings.vlm_timeout, follow_redirects=False) as client,
-        ):
-            response = client.post(
-                self.settings.vlm_url.rstrip("/") + "/chat/completions", json=body, headers=headers
-            )
-            response.raise_for_status()
-            text = response.json()["choices"][0]["message"]["content"]
-        if not isinstance(text, str) or len(text) > 50000:
-            raise ValueError("Invalid VLM response")
+
+        def call():
+            with (
+                self.lock,
+                httpx.Client(timeout=self.settings.vlm_timeout, follow_redirects=False) as client,
+            ):
+                response = client.post(
+                    self.settings.vlm_url.rstrip("/") + "/chat/completions",
+                    json=body,
+                    headers=headers,
+                )
+                if not response.is_success:
+                    raise ProviderUnavailable(
+                        f"Vision provider returned HTTP {response.status_code}"
+                    )
+                text = response.json()["choices"][0]["message"]["content"]
+            if not isinstance(text, str) or not text.strip() or len(text) > 50000:
+                raise ValueError("Invalid VLM response")
+            if transcript_warnings(text):
+                raise ProviderUnavailable("Repetitive visual transcript")
+            return text
+
+        text = recorded_call(
+            self.settings.data_dir / "provider-journal" / "vision",
+            {
+                "endpoint": self.settings.vlm_url,
+                "model": self.settings.vlm_model,
+                "prompt": prompt,
+                "generation": {"temperature": 0, "max_tokens": 2500},
+                "image": hashlib.sha256(png).hexdigest(),
+            },
+            call,
+        )
         return [
             TextLine(
                 id=f"p{page}:vlm:{i}",

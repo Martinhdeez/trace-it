@@ -11,17 +11,17 @@ curl.exe http://127.0.0.1:8000/v1/extractions -F "file=@../.context/500-sombras-
 curl.exe http://127.0.0.1:8000/v1/extractions -F "file=@../.context/500-sombras-de-alberto/FINAL_v7_DEFINITIVO_ahorasi.xlsx"
 ```
 
-Multipart: `file` obligatorio, `ocr=true` y `vlm=false` opcionales. No se pide moneda, NIF ni otro campo que deba leerse del documento. Hasta 25 MiB por archivo. Un `200` devuelve:
+Multipart: `file` obligatorio, `ocr=true`, `vlm` y `jev` opcionales. Omitir `vlm`/`jev` habilita el proveedor configurado cuando hace falta; `false` lo desactiva. No se pide moneda, NIF ni otro campo que deba leerse del documento. Hasta 25 MiB por archivo. Un `200` devuelve:
 
 - `id`, `file_id`, `sha256`: identidad de esta ingesta y contenido original.
 - `kind`: `invoice` o `workbook`.
 - `status`: `COMPLETE` o `NEEDS_REVIEW`; ninguno es una decisión de pago.
 - `fields`: valores normalizados, estados y candidatos con texto, página y coordenadas.
-- `data`: hojas/celdas de Excel, propuestas visuales y procedencia del procesamiento.
+- `data`: hojas/celdas de Excel, propuestas visuales, `committee` (lectores, soporte por campo y recomendaciones de Jev) y procedencia del procesamiento.
 - `warnings`, `pages`, `metrics`, `pipeline_version`, `cache_hit`.
 - `review`: `required`, `action` (`CONTINUE` o `HUMAN_REVIEW`), `fields` y `reasons`.
 
-Los importes son cadenas decimales. `OBSERVED` es una observación que puede contener errores OCR. Un candidato generativo queda `UNVERIFIED`. Excel conserva hoja, celda, fórmula, caché de fórmula y formato numérico.
+Los importes son cadenas decimales. `OBSERVED` es una observación que puede contener errores OCR. Un candidato generativo sin corroboración queda `UNVERIFIED`. El comité puede aceptar una coincidencia con otro lector fiable si no hay evidencia incompatible. Excel conserva hoja, celda, fórmula, caché de fórmula y formato numérico.
 
 Desde `invoice-v1.8.0`, los campos inciertos de facturas tienen `value: null`; las lecturas
 propuestas permanecen en `candidates`. `[ILLEGIBLE]`, caracteres `?`, contradicciones y OCR sin
@@ -57,7 +57,7 @@ curl.exe http://127.0.0.1:8000/v1/batches/IDENTIFICADOR
 
 El POST admite hasta 100 archivos, rechaza nombres repetidos y responde `202` con `id`, `files` y `status_url`. La consulta devuelve trabajos y recuentos `QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`, además de `finished`. `COMPLETED` significa trabajo ejecutado; hay que consultar también el `status` del resultado.
 
-Tras reiniciar se recuperan los trabajos en curso. Un fallo transitorio del proveedor conserva lo leído y evita guardar un éxito en caché. Reenviar el documento permite reintentar. Los lotes fallidos no se reenvían automáticamente.
+Tras reiniciar se recuperan los trabajos en curso. Un fallo transitorio del proveedor conserva lo leído y evita guardar un éxito en caché. El diario remoto impide repetir automáticamente una petición cuya entrega fue incierta; reenviar el documento no elimina ese bloqueo. Inspeccionar el diario del proveedor antes de un nuevo intento. Los lotes fallidos no se reenvían automáticamente.
 
 ## Errores
 

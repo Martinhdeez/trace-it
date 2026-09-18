@@ -4,6 +4,8 @@
 
 La referencia es [la guía del equipo](../guia-equipo.md). `backend/app/features/ingestion/` contiene recepción, PDF, OCR, cola y evidencia. `features/sources/` contiene Excel y su servicio público. Cada funcionalidad conserva sus tests. Evidencia, normalización y errores comunes viven en `app/common/`.
 
+Los paquetes añadidos en `data-ingestion` usan nombres en inglés. Los modelos PostgreSQL previos siguen en `features/ingesta/model.py` y `features/fuentes/model.py`, con sus imports y contratos originales. Este cambio de nombres no migra tablas ni modifica la API previa de la aplicación.
+
 El router valida y llama al servicio. `ingestion.service` consume `sources.service`, sin importar routers ajenos. `app/main.py` conserva el arranque general de dev. `ingestion.application.create_app` ofrece la API independiente con composición y ciclo de vida propios; sus rutas aún no están montadas en la aplicación general.
 
 `ingestion/pdf/invoice.py` es un adaptador determinista de campos de factura de los formatos observados. No implementa los símbolos genéricos por proceso de `features/extraccion/`. Conserva texto completo y evidencia para esa integración.
@@ -12,7 +14,7 @@ El router valida y llama al servicio. `ingestion.service` consume `sources.servi
 
 Archivo → límite y tipo → objeto inmutable SHA-256 → caché versionada → lector PDF o Excel → campos y evidencia → resultado persistido.
 
-PDF usa texto nativo primero. Las páginas sin texto fiable activan OCR local. Los escaneos que parecen completos reciben una lectura local de contraste. La visión opcional propone valores pendientes sin verificarlos. OCR nunca decide PAGAR, NO_PAGAR o ESCALAR.
+PDF usa texto nativo primero. Las páginas sin texto fiable activan OCR local. Toda página que necesita OCR recibe dos lecturas locales, aunque la primera esté incompleta. Los campos pendientes activan el lector visual configurado y después el juez textual Jev. El comité conserva candidatos y solo acepta corroboración sin conflictos; Jev recomienda, pero no añade un voto visual. Ver [política del comité](committee.md). OCR nunca decide PAGAR, NO_PAGAR o ESCALAR.
 
 SQLite WAL guarda resultados y cola; los originales permanecen en disco. Un proceso Uvicorn mantiene trabajadores acotados y recupera trabajos interrumpidos. Identidad documental y hash se separan: reutilizar procesamiento no elimina documentos.
 

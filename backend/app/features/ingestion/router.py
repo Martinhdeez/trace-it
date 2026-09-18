@@ -33,13 +33,21 @@ def create_router(settings: Settings, service: ExtractionService) -> APIRouter:
             bool, Form(description="Allow local OCR for pages without reliable text.")
         ] = True,
         vlm: Annotated[
-            bool,
-            Form(description="Allow the configured vision fallback; proposals remain unverified."),
-        ] = False,
+            bool | None,
+            Form(
+                description="Use visual reading when needed; omitted enables configured providers."
+            ),
+        ] = None,
+        jev: Annotated[
+            bool | None,
+            Form(description="Allow Jev recommendations; omitted enables the configured judge."),
+        ] = None,
     ):
         try:
             item = await run_in_threadpool(service.ingest, file.file, file.filename)
-            return await run_in_threadpool(service.extract, item, ExtractOptions(ocr=ocr, vlm=vlm))
+            return await run_in_threadpool(
+                service.extract, item, ExtractOptions(ocr=ocr, vlm=vlm, jev=jev)
+            )
         except ValueError as exc:
             raise InvalidDocumentError(str(exc)) from exc
         except (pymupdf.FileDataError, zipfile.BadZipFile, InvalidFileException, ParseError) as exc:
@@ -64,9 +72,15 @@ def create_router(settings: Settings, service: ExtractionService) -> APIRouter:
             bool, Form(description="Allow local OCR for pages without reliable text.")
         ] = True,
         vlm: Annotated[
-            bool,
-            Form(description="Allow the configured vision fallback; proposals remain unverified."),
-        ] = False,
+            bool | None,
+            Form(
+                description="Use visual reading when needed; omitted enables configured providers."
+            ),
+        ] = None,
+        jev: Annotated[
+            bool | None,
+            Form(description="Allow Jev recommendations; omitted enables the configured judge."),
+        ] = None,
     ):
         try:
             if not 1 <= len(files) <= settings.max_batch_files:
@@ -77,7 +91,7 @@ def create_router(settings: Settings, service: ExtractionService) -> APIRouter:
             items = []
             for file in files:
                 items.append(await run_in_threadpool(service.ingest, file.file, file.filename))
-            options = ExtractOptions(ocr=ocr, vlm=vlm)
+            options = ExtractOptions(ocr=ocr, vlm=vlm, jev=jev)
             return await run_in_threadpool(service.submit_batch, items, options)
         except ValueError as exc:
             raise InvalidDocumentError(str(exc)) from exc

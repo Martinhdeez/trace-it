@@ -49,16 +49,16 @@ def test_ocr_verification_controls_false_completeness(settings, variant):
         assert any(w["code"] == "OCR_ERROR" for w in warnings)
 
 
-def test_second_ocr_is_not_called_for_already_incomplete_scan(settings):
+def test_second_ocr_corroborates_an_incomplete_scan(settings):
     class OCR(NoOCR):
         def recognize(self, *args):
             return lines("NIF: B98120774", "ocr", 0.99)
 
         def verify(self, *args):
-            raise AssertionError("Should not verify incomplete scans")
+            return lines("NIF: B98120774", "ocr", 0.99)
 
     _, _, _, _, metrics = extract_pdf(pdf_bytes(""), ExtractOptions(), settings, OCR(), NoVLM())
-    assert metrics["ocr_verification_calls"] == 0
+    assert metrics["ocr_verification_calls"] == 1
 
 
 def test_ocr_success_skips_vlm(settings):

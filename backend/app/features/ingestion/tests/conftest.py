@@ -12,7 +12,17 @@ MATERIAL = Path(__file__).resolve().parents[5] / ".context/500-sombras-de-albert
 
 @pytest.fixture
 def settings(tmp_path):
-    return Settings(data_dir=tmp_path / "data", model_dir=tmp_path / "models", workers=1)
+    # General application imports may load .env; unit tests must remain offline.
+    return Settings(
+        data_dir=tmp_path / "data",
+        model_dir=tmp_path / "models",
+        workers=1,
+        vlm_url=None,
+        vlm_model=None,
+        vlm_api_key=None,
+        gemini_api_key=None,
+        jev_api_key=None,
+    )
 
 
 def pdf_bytes(text):

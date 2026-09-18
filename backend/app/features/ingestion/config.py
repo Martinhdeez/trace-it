@@ -28,8 +28,20 @@ class Settings:
     ocr_min_confidence: float = 0.90
     vlm_url: str | None = field(default_factory=lambda: os.getenv("TRACEPAY_VLM_URL"))
     vlm_model: str | None = field(default_factory=lambda: os.getenv("TRACEPAY_VLM_MODEL"))
-    vlm_api_key: str | None = field(default_factory=lambda: os.getenv("TRACEPAY_VLM_API_KEY"))
+    vlm_api_key: str | None = field(
+        default_factory=lambda: os.getenv("TRACEPAY_VLM_API_KEY"), repr=False
+    )
     vlm_timeout: float = 60.0
+    gemini_model: str = field(
+        default_factory=lambda: os.getenv("TRACEPAY_GEMINI_MODEL", "gemini-3.1-flash-lite")
+    )
+    gemini_api_key: str | None = field(
+        default_factory=lambda: os.getenv("GEMINI_API_KEY"), repr=False
+    )
+    jev_model: str = field(default_factory=lambda: os.getenv("TRACEPAY_JEV_MODEL", "jev-1.13.0"))
+    jev_api_key: str | None = field(
+        default_factory=lambda: os.getenv("TYPESAFE_API_KEY"), repr=False
+    )
     max_batch_files: int = 100
     max_queued_files: int = 1000
 

@@ -1,4 +1,4 @@
-"""Explicit Gemini transcription experiment; never enables automatic paid fallback."""
+"""Literal Gemini image transcription shared by experiments and the configured committee."""
 
 import base64
 import re

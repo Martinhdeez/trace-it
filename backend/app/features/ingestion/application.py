@@ -59,7 +59,8 @@ def create_app(
             "status": "ok",
             "workers": settings.workers,
             "ocr_models": service.ocr.signature(),
-            "vlm_configured": bool(settings.vlm_url and settings.vlm_model),
+            "vlm_configured": getattr(service.vlm, "configured", False),
+            "jev_configured": getattr(service.judge, "configured", False),
         }
 
     app.include_router(create_router(settings, service))

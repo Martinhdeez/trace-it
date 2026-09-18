@@ -36,7 +36,7 @@ curl.exe -X POST http://127.0.0.1:8000/v1/batches -F "files=@primera.pdf" -F "fi
 | `POST /v1/batches` | Acepta hasta 100 archivos; devuelve `202`, identificador y URL de seguimiento. |
 | `GET /v1/batches/{id}` | Trabajos `QUEUED`, `RUNNING`, `COMPLETED` o `FAILED`, errores y referencias a resultados. |
 
-El único dato de entrada obligatorio es el archivo. Los POST aceptan los controles de procesamiento `ocr=true` y `vlm=false`. La moneda se extrae del contenido: códigos como EUR, USD, CAD o MXN, la palabra euro y símbolos. Por convención del proyecto, `$` se interpreta como USD; un código explícito en el documento tiene prioridad (por ejemplo, MXN junto a `$`). Si no hay evidencia de moneda, queda `MISSING`; dos códigos contradictorios quedan `AMBIGUOUS`. Los nombres repetidos dentro de un lote se rechazan; archivos distintos con contenido idéntico conservan identidades independientes.
+El único dato de entrada obligatorio es el archivo. Los POST aceptan `ocr=true`, `vlm` y `jev`. Omitir `vlm` o `jev` activa automáticamente el proveedor configurado cuando hace falta; enviar `false` lo desactiva. Ver [comité de extracción](committee.md). La moneda se extrae del contenido: códigos como EUR, USD, CAD o MXN, la palabra euro y símbolos. Por convención del proyecto, `$` se interpreta como USD; un código explícito en el documento tiene prioridad (por ejemplo, MXN junto a `$`). Si no hay evidencia de moneda, queda `MISSING`; dos códigos contradictorios quedan `AMBIGUOUS`. Los nombres repetidos dentro de un lote se rechazan; archivos distintos con contenido idéntico conservan identidades independientes.
 
 Cada campo contiene `value`, `status`, `origin` y `candidates`. Cada candidato conserva el fragmento original, el método, la página y coordenadas PDF en puntos, o la referencia `Hoja!Celda`. Los importes son cadenas decimales para evitar errores de coma flotante. El resultado incluye SHA-256, versión del pipeline, advertencias, tiempos y número de llamadas a proveedores. `ocr_calls` describe la extracción original; `ocr_calls_this_request` es cero al reutilizar caché.
 
@@ -60,11 +60,11 @@ No equivale a la decisión de negocio `ESCALAR` del reto. Ver [contrato API](api
 1. Guardar el archivo por SHA-256 y conservar su nombre original. Comprobar tipo y tamaño: PDF/XLSX, hasta 25 MiB por archivo.
 2. Consultar caché por contenido, opciones, versión del pipeline, manifiesto de modelos y configuración relevante. Ocho solicitudes simultáneas del mismo contenido comparten una extracción en las pruebas.
 3. PDF: obtener texto y posiciones de todas las páginas con PyMuPDF. Aplicar reglas de campos y normalizadores deterministas. No rasterizar ni invocar modelos cuando el texto es suficiente.
-4. Para páginas sin texto útil, corrupto o con una imagen dominante y campos pendientes: renderizar a 240 DPI, limitar a 18 millones de píxeles, detectar sombras/rayas fuertes, corregir la iluminación o el fondo cuando corresponda, recortar márgenes y ejecutar PP-OCRv5 local. Se mantienen coordenadas respecto al PDF original y las operaciones figuran en la evidencia. Una segunda página escaneada se procesa aunque la primera tenga texto. Si la lectura parece completa, un segundo reconocedor local contrasta los campos: las discrepancias quedan pendientes. No se selecciona un tratamiento por nombre de archivo.
+4. Para páginas sin texto útil, corrupto o con una imagen dominante y campos pendientes: renderizar a 240 DPI, limitar a 18 millones de píxeles, detectar sombras/rayas fuertes, corregir la iluminación o el fondo cuando corresponda, recortar márgenes y ejecutar PP-OCRv5 local. Se mantienen coordenadas respecto al PDF original y las operaciones figuran en la evidencia. Una segunda página escaneada se procesa aunque la primera tenga texto. El segundo reconocedor local contrasta también las lecturas incompletas, campo por campo; las discrepancias quedan pendientes. No se selecciona un tratamiento por nombre de archivo.
 5. Reconocer etiquetas y formatos del lote. Conservar candidatos incompatibles. Corregir separadores e invisibles de Unicode cuando la transformación es inequívoca; tolerar errores conocidos en etiquetas OCR sin sustituir dígitos de NIF, IBAN, pedido o importes.
 6. XLSX: leer todas las hojas, incluso ocultas, con `openpyxl` en modo de lectura. Detectar cabeceras entre las primeras 25 filas, conservar celdas originales, `xml_numeric_value` y `number_format`, y extraer proveedores, pedidos y asientos cuando el esquema es reconocible. Leer también libros con dimensiones ausentes o incorrectas, comprobando límites sobre las coordenadas reales. Conservar las hojas de normas como texto; no convertirlas automáticamente en reglas ejecutables.
-7. Solo si quedan campos sin resolver y `vlm=true`, consultar el servidor visual configurado. Las propuestas quedan registradas en `data.vision_proposals`. Los campos faltantes propuestos por el modelo quedan `UNVERIFIED`. Si la lectura visual contradice un valor previo, se conservan ambos candidatos y el campo queda `AMBIGUOUS`, sin valor canónico. Una fecha inválida claramente impresa no se "arregla" mediante un LLM.
-8. Persistir resultado y estado en SQLite WAL. Los trabajos `RUNNING` vuelven a `QUEUED` al reiniciar. Los fallos OCR/VLM preservan la evidencia y no se almacenan como aciertos de caché: reenviar el archivo permite reintentar.
+7. Si quedan campos pendientes y hay un lector visual configurado, consultar Gemini o el servidor compatible. `vlm=false` lo desactiva. El comité conserva todas las lecturas: una propuesta visual requiere corroboración; una contradicción o un fragmento ilegible impide aceptarla automáticamente. Jev selecciona candidatos a partir del texto cuando está configurado; su selección se conserva en `data.committee.text_judge` y no cuenta como otro lector de píxeles.
+8. Persistir resultado y estado en SQLite WAL. Los trabajos `RUNNING` vuelven a `QUEUED` al reiniciar. Los fallos de proveedores conservan la evidencia y no se guardan como aciertos de extracción. Las peticiones remotas tienen diario: una entrega incierta no se reenvía automáticamente al volver a subir el documento. Revisar el diario antes de autorizar un nuevo intento.
 
 PDF: máximo 40 páginas; documentos cifrados o corruptos se rechazan. XLSX: máximo 200 MiB descomprimidos, 2.000 miembros ZIP, 500.000 celdas, 25.000 filas y 100 columnas por hoja. Se conservan fórmulas, pero no se ejecutan: un caché de fórmula puede estar desactualizado. Las hojas no reconocidas se devuelven con `UNRECOGNIZED_SCHEMA`.
 
@@ -88,8 +88,14 @@ Configurar mediante variables de entorno antes de arrancar:
 | `TRACEPAY_VLM_URL` | Sin configurar; URL base de un servidor compatible, por ejemplo `http://127.0.0.1:8001/v1`. |
 | `TRACEPAY_VLM_MODEL` | Nombre publicado por ese servidor. |
 | `TRACEPAY_VLM_API_KEY` | Opcional. |
+| `GEMINI_API_KEY` | Activa Gemini cuando no hay servidor `TRACEPAY_VLM_URL`. |
+| `TRACEPAY_GEMINI_MODEL` | `gemini-3.1-flash-lite`. |
+| `TYPESAFE_API_KEY` | Activa el juez textual Jev. |
+| `TRACEPAY_JEV_MODEL` | `jev-1.13.0`. |
 
-El adaptador VLM tiene timeout de 60 segundos, concurrencia 1 y salida limitada. **No se incluye ni se ha validado un servidor VLM real en esta entrega**; su contrato y degradación están probados con dobles de prueba. El OCR local sí está descargado y ejecutado con archivos reales. No se presupone que cualquier modelo visual entienda el protocolo del adaptador.
+Los adaptadores remotos tienen un timeout de 60 segundos por defecto y no reintentan peticiones de entrega incierta. Los trabajadores limitan la concurrencia total; el servidor compatible serializa las llamadas. Gemini y Jev se han ejecutado con documentos reales en la [auditoría del corpus](corpus-audit.md). El contrato del servidor visual compatible se verifica mediante pruebas simuladas.
+
+Para cargar las claves de `.env` al arrancar desde `backend/`, añadir `--env-file ../.env` al comando Uvicorn. La biblioteca no carga `.env` implícitamente. Sin claves, el procesamiento sigue siendo local. No subir claves ni diarios de peticiones a Git.
 
 ## Verificación reproducible
 
@@ -109,8 +115,7 @@ Se ha probado GOT-OCR v2 de fal.ai con peticiones reales, comparándolo con las 
 
 ## Decisiones de implementación
 
-Jev se ha evaluado como selector textual de candidatos en un experimento explícito, sin
-integrarlo en la cascada automática. No admite imágenes. Ver [prueba de TypeSafe/Jev](jev.md).
+Jev participa como selector textual cuando está configurado. No admite imágenes ni verifica caracteres ocultos. Ver [comité](committee.md) y el [experimento histórico de TypeSafe/Jev](jev.md).
 
 - Reglas y normalización antes de modelos: coste bajo y evidencia estable. Consecuencia: un diseño desconocido puede quedar pendiente aunque una persona lo lea fácilmente.
 - OCR móvil local antes de modelos generativos: pesos pequeños y cero coste de API. Consecuencia: escaneados dañados siguen necesitando revisión o un modelo mayor; la confianza del OCR no es una probabilidad calibrada de corrección.

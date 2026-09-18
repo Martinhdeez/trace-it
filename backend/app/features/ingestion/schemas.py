@@ -7,7 +7,8 @@ from app.common.extraction import ExtractedField
 
 class ExtractOptions(BaseModel):
     ocr: bool = True
-    vlm: bool = False
+    vlm: bool | None = None
+    jev: bool | None = None
 
 
 class ReviewRequirement(BaseModel):
