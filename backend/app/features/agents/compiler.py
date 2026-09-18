@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.exceptions import TraceError
 from app.features.agents import sandbox
 from app.features.ingestion.model import Instance
+from app.features.ingestion.symbols import flatten_symbols
 from app.features.llm import client
 from app.features.llm.model import LLMConfig
 from app.features.processes.model import Process, Symbol
@@ -291,9 +292,7 @@ async def _read(
         .where(Instance.process_id == process_id)
         .order_by(Instance.id)
     )
-    history = [
-        (name, {k: v.get("value") for k, v in symbols.items()}) for name, symbols in rows if symbols
-    ]
+    history = [(name, flatten_symbols(symbols)) for name, symbols in rows if symbols]
     configs = list(await session.scalars(select(LLMConfig).where(LLMConfig.role.in_(ROLES))))
     return description or "", sources, history, configs
 

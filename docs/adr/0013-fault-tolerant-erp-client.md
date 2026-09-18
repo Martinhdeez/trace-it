@@ -64,7 +64,8 @@ runtime; values are fixed after load testing against the challenge ERP.
 ## Evidence
 - Behaviour table and client rules: `.artifacts/specs/2026-09-18-reglas-sistema.md` §4, §8.
 - Counts: `.artifacts/specs/2026-09-18-analisis-caja-v3.md` (516 entries: 507 PENDIENTE,
-  9 PAGADA). No client code on `dev` yet (`TRACE_ERP_URL` in `core/config.py` only).
+  9 PAGADA). Implemented in `features/sources/http_connector.py`, configured by
+  `processes/invoice-payment/sources.json`; see `docs/sources-http.md`.
 
 ## Related
 ADR 0006, 0007 (`sources.json`), 0008. Plan P6, P16; `docs/mvp-plan.md` (owner Álvaro).

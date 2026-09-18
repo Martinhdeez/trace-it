@@ -4,7 +4,7 @@ from dataclasses import replace
 import pytest
 from openpyxl import Workbook
 
-from app.features.sources.service import extract_workbook
+from app.features.sources.excel import extract_workbook
 
 
 @pytest.mark.parametrize("dimension", ["", '<dimension ref="A1:A1"/>'])

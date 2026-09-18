@@ -22,6 +22,8 @@ def test_main_application_keeps_dev_routes_and_protects_ingestion(settings):
                 "/v1/batches",
                 "/processes/{process_id}/files",
                 "/instances/{instance_id}/document",
+                "/processes/{process_id}/sources/{name}/sync",
+                "/processes/{process_id}/sources/{name}/diff",
             } <= set(schema["paths"])
             assert client.get("/v1/extractions/missing").status_code == 422
             assert client.get("/instances/1/document").status_code == 422

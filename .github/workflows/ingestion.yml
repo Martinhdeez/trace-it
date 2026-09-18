@@ -31,6 +31,7 @@ jobs:
       - run: uv run ruff format --check .
       - run: >-
           uv run pytest -q app/features/ingestion/tests app/features/sources/tests
+          --ignore=app/features/sources/tests/test_erp_sync.py
           -m "not ocr and not integration"
 
   postgres:

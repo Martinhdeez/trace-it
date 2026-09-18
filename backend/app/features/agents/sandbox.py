@@ -44,7 +44,8 @@ FORBIDDEN_ATTRIBUTES = {
 MAX_MEMORY = 512 * 1024 * 1024
 MAX_MESSAGE = 500
 
-# Runs in the child. Reads {"code", "cases"} on stdin, writes one result per case on stdout.
+# Runs in the child. Accepts either explicit cases or a compact shared dataset, and writes
+# one result per evaluated instance on stdout.
 _RUNNER = """
 import builtins, decimal, io, json, sys, types
 ALLOWED_IMPORTS = %r
@@ -65,8 +66,17 @@ safe["__import__"] = safe_import
 out, sys.stdout = sys.stdout, io.StringIO()
 data = json.load(sys.stdin)
 code = compile(data["code"], "<rule>", "exec")
+if "cases" in data:
+    cases = data["cases"]
+else:
+    sources = data["sources"]
+    population = data["population"]
+    cases = (
+        (instance, sources, [symbols for other_key, symbols in population if other_key != key])
+        for key, instance in data["instances"]
+    )
 results = []
-for instance, sources, others in data["cases"]:
+for instance, sources, others in cases:
     decimal.setcontext(decimal.Context())
     try:
         ns = {"__builtins__": safe, "__name__": "rule"}
@@ -142,6 +152,13 @@ def run_batch(
     batch fails (timeout, crash, unreadable output)."""
     check(code)
     stdin = json.dumps({"code": code, "cases": cases})
+    return _run(stdin, len(cases), timeout_s)
+
+
+def _run(
+    stdin: str, expected_results: int, timeout_s: float
+) -> list[dict[str, Any] | SandboxError]:
+    """Run an already validated and serialized request in a fresh child process."""
     limits = None if sys.platform == "win32" else (lambda: _limit(int(timeout_s) + 1))
     with tempfile.TemporaryDirectory() as cwd:
         try:
@@ -163,9 +180,33 @@ def run_batch(
         results = json.loads(proc.stdout)
     except json.JSONDecodeError as e:
         raise SandboxError("Unreadable sandbox output") from e
-    if not isinstance(results, list) or len(results) != len(cases):
+    if not isinstance(results, list) or len(results) != expected_results:
         raise SandboxError("Number of results differs from number of cases")
     return [_validate(r) for r in results]
+
+
+def run_dataset(
+    code: str,
+    instances: list[tuple[int, dict[str, Any]]],
+    sources: dict[str, list[dict[str, Any]]],
+    population: list[tuple[int, dict[str, Any]]],
+    timeout_s: float = 10.0,
+) -> list[dict[str, Any] | SandboxError]:
+    """Run one rule over instances that share sources and a population.
+
+    The population crosses the process boundary once. The child derives each instance's
+    `others` list by key, avoiding the quadratic JSON payload produced by `run_batch`.
+    """
+    check(code)
+    stdin = json.dumps(
+        {
+            "code": code,
+            "instances": instances,
+            "sources": sources,
+            "population": population,
+        }
+    )
+    return _run(stdin, len(instances), timeout_s)
 
 
 def run(

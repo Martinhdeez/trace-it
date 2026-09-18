@@ -11,7 +11,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.core.database import session_factory
 from app.features.agents import sandbox
-from app.features.decisions.tests.test_api import RULES_V3, create_process
+from app.features.decisions.tests.test_api import RULES_V3, assert_flat, create_process, recording
 from app.features.rules.model import Rule
 from app.main import app
 
@@ -28,6 +28,18 @@ def fake_sandbox(code: str, instance: dict, sources: dict, others: list) -> dict
 
 def fake_batch(code: str, cases: list) -> list:
     return [fake_sandbox(code, *case) for case in cases]
+
+
+def fake_dataset(code: str, instances: list, sources: dict, population: list) -> list:
+    return [
+        fake_sandbox(
+            code,
+            instance,
+            sources,
+            [symbols for other_id, symbols in population if other_id != instance_id],
+        )
+        for instance_id, instance in instances
+    ]
 
 
 async def create_draft(process_id: int) -> int:
@@ -56,7 +68,7 @@ async def prepare(api: AsyncClient) -> tuple[int, dict[str, str]]:
 
 
 async def test_impact_is_visible_before_activating(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, _ = await prepare(api)
@@ -83,7 +95,7 @@ async def test_impact_is_visible_before_activating(monkeypatch: pytest.MonkeyPat
 async def test_activating_records_findings_and_leaves_the_past_alone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await prepare(api)
@@ -109,7 +121,7 @@ async def test_activating_records_findings_and_leaves_the_past_alone(
 
 async def test_a_human_decision_blocks_the_rule(monkeypatch: pytest.MonkeyPatch) -> None:
     """The rules do not overrule a person, and a person does not silently veto a rule."""
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await prepare(api)
@@ -135,7 +147,7 @@ async def test_a_human_decision_blocks_the_rule(monkeypatch: pytest.MonkeyPatch)
 
 
 async def test_retiring_is_checked_like_activating(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await prepare(api)
@@ -156,7 +168,7 @@ async def test_retiring_is_checked_like_activating(monkeypatch: pytest.MonkeyPat
 
 async def test_an_escalated_case_gives_no_finding(monkeypatch: pytest.MonkeyPatch) -> None:
     """An instance sitting in the human queue was never acted on, so nothing went wrong."""
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await prepare(api)
@@ -171,3 +183,14 @@ async def test_an_escalated_case_gives_no_finding(monkeypatch: pytest.MonkeyPatc
 
         await api.post(f"/rules/{iban['id']}/retire", headers=headers)
         assert (await api.get(f"/processes/{process_id}/findings")).json() == []
+
+
+async def test_impact_gives_rule_code_flat_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        process_id, _ = await prepare(api)
+        rule_id = await create_draft(process_id)
+        seen: list = []
+        monkeypatch.setattr(sandbox, "run_dataset", recording(seen, fake_dataset))
+        assert (await api.get(f"/rules/{rule_id}/impact")).status_code == 200
+    assert_flat(seen[0])

@@ -71,8 +71,27 @@ def fake_sandbox(code: str, instance: dict, sources: dict, others: list) -> dict
     return {"fires": fires, "reason": code if fires else ""}
 
 
+def stored(values: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Flat test values in the stored format, as extraction writes them."""
+    if values is None:
+        return None
+    return {k: {"value": v, "origin": "text"} for k, v in values.items()}
+
+
 def fake_batch(code: str, cases: list) -> list:
     return [fake_sandbox(code, *case) for case in cases]
+
+
+def fake_dataset(code: str, instances: list, sources: dict, population: list) -> list:
+    return [
+        fake_sandbox(
+            instance=instance,
+            code=code,
+            sources=sources,
+            others=[symbols for other_id, symbols in population if other_id != instance_id],
+        )
+        for instance_id, instance in instances
+    ]
 
 
 async def seed(process_id: int) -> None:
@@ -86,7 +105,7 @@ async def seed(process_id: int) -> None:
                     process_id=process_id,
                     file_hash=digest,
                     name=name,
-                    symbols=symbols,
+                    symbols=stored(symbols),
                     status="PENDING" if symbols else "REVIEW",
                     review_reason=None if symbols else "The two extractions disagree",
                 )
@@ -139,7 +158,7 @@ async def create_process(api: AsyncClient, suffix: str, role: str) -> tuple[int,
 
 
 async def test_run_review_and_export(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await create_process(api, uuid.uuid4().hex[:8], "manager")
@@ -166,7 +185,8 @@ async def test_run_review_and_export(monkeypatch: pytest.MonkeyPatch) -> None:
         r = await api.get(f"/instances/{escalated}")
         detail = r.json()
         assert detail["decision"] == "ESCALAR"
-        assert detail["symbols"]["purchase_order"] == "PO-2026-0813"
+        # The API shows symbols as stored, with their provenance.
+        assert detail["symbols"]["purchase_order"] == {"value": "PO-2026-0813", "origin": "text"}
         assert len(detail["decisions"]) == 1
         decision = detail["decisions"][0]
         assert decision["author"] == "engine"
@@ -224,7 +244,7 @@ async def test_run_review_and_export(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_resolve_rejects_a_decision_not_in_the_process(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await create_process(api, uuid.uuid4().hex[:8], "operator")
@@ -244,7 +264,7 @@ async def test_resolve_rejects_a_decision_not_in_the_process(
 async def test_export_a_duplicate_name_gives_a_single_line(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await create_process(api, uuid.uuid4().hex[:8], "operator")
@@ -257,7 +277,7 @@ async def test_export_a_duplicate_name_gives_a_single_line(
                     process_id=process_id,
                     file_hash=digest,
                     name="factura_1217.pdf",
-                    symbols=INVOICES["FA-1016_papelería.pdf"],  # its order was already paid
+                    symbols=stored(INVOICES["FA-1016_papelería.pdf"]),  # order already paid
                 )
             )
             await session.commit()
@@ -289,7 +309,7 @@ async def test_export_a_duplicate_name_gives_a_single_line(
 async def test_a_priority_tie_at_runtime_goes_to_review(monkeypatch: pytest.MonkeyPatch) -> None:
     """The loader refuses two types with one priority; one inserted directly is still caught:
     the instance goes to REVIEW with the reason, and no decision is written."""
-    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+    monkeypatch.setattr(sandbox, "run_dataset", fake_dataset)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, _ = await create_process(api, uuid.uuid4().hex[:8], "operator")
@@ -304,7 +324,9 @@ async def test_a_priority_tie_at_runtime_goes_to_review(monkeypatch: pytest.Monk
                 process_id=process_id,
                 file_hash=digest,
                 name="FA-7777_both.pdf",
-                symbols={**INVOICES["FA-5044_mensajería2.pdf"], "purchase_order": "PO-2026-0474"},
+                symbols=stored(
+                    {**INVOICES["FA-5044_mensajería2.pdf"], "purchase_order": "PO-2026-0474"}
+                ),
             )
             session.add(both)
             await session.commit()
@@ -331,3 +353,41 @@ async def test_a_priority_tie_at_runtime_goes_to_review(monkeypatch: pytest.Monk
 
         # Export refuses while our own doubt is open.
         assert (await api.get(f"/processes/{process_id}/export")).status_code == 409
+
+
+def test_flat_symbols_are_refused_on_write() -> None:
+    with pytest.raises(ValueError, match="must be stored as"):
+        Instance(name="x.pdf", symbols={"nif": "B96233419"})
+
+
+def recording(seen: list, dataset: Any = fake_dataset) -> Any:
+    """`dataset` that also keeps what each instance's rule code was handed."""
+
+    def run_dataset(code: str, instances: list, sources: dict, population: list) -> list:
+        seen.extend(
+            (symbols, sources, [other for oid, other in population if oid != instance_id])
+            for instance_id, symbols in instances
+        )
+        return dataset(code, instances, sources, population)
+
+    return run_dataset
+
+
+def assert_flat(case: tuple) -> None:
+    """The first case of the seeded process, as rule code must receive it."""
+    instance, _, others = case
+    assert instance == INVOICES["factura_1217.pdf"]
+    assert others == [
+        {**INVOICES[n], "_instance": n}
+        for n in ("FA-1016_papelería.pdf", "FA-5044_mensajería2.pdf")
+    ]
+
+
+async def test_rule_code_gets_flat_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The database holds {value, origin}; rule code only ever sees the values."""
+    seen: list = []
+    monkeypatch.setattr(sandbox, "run_dataset", recording(seen))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        process_id, _ = await create_process(api, uuid.uuid4().hex[:8], "operator")
+        assert (await api.post(f"/processes/{process_id}/run")).status_code == 200
+    assert_flat(seen[0])

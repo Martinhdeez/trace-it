@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.exceptions import ConflictError, NotFoundError, TraceError
 from app.features.decisions.model import ENGINE, Decision
 from app.features.ingestion.model import File, Instance
+from app.features.ingestion.symbols import flatten_symbols
 from app.features.llm.client import complete
 from app.features.processes.model import DecisionType, Process
 from app.features.rules.model import Rule
@@ -127,7 +128,12 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
             if r.status == "active"
         ],
         "human_resolutions": [
-            {"symbols": symbols, "decision": d.decision, "author": d.author, "reason": d.reason}
+            {
+                "symbols": flatten_symbols(symbols or {}),
+                "decision": d.decision,
+                "author": d.author,
+                "reason": d.reason,
+            }
             for d, symbols in resolutions
         ],
     }

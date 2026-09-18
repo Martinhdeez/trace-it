@@ -53,7 +53,6 @@ class RuleSpec:
 class Outcomes:
     priorities: dict[str, int]
     default: str
-    escalate: str  # the highest-priority outcome that needs a person
 
 
 def definition() -> dict[str, Any]:
@@ -70,8 +69,7 @@ def outcomes(defn: dict[str, Any]) -> Outcomes:
     kinds = defn["decision_types"]
     priorities = {t["name"]: t["priority"] for t in kinds}
     default = next(t["name"] for t in kinds if t.get("is_default"))
-    human = [t["name"] for t in kinds if t.get("requires_human")]
-    return Outcomes(priorities, default, max(human, key=priorities.__getitem__))
+    return Outcomes(priorities, default)
 
 
 # --- Engine and sandbox, without the database ----------------------------------------------
@@ -119,7 +117,7 @@ def reason(result: Any) -> str:
 
 @dataclass(frozen=True)
 class Verdict:
-    decision: str
+    decision: str | None  # None: the engine sends it to REVIEW (a rule could not be trusted)
     reason: str
     fired: list[str]  # "R07: <reason>" for each rule that fired or failed
 
@@ -135,12 +133,23 @@ def decide(
 ) -> Verdict:
     """The engine's own decision function, with `execute` standing in for the sandbox call."""
     rows = [
-        Rule(id=s.number, text=s.text, type=s.kind, decision=s.decision, code_a=c, hash="")
+        Rule(
+            id=s.number, text=s.text, type=s.kind, decision=s.decision, code_a=c, code_b=c, hash=""
+        )
         for s, c in zip(specs, codes, strict=True)
     ]
-    v = engine_decide(
-        rows, out.priorities, out.default, out.escalate, instance, sources, others, execute
-    )
+
+    def run_batch(code: str, cases: list[Any]) -> list[Any]:
+        """The sandbox's batch contract: per case, the answer or that case's error."""
+        answers: list[Any] = []
+        for case in cases:
+            try:
+                answers.append(execute(code, *case))
+            except Exception as error:  # noqa: BLE001 - the engine reads it as a rule error
+                answers.append(error)
+        return answers
+
+    v = engine_decide(rows, out.priorities, out.default, instance, sources, others, run_batch)
     fired = [f"R{r.rule_id:02d}: {r.reason}" for r in v.results if r.fires is not False]
     return Verdict(v.decision, v.reason, fired)
 
@@ -250,13 +259,15 @@ async def load_sources(process_id: int, sources: dict[str, list[dict[str, Any]]]
 async def add_instances(process_id: int, files: dict[str, tuple[bytes, dict[str, Any]]]) -> None:
     """One extracted instance per file: {file_id: (pdf bytes, symbols)}.
 
-    Symbols are stored flat ({name: value}), which is what the engine hands to the rules.
+    The golden symbols are flat ({name: value}); they are stored as extraction writes them,
+    {name: {"value", "origin"}}, and the engine flattens them again for the rules.
     """
     async with session_factory() as session:
-        for name, (content, symbols) in files.items():
+        for name, (content, values) in files.items():
             digest = hashlib.sha256(content).hexdigest()
             if await session.get(File, digest) is None:
                 session.add(File(hash=digest, name=name, content=content, text=None))
+            symbols = {k: {"value": v, "origin": "golden"} for k, v in values.items()}
             session.add(
                 Instance(process_id=process_id, file_hash=digest, name=name, symbols=symbols)
             )

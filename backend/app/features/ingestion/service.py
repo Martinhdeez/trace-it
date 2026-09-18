@@ -17,7 +17,7 @@ from app.features.ingestion.pdf.extractor import extract_pdf
 from app.features.ingestion.readings import field_readings, full_text
 from app.features.ingestion.schemas import ExtractionResult, ExtractOptions
 from app.features.ingestion.store import Store
-from app.features.sources.service import extract_workbook
+from app.features.sources.excel import extract_workbook
 
 PIPELINE_VERSION = "invoice-v2.0.0+xlsx-v1.3"
 logger = logging.getLogger(__name__)

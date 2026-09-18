@@ -23,7 +23,7 @@ The bootstrap layer makes a setup reproducible on any machine. The runtime layer
 processes/
   invoice-payment/
     process.json   # decision types, symbols, rules, description (domain conventions), policies
-    sources.json   # sources the rules read and where each comes from (planned)
+    sources.json   # sources the rules read and where each comes from
     demo.json      # optional: where the sample data lives, for one-command demos (planned)
   travel-expenses/
     process.json
@@ -44,7 +44,9 @@ processes/
 
 - `users` (optional): initial users and roles (`manager`, `operator`).
 
-### `sources.json` *(planned)*
+### `sources.json`
+Implemented for HTTP sources (the challenge ERP): format, guarantees and commands in `docs/sources-http.md`. The file sits in a folder named after the pack file (`processes/invoice-payment/sources.json`).
+
 Declares each source of truth the rules read (`sources` in `evaluate(instance, sources, others)`) and its connector: spreadsheet sheets and column mapping, an HTTP API such as the challenge ERP (base URL; credentials referenced by `.env` variable name, never inline), or a CSV. This is what makes connectors reusable across processes.
 
 ### `demo.json` *(planned)*

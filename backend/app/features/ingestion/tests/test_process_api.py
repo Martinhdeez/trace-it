@@ -83,7 +83,7 @@ async def test_reupload_preserves_instance_state_and_distinguishes_file_names(pr
     async with session_factory() as session:
         instance = await session.get(Instance, first["instance_id"])
         instance.status = "DECIDED"
-        instance.symbols = {"approved_by_another_stage": {"value": True}}
+        instance.symbols = {"approved_by_another_stage": {"value": True, "origin": "test"}}
         await session.commit()
     again = (await client.post(endpoint, files={"file": ("original.pdf", content)})).json()
     other = (await client.post(endpoint, files={"file": ("copy.pdf", content)})).json()
