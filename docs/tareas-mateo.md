@@ -36,6 +36,7 @@ decidir(reglas, prioridades: dict[str, int], por_defecto: str,
 - `GET /procesos/{id}/exportar`: una línea por instancia con su nombre y su decisión. El formato del reto (`outcomes.jsonl`) es `{"file_id": nombre, "result": decisión}`; el código no sabe nada de facturas, solo usa esos dos nombres de campo. Devuelve 409 si queda alguna instancia `PENDIENTE` o en `REVISION`.
   - **Qué decisión se exporta [DECIDIDO]:** la última decisión del **motor**. Las decisiones de una persona llevan un tipo: `resolucion` (resuelve un caso cuyo tipo tiene `requiere_persona`; nunca cambia lo exportado, P4) o `correccion_revision` (corrige una instancia que estaba en `REVISION`; se exporta si no hay decisión del motor).
   - **Nombres repetidos [DECIDIDO]:** se exporta solo la instancia más reciente de cada `nombre` y se avisa si había repetidos.
+  - Hecho en `fix/exportar-decision-motor` (`Decision.tipo_humana`, cabecera `X-Nombres-Repetidos`).
 
 ### 3. `feat/auditoria` — `features/decisiones/auditoria.py` + comprobación al activar
 - `comprobar(session, proceso_id, regla_nueva)` vuelve a ejecutar las reglas activas + la nueva sobre los símbolos guardados de todas las instancias decididas. No relee PDFs ni llama al ERP.

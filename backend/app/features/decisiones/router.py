@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 
@@ -69,14 +71,24 @@ async def resolve_instancia(
     summary="outcomes.jsonl, one line per instance",
     response_class=PlainTextResponse,
     responses={
-        200: {"content": {"application/x-ndjson": {}}},
+        200: {
+            "content": {"application/x-ndjson": {}},
+            "headers": {
+                "X-Nombres-Repetidos": {
+                    "description": "JSON list of names shared by several instances; "
+                    "only the most recent one is exported",
+                    "schema": {"type": "string"},
+                }
+            },
+        },
         409: {"description": "Some instance has no decision yet"},
     },
 )
 async def export_outcomes(proceso_id: int, session: Session) -> PlainTextResponse:
-    return PlainTextResponse(
-        await service.exportar(session, proceso_id), media_type="application/x-ndjson"
-    )
+    cuerpo, repetidos = await service.exportar(session, proceso_id)
+    # JSON in ASCII: a header value cannot carry every character a file name can.
+    cabeceras = {"X-Nombres-Repetidos": json.dumps(repetidos)} if repetidos else None
+    return PlainTextResponse(cuerpo, media_type="application/x-ndjson", headers=cabeceras)
 
 
 @router.get(
