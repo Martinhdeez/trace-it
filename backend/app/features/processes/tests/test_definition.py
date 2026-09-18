@@ -80,6 +80,17 @@ async def test_two_defaults_are_rejected() -> None:
     assert data["name"] not in names
 
 
+async def test_two_types_with_the_same_priority_are_rejected() -> None:
+    data = _definition("travel-expenses.json")
+    data["decision_types"][1]["priority"] = data["decision_types"][0]["priority"]
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        r = await api.post("/processes/definition", json=data)
+        assert r.status_code == 422, r.text
+        assert "share a priority" in r.text
+        names = [p["name"] for p in (await api.get("/processes")).json()]
+    assert data["name"] not in names
+
+
 async def test_rules_with_code_in_a_file_are_not_loaded_over_http() -> None:
     """A path would be resolved on the server, against whatever the backend can read."""
     data = _definition("invoice-payment.json", with_code=True)

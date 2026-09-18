@@ -10,7 +10,7 @@ class DecisionOut(BaseModel):
     author: str  # "engine" or the person's name
     human_kind: str | None  # a person's decision: "resolution" or "review_correction"
     reason: str | None
-    results: list[dict[str, Any]]  # per rule: rule_id, hash, fires, reason
+    results: list[dict[str, Any]]  # per rule: rule_id, hash, fires, reason, reason_b
     rules_hash: str
     created_at: datetime
 
@@ -44,6 +44,7 @@ class ResolveIn(BaseModel):
 class RunSummary(BaseModel):
     decided: int
     by_decision: dict[str, int] = Field(examples=[{"PAGAR": 431, "NO_PAGAR": 9, "ESCALAR": 60}])
+    review: int = 0  # sent to REVIEW because a rule result could not be trusted
 
 
 class ChangeOut(BaseModel):
