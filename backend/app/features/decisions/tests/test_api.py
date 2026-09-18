@@ -14,6 +14,7 @@ from httpx import ASGITransport, AsyncClient
 from app.core.database import session_factory
 from app.features.agents import sandbox
 from app.features.ingestion.model import File, Instance
+from app.features.processes.model import DecisionType
 from app.features.rules.model import Rule
 from app.features.sources.model import Source
 from app.main import app
@@ -68,6 +69,10 @@ INVOICES = {
 def fake_sandbox(code: str, instance: dict, sources: dict, others: list) -> dict:
     fires = RULES_V3[code][1](instance, sources, others)
     return {"fires": fires, "reason": code if fires else ""}
+
+
+def fake_batch(code: str, cases: list) -> list:
+    return [fake_sandbox(code, *case) for case in cases]
 
 
 async def seed(process_id: int) -> None:
@@ -134,7 +139,7 @@ async def create_process(api: AsyncClient, suffix: str, role: str) -> tuple[int,
 
 
 async def test_run_review_and_export(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "run", fake_sandbox)
+    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await create_process(api, uuid.uuid4().hex[:8], "manager")
@@ -219,7 +224,7 @@ async def test_run_review_and_export(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_resolve_rejects_a_decision_not_in_the_process(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sandbox, "run", fake_sandbox)
+    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await create_process(api, uuid.uuid4().hex[:8], "operator")
@@ -239,7 +244,7 @@ async def test_resolve_rejects_a_decision_not_in_the_process(
 async def test_export_a_duplicate_name_gives_a_single_line(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sandbox, "run", fake_sandbox)
+    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         process_id, headers = await create_process(api, uuid.uuid4().hex[:8], "operator")
@@ -279,3 +284,50 @@ async def test_export_a_duplicate_name_gives_a_single_line(
             {"file_id": "factura_1217.pdf", "result": "NO_PAGAR"}
         ]
         assert json.loads(r.headers["X-Duplicate-Names"]) == ["factura_1217.pdf"]
+
+
+async def test_a_priority_tie_at_runtime_goes_to_review(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The loader refuses two types with one priority; one inserted directly is still caught:
+    the instance goes to REVIEW with the reason, and no decision is written."""
+    monkeypatch.setattr(sandbox, "run_batch", fake_batch)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        process_id, _ = await create_process(api, uuid.uuid4().hex[:8], "operator")
+        async with session_factory() as session:
+            no_pagar = await session.get(DecisionType, (process_id, "NO_PAGAR"))
+            assert no_pagar is not None
+            no_pagar.priority = 3
+            # A new IBAN on an order already paid: both rules fire, ESCALAR ties NO_PAGAR.
+            digest = uuid.uuid4().hex
+            session.add(File(hash=digest, name="FA-7777_both.pdf", content=b"%PDF"))
+            both = Instance(
+                process_id=process_id,
+                file_hash=digest,
+                name="FA-7777_both.pdf",
+                symbols={**INVOICES["FA-5044_mensajería2.pdf"], "purchase_order": "PO-2026-0474"},
+            )
+            session.add(both)
+            await session.commit()
+            both_id = both.id
+
+        r = await api.post(f"/processes/{process_id}/run")
+        assert r.status_code == 200, r.text
+        # The others fire one rule each: no tie, decided as before.
+        assert r.json() == {
+            "decided": 3,
+            "by_decision": {"PAGAR": 1, "NO_PAGAR": 1, "ESCALAR": 1},
+            "review": 1,
+        }
+
+        detail = (await api.get(f"/instances/{both_id}")).json()
+        assert detail["status"] == "REVIEW"
+        assert detail["decisions"] == []
+        assert [e["step"] for e in detail["events"]] == ["review"]
+        assert "RULE_CONFLICT: ESCALAR, NO_PAGAR" in detail["events"][0]["data"]["reason"]
+        async with session_factory() as session:
+            instance = await session.get(Instance, both_id)
+            assert instance is not None
+            assert (instance.review_reason or "").startswith("RULE_CONFLICT")
+
+        # Export refuses while our own doubt is open.
+        assert (await api.get(f"/processes/{process_id}/export")).status_code == 409
