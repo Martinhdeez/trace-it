@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: trace
+      POSTGRES_PASSWORD: trace
+      POSTGRES_DB: trace
+    ports: ["5432:5432"]
+    volumes: [db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "trace"]
+      interval: 2s
+      retries: 20
+
+  backend:
+    build: ./backend
+    env_file: [{path: .env, required: false}]
+    environment:
+      TRACE_DATABASE_URL: postgresql+psycopg://trace:trace@db:5432/trace
+      TRACE_ERP_URL: http://host.docker.internal:8009
+    ports: ["${BACKEND_PORT:-8000}:8000"]
+    volumes: ["./backend/app:/srv/app", "./backend/alembic:/srv/alembic"]
+    depends_on:
+      db: {condition: service_healthy}
+
+volumes:
+  db:
