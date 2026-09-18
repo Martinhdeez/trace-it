@@ -183,7 +183,7 @@
     "file_id": "scan_011.pdf",
     "fields": {
       "supplier_tax_id": "B90233808",
-      "payment_iban": "ES9368884400123588900142",
+      "payment_iban": "ES8368884400123588900142",
       "purchase_order_ref": "PO-2026-0487",
       "issued_on": "2026-01-13",
       "net_amount": "1255.20",
@@ -195,7 +195,8 @@
     },
     "not_verifiable": [],
     "review_method": "assistant_visual_transcription",
-    "sha256": "c1657a76f2a016bd4f1c8d6c93050766211d20bfa54882b5229d07bf90d28199"
+    "sha256": "c1657a76f2a016bd4f1c8d6c93050766211d20bfa54882b5229d07bf90d28199",
+    "human_confirmed_fields": ["payment_iban"]
   },
   {
     "file_id": "scan_012.pdf",
@@ -364,7 +365,6 @@
   {
     "file_id": "scan_023.pdf",
     "fields": {
-      "supplier_tax_id": "B96233419",
       "purchase_order_ref": "PO-2026-0726",
       "issued_on": "2026-04-29",
       "net_amount": "2050.00",
@@ -375,10 +375,12 @@
       "vat_rate": "21"
     },
     "not_verifiable": [
-      "payment_iban"
+      "payment_iban",
+      "supplier_tax_id"
     ],
     "review_method": "assistant_visual_transcription",
     "sha256": "d80c01723c5862ae77124cf616bf211fc2753c90b9984cb3717da0cde18a5490",
+    "human_confirmed_fields": ["invoice_number"],
     "human_review": {
       "source": "user_visual_reading_in_conversation",
       "status": "PROVISIONAL",
