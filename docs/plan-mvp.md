@@ -30,7 +30,9 @@ Ningún ERP concreto entra en el código. Un único conector de APIs HTTP se con
 - el formato de respuesta y su codificación (XML en ISO-8859-1 en el reto);
 - cómo se mapea cada campo a las columnas que leen las reglas.
 
-El resultado siempre es una foto local guardada como una fila nueva de `fuentes`. Las reglas leen esa foto y nunca la API. Un ERP nuevo es un fichero de configuración, no código nuevo.
+El resultado siempre es una foto local guardada como una fila nueva de `fuentes`. Las reglas leen esa foto y nunca la API.
+
+**Alcance antes de H1:** la configuración del ERP del reto va en `sources.json` desde el primer día. El código solo implementa las opciones que usa este ERP. Cuando llegue otro ERP, se amplía el código detrás de la misma configuración. Así el contrato ya es genérico y el riesgo de plazo es menor.
 
 ## Hitos
 | Hito | Cuándo | Criterio de hecho |
