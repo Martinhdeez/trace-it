@@ -1,6 +1,6 @@
-# Guía del equipo
+# trace-it: guía del equipo
 
-Cómo trabajamos en este repo: ramas, commits, estructura del backend y cómo arrancarlo.
+Cómo trabajamos en el repo de trace-it: ramas, commits, estructura del backend y cómo arrancarlo.
 Qué construimos y por qué: `docs/plano-aplicacion.md`. Quién hace qué: `docs/plan-mvp.md`.
 
 ## 1. Git

@@ -1,4 +1,4 @@
-# Plan del MVP
+# trace-it: plan del MVP
 
 **Estado:** propuesta. Basado en `docs/plano-aplicacion.md` (decisiones P1-P22).
 

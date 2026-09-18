@@ -1,4 +1,4 @@
-# Plano de la aplicación
+# trace-it: plano de la aplicación
 
 **Estado:** borrador vivo. Se itera hasta tener el plano completo.
 **Marcadores:** [DECIDIDO] acordado por el equipo · [PROPUESTA] sugerencia pendiente de validar · [ABIERTO] sin decidir · [DESCARTADO] valorado y rechazado · [PENDIENTE] sección por escribir.

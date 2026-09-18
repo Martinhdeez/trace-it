@@ -10,7 +10,7 @@ from app.features.reglas.router import router as reglas_router
 from app.features.usuarios.router import router as usuarios_router
 
 app = FastAPI(
-    title="trace-pay",
+    title="trace-it",
     version="0.1.0",
     description=(
         "Deterministic decision processes with rules compiled to code by agents.\n\n"
