@@ -66,4 +66,4 @@ and the blind double compilation (ADR 0004) reduce but do not close that path.
   case gets its own subprocess (`ejecutar`).
 
 ## Related
-ADR 0003, 0004, 0010 (compiled extractors would reuse it). Plan P8; `docs/plan-agentes.md` §5.
+ADR 0003, 0004, 0010 (compiled extractors would reuse it). Plan P8; `docs/agents-plan.md` §5.

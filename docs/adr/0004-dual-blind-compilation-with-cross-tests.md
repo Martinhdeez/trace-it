@@ -63,4 +63,4 @@ generated function before the batch 2 deadline, and one wrong outcome fails the 
   so running both codes stays well under a second per rule.
 
 ## Related
-ADR 0003, 0005, 0006, 0008, 0009, 0014. Plan P9, P21; `docs/plan-agentes.md` §3.1.
+ADR 0003, 0005, 0006, 0008, 0009, 0014. Plan P9, P21; `docs/agents-plan.md` §3.1.

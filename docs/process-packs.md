@@ -51,7 +51,7 @@ Declares each source of truth the rules read (`sources` in `evaluate(instance, s
 Optional pointers to sample data (e.g. the challenge PDFs folder and Excel file) so a full demo runs with one command.
 
 ## Agent presets (shared by all processes)
-`backend/app/features/agents/presets/{quality,cheap,fast}.json` define, per agent role, the model fallback chain, settings, retries, request limit, timeout and prompt file. See `docs/plan-agentes.md`.
+`backend/app/features/agents/presets/{quality,cheap,fast}.json` define, per agent role, the model fallback chain, settings, retries, request limit, timeout and prompt file. See `docs/agents-plan.md`.
 
 ## Commands
 | Command | Does |

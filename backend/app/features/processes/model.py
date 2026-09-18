@@ -5,7 +5,7 @@ from app.core.database import Base, created_at
 
 
 class Process(Base):
-    """A folder of rules with its own decision history (docs/plano-aplicacion.md 3.8)."""
+    """A folder of rules with its own decision history (docs/application-blueprint.md 3.8)."""
 
     __tablename__ = "processes"
 

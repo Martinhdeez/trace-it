@@ -2,7 +2,7 @@
 
 ## Antes de empezar
 - Parte de `dev` una vez unido el PR del esqueleto (`feat/esqueleto-backend`): `git switch dev && git pull`.
-- Lee `docs/guia-equipo.md` (git y estructura) y de `docs/plano-aplicacion.md`: 3.6, 3.7, 3.8, P3, P7, P14, P15, P18, P19, P21.
+- Lee `docs/team-guide.md` (git y estructura) y de `docs/application-blueprint.md`: 3.6, 3.7, 3.8, P3, P7, P14, P15, P18, P19, P21.
 
 ## Tu zona
 `backend/app/features/rules/`, `features/decisions/`, `features/processes/`, `features/users/`.

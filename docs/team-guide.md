@@ -1,7 +1,7 @@
 # trace-it: guía del equipo
 
 Cómo trabajamos en el repo de trace-it: ramas, commits, estructura del backend y cómo arrancarlo.
-Qué construimos y por qué: `docs/plano-aplicacion.md`. Quién hace qué: `docs/plan-mvp.md`.
+Qué construimos y por qué: `docs/application-blueprint.md`. Quién hace qué: `docs/mvp-plan.md`.
 
 ## Arranque rápido
 
@@ -117,7 +117,7 @@ Reglas:
 - Todo el código va en inglés (identificadores, base de datos, API, mensajes, prompts): ver `docs/CONVENTIONS.md` y su glosario.
 
 ### Agentes (LLM)
-Todos los agentes usan PydanticAI v2. Arquitectura, configuración por versiones y tareas: `docs/plan-agentes.md`.
+Todos los agentes usan PydanticAI v2. Arquitectura, configuración por versiones y tareas: `docs/agents-plan.md`.
 - Toda llamada a un LLM pasa por `features/llm/ejecutar.py`, con un papel de `config_agente`: así queda en la traza con su versión de configuración, coste y latencia.
 - Los prompts son ficheros en `features/agents/prompts/`. Los datos del caso van en el mensaje, nunca en el prompt.
 - En la extracción, un validador que falla manda la instancia a `REVIEW`; nunca se devuelve al modelo con `ModelRetry`.

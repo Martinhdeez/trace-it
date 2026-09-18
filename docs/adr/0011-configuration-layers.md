@@ -1,5 +1,5 @@
 ---
-status: accepted  # agent config versions: implementation in progress (plan-agentes task 1)
+status: accepted  # agent config versions: implementation in progress (agents-plan task 1)
 ---
 
 # Separate bootstrap files, versioned runtime configuration and secrets
@@ -56,7 +56,7 @@ Three layers:
 
 ## Evidence
 - Current state: `features/llm/model.py` (`ConfigLLM`), `features/llm/cliente.py`.
-- Design and endpoints: `docs/plan-agentes.md` §4; layers table: `docs/process-packs.md`.
+- Design and endpoints: `docs/agents-plan.md` §4; layers table: `docs/process-packs.md`.
 - Planned tests (task 1): versions and activation against Postgres, partial unique index,
   idempotent preset, export → apply gives the same config, invalid config → 422.
 

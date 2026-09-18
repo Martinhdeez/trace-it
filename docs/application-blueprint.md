@@ -242,7 +242,7 @@ En el proceso de facturas: ESCALAR (3, requiere persona) > NO_PAGAR (2) > PAGAR 
 **P22. Proveedores de LLM.** [DECIDIDO]
 - El sistema no depende de ningún proveedor. Cualquier API (Anthropic, OpenAI, Gemini, local...) se puede usar.
 - Cada papel tiene su propia configuración, cambiable en ejecución: `compilador_a`, `compilador_b`, `extractor_1`, `extractor_2`, `asistente` (y `corrector` en la iteración 2). Cada uno elige una cadena de modelos (el primero y sus sustitutos si falla un proveedor), sus ajustes, reintentos, límite de peticiones y prompt.
-- [DECIDIDO] Implementación: PydanticAI (P23). La configuración sale de presets en el repo y se guarda en la base de datos como versiones que solo se añaden (`config_agente`); cada llamada usa la versión activa de su papel y la anota en la traza. Detalle en `docs/plan-agentes.md`.
+- [DECIDIDO] Implementación: PydanticAI (P23). La configuración sale de presets en el repo y se guarda en la base de datos como versiones que solo se añaden (`config_agente`); cada llamada usa la versión activa de su papel y la anota en la traza. Detalle en `docs/agents-plan.md`.
 - Por defecto, los papeles emparejados (`_a`/`_b`, `_1`/`_2`) usan proveedores distintos, también en sus modelos de sustitución, para que no se equivoquen igual.
 
 **P23. Framework de agentes: PydanticAI.** [DECIDIDO]
@@ -275,7 +275,7 @@ No se usan sus grafos, su ejecución durable ni sus tools con aprobación humana
 - Nueva dependencia con cambios frecuentes: se fija la versión (`>=2.45,<3` y `uv.lock`) y la documentación local está en `.context/pydantic-ai/` para no programar contra APIs viejas.
 - Riesgo: si todos los modelos de una cadena fallan, el agente falla en cerrado (la regla no se activa, la instancia queda en `REVISION`), nunca decide.
 
-*Evidencia.* Las APIs usadas están comprobadas en la documentación local de PydanticAI v2 (referencias por sección en `docs/plan-agentes.md` §12). Las comparativas con LangGraph, CrewAI y los SDK de Claude y OpenAI están en esa misma documentación y las escribe Pydantic, así que se leen con su sesgo; la razón de fondo para descartarlas es nuestra arquitectura (P7, P22 y el estado en Postgres), no esas tablas. Las cifras de coste y latencia por etapa saldrán de `GET /procesos/{id}/metricas` sobre `eventos` (plan, §7.4).
+*Evidencia.* Las APIs usadas están comprobadas en la documentación local de PydanticAI v2 (referencias por sección en `docs/agents-plan.md` §12). Las comparativas con LangGraph, CrewAI y los SDK de Claude y OpenAI están en esa misma documentación y las escribe Pydantic, así que se leen con su sesgo; la razón de fondo para descartarlas es nuestra arquitectura (P7, P22 y el estado en Postgres), no esas tablas. Las cifras de coste y latencia por etapa saldrán de `GET /procesos/{id}/metricas` sobre `eventos` (plan, §7.4).
 
 ## 5. Funcionalidades de la primera iteración [PROPUESTA; corte de F11 DECIDIDO]
 Objetivo de la iteración 1 (sábado ~14:00): `outcomes.jsonl` del lote 1 correcto y todo el ciclo de reglas funcionando de punta a punta en un proceso.
@@ -316,7 +316,7 @@ Motivo del corte: F11 es lo más difícil de dejar fiable y no hace falta para p
 
 Principio: el LLM nunca está en el camino de la decisión. Solo escribe código de reglas, extrae símbolos y sugiere al responsable.
 
-**Capa de agentes [DECIDIDO, P23].** Los componentes que usan LLM (extractor, compilador, asistente) son agentes de PydanticAI sobre una infraestructura común (`features/llm/`): el modelo de cada llamada se construye desde la versión activa de su papel en `config_agente` (cadena de modelos de reserva, ajustes, reintentos, límites y prompt), y cada ejecución deja un evento en `eventos` con esa versión, el modelo que respondió, tokens, coste y latencia. Cada resultado de un LLM (símbolos por fichero, código por regla) se calcula una vez y se guarda; decidir y auditar no vuelven a llamar al LLM. Plan de ejecución: `docs/plan-agentes.md`.
+**Capa de agentes [DECIDIDO, P23].** Los componentes que usan LLM (extractor, compilador, asistente) son agentes de PydanticAI sobre una infraestructura común (`features/llm/`): el modelo de cada llamada se construye desde la versión activa de su papel en `config_agente` (cadena de modelos de reserva, ajustes, reintentos, límites y prompt), y cada ejecución deja un evento en `eventos` con esa versión, el modelo que respondió, tokens, coste y latencia. Cada resultado de un LLM (símbolos por fichero, código por regla) se calcula una vez y se guarda; decidir y auditar no vuelven a llamar al LLM. Plan de ejecución: `docs/agents-plan.md`.
 
 ### 6.2 Flujo de una instancia
 1. Ingesta: fichero → hash → texto completo guardado.
@@ -338,4 +338,4 @@ Principio: el LLM nunca está en el camino de la decisión. Solo escribe código
 - Encaje con la rúbrica y lista de ADRs.
 - Frontend.
 
-El reparto del trabajo está en `docs/plan-mvp.md` y `docs/guia-equipo.md`.
+El reparto del trabajo está en `docs/mvp-plan.md` y `docs/team-guide.md`.

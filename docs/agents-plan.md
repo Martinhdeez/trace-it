@@ -1,7 +1,7 @@
 # trace-it: plan de los agentes sobre PydanticAI
 
 **Estado:** plan de ejecución. Solo documentación: aún no hay código de este plan.
-**Decisión de fondo:** P23 en `docs/plano-aplicacion.md`.
+**Decisión de fondo:** P23 en `docs/application-blueprint.md`.
 **Fuente de las APIs:** la documentación local de PydanticAI v2 en `.context/pydantic-ai/` (ver "Referencias"). Todo nombre de clase o función de este documento está comprobado ahí. Lo que no aparece en la documentación está en "APIs sin confirmar".
 
 ## 0. Decisiones previas (no se reabren)
@@ -459,7 +459,7 @@ Paquete: **`pydantic-ai-slim[openai,anthropic,google]>=2.45,<3`** (2.45.0 es la 
 | 5 | `feat/metricas-agentes` | Martín | `trazas/service.py`, `trazas/router.py`, `trazas/schemas.py`, `main.py`; `datos.proceso_id` en los eventos | `GET /procesos/{id}/metricas` devuelve 7.4 para el proceso de facturas | eventos sintéticos → p50/p95 y coste por instancia correctos |
 | 6 | `feat/simbolos-validables` | Álvaro con Mateo | `procesos/definicion.py`, `procesos/schemas.py`, `procesos/README.md`, `procesos/pago-facturas.json` (tipos `iban`, `nif`; `comprobaciones`) | el JSON de facturas declara sus tipos y su suma; `gastos-viaje.json` sigue cargando | carga con y sin `comprobaciones`; tipo desconocido → rechazo |
 | 7 | `feat/extraccion-agentes` | Álvaro | `extraccion/extractor.py`, `extraccion/validadores.py`, `extraccion/service.py`, `agentes/prompts/extractor.md` | las 500 facturas pasan por doble extracción; ninguna llamada reintenta por un validador; repetir la extracción no llama a ningún modelo (caché por hash) | 3.3, y un test por validador (IBAN, NIF, suma) con casos buenos y malos |
-| 8 | `chore/quitar-litellm` | Martín | borrar `llm/cliente.py`, `llm/model.py`, `llm/router.py`, `llm/schemas.py`; `main.py`; migración `0006` (borra `config_llm`); `pyproject.toml` (fuera `litellm`); `docs/guia-equipo.md` | `grep -ri litellm backend` vacío; `make test` en verde | suite completa |
+| 8 | `chore/quitar-litellm` | Martín | borrar `llm/cliente.py`, `llm/model.py`, `llm/router.py`, `llm/schemas.py`; `main.py`; migración `0006` (borra `config_llm`); `pyproject.toml` (fuera `litellm`); `docs/team-guide.md` | `grep -ri litellm backend` vacío; `make test` en verde | suite completa |
 | 9 | `feat/observabilidad-logfire` (opcional) | quien quiera | extra `logfire`, arranque condicionado a `LOGFIRE_TOKEN` | sin token no cambia nada | ninguno nuevo |
 | 10 | `feat/corrector` (iteración 2) | Martín | `agentes/corrector.py`, `agentes/prompts/corrector.md`, papel `corrector` en los presets | F12 funciona con propuestas que pasan por A y B | 3.4 |
 

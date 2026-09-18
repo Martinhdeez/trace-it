@@ -67,4 +67,4 @@ runtime; values are fixed after load testing against the challenge ERP.
   9 PAGADA). No client code on `dev` yet (`TRACE_ERP_URL` in `core/config.py` only).
 
 ## Related
-ADR 0006, 0007 (`sources.json`), 0008. Plan P6, P16; `docs/plan-mvp.md` (owner Álvaro).
+ADR 0006, 0007 (`sources.json`), 0008. Plan P6, P16; `docs/mvp-plan.md` (owner Álvaro).

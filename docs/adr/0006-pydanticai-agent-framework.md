@@ -1,5 +1,5 @@
 ---
-status: accepted  # implementation in progress (docs/plan-agentes.md §9, tasks 1-8)
+status: accepted  # implementation in progress (docs/agents-plan.md §9, tasks 1-8)
 ---
 
 # Build every agent on PydanticAI
@@ -54,14 +54,14 @@ and rule state machines, the manager's queue and idempotency already live in Pos
   `/agents/.../config`. Model names change from `anthropic/x` to `anthropic:x`.
 - If every model in a chain fails, the agent fails closed: rule stays draft, instance stays
   in REVIEW, never a decision.
-- Behaviour marked "unconfirmed" in `docs/plan-agentes.md` §11 (e.g. whether timeouts reach
+- Behaviour marked "unconfirmed" in `docs/agents-plan.md` §11 (e.g. whether timeouts reach
   `FallbackModel` as `ModelAPIError`) must be checked by tests in task 2.
 
 ## Evidence
 - APIs checked against the local PydanticAI v2 docs (`.context/pydantic-ai/`), references
-  in `docs/plan-agentes.md` §12.
+  in `docs/agents-plan.md` §12.
 - Cost and latency per stage will come from `GET /processes/{id}/metrics` over `events`
   (plan §7.4); not measured yet.
 
 ## Related
-ADR 0002, 0004, 0010, 0011, 0013 (resilience). Plan P22, P23; `docs/plan-agentes.md`.
+ADR 0002, 0004, 0010, 0011, 0013 (resilience). Plan P22, P23; `docs/agents-plan.md`.

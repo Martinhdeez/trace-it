@@ -1,6 +1,6 @@
 # trace-it: plan del MVP
 
-**Estado:** propuesta. Basado en `docs/plano-aplicacion.md` (decisiones P1-P23). Agentes: `docs/plan-agentes.md`.
+**Estado:** propuesta. Basado en `docs/application-blueprint.md` (decisiones P1-P23). Agentes: `docs/agents-plan.md`.
 
 ## Objetivo
 Un proceso ("Pago de facturas") funcionando de punta a punta en la aplicación: ingesta, conectores, extracción, reglas compiladas por dos agentes, motor, histórico, escalado y exportación. El `outcomes.jsonl` del lote 1 sale de ese flujo y es correcto. Todo lo propio de las facturas (tipos de decisión, símbolos, fuentes, reglas) se da de alta como datos del proceso, no en el código.
@@ -44,7 +44,7 @@ El resultado siempre es una foto local guardada como una fila nueva de `sources`
 | H4 Entrega | Domingo 10:30 | Repo público con `outcomes.jsonl`, `outcomes_lote2.jsonl` y `albertitos_plan.pdf` |
 
 ## Estructura del repo
-Ver `docs/guia-equipo.md` (organizado por funcionalidades en `backend/app/features/`).
+Ver `docs/team-guide.md` (organizado por funcionalidades en `backend/app/features/`).
 
 ## Tablas (fuente de verdad: `backend/app/models.py` y las migraciones)
 - `users`: nombre, email, rol (`manager`/`operator`).
@@ -59,14 +59,14 @@ Ver `docs/guia-equipo.md` (organizado por funcionalidades en `backend/app/featur
 - `decisions`: instancia, resultado de cada regla (`jsonb`), decisión, hash de las reglas aplicadas, autor (`engine` o persona), tipo de decisión humana (`resolution`/`review_correction`), motivo.
 - `findings`: decisión, tipo (hoy `different_decision`), detalle, regla que lo genera.
 - `events`: traza de todo (paso, entrada, salida, latencia, reintentos, coste).
-- `config_agente`: versiones de la configuración de cada papel de agente (cadena de modelos en formato PydanticAI `proveedor:modelo`, ajustes, reintentos, límite de peticiones, prompt); solo se añaden filas y hay una activa por papel. Sustituye a `llm_config` (ver `docs/plan-agentes.md` §4).
+- `config_agente`: versiones de la configuración de cada papel de agente (cadena de modelos en formato PydanticAI `proveedor:modelo`, ajustes, reintentos, límite de peticiones, prompt); solo se añaden filas y hay una activa por papel. Sustituye a `llm_config` (ver `docs/agents-plan.md` §4).
 
 ## Reparto
 | Persona | Bloque | Entregable |
 |---|---|---|
-| Martín | Agentes: compilador (dos agentes, tests cruzados), sandbox, asistente de escalado (el corrector de F12 es de la iteración 2); infraestructura de agentes sobre PydanticAI y su configuración (`docs/plan-agentes.md`). Texto de las reglas de la norma v3. Responsable del filtro | `features/agents/`, `features/llm/`, reglas v3 |
-| Mateo | Reglas y decisiones: ciclo de vida de reglas, motor, API de decisiones, auditoría y hallazgos; procesos y usuarios. Tareas en `docs/tareas-mateo.md` | `features/rules/`, `features/decisions/`, `features/processes/`, `features/users/` |
-| Álvaro | Todo lo que entra: ingesta (hash, `pdftotext`, render/OCR de escaneos), extracción de símbolos (doble extracción con un agente de PydanticAI sobre `features/llm/`, validadores sin reintentar al modelo; `docs/plan-agentes.md` §3.3), conector del Excel (normalización). El conector genérico de APIs HTTP (ERP) queda por asignar, porque Álvaro está con el OCR | `features/ingestion/`, `features/extraction/`, `features/sources/` |
+| Martín | Agentes: compilador (dos agentes, tests cruzados), sandbox, asistente de escalado (el corrector de F12 es de la iteración 2); infraestructura de agentes sobre PydanticAI y su configuración (`docs/agents-plan.md`). Texto de las reglas de la norma v3. Responsable del filtro | `features/agents/`, `features/llm/`, reglas v3 |
+| Mateo | Reglas y decisiones: ciclo de vida de reglas, motor, API de decisiones, auditoría y hallazgos; procesos y usuarios. Tareas en `docs/tasks-mateo.md` | `features/rules/`, `features/decisions/`, `features/processes/`, `features/users/` |
+| Álvaro | Todo lo que entra: ingesta (hash, `pdftotext`, render/OCR de escaneos), extracción de símbolos (doble extracción con un agente de PydanticAI sobre `features/llm/`, validadores sin reintentar al modelo; `docs/agents-plan.md` §3.3), conector del Excel (normalización). El conector genérico de APIs HTTP (ERP) queda por asignar, porque Álvaro está con el OCR | `features/ingestion/`, `features/extraction/`, `features/sources/` |
 | Varsovia | Producto e ideas: demo, ADRs, `albertitos_plan.pdf`, hoja de resultados esperados para verificar | Guion de demo, ADRs |
 | Carlos | Frontend contra los endpoints de H0 (datos simulados hasta H1): procesos, instancias con traza, alta de regla que encadena crear → compilar mostrando el progreso (compilar tarda 30-60 s) y el informe, cola del responsable (tipos con `requires_human` y `REVIEW`), exportar | `frontend/` |
 

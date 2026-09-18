@@ -8,7 +8,7 @@
 >
 > Ya decidido: R16 no es una regla (será un aviso en la traza); recargo financiero y fechas imposibles → NO_PAGAR; hoja `pendiente_revisar` → sin regla; pedido duplicado (R15) → ESCALAR, con las instancias identificadas por `_instance`.
 
-**Fecha:** 2026-09-18 · **Estado:** cargado como borradores (sin compilar) · **Base:** `Norma_Pagos_v3` (Excel), `analisis-caja-v3.md`, `reglas-sistema.md`, `plano-aplicacion.md` P18-P21.
+**Fecha:** 2026-09-18 · **Estado:** cargado como borradores (sin compilar) · **Base:** `Norma_Pagos_v3` (Excel), `analisis-caja-v3.md`, `reglas-sistema.md`, `application-blueprint.md` P18-P21.
 **Comprobación hecha para este borrador:** `pdftotext` de los 471 PDF con texto + cruce con `Proveedores`, `Pedidos_2026` y los datos del ERP (leídos como texto del `_DATOS_ERP` de `alberto_erp.py`, solo para investigar; el sistema usa la API). Resultado: 433 facturas de texto sin anomalía (442 sin anomalía de maestro ni importes, menos 9 PAGADA en el ERP); las 38 restantes coinciden con la tabla de trampas. Los 29 escaneos no se han comprobado (solo `scan_001`, limpio a la vista).
 
 Convenciones para todas las reglas (el agente compilador debe aplicarlas siempre):
