@@ -23,7 +23,7 @@ export function TracePane({
 }) {
   if (!instance) {
     return (
-      <aside className="flex w-[340px] shrink-0 flex-col px-5 py-4 text-[13px] text-muted">
+      <aside className="flex h-full min-h-0 w-[340px] shrink-0 flex-col px-5 py-4 text-[13px] text-muted">
         Decisión
       </aside>
     )
@@ -36,7 +36,7 @@ export function TracePane({
     rules.find((rule) => rule.id === outcome.regla_id)?.texto ?? `Regla ${outcome.regla_id}`
 
   return (
-    <aside className="flex w-[340px] shrink-0 flex-col overflow-y-auto px-2 pb-3">
+      <aside className="flex h-full min-h-0 w-[340px] shrink-0 flex-col overflow-y-auto px-2 pb-3">
       <div className="px-3 py-3">
         <h2 className="text-[13px] font-medium">Decisión</h2>
       </div>

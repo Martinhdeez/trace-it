@@ -15,7 +15,7 @@ backend serves at the root.
 
 | Value | What happens |
 |---|---|
-| `auto` (default) | Every call tries the backend and falls back to the in-memory mock when the endpoint answers 501, is not mounted, or the backend is down |
+| `auto` (default) | Every call tries the backend and falls back to the in-memory mock when the endpoint answers 501, 502, is not mounted, or the backend is down |
 | `live` | Only the backend. Errors surface as they are |
 | `mock` | Only the mock, with the Caja lote 1 loaded. No backend needed |
 

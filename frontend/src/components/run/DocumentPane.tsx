@@ -20,7 +20,7 @@ export function DocumentPane({ name }: { name: string | undefined }) {
   }
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col px-2 pb-3">
+    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col px-2 pb-3">
       <div className="flex items-end justify-between gap-3 px-3 pb-3 pt-1">
         <div>
           <p className="text-[11px] text-muted">Documento</p>

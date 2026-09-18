@@ -132,7 +132,7 @@ function ApiStatus() {
         </div>
         <p className="text-[12px] text-muted">
           En <span className="font-mono">auto</span> cada llamada intenta el backend real y cae al
-          simulador si el endpoint todavía responde 501 o no existe. {live} de {entries.length}{' '}
+          simulador si el endpoint responde 501, 502 o no existe. {live} de {entries.length}{' '}
           llamadas de esta sesión salieron del backend.
         </p>
         {entries.length === 0 ? (

@@ -40,10 +40,18 @@ export function DataTable<T extends { id: string }>({
         {rows.map((row) => (
           <tr
             key={row.id}
+            tabIndex={onRowClick ? 0 : undefined}
             onClick={() => onRowClick?.(row)}
+            onKeyDown={(event) => {
+              if (!onRowClick) return
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onRowClick(row)
+              }
+            }}
             className={cn(
               'border-b border-hairline last:border-0',
-              onRowClick && 'cursor-pointer hover:bg-canvas',
+              onRowClick && 'cursor-pointer hover:bg-canvas focus-visible:bg-canvas',
               selectedId === row.id && 'bg-canvas',
             )}
           >

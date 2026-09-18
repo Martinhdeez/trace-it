@@ -48,10 +48,6 @@ export function ExportButton({ processId }: { processId: number }) {
           <div className="rounded-[16px] bg-white p-4 shadow-[0_16px_50px_rgba(19,19,19,0.12)] ring-1 ring-black/[0.06]">
             <Notice tone="warning" title="No se puede exportar todavía">
               {blocked}
-              <p className="mt-2">
-                <span className="font-mono">REVISION</span> es un estado interno, no una decisión:
-                una instancia ahí no tiene línea que exportar. Resuélvelas en la cola y vuelve.
-              </p>
             </Notice>
             <div className="mt-3 flex justify-end">
               <Button tone="soft" onClick={() => setBlocked(null)}>

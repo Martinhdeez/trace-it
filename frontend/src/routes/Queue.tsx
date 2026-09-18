@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileText, Sparkles } from 'lucide-react'
 import { api } from '../api/client'
-import { keys } from '../api/queries'
+import { families, keys } from '../api/queries'
 import type { ProcessDetail, RuleKind, Suggestion } from '../api/contracts'
 import { Button, Field, Segmented, Select, Textarea } from '../components/shell/Controls'
 import { Empty, ErrorNotice, Notice } from '../components/shell/Notice'
@@ -181,10 +181,9 @@ function Resolve({
       return api.createRule(process.id, { texto: text, tipo: ruleKind, decision })
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['queue'] })
-      void queryClient.invalidateQueries({ queryKey: ['instances'] })
-      void queryClient.invalidateQueries({ queryKey: ['instance'] })
-      void queryClient.invalidateQueries({ queryKey: ['rules'] })
+      for (const name of [...families.decisions, ...families.rules]) {
+        void queryClient.invalidateQueries({ queryKey: [name] })
+      }
     },
   })
 

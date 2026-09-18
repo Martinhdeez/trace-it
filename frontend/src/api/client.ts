@@ -32,15 +32,16 @@ export const apiTrace = {
 }
 
 /**
- * The endpoint is not there yet: either its owner has not written it (501), the
- * router is not mounted (404 without our `{code, message}` envelope), or the
- * backend is down. Anything else is a real answer and must reach the UI.
+ * The endpoint is not there yet. Vite's proxy answers 502 with an empty body
+ * when nothing is listening on 8000, so that has to count as "backend down"
+ * the same as a failed fetch (status 0). A 500 that carries our `{code, message}`
+ * envelope is a real answer and must reach the UI.
  */
 function missingEndpoint(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false
-  return (
-    error.notImplemented || error.unreachable || (error.status === 404 && error.code === 'http_error')
-  )
+  if (error.notImplemented || error.unreachable) return true
+  if (error.status === 502 || error.status === 503 || error.status === 504) return true
+  return error.status === 404 && error.code === 'http_error'
 }
 
 function withFallback(): ApiClient {
