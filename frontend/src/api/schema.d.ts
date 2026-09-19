@@ -1256,7 +1256,7 @@ export interface paths {
         };
         /**
          * outcomes.jsonl, one line per instance
-         * @description `trace=true` adds a `trace_url` per line: the console screen with that case's trace.
+         * @description `file_id` and `result` come first on every line. `trace=true` adds a `trace_url`: the console screen with that case's trace. `full=true` writes the whole trace inline (`reason_code`, `reason`, `decided_by`, `decided_at`, `process_version`, `rules_hash`, `rules_fired`, `evidence`, `sources_read`, `trace_id`, `trace_url`), leaving out what has no data; a person's later resolution is then the exported one.
          */
         get: operations["exportOutcomes"];
         put?: never;
@@ -9154,6 +9154,7 @@ export interface operations {
         parameters: {
             query?: {
                 trace?: boolean;
+                full?: boolean;
             };
             header?: never;
             path: {

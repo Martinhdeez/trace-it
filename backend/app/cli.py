@@ -137,12 +137,14 @@ def check_outcomes(output: Path, files: Path) -> None:
     print(f"OK: one line per file, valid results {dict(sorted(results.items()))}")
 
 
-async def export(file: Path, files: Path, output: Path, trace: bool = False) -> None:
+async def export(
+    file: Path, files: Path, output: Path, trace: bool = False, full: bool = False
+) -> None:
     async with session_factory() as session:
         process = await process_of(session, file)
         try:
             body, duplicates = await decisions.export(
-                session, process.id, outcomes_file.batch_files(files), trace=trace
+                session, process.id, outcomes_file.batch_files(files), trace=trace, full=full
             )
         except ConflictError as e:
             sys.exit(f"export refused: {e.message}")
@@ -181,6 +183,11 @@ def main() -> None:
         action="store_true",
         help="Add a trace_url per line: the console screen with that case's trace",
     )
+    command.add_argument(
+        "--full",
+        action="store_true",
+        help="Write the whole trace of each decision inline, beside its trace_url",
+    )
     command = commands.add_parser("check-outcomes", help="Check an outcomes JSONL for a batch")
     command.add_argument("output", type=Path)
     command.add_argument("--files", type=Path, required=True, help="Folder with the batch's PDFs")
@@ -190,7 +197,7 @@ def main() -> None:
     elif args.command == "sources":
         asyncio.run(sync_source(args.file, args.source))
     elif args.command == "export":
-        asyncio.run(export(args.file, args.files, args.output, args.trace))
+        asyncio.run(export(args.file, args.files, args.output, args.trace, args.full))
     else:
         check_outcomes(args.output, args.files)
 
