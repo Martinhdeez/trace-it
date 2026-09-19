@@ -1,0 +1,40 @@
+[
+  {
+    "file_id": "scan_001.pdf",
+    "sha256": "304c94e1fc9bb37bfd9cd6a3c0ad77b1372a0e5a557a339fe9d7dbea01c3309f",
+    "review_method": "Assistant visual review of current PDF rendered at 150 dpi; not organizer ground truth",
+    "fields": {
+      "invoice_number": "2026/86248",
+      "supplier_tax_id": "B98120774",
+      "payment_iban": "ES4414650100951704302211",
+      "purchase_order_ref": "PO-2026-0477",
+      "issued_on": "2026-03-08",
+      "net_amount": "1025.49",
+      "vat_rate": "21",
+      "vat_amount": "215.35",
+      "gross_amount": "1240.84",
+      "currency": "EUR"
+    },
+    "not_verifiable": [],
+    "reviewed_at": "2026-09-19"
+  },
+  {
+    "file_id": "scan_026.pdf",
+    "sha256": "c6811fccbb1492b42b615b3e53051c09aa6da0218d4a0a4ad576e21083b6f143",
+    "review_method": "Assistant visual review of current PDF rendered at 150 dpi; not organizer ground truth",
+    "fields": {
+      "invoice_number": "F26-7712",
+      "supplier_tax_id": "B91455230",
+      "payment_iban": "ES0900730100510505331902",
+      "purchase_order_ref": "PO-2026-0729",
+      "issued_on": "2026-05-15",
+      "net_amount": "2480.00",
+      "vat_rate": "21",
+      "vat_amount": "520.80",
+      "gross_amount": "3000.80",
+      "currency": "EUR"
+    },
+    "not_verifiable": [],
+    "reviewed_at": "2026-09-19"
+  }
+]

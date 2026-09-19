@@ -7,11 +7,10 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-import httpx
-
 from app.common import prompts
 from app.common.extraction import Candidate, Evidence, TextLine
 from app.common.normalization import clean_text, fold, invoice_date
+from app.features.ingestion.ocr.http import ProviderHTTP
 
 from .extraction_plan import ExtractionField
 from .ocr.errors import ProviderUnavailable, note_provider_failure, provider_on_cooldown
@@ -294,8 +293,9 @@ def read_schema_fields(
 
 
 class SchemaFieldReader:
-    def __init__(self, settings):
+    def __init__(self, settings, *, http=None):
         self.settings = settings
+        self.http = http or ProviderHTTP()
 
     @property
     def configured(self) -> bool:
@@ -489,7 +489,7 @@ class SchemaFieldReader:
         trace_provider = "vision" if provider == "compatible" else provider
 
         def call(mark_network_attempt):
-            with httpx.Client(timeout=self.settings.vlm_timeout, follow_redirects=False) as client:
+            with self.http.session(self.settings.vlm_timeout) as client:
                 mark_network_attempt()
                 response = client.post(endpoint, headers=headers, json=body)
             record_response(

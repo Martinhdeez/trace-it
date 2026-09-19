@@ -14,6 +14,7 @@ from filelock import FileLock
 from app.core import events
 from app.features.ingestion.cache import count_reader
 
+from .budget import acquired, remaining
 from .errors import ProviderUnavailable
 from .pricing import cost_snapshot
 
@@ -160,6 +161,8 @@ def recorded_call(
             wait, basis = _backoff(exc, attempt)
             if waited + wait > budget:
                 raise
+            if wait >= remaining(wait + 1):
+                raise
             _sleep(wait)
             waited += wait
             retry = {"backoff_s": round(wait, 3), "backoff_basis": basis, "waited_s": waited}
@@ -185,7 +188,7 @@ def _attempt(path, identity, call, span, reader, force, retry):
 
         def limited(mark_network_attempt):
             queued = time.perf_counter()
-            with _slot(provider):
+            with acquired(_slot(provider)):
                 trace.set(slot_wait_ms=round((time.perf_counter() - queued) * 1000))
                 return call(mark_network_attempt)
 
@@ -205,10 +208,13 @@ def _attempt(path, identity, call, span, reader, force, retry):
 
 
 def _recorded_call(path, identity, call, trace=None, reader=None, force=False):
-    with FileLock(str(path) + ".lock", timeout=60):
+    queued = time.perf_counter()
+    with FileLock(str(path) + ".lock", timeout=remaining(60)):
+        if trace is not None:
+            trace.set(journal_wait_ms=round((time.perf_counter() - queued) * 1000))
         exists = path.exists() and not force
         record = json.loads(path.read_text(encoding="utf-8")) if exists else None
-        if record is not None and record["state"] != "refused":  # refused: call again
+        if record is not None and record["state"] not in {"refused", "not_started"}:
             if trace is not None:
                 trace.set(journal_hit=True)
             if record["state"] != "complete":
@@ -258,7 +264,11 @@ def _recorded_call(path, identity, call, trace=None, reader=None, force=False):
             status = trace.data.get("http_status_code") if trace is not None else None
             refused = status is not None and (400 <= status < 500 or status == 503)
             record.update(
-                state="refused" if refused else "uncertain_or_failed",
+                state="not_started"
+                if trace is not None and not trace.data["network_attempted"]
+                else "refused"
+                if refused
+                else "uncertain_or_failed",
                 error_type=type(exc).__name__,
                 **({"http_status_code": status} if refused else {}),
             )

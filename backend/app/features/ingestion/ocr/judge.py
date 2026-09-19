@@ -3,11 +3,10 @@
 import json
 from pathlib import Path
 
-import httpx
-
 from app.common import prompts
 
 from .errors import ProviderUnavailable, note_provider_failure, provider_on_cooldown
+from .http import ProviderHTTP
 from .journal import record_response, recorded_call, retry_after
 
 PROMPTS = Path(__file__).parents[1] / "prompts"
@@ -16,8 +15,9 @@ INSTRUCTIONS = prompts.read(PROMPTS, "text-judge")
 
 
 class TextJudge:
-    def __init__(self, settings):
+    def __init__(self, settings, *, http=None):
         self.settings = settings
+        self.http = http or ProviderHTTP()
 
     @property
     def configured(self):
@@ -129,9 +129,7 @@ class TextJudge:
         questions = payload["questions"]
 
         def call(mark_network_attempt):
-            with httpx.Client(
-                timeout=self.settings.judge_timeout, follow_redirects=False
-            ) as client:
+            with self.http.session(self.settings.judge_timeout) as client:
                 mark_network_attempt()
                 response = client.post(
                     URL,
@@ -220,9 +218,7 @@ class TextJudge:
             }
 
         def call(mark_network_attempt):
-            with httpx.Client(
-                timeout=self.settings.judge_timeout, follow_redirects=False
-            ) as client:
+            with self.http.session(self.settings.judge_timeout) as client:
                 mark_network_attempt()
                 response = client.post(
                     endpoint,
@@ -284,9 +280,7 @@ class TextJudge:
             headers = {}
             if self.settings.judge_api_key:
                 headers["Authorization"] = "Bearer " + self.settings.judge_api_key
-            with httpx.Client(
-                timeout=self.settings.judge_timeout, follow_redirects=False
-            ) as client:
+            with self.http.session(self.settings.judge_timeout) as client:
                 mark_network_attempt()
                 response = client.post(endpoint, headers=headers, json=body)
             record_response("jev", response.status_code, retry_after_s=retry_after(response))

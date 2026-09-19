@@ -12730,6 +12730,14 @@
             ],
             "title": "Vision Model"
           },
+          "vision_verification_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Vision Verification Models"
+          },
           "text_judge_model": {
             "anyOf": [
               {
@@ -12785,6 +12793,13 @@
             "minimum": 128.0,
             "title": "Judge Max Tokens",
             "default": 4096
+          },
+          "timeout_seconds": {
+            "type": "number",
+            "maximum": 600.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Timeout Seconds",
+            "default": 120
           }
         },
         "additionalProperties": false,

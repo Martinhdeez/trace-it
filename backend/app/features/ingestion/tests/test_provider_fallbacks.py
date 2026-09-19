@@ -147,7 +147,7 @@ def test_same_model_through_compatible_and_helm_counts_once(settings, monkeypatc
     )
     readers = VisionFallback(with_second_model).transcribe_readers(b"image", 1, (595, 842))
     assert set(readers) == {"visual:compatible:qwen3.6", "visual:helmcode:gemma4"}
-    assert requested_models == ["qwen3.6", "qwen3.6", "gemma4"]
+    assert sorted(requested_models) == ["gemma4", "qwen3.6", "qwen3.6"]
 
 
 def test_schema_two_provider_labels_for_same_model_do_not_verify():

@@ -20,7 +20,12 @@ def compare(result, reference):
         checks[key] = {
             "expected": expected,
             "value": field["value"],
-            "status": field.get("status", "READING"),
+            "status": field.get("status")
+            or (
+                "OBSERVED"
+                if field.get("verification") == "verified"
+                else field.get("verification", "READING").upper()
+            ),
             "matches": field["value"] == expected,
         }
     return {
@@ -28,6 +33,21 @@ def compare(result, reference):
         "checks": checks,
         "not_verifiable": reference["not_verifiable"],
     }
+
+
+def validate_references(directory, references):
+    """Fail before making any billable call when a reference no longer identifies its PDF."""
+    mismatches = []
+    for reference in references:
+        path = directory / reference["file_id"]
+        if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != reference.get(
+            "sha256"
+        ):
+            mismatches.append(reference["file_id"])
+    if mismatches:
+        raise ValueError(
+            "References require visual re-review before evaluation: " + ", ".join(mismatches)
+        )
 
 
 def main():
@@ -38,7 +58,9 @@ def main():
     parser.add_argument(
         "--labels",
         type=Path,
-        default=(Path(__file__).resolve().parents[1] / "tests/fixtures/scans-reviewed.json"),
+        default=(
+            Path(__file__).resolve().parents[1] / "tests/fixtures/scans-reviewed-current.json"
+        ),
     )
     parser.add_argument("--output", type=Path, default=Path("reports/scans"))
     parser.add_argument("--extractions", type=Path)
@@ -46,6 +68,7 @@ def main():
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     references = json.loads(args.labels.read_text(encoding="utf-8"))
+    validate_references(args.input, references)
     service = (
         ExtractionService(replace(Settings(), ocr_dpi=args.dpi)) if not args.extractions else None
     )
@@ -94,6 +117,7 @@ def main():
     )
     summary = {
         "files": len(reports),
+        "labels": str(args.labels),
         "seconds": round(time.perf_counter() - started, 3),
         **counts,
         "note": (

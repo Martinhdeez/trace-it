@@ -26,6 +26,7 @@ class ExtractionSettings(BaseModel):
     secondary_ocr: bool = True
     # None disables a reader. Explicit prefixes prevent implicit provider selection.
     vision_model: str | None = None  # local:, compatible:, gemini:, helmcode:
+    vision_verification_models: list[str] = Field(default_factory=list, max_length=3)
     text_judge_model: str | None = None  # local:, compatible:, jev:, helmcode:
     focused_verification: bool = True
     source_verification: bool = True
@@ -34,21 +35,30 @@ class ExtractionSettings(BaseModel):
     judge_timeout_seconds: float = Field(default=60, gt=0, le=600)
     vision_max_tokens: int = Field(default=4096, ge=128, le=32768)
     judge_max_tokens: int = Field(default=4096, ge=128, le=32768)
+    timeout_seconds: float = Field(default=120, gt=0, le=600)
 
     @model_validator(mode="after")
     def readers(self) -> Self:
+        if self.vision_verification_models and not self.vision_model:
+            raise ValueError("Verification readers require a primary vision model")
+        names = [self.vision_model, *self.vision_verification_models]
+        identities = [name.split(":", 1)[-1].rsplit("/", 1)[-1].lower() for name in names if name]
+        if len(set(identities)) != len(identities):
+            raise ValueError("Visual verification requires distinct models")
         for model, providers in (
             (self.vision_model, {"local", "compatible", "gemini", "helmcode"}),
+            *((model, {"gemini", "helmcode"}) for model in self.vision_verification_models),
             (self.text_judge_model, {"local", "compatible", "jev", "helmcode"}),
         ):
             if model is not None:
                 provider, _, name = model.partition(":")
                 if provider not in providers or not name.strip():
                     raise ValueError(f"Reader model must use one of {sorted(providers)} prefixes")
-        if (
-            self.vision_model
-            and self.vision_model.startswith("helmcode:")
-            and self.vision_model.split(":", 1)[1] not in {"qwen3.6", "gemma4"}
+        if any(
+            model
+            and model.startswith("helmcode:")
+            and model.split(":", 1)[1] not in {"qwen3.6", "gemma4"}
+            for model in names
         ):
             raise ValueError("Helmcode vision supports qwen3.6 and gemma4")
         return self
@@ -94,7 +104,11 @@ class ExecutionSettings(BaseModel):
                     raise ValueError(
                         f"{role}: local-only processes require local models and fallbacks"
                     )
-        for model in (self.extraction.vision_model, self.extraction.text_judge_model):
+        for model in (
+            self.extraction.vision_model,
+            self.extraction.text_judge_model,
+            *self.extraction.vision_verification_models,
+        ):
             if self.local_only and model and not model.startswith("local:"):
                 raise ValueError("Local-only extraction requires local readers")
             if model and model.startswith("compatible:") and not self.compatible_endpoint:
@@ -119,11 +133,18 @@ def extraction_defaults() -> ExtractionSettings:
         primary_model_dir=str(config.model_dir),
         verification_model_dir=str(config.model_dir / "verify"),
         vision_model=vision,
+        vision_verification_models=[
+            f"{provider}:{model}"
+            for provider, model in chain[1:]
+            if provider in {"helmcode", "gemini"}
+            and model.rsplit("/", 1)[-1].lower() != chain[0][1].rsplit("/", 1)[-1].lower()
+        ][:3],
         text_judge_model=judge,
         mode=config.ocr_mode,
         dpi=config.ocr_dpi,
         vision_timeout_seconds=config.vlm_timeout,
         judge_timeout_seconds=config.vlm_timeout,
+        timeout_seconds=config.extraction_timeout,
     )
 
 
@@ -185,7 +206,9 @@ def preset(base: ExecutionSettings, name: Preset) -> ExecutionSettings:
         judge_timeout_seconds=timeout,
     )
     if name in {"lowest_cost", "fastest"}:
-        value["extraction"].update(mode="local", vision_model=None, text_judge_model=None)
+        value["extraction"].update(
+            mode="local", vision_model=None, vision_verification_models=[], text_judge_model=None
+        )
     overrides = deepcopy(settings.execution_presets.get(name, {}))
     for role, patch in overrides.pop("agents", {}).items():
         value["agents"][role].update(patch)
@@ -203,15 +226,26 @@ def ingestion_settings(config: ExecutionSettings, base: IngestionSettings) -> In
     vision = extraction.vision_model
     provider, _, model = (vision or "disabled:").partition(":")
     judge_provider, _, judge_model = (extraction.text_judge_model or "disabled:").partition(":")
+    readers = [
+        (
+            "compatible" if name.split(":", 1)[0] == "local" else name.split(":", 1)[0],
+            name.split(":", 1)[1],
+        )
+        for name in [vision, *extraction.vision_verification_models]
+        if name
+    ]
+    providers = {provider for provider, _ in readers}
     return replace(
         base,
         model_dir=Path(extraction.primary_model_dir),
         verification_model_dir=Path(extraction.verification_model_dir),
         ocr_dpi=extraction.dpi,
         ocr_mode=extraction.mode,
+        extraction_timeout=extraction.timeout_seconds,
+        visual_readers=tuple(readers),
         # A version selects its readers explicitly; never inherit deployment fallbacks.
         helmcode_api_key=base.helmcode_api_key
-        if "helmcode" in {provider, judge_provider}
+        if "helmcode" in providers | {judge_provider}
         else None,
         helmcode_vision_models=(model,) if provider == "helmcode" else (),
         helmcode_text_model=judge_model
@@ -231,7 +265,7 @@ def ingestion_settings(config: ExecutionSettings, base: IngestionSettings) -> In
         vlm_model=model if provider in {"local", "compatible"} else None,
         vlm_api_key=os.getenv("LOCAL_LLM_API_KEY") if provider == "local" else base.vlm_api_key,
         gemini_model=model if provider == "gemini" else base.gemini_model,
-        gemini_api_key=base.gemini_api_key if provider == "gemini" else None,
+        gemini_api_key=base.gemini_api_key if "gemini" in providers else None,
         vlm_timeout=extraction.vision_timeout_seconds,
         vision_max_tokens=extraction.vision_max_tokens,
         jev_model=judge_model,

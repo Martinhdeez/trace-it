@@ -56,7 +56,10 @@ the deployment refuses to proceed below 6 GiB free. No global Docker prune is us
 - Only `127.0.0.1:18173` is published. PostgreSQL and backend publish no host ports.
 - No changes to firewall, mail, existing containers, Hub or other domain routes.
 - Limits: API 2 GiB/1 CPU, DB 512 MiB/0.5 CPU, gateway 128 MiB/0.25 CPU;
-  one extraction worker, one OCR thread and one concurrent compiler.
+  three bounded extraction workers, one OCR thread and one concurrent compiler.
+  Existing installations must update their installed Compose configuration to
+  adopt the worker default; image replacement alone does not change it. See
+  [API OCR performance and verification](../docs/ingestion/performance.md).
 - API/frontend run without privileges; root filesystem is read-only; logs rotate.
 - Provider keys are in `/opt/trace-it/secrets/runtime.env`, never in GHCR, Git or
   frontend `VITE_*` variables. The source `.env` is transferred by SCP, mode 600.

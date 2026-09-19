@@ -80,6 +80,8 @@ PLANES: dict[str, Plane] = {
     "store_file": _INGESTION,
     "extraction": _INGESTION,
     "native_text": _INGESTION,
+    "render_page": _INGESTION,
+    "render_region": _INGESTION,
     "ocr": _INGESTION,
     "vision": _INGESTION,
     "text_judge": _INGESTION,
