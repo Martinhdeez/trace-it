@@ -61,6 +61,16 @@ rollback() {
   exit 1
 }
 trap rollback ERR
+# Stop the optional mail writer before backend shutdown, backups or migrations.
+# Discover by this project's exact Compose labels; never affect another stack.
+# Do not restart it automatically on success or rollback. Activation is explicit.
+mail_ids=$(docker ps -q \
+  --filter label=com.docker.compose.project=trace-it \
+  --filter label=com.docker.compose.service=mail-ingestion)
+if [[ -n "$mail_ids" ]]; then
+  mapfile -t mail_containers <<< "$mail_ids"
+  docker stop --time 300 "${mail_containers[@]}"
+fi
 "${compose[@]}" stop frontend backend
 "${compose[@]}" exec -T db pg_dump -U trace -d trace -Fc > "$backup/database.dump"
 "${compose[@]}" exec -T db pg_restore --list < "$backup/database.dump" > "$backup/database.list"
@@ -68,6 +78,7 @@ trap rollback ERR
   'import sys, tarfile; t=tarfile.open(fileobj=sys.stdout.buffer, mode="w|gz"); t.add("/srv/.data", arcname="data"); t.close()' > "$backup/ingestion.tar.gz"
 # Runtime may be restricted; only this one-off migration container receives owner credentials.
 set -a
+# shellcheck source=/dev/null
 source secrets/compose.env
 set +a
 export TRACE_DATABASE_URL="postgresql+psycopg://trace:${POSTGRES_PASSWORD}@db:5432/trace"

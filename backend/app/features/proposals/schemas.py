@@ -20,6 +20,8 @@ class ManagerProposalOut(BaseModel):
     rationale: str
     evidence: list[str]  # references: symbol:<name>, rule:<id>, case:<id>, chat:<n>...
     # decision: {proposed, why, options[{decision, consequence}], escalation_reason, ...}
+    # escalation rule: {decision_id, engine_decision_id, replaces, text, summary, type,
+    # decision, resolved_as, version_id} (ADR 0035)
     # chat: {draft_id, revision, review_key, before, after}; learning: {analysis_id, ...}
     payload: dict[str, Any]
     status: Status
@@ -27,7 +29,10 @@ class ManagerProposalOut(BaseModel):
     created_at: datetime
     resolved_by: str | None
     resolved_at: datetime | None
-    outcome: dict[str, Any] | None  # decision_id, draft revision, adoption or version
+    # decision_id, draft revision, adoption or version; escalation rule: {reason, rule_id,
+    # retired, draft_revision}; superseded: {cause} (ignored, version_published,
+    # case_changed, superseded); rejected: {reason}
+    outcome: dict[str, Any] | None
 
 
 class SettleIn(BaseModel):

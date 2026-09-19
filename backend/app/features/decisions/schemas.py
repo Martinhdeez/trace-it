@@ -106,11 +106,18 @@ class ProcessSummary(BaseModel):
 
 
 class RunSummary(BaseModel):
+    execution_id: int | None = None
+    decision_ids: list[int] = []
     decided: int
     by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
     # Sources whose pre-run sync failed or that were never loaded, name -> why; omitted when
     # none (ADR 0028).
     down_sources: dict[str, str] = {}
+
+
+class RunIn(BaseModel):
+    instance_ids: list[int] = Field(min_length=1, max_length=500)
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class ChangeOut(BaseModel):

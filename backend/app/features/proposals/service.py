@@ -37,11 +37,29 @@ def settle(row: ManagerProposal, status: str, author: str, outcome: dict | None 
     row.outcome = outcome
 
 
-async def supersede(session: AsyncSession, *where) -> None:
-    for row in await session.scalars(
-        select(ManagerProposal).where(ManagerProposal.status == "open", *where)
-    ):
-        settle(row, "superseded", row.author)
+async def supersede(session: AsyncSession, cause: str, *where) -> list[int]:
+    """Close every open proposal matching `where` as `superseded` with `outcome.cause`, in
+    the caller's transaction, and record one `expire_proposal` event for them. A proposal
+    the manager rejected is `rejected`; one nobody settled ends here (ADR 0035). Causes:
+    `ignored` (the manager resolved another case), `version_published`, `case_changed`
+    (the case got a new decision), `superseded` (a newer proposal of the same kind)."""
+    rows = list(
+        await session.scalars(
+            select(ManagerProposal).where(ManagerProposal.status == "open", *where)
+        )
+    )
+    for row in rows:
+        settle(row, "superseded", row.author, {"cause": cause})
+    if rows:
+        instances = {r.instance_id for r in rows}
+        events.record(
+            session,
+            "expire_proposal",
+            process_id=rows[0].process_id,
+            instance_id=instances.pop() if len(instances) == 1 else None,
+            data={"proposal_ids": [r.id for r in rows], "cause": cause},
+        )
+    return [r.id for r in rows]
 
 
 async def list_for(session: AsyncSession, process_id: int, status: str | None):
@@ -60,6 +78,19 @@ async def get(session: AsyncSession, proposal_id: int, *, lock: bool = False) ->
     return row
 
 
+async def _unchanged(session: AsyncSession, instance, asked):
+    """R04: the model answered about decision `asked`; if the case got another decision
+    while it ran (a resolution, a reprocess), the answer is stale and nothing is stored."""
+    from app.features.decisions.service import latest_decisions
+
+    latest = (await latest_decisions(session, [instance])).get(instance.id)
+    if asked is None or latest is None or latest.id != asked.id:
+        raise ConflictError(
+            "El caso ha cambiado mientras el asistente respondía; pide una nueva sugerencia"
+        )
+    return latest
+
+
 # Channel 1: the assistant on an escalated instance.
 async def propose_decision(session: AsyncSession, instance_id: int) -> ManagerProposalOut:
     from app.features.agents import assistant
@@ -72,9 +103,15 @@ async def propose_decision(session: AsyncSession, instance_id: int) -> ManagerPr
     with events.span(
         "propose_decision", process_id=instance.process_id, instance_id=instance_id
     ) as span:
+        asked = (await latest_decisions(session, [instance])).get(instance.id)
         suggestion = await assistant.suggest(session, instance_id)
-        latest = (await latest_decisions(session, [instance]))[instance.id]
-        await supersede(session, ManagerProposal.instance_id == instance_id)
+        latest = await _unchanged(session, instance, asked)
+        await supersede(
+            session,
+            "superseded",
+            ManagerProposal.instance_id == instance_id,
+            ManagerProposal.kind == "decision",
+        )
         row = ManagerProposal(
             process_id=instance.process_id,
             instance_id=instance_id,
@@ -105,6 +142,164 @@ async def propose_decision(session: AsyncSession, instance_id: int) -> ManagerPr
     return out(row)
 
 
+# Channel 1b: after a resolution, amend the escalation rule that fired (ADR 0035). The
+# engine's own escalation codes come from data or infrastructure, never from a rule that an
+# exception could fix: {code: why not, in Spanish for the manager}.
+NOT_LEARNABLE = {
+    "MISSING_DATA": "Faltaba un dato obligatorio ({}): ninguna regla puede suplir un dato.",
+    "UNVERIFIED_DATA": "Es un escaneo y no se pudo confirmar {}: ninguna regla puede "
+    "confirmar un dato.",
+    "SOURCE_UNAVAILABLE": "No se pudo consultar {}: es un fallo temporal, vuelve a ejecutar "
+    "cuando responda.",
+    "RULE_CONFLICT": "Dos reglas con la misma prioridad pedían decisiones distintas: se "
+    "corrige en Definición → Normas, no con una excepción.",
+    "SCAN_REVIEW": "Las reglas lo rechazaban, pero es un escaneo y podría ser un error de "
+    "lectura: no hay regla de escalado que enmendar.",
+}
+RULE_FAILED = "Una regla no pudo evaluarse ({}): es un fallo técnico, no un criterio que aprender."
+
+
+def learnable(
+    reason: str,
+    results: list[dict],
+    rule_decisions: dict[int, str],
+    outcomes,
+    human: set[str],
+    resolved_as: str,
+) -> tuple[int | None, str]:
+    """Pure gate before any model call: can amending one rule turn this engine escalation
+    into the person's decision `resolved_as`? Returns (the rule to amend, "") or (None, why
+    not, in Spanish). Only a rule-based escalation qualifies, with exactly one escalation
+    rule fired, and the other fired rules (or the default when none) giving `resolved_as`:
+    an exception to that rule is then exactly what would have decided the case."""
+    head = (reason or "").split(" | ", 1)[0]
+    code, _, detail = head.partition(": ")
+    if code in NOT_LEARNABLE:
+        return None, NOT_LEARNABLE[code].format(detail)
+    failed = [r["reason"].split(" ", 1)[0] for r in results if r.get("fires") is None]
+    if failed:
+        return None, RULE_FAILED.format(", ".join(sorted(set(failed))))
+    fired = [r["rule_id"] for r in results if r.get("fires")]
+    escalating = [i for i in fired if rule_decisions.get(i) in human]
+    if not escalating:
+        return None, "Ninguna regla de escalado se disparó en este caso: no hay regla que enmendar."
+    if len(escalating) > 1:
+        ids = ", ".join(str(i) for i in escalating)
+        return None, f"Se dispararon varias reglas de escalado ({ids}): una enmienda no basta."
+    others = {rule_decisions[i] for i in fired if i not in escalating}
+    top = max((outcomes.priorities[d] for d in others), default=None)
+    without = sorted(d for d in others if outcomes.priorities[d] == top) or [outcomes.default]
+    if without != [resolved_as]:
+        return None, (
+            f"Sin la regla {escalating[0]} el motor decidiría {' o '.join(without)}, no "
+            f"{resolved_as}: hace falta una regla nueva (Definición → Normas)."
+        )
+    return escalating[0], ""
+
+
+async def propose_rule(session: AsyncSession, instance_id: int) -> ManagerProposalOut:
+    """The assistant amends the escalation rule that fired on a resolved case so that
+    similar cases get the person's decision. Gated by `learnable` first: a case it cannot
+    help is a 409 with the reason, and no model is called."""
+    from app.features.agents import assistant
+    from app.features.decisions.model import ENGINE, Decision
+    from app.features.ingestion.model import Instance
+    from app.features.versions import configuration as config
+    from app.features.versions.model import ProcessVersion
+
+    instance = await session.get(Instance, instance_id)
+    if instance is None:
+        raise NotFoundError(f"Instance {instance_id} does not exist")
+    with events.span(
+        "suggest_rule", process_id=instance.process_id, instance_id=instance_id
+    ) as span:
+        history = list(
+            await session.scalars(
+                select(Decision).where(Decision.instance_id == instance_id).order_by(Decision.id)
+            )
+        )
+        resolution = history[-1] if history and history[-1].author != ENGINE else None
+        engine = next((d for d in reversed(history) if d.author == ENGINE), None)
+        if resolution is None:
+            raise ConflictError("Resuelve el caso antes de pedir una regla.")
+        if engine is None or engine.version_id is None:
+            raise ConflictError("El motor no decidió este caso: no hay regla que enmendar.")
+        snapshot = (await session.get(ProcessVersion, engine.version_id)).snapshot
+        human = {t["name"] for t in snapshot["process"]["decision_types"] if t["requires_human"]}
+        if engine.decision not in human:
+            raise ConflictError("El motor no escaló este caso: no hay regla que enmendar.")
+        if resolution.decision in human:
+            raise ConflictError("Resuelve el caso con una decisión final antes de pedir una regla.")
+        replaces, why = learnable(
+            engine.reason,
+            engine.results,
+            {r.id: r.decision for r in config.rules(snapshot)},
+            config.outcomes(snapshot),
+            human,
+            resolution.decision,
+        )
+        span.set(learnable=replaces is not None, replaces=replaces, why=why or None)
+        if replaces is None:
+            raise ConflictError(why)
+        suggestion = await assistant.suggest_rule(session, instance, engine, resolution, replaces)
+        await _unchanged(session, instance, resolution)
+        await supersede(
+            session,
+            "superseded",
+            ManagerProposal.instance_id == instance_id,
+            ManagerProposal.kind == "rule",
+        )
+        decision = next(r.decision for r in config.rules(snapshot) if r.id == replaces)
+        row = ManagerProposal(
+            process_id=instance.process_id,
+            instance_id=instance_id,
+            channel="escalation",
+            kind="rule",
+            summary=suggestion.summary[:500],
+            rationale=suggestion.rationale,
+            evidence=suggestion.evidence,
+            payload={
+                "decision_id": resolution.id,  # the resolution it generalises
+                "engine_decision_id": engine.id,
+                "replaces": replaces,
+                "text": suggestion.text,
+                "summary": suggestion.summary,
+                "type": suggestion.type,
+                "decision": decision,
+                "resolved_as": resolution.decision,
+                "version_id": engine.version_id,
+            },
+            status="open",
+            author="assistant",
+        )
+        session.add(row)
+        await session.commit()
+        span.set(proposal_id=row.id)
+    return out(row)
+
+
+async def _amend(session, row, user, background) -> dict:
+    """Stage the amended rule in the draft in place of the one it replaces; it compiles in
+    the background. Publishing stays validate + publish of the process draft."""
+    from app.features.rules import service as rules
+    from app.features.rules.schemas import RuleIn
+    from app.features.versions.model import ProcessDraft
+
+    p = row.payload
+    with events.span("save_rule", process_id=row.process_id, author=user.name) as span:
+        rule = await rules.create(
+            session,
+            row.process_id,
+            RuleIn(text=p["text"], summary=p["summary"], type=p["type"], decision=p["decision"]),
+        )  # commits the settlement too
+        span.set(rule_id=rule.id, proposal_id=row.id)
+    await rules.retire(session, p["replaces"], user.name)
+    if background is not None:
+        background.add_task(rules.compile_all_in_background, [rule.id], events.current())
+    draft = await session.get(ProcessDraft, row.process_id, populate_existing=True)
+    return {"rule_id": rule.id, "retired": p["replaces"], "draft_revision": draft.revision}
+
+
 def _content(item: dict | None) -> dict:
     """What a change changes: a restated evidence or explanation alone is no proposal."""
     return {k: v for k, v in (item or {}).items() if k not in {"evidence", "explanation"}}
@@ -114,6 +309,7 @@ def _content(item: dict | None) -> dict:
 async def from_chat(session: AsyncSession, draft, data: dict, revision: int) -> None:
     await supersede(
         session,
+        "superseded",
         ManagerProposal.channel == "chat",
         ManagerProposal.payload["draft_id"].as_integer() == draft.id,
     )
@@ -267,7 +463,10 @@ async def _stage(session, row, user) -> dict:
     return {"process_draft_revision": staged.revision}
 
 
-async def accept(session: AsyncSession, proposal_id: int, reason: str, user) -> ManagerProposalOut:
+async def accept(
+    session: AsyncSession, proposal_id: int, reason: str, user, background=None
+) -> ManagerProposalOut:
+    """`background` (FastAPI's BackgroundTasks): where an accepted rule is compiled."""
     row = await get(session, proposal_id, lock=True)
     if row.status != "open":
         raise ConflictError(f"Proposal {proposal_id} is {row.status}")
@@ -280,7 +479,10 @@ async def accept(session: AsyncSession, proposal_id: int, reason: str, user) -> 
         kind=row.kind,
         author=user.name,
     ):
-        if row.channel == "escalation":
+        if row.channel == "escalation" and row.kind == "rule":
+            settle(row, "accepted", user.name, {"reason": reason})
+            row.outcome = {**row.outcome, **await _amend(session, row, user, background)}
+        elif row.channel == "escalation":
             from app.features.decisions import service as decisions
             from app.features.decisions.schemas import ResolveIn
 

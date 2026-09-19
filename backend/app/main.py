@@ -19,6 +19,7 @@ from app.features.ingestion.process_router import router as ingestion_router
 from app.features.ingestion.router import create_router as create_extraction_router
 from app.features.ingestion.runtime import ingestion_lifespan
 from app.features.learning.router import router as learning_router
+from app.features.mail_ingestion.router import router as mail_router
 from app.features.processes.draft_router import router as draft_router
 from app.features.processes.router import router as processes_router
 from app.features.proposals.router import router as proposals_router
@@ -51,6 +52,7 @@ app = FastAPI(
         "the `/db` administration endpoints. Bearer calls act as the dedicated API manager; "
         "`X-User-Id` is ignored. Browser/HTTP Basic callers continue to identify with "
         "`X-User-Id` (see `POST /login`). `/db` always requires Bearer authentication. "
+        "Mail-ingestion endpoints require their separate process-scoped mail service token. "
         "See the [API guide](guide) for examples, permissions and deployment details. Errors are "
         '`{"code", "message"}`, except request validation (422), which keeps FastAPI\'s '
         '`{"detail": [...]}`.'
@@ -92,6 +94,7 @@ async def ready(session: Session) -> dict[str, str]:
 
 for router in (
     database_router,
+    mail_router,
     versions_router,
     users_router,
     processes_router,
@@ -110,3 +113,19 @@ for router in (
     app.include_router(router)
 
 app.include_router(create_extraction_router(), dependencies=[Depends(current_user)])
+
+# The global administrator dependency deliberately defers mail routes to MailIdentity.
+# Describe their actual required credential, rather than advertising the admin token there.
+_application_openapi = app.openapi
+
+
+def application_openapi():
+    schema = _application_openapi()
+    for path, operations in schema["paths"].items():
+        if path.startswith("/mail-ingestion/"):
+            for operation in operations.values():
+                operation["security"] = [{"MailIngestionBearer": []}]
+    return schema
+
+
+app.openapi = application_openapi
