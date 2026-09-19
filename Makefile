@@ -32,11 +32,13 @@ activate:  # MANAGER_ID=<id>: explicitly approve the validated pack draft
 # MANAGER_ID=<id>: the rule set compiled from Norma_Pagos_v3 and frozen for delivery, as its
 # own process (`Invoice payment - frozen 2026-09-19`), loaded and published with no LLM. The
 # first load only makes sure the use case exists; its hand-written rules stay unpublished.
+# `.env` matters: a published version pins the OCR readers this environment configures
+# (Gemini/Jev keys, `.models`); without it, scans would be read by local OCR only.
 FROZEN = ../processes/invoice-payment/frozen/2026-09-19/invoice-payment.json
 load-frozen:
 	test -n "$(MANAGER_ID)"
-	cd backend && uv run python -m app.cli load ../processes/invoice-payment.json
-	cd backend && uv run python -m app.cli load $(FROZEN) --activate --manager-id $(MANAGER_ID)
+	cd backend && uv run --env-file ../.env python -m app.cli load ../processes/invoice-payment.json
+	cd backend && uv run --env-file ../.env python -m app.cli load $(FROZEN) --activate --manager-id $(MANAGER_ID)
 
 # The whole process over the challenge corpus -> output/outcomes.jsonl. Needs `make erp`
 # running in another terminal, `make setup` and downloaded OCR weights.

@@ -1,0 +1,17 @@
+$ . /private/tmp/claude-501/-Users-apple-orca-workspaces-trace-pay-pelican/81951f95-6768-4335-9ebf-6930a2d5a39b/scratchpad/b8b7/1d.sh
+UC=1 CFG=8
+{
+    "id": 8,
+    "role": "compiler",
+    "version": 2,
+    "config": {
+REV=1
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; d=json.load(sys.stdin); print("draft", d["revision"], "compiler", d["snapshot"]["agents"]["compiler"]["settings"]["model_settings"].get("max_tokens"))
+                                                            ~^^^^^^^^^^^^
+KeyError: 'revision'
+[exit 1] [0.13 s] [14:50:10]
+$ REV=1; curl -s -X PUT $API/processes/$P/draft -H "$MANAGER" -H "Content-Type: application/json" -d "{\"refresh_agents\": true, \"expected_revision\": $REV}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("draft", d["revision"], "compiler", d["snapshot"]["agents"]["compiler"]["settings"]["model_settings"].get("max_tokens"))'
+draft 2 compiler 16000
+[exit 0] [0.04 s] [14:50:15]
