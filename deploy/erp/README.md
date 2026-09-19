@@ -13,6 +13,10 @@ periodic ORA-00600, rate limiting and expiring sessions stay enabled in HTML and
 The adapter only binds inside the container, prefixes public links/redirects, and
 keeps session tokens out of logs. Batch two is not silently loaded.
 
+For the explicit batch-two CSV mount and cumulative reference workbook, see
+[Batch 2 compatibility](../../docs/batch2-compatibility.md). The optional overlay
+loads 556 entries; the base compose configuration retains the original 516.
+
 - Public frontend: `https://gex-dashboard.hopto.org/nexia/erp/`.
 - Synthetic ERP login: `alberto` / `FACTURAS2009` (challenge manual).
 - Internal API: `http://erp:8009`, on the existing `trace-it_default` network.

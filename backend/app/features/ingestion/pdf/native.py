@@ -7,6 +7,7 @@ from app.common.normalization import clean_text
 from app.features.ingestion.config import Settings
 
 from .layout import reading_order, suspect_spacing, table_membership
+from .visual_risk import inspect_page
 
 # MuPDF is not thread-safe. Keep document access/rendering short and serialized;
 # OCR runs outside this lock and has its own bounded session.
@@ -22,10 +23,12 @@ def native_pages(content: bytes, settings: Settings):
             raise ValueError("PDF page count exceeds limit or document is empty")
         for index, page in enumerate(document):
             lines = []
+            spans = []
             for block in page.get_text(
                 "dict", flags=pymupdf.TEXTFLAGS_DICT & ~pymupdf.TEXT_PRESERVE_IMAGES
             )["blocks"]:
                 for line in block.get("lines", []):
+                    spans.extend(line["spans"])
                     raw = "".join(span["text"] for span in line["spans"])
                     if raw.strip():
                         lines.append(
@@ -57,6 +60,7 @@ def native_pages(content: bytes, settings: Settings):
                     "image_ratio": min(1, image_area / max(1, page.rect.get_area())),
                     "suspect_spacing": spacing,
                     "warnings": layout_warnings,
+                    "visual_risk": inspect_page(page, lines, spans),
                 }
             )
     return pages

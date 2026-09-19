@@ -1,5 +1,6 @@
 """Host the unmodified challenge ERP, including its faults, under a public subpath."""
 
+import os
 import re
 from http.server import ThreadingHTTPServer
 from urllib.parse import urlsplit
@@ -37,8 +38,15 @@ class Handler(erp.ManejadorERP):
         print(f"ERP {self.command} {urlsplit(self.path).path}", flush=True)
 
 
-def main():
+def load_state(update=None):
     erp.ESTADO = erp.EstadoERP(erp._cargar_asientos_embebidos(), latencia=0.12)
+    if update:
+        erp.ESTADO.cargar_lote2(erp._cargar_asientos_csv(update))
+    return erp.ESTADO
+
+
+def main():
+    load_state(os.environ.get("TRACE_ERP_UPDATE"))
     server = ThreadingHTTPServer(("0.0.0.0", 8009), Handler)
     server.daemon_threads = True
     server.serve_forever()
