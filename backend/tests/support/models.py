@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
+from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -16,7 +17,9 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 
 def scripted(
-    replies: list[dict[str, Any]], seen: list[list[ModelMessage]] | None = None
+    replies: list[dict[str, Any]],
+    seen: list[list[ModelMessage]] | None = None,
+    name: str = "fake/model",
 ) -> FunctionModel:
     """A model that answers the agent's structured output with each dict in turn. `seen`
     collects the message history the model was shown on every call. With several output
@@ -30,7 +33,16 @@ def scripted(
         tool = next(t for t in info.output_tools if kind is None or t.name.endswith(kind))
         return ModelResponse(parts=[ToolCallPart(tool.name, reply)])
 
-    return FunctionModel(answer, model_name="fake/model")
+    return FunctionModel(answer, model_name=name)
+
+
+def down(name: str) -> FunctionModel:
+    """A model whose provider answers 503 to every request."""
+
+    def fail(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        raise ModelHTTPError(503, name, "service unavailable")
+
+    return FunctionModel(fail, model_name=name)
 
 
 def per_role(

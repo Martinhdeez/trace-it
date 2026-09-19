@@ -4,6 +4,8 @@
   "agents": {
     "compiler": {
       "model": "helmcode:deepseek-v4-flash",
+      "fallback_models": ["helmcode:glm5.3", "helmcode:qwen3.6"],
+      "timeout_seconds": 180,
       "model_settings": {
         "temperature": 0
       },
@@ -37,6 +39,8 @@
     },
     "tester": {
       "model": "helmcode:deepseek-v4-flash",
+      "fallback_models": ["helmcode:qwen3.6", "helmcode:glm5.3"],
+      "timeout_seconds": 180,
       "model_settings": {
         "temperature": 0
       },
@@ -53,6 +57,8 @@
     },
     "normalizer": {
       "model": "helmcode:deepseek-v4-flash",
+      "fallback_models": ["helmcode:glm5.3", "helmcode:qwen3.6"],
+      "timeout_seconds": 300,
       "model_settings": {
         "temperature": 0
       },
