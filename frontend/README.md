@@ -16,12 +16,8 @@ Opens on http://127.0.0.1:5173. `/api` proxies to `http://127.0.0.1:8000`, where
 VITE_API_TARGET=http://127.0.0.1:8001 npm run dev
 ```
 
-`VITE_API_MODE` picks the client in `src/api/client.ts`:
-
-| Value | What happens |
-|---|---|
-| unset (default) | Only the backend. Errors surface as they are ("El backend no responde" when it is down) |
-| `mock` | Only the in-memory mock, with the Caja lote 1 loaded. No backend needed. A "MOCK DATA" badge stays on screen |
+There is no mock: the console only shows backend data, and its errors surface as they
+are ("El backend no responde" when it is down).
 
 ## Identity
 
@@ -42,12 +38,11 @@ Commit both files. A backend test fails while they are out of date.
 
 | Folder | Holds |
 |---|---|
-| `src/api/` | `contracts.ts` mirrors the backend schemas; `live.ts` and `mock.ts` implement them; `client.ts` picks one |
+| `src/api/` | `contracts.ts` aliases the generated `schema.d.ts`; `live.ts` calls the API; `client.ts` exports it as `api` |
 | `src/routes/` | One file per screen, mounted in `App.tsx` |
 | `src/components/shell/` | Chrome: sidebar, topbar, command palette, buttons, tables |
 | `src/components/run/` | The three panes of the instance console |
 | `src/lib/` | Paths, formatting, derived counts |
 
-Code, file names and identifiers are English. Payload keys keep the Spanish the API
-sends (`nombre`, `tipos_decision`, `requiere_persona`), and so do the strings a user
-reads, which live in `src/i18n/es.ts`.
+Code, file names, identifiers and API codes are English. Only the strings a user reads
+are Spanish, and they live in `src/i18n/es.ts`.

@@ -910,7 +910,7 @@ function VersionChip({
             <ul className="max-h-40 overflow-y-auto border-t border-hairline py-1">
               {findings.slice(0, 6).map((finding) => (
                 <li key={finding.id} className="px-2.5 py-1 text-[11px] leading-4 text-muted">
-                  {finding.tipo.replaceAll('_', ' ')}
+                  {finding.type.replaceAll('_', ' ')}
                 </li>
               ))}
             </ul>

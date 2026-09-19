@@ -135,17 +135,8 @@ export type DiscoverySessionSummary = Schemas['DiscoverySessionSummary']
 /** One entry of `DiscoverySession.messages`. */
 export type DiscoveryMessage = { role: 'user' | 'assistant'; text: string; author?: string }
 
-export type FindingKind = 'pagada_indebidamente' | 'no_pagada_debiendo' | (string & {})
-
-/** A past decision a later rule says was wrong. A notice, never a correction (P14). */
-export type Finding = {
-  id: number
-  decision_id: number
-  regla_id: number | null
-  tipo: FindingKind
-  detalle: string | null
-  creado: string
-}
+/** A past decision a later rule says was wrong. A notice, never a correction. */
+export type Finding = Schemas['FindingOut']
 
 export interface ApiClient {
   health(): Promise<boolean>
