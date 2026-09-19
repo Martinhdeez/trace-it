@@ -20,6 +20,8 @@ export const keys = {
   suggestion: (instanceId: number) => ['suggestion', instanceId] as const,
   /** The open escalation proposal of one case. */
   caseProposal: (instanceId: number) => ['proposals', 'case', instanceId] as const,
+  /** reviewer-agent FE-3: the latest rule suggestion of one resolved case, any status. */
+  caseRuleProposal: (instanceId: number) => ['proposals', 'case', instanceId, 'rule'] as const,
   proposals: (processId: number, status: string) => ['proposals', processId, status] as const,
   findings: (processId: number) => ['findings', processId] as const,
   sources: (processId: number) => ['sources', processId] as const,

@@ -37,3 +37,9 @@ class ManagerProposalOut(BaseModel):
 
 class SettleIn(BaseModel):
     reason: str = Field(default="", max_length=8000)
+
+
+class AcceptIn(SettleIn):
+    # Escalation rule suggestion only: the manager's edit of `payload.text`, compiled in
+    # its place; the outcome records `edited` and `original_text`. Ignored elsewhere.
+    text: str | None = Field(default=None, max_length=8000)

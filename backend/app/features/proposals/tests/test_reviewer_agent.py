@@ -360,6 +360,31 @@ async def test_accepting_stages_the_amended_rule_in_place_of_the_old_one(monkeyp
     assert {"accept_proposal", "save_rule", "retire_rule", "compile_rules", "compile_rule"} <= steps
 
 
+async def test_the_manager_edits_the_rule_before_accepting(monkeypatch):
+    """The manager's `text` is the rule that compiles; the payload keeps the agent's."""
+    monkeypatch.setattr(compiler, "compile_rule", compiled("iban_unless_pending"))
+    edited = "The IBAN differs from the master, unless the ERP entry is PENDIENTE."
+    async with client() as api:
+        _, headers, iid, _ = await resolved(api, monkeypatch, [SUGGESTION])
+        proposal = await suggest(api, iid, headers)
+        r = await api.post(
+            f"/proposals/{proposal['id']}/accept", json={"text": edited}, headers=headers
+        )
+        assert r.status_code == 200, r.text
+        accepted = r.json()
+        rule = (await api.get(f"/rules/{accepted['outcome']['rule_id']}")).json()
+
+    assert rule["text"] == edited
+    assert accepted["payload"]["text"] == SUGGESTION["text"]
+    assert accepted["outcome"]["edited"] is True
+    assert accepted["outcome"]["original_text"] == SUGGESTION["text"]
+    async with session_factory() as s:
+        span = await s.scalar(
+            select(Event).where(Event.step == "accept_proposal").order_by(Event.id.desc())
+        )
+    assert span.data["edited"] is True and span.data["original_text"] == SUGGESTION["text"]
+
+
 # BE-4: the program learns. Two hotel invoices at 10 % VAT escalate under "VAT other than
 # 21"; a person pays one, the reviewer agent amends the rule, the manager accepts, validates
 # and publishes, and a reprocess pays the other one by the engine (the demo's fallback pair,

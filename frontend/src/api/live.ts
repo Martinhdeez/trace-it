@@ -121,9 +121,11 @@ export const liveClient: ApiClient = {
   suggestion: (instanceId) => get<Suggestion>(`/instances/${instanceId}/suggestion`),
   resolve: (instanceId, body) => post<InstanceDetail>(`/instances/${instanceId}/resolve`, body),
   proposeDecision: (instanceId) => post<Proposal>(`/instances/${instanceId}/proposal`),
+  proposeRule: (instanceId) => post<Proposal>(`/instances/${instanceId}/rule-proposal`),
   listProposals: (processId, status) =>
     get<Proposal[]>(`/processes/${processId}/proposals${query({ status })}`),
-  acceptProposal: (id, reason) => post<Proposal>(`/proposals/${id}/accept`, { reason: reason ?? '' }),
+  acceptProposal: (id, reason, text) =>
+    post<Proposal>(`/proposals/${id}/accept`, { reason: reason ?? '', ...(text ? { text } : {}) }),
   rejectProposal: (id, reason) => post<Proposal>(`/proposals/${id}/reject`, { reason }),
 
   listFindings: (processId) => get<Finding[]>(`/processes/${processId}/findings`),

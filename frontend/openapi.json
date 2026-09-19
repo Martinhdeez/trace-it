@@ -7701,7 +7701,7 @@
           "proposals"
         ],
         "summary": "The manager accepts a proposal; its channel's own workflow applies it",
-        "description": "decision: resolves the instance with the proposed decision. Escalation rule: creates the amended rule in the process draft, retires `replaces` there and compiles it in the background; `outcome` is `{rule_id, retired, draft_revision}`. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.",
+        "description": "decision: resolves the instance with the proposed decision. Escalation rule: creates the amended rule in the process draft, retires `replaces` there and compiles it in the background; `outcome` is `{rule_id, retired, draft_revision}`. An optional `text` replaces the suggested rule text (the manager's edit); `outcome` then adds `edited: true` and `original_text`. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.",
         "operationId": "acceptProposal",
         "security": [
           {
@@ -7741,7 +7741,7 @@
               "schema": {
                 "anyOf": [
                   {
-                    "$ref": "#/components/schemas/SettleIn"
+                    "$ref": "#/components/schemas/AcceptIn"
                   },
                   {
                     "type": "null"
@@ -8167,6 +8167,30 @@
   },
   "components": {
     "schemas": {
+      "AcceptIn": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 8000,
+            "title": "Reason",
+            "default": ""
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "title": "AcceptIn"
+      },
       "AcceptanceExample": {
         "properties": {
           "name": {

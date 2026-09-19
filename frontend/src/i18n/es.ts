@@ -116,6 +116,25 @@ export const es = {
     manager: 'Responsable',
     operator: 'Operador',
   },
+  // reviewer-agent FE-1..3 (docs/reviewer-agent.md). `escalationWhy`: one templated
+  // sentence per escalation code, filled with `symbols.*` labels and the fired rules'
+  // summary, no LLM (FE-2). `proposalCause`: why an open rule suggestion ended
+  // `superseded` (`outcome.cause`, FE-3).
+  escalationWhy: {
+    MISSING_DATA: 'Falta {X}; sin ese dato el proceso nunca decide solo',
+    UNVERIFIED_DATA: 'Es un escaneo y no pudimos confirmar {X}',
+    SOURCE_UNAVAILABLE: 'No pudimos consultar {X}; vuelve a ejecutar cuando responda',
+    RULE_ERROR: 'La regla {X} falló al evaluarse: es un fallo técnico, no de la factura',
+    RULE_CONFLICT: 'Dos reglas piden decisiones distintas con la misma prioridad',
+    SCAN_REVIEW: 'Las reglas lo rechazarían, pero es un escaneo y podría ser un error de lectura',
+    rule: 'La regla «{X}» pide revisión humana: {Y}',
+  },
+  proposalCause: {
+    ignored: 'resolviste otro caso sin decidir sobre ella',
+    version_published: 'se publicó una versión nueva',
+    case_changed: 'el caso cambió de decisión',
+    superseded: 'hay una sugerencia más nueva',
+  },
   common: {
     loading: 'Cargando…',
     empty: 'Nada por aquí todavía.',

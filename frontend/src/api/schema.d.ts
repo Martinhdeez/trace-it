@@ -1946,7 +1946,7 @@ export interface paths {
         put?: never;
         /**
          * The manager accepts a proposal; its channel's own workflow applies it
-         * @description decision: resolves the instance with the proposed decision. Escalation rule: creates the amended rule in the process draft, retires `replaces` there and compiles it in the background; `outcome` is `{rule_id, retired, draft_revision}`. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.
+         * @description decision: resolves the instance with the proposed decision. Escalation rule: creates the amended rule in the process draft, retires `replaces` there and compiles it in the background; `outcome` is `{rule_id, retired, draft_revision}`. An optional `text` replaces the suggested rule text (the manager's edit); `outcome` then adds `edited: true` and `original_text`. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.
          */
         post: operations["acceptProposal"];
         delete?: never;
@@ -2061,6 +2061,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptIn */
+        AcceptIn: {
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Text */
+            text?: string | null;
+        };
         /** AcceptanceExample */
         AcceptanceExample: {
             /** Name */
@@ -9857,7 +9867,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["SettleIn"] | null;
+                "application/json": components["schemas"]["AcceptIn"] | null;
             };
         };
         responses: {

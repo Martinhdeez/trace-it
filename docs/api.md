@@ -148,8 +148,11 @@ English rule that gets compiled:
 }
 ```
 
-`POST /proposals/{id}/accept` on it returns it `accepted` with
-`outcome: {reason, rule_id, retired, draft_revision}`; the new rule is `compiling` until
+`POST /proposals/{id}/accept` `{reason?, text?}` on it returns it `accepted` with
+`outcome: {reason, rule_id, retired, draft_revision}`. `text` is the manager's edit of the
+suggested rule: when it differs from `payload.text` it is the rule that gets created, the
+payload stays as the agent wrote it, and `outcome` (and the `accept_proposal` span) adds
+`edited: true, original_text`. The new rule is `compiling` until
 the background compile ends (`GET /rules/{rule_id}`), and the compile bumps the draft
 revision once more. 409 if it is no longer open (for example `superseded` by a publish).
 Spans: `suggest_rule` (`learnable`, `replaces`, `why`, `proposal_id`) with its `llm_run`;

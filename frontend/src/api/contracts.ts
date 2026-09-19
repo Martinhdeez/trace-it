@@ -57,6 +57,33 @@ export type DecisionProposalPayload = {
   fired_rules?: number[]
   proposed_rule?: { text: string; type: RuleIn['type'] }
 }
+/**
+ * `payload` of a reviewer-agent rule suggestion (`channel: escalation`, `kind: rule`).
+ * reviewer-agent FE-3 (docs/reviewer-agent.md): the amended escalation rule; `text` is the
+ * English rule that compiles, `replaces` the rule it retires on accept.
+ */
+export type RuleProposalPayload = {
+  decision_id: number
+  engine_decision_id: number
+  replaces: number
+  text: string
+  summary: string
+  type: RuleIn['type']
+  decision: string
+  resolved_as: string
+  version_id: number
+}
+/** `outcome` of a settled proposal: accepted rule suggestion, rejection or expiry. */
+export type ProposalOutcome = {
+  reason?: string
+  rule_id?: number
+  retired?: number | null
+  draft_revision?: number
+  cause?: 'ignored' | 'version_published' | 'case_changed' | 'superseded'
+  /** The manager edited the rule text before accepting; `original_text` is the agent's. */
+  edited?: boolean
+  original_text?: string
+}
 export type UseCaseOut = Schemas['UseCaseOut']
 export type UseCaseDetail = Schemas['UseCaseDetail']
 export type AgentConfigOut = Schemas['AgentConfigOut']
@@ -275,9 +302,15 @@ export interface ApiClient {
   resolve(instanceId: number, body: ResolveIn): Promise<InstanceDetail>
   /** The assistant proposes a decision for an escalated case; a new one supersedes the open one. */
   proposeDecision(instanceId: number): Promise<Proposal>
+  /**
+   * reviewer-agent FE-6: after a person resolved the case, the reviewer agent amends the
+   * escalation rule that fired. 409 with the Spanish reason when no rule can learn it.
+   */
+  proposeRule(instanceId: number): Promise<Proposal>
   listProposals(processId: number, status?: ProposalStatus): Promise<Proposal[]>
   /** Applies it through its channel: a decision resolves the case; chat and learning stage it. */
-  acceptProposal(id: number, reason?: string): Promise<Proposal>
+  /** `text`: the manager's edit of an escalation rule suggestion (reviewer-agent FE-3). */
+  acceptProposal(id: number, reason?: string, text?: string): Promise<Proposal>
   rejectProposal(id: number, reason: string): Promise<Proposal>
 
   listFindings(processId: number): Promise<Finding[]>
