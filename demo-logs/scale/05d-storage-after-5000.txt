@@ -1,0 +1,42 @@
+ANALYZE
+    relname    | rows | total_bytes | bytes_per_row 
+---------------+------+-------------+---------------
+ instances     | 5000 |    11919360 |          2383
+ decisions     | 5000 |     8486912 |          1697
+ files         |  500 |     6823936 |         13647
+ events        | 5572 |     3186688 |           571
+ agent_configs |    4 |       98304 |         24576
+ rules         |   16 |       90112 |          5632
+ sources       |    4 |       90112 |         22528
+ processes     |    1 |       65536 |         65536
+(8 rows)
+
+      step       | count | avg_row_bytes | max_row_bytes 
+-----------------+-------+---------------+---------------
+ decision        |  5000 |           353 |           424
+ ingest_document |   500 |          1130 |          1344
+ evaluate_rule   |    48 |           236 |           236
+ activate_rule   |    16 |           316 |           316
+ sync_source     |     1 |           792 |           792
+ run_process     |     2 |           324 |           336
+ load_use_case   |     1 |           504 |           504
+ reprocess       |     1 |           328 |           328
+ load_definition |     1 |           312 |           312
+ export_outcomes |     1 |           216 |           216
+ demo_ingest     |     1 |           168 |           168
+(11 rows)
+
+ llm_run_role | count | avg_row_bytes | max_row_bytes 
+--------------+-------+---------------+---------------
+(0 rows)
+
+ spans | heap_bytes | index_bytes | total_bytes_per_span 
+-------+------------+-------------+----------------------
+  5572 |    2441216 |      704512 |                  571
+(1 row)
+
+ database_bytes 
+----------------
+       39664663
+(1 row)
+
