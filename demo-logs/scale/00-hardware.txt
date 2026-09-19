@@ -1,0 +1,13 @@
+hw.model: Mac16,7
+hw.ncpu: 14
+hw.physicalcpu: 14
+hw.perflevel0.physicalcpu: 10
+hw.perflevel1.physicalcpu: 4
+hw.memsize: 25769803776
+hw.l2cachesize: 4194304
+machdep.cpu.brand_string: Apple M4 Pro
+ProductName:		macOS
+ProductVersion:		26.5
+BuildVersion:		25F71
+docker VM: 14 CPUs, 8320954368 bytes
+PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit

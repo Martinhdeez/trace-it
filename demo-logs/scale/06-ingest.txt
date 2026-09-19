@@ -1,0 +1,40 @@
+upload: 500 PDFs in 74.4 s, 6.7/s
+  scans (OCR): 29, median 1216 ms, max 8872 ms, total 56.4 s
+  text layer: 471, median 25 ms, max 78 ms, total 12.0 s
+       75.53 real       176.48 user        10.48 sys
+          2643886080  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             3715619  page reclaims
+               10078  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+               13175  messages sent
+               20925  messages received
+                   1  signals received
+                4581  voluntary context switches
+              130625  involuntary context switches
+           172047852  instructions retired
+            58921294  cycles elapsed
+            13238776  peak memory footprint
+      step       | status | count | p50_ms | max_ms 
+-----------------+--------+-------+--------+--------
+ extraction      | ok     |   503 |      5 |   8834
+ ingest_document | ok     |   500 |      4 |   8832
+ load_definition | ok     |     1 |     19 |     19
+ load_workbook   | ok     |     3 |        |       
+ native_text     | ok     |   500 |      2 |     15
+ ocr             | ok     |    58 |  822.5 |   6856
+ store_file      | ok     |   500 |      0 |      1
+ upload_document | ok     |   500 |     18 |   8861
+ upload_workbook | ok     |     3 |     60 |    135
+(9 rows)
+
+ no_symbols | count 
+------------+-------
+          0 |   500
+(1 row)
+
+OCR weights:  98M (TRACEPAY_MODEL_DIR); TRACEPAY_WORKERS=2, TRACEPAY_OCR_THREADS=4 (defaults); no Gemini/VLM/JEV key (local OCR only)

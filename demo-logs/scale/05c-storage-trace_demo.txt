@@ -1,0 +1,56 @@
+ANALYZE
+    relname    | rows | total_bytes | bytes_per_row 
+---------------+------+-------------+---------------
+ events        | 5827 |     9060352 |          1554
+ files         |  501 |     6955008 |         13882
+ instances     | 1001 |     2260992 |          2258
+ decisions     |  501 |      983040 |          1962
+ rules         |   39 |      278528 |          7141
+ sources       |   11 |      131072 |         11915
+ agent_configs |    4 |       98304 |         24576
+ processes     |    3 |       65536 |         21845
+(8 rows)
+
+      step       | count | avg_row_bytes | max_row_bytes 
+-----------------+-------+---------------+---------------
+ ingest_document |  1003 |          5043 |         10320
+ extraction      |  1006 |           640 |           648
+ load_workbook   |     3 |        133456 |        133464
+ llm_run         |    50 |          6492 |          8992
+ upload_document |  1003 |           197 |           208
+ native_text     |  1001 |           184 |           184
+ store_file      |  1003 |           160 |           160
+ decision        |   500 |           314 |           424
+ ocr             |   118 |           265 |           312
+ impact_check    |    23 |           272 |           272
+ normalize_norm  |     2 |          3032 |          3112
+ coder_attempt   |    24 |           240 |           240
+ run_tests       |    24 |           208 |           208
+ compile_rule    |    23 |           208 |           208
+ activate_rule   |    23 |           176 |           176
+ evaluate_rule   |    11 |           236 |           236
+ sync_source     |     2 |           792 |           792
+ export_outcomes |     2 |           216 |           216
+ compile_rules   |     2 |           184 |           184
+ run_process     |     1 |           336 |           336
+ norm            |     2 |           144 |           144
+ resolution      |     1 |           192 |           192
+(22 rows)
+
+ llm_run_role | count | avg_row_bytes | max_row_bytes 
+--------------+-------+---------------+---------------
+ compiler     |    24 |          7829 |          8992
+ normalizer   |     2 |          8620 |          8696
+ tester       |    24 |          4977 |          5424
+(3 rows)
+
+ spans | heap_bytes | index_bytes | total_bytes_per_span 
+-------+------------+-------------+----------------------
+  5827 |    1736704 |      778240 |                 1554
+(1 row)
+
+ database_bytes 
+----------------
+       28385807
+(1 row)
+

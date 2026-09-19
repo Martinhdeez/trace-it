@@ -1,0 +1,8 @@
+16 rules, base 500 instances, sandbox timeout 10.0 s, 14 CPUs
+
+n=50000: sequential 163.76 s, 305/s, stdin 24.8 MB per rule, child CPU 158.5 s, largest child RSS so far 269 MB, verdicts with RULE_ERROR 47100
+  per rule, wall s: R1=10.11, R2=10.10, R3=10.11, R4=10.11, R5=10.11, R6=10.11, R7=10.10, R8=10.11, R9=10.11, R10=10.10, R11=10.11, R12=10.11, R13=10.11, R14=10.11, R15=10.10, R16=10.11
+  slowest R14 10.11 s
+  parallel, 4 workers: 41.48 s, 1206/s, rules timed out 16
+  parallel, 14 workers: 20.64 s, 2423/s, rules timed out 16
+  fix path, sequential: 31.16 s, 1605/s, slowest rule 6.44 s
