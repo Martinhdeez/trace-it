@@ -404,7 +404,7 @@ function Alerts({
       : null,
     proposals > 0
       ? {
-          to: paths.definition(processId),
+          to: paths.processChat(processId),
           text: `${proposals} propuesta${proposals === 1 ? ' espera' : 's esperan'} tu decisión`,
         }
       : null,
@@ -747,7 +747,7 @@ function EmptyPanel({
           </Button>
         ) : (
           <Link
-            to={paths.definition(processId)}
+            to={paths.processChat(processId)}
             className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-[12px] font-medium text-on-ink hover:bg-ink/90"
           >
             Ir a Definición

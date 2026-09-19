@@ -23,6 +23,13 @@ and answers with their authors. Draft state survives restarting the backend.
 All mutation requests after creation carry the last returned `revision`. A concurrent
 edit or published draft returns 409. Use the returned revision for the next request.
 
+In the console, **New process** opens chat by default and resumes the latest unpublished
+new-process conversation. A manager can start another conversation or switch among saved
+ones. For an existing process, **Definition** opens the same workflow with the published
+version as its baseline. Review, connector sync, preparation, impact and publication stay
+inside that screen. Form entry, JSON import and the manual definition editor remain secondary
+paths.
+
 Every response carries `trace_id`, the audit trail of the last agent run on this draft
 (discovery, discussion or compilation). `GET /traces/{trace_id}` returns that tree: each
 model call with its agent, the model that answered, the instructions it saw, its output,
@@ -71,8 +78,9 @@ duplicate or missing keys and shows the operation, key and before/after row coun
 }
 ```
 
-Proposal keys are `setup`, `source:<name>`, `rule:<name>`, `guidance:<name>` and `example:<name>`. Disposition
-is `accepted` or `rejected`. The explanation also enters the conversation; follow a
+Proposal keys are `setup`, `connector:<name>`, `source:<name>`, `rule:<name>`,
+`guidance:<name>` and `example:<name>`. Disposition is `accepted` or `rejected`. The
+explanation also enters the conversation; follow a
 rejection with a message to revise the draft or resolve the ambiguity. Chat revisions,
 new uploads and source refreshes clear the reviews and preview. No LLM marks a proposal
 accepted. Acceptance examples are reviewed separately and cannot be changed by the coder

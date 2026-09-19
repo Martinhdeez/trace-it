@@ -73,7 +73,7 @@ Constraints from the plan:
 | 42 | Dead code | `routes/{Audit,Rules,Sources}.tsx`, `RuleSteps.tsx`, `listFiles` (invents `hash:''`), `uploadSource` | – | Fabricated fields (#29) | d | Delete it | S | FE |
 | 43 | Reprocess | None | `POST /processes/{id}/reprocess?dry_run=` | Needed to act on an alert, besides Resolve | d | After the demo path. The API and CLI are enough for now | – | – |
 | 44 | Learning | None | `/processes/{id}/learning`, `/norm-proposals/*` ([learning.md](learning.md)) | No UI for the bonus feature | d | Q6: no new UI. Learning shows in the run history (row 7): a rerun of the same invoices has fewer escalations | – | – |
-| 45 | Discovery (new process by conversation) | Form or JSON import | `/process-drafts/*` ([process-discovery.md](process-discovery.md)) | Unused | d | The form and import are enough for one pack. Discovery takes minutes of LLM calls | – | – |
+| 45 | Discovery (new process by conversation) | Chat is the primary New process path; form and JSON remain secondary | `/process-drafts/*` ([process-discovery.md](process-discovery.md)) | Done | b | The saved conversation now includes review, preparation, impact and explicit publication | S | FE |
 | 46 | User administration | Picker only | `POST /users`, manager only (#3) | – | d | Users come from the pack. The first manager is loaded by `make setup` | – | – |
 | 47 | "Proponer": proposals to accept or reject | Regular expressions in `proposalsFrom()` | `GET /processes/{id}/proposals`, `POST /proposals/{id}/accept\|reject`, `POST /instances/{id}/proposal` ([api.md](api.md#proposals)) | Three channels (escalation, chat, learning), each with its own endpoints | c | One contract lists every proposal (decision, rule, context, input, source), and the manager settles each one | M | BE done, FE |
 
@@ -202,7 +202,6 @@ Every package has the same **done check**:
 - `EventSource` on `/events/stream`, with the backend reading `Last-Event-ID` (row 35).
 - Reprocess (row 43).
 - Learning (Q6).
-- Process chat and discovery (Q2, row 45).
 - An HTTP batch export (row 36).
 
 If time runs short, WP1-WP7 are the jury path.

@@ -233,8 +233,16 @@ export type DocumentEvidence = ExtractionResult
 
 export type DiscoverySession = Schemas['DiscoveryDraftOut']
 export type DiscoverySessionSummary = Schemas['DiscoverySessionSummary']
+export type DiscoveryPlan = DiscoverySession['plan']
 /** One entry of `DiscoverySession.messages`. */
-export type DiscoveryMessage = { role: 'user' | 'assistant'; text: string; author?: string }
+export type DiscoveryMessage = {
+  role: 'user' | 'assistant'
+  text: string
+  author?: string
+  mode?: 'discuss' | 'revise'
+  evidence?: string[]
+  questions?: string[]
+}
 
 /** A past decision a later rule says was wrong. A notice, never a correction. */
 export type Finding = Schemas['FindingOut']
@@ -269,7 +277,8 @@ export interface ApiClient {
   retireRule(id: number): Promise<RuleDetail>
 
   listDiscoverySessions(): Promise<DiscoverySessionSummary[]>
-  startDiscoverySession(processId: number, name: string): Promise<DiscoverySession>
+  startDiscoverySession(processId?: number, name?: string): Promise<DiscoverySession>
+  getDiscoverySession(id: number): Promise<DiscoverySession>
   messageDiscoverySession(
     id: number,
     revision: number,
@@ -277,6 +286,16 @@ export interface ApiClient {
     mode?: 'discuss' | 'revise',
   ): Promise<DiscoverySession>
   uploadDraftEvidence(id: number, revision: number, file: File): Promise<DiscoverySession>
+  reviewDiscoveryProposal(
+    id: number,
+    revision: number,
+    proposal: string,
+    disposition: 'accepted' | 'rejected',
+    explanation?: string,
+  ): Promise<DiscoverySession>
+  syncDiscoverySource(id: number, revision: number, name: string): Promise<DiscoverySession>
+  prepareDiscoverySession(id: number, revision: number): Promise<DiscoverySession>
+  publishDiscoverySession(id: number, revision: number): Promise<DiscoverySession>
 
   summary(processId: number): Promise<ProcessSummary>
   planeMetrics<P extends Plane>(processId: number, plane: P): Promise<PlaneMetrics[P]>

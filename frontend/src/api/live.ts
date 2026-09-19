@@ -81,7 +81,11 @@ export const liveClient: ApiClient = {
 
   listDiscoverySessions: () => get<DiscoverySessionSummary[]>('/process-drafts'),
   startDiscoverySession: (processId, name) =>
-    post<DiscoverySession>('/process-drafts', { process_id: processId, name }),
+    post<DiscoverySession>('/process-drafts', {
+      ...(processId != null ? { process_id: processId } : {}),
+      ...(name ? { name } : {}),
+    }),
+  getDiscoverySession: (id) => get<DiscoverySession>(`/process-drafts/${id}`),
   messageDiscoverySession: (id, revision, message, mode = 'discuss') =>
     post<DiscoverySession>(`/process-drafts/${id}/messages`, { revision, message, mode }),
   uploadDraftEvidence: (id, revision, file) => {
@@ -90,6 +94,21 @@ export const liveClient: ApiClient = {
     form.append('revision', String(revision))
     return upload<DiscoverySession>(`/process-drafts/${id}/evidence`, form)
   },
+  reviewDiscoveryProposal: (id, revision, proposal, disposition, explanation = '') =>
+    post<DiscoverySession>(`/process-drafts/${id}/reviews`, {
+      revision,
+      proposal,
+      disposition,
+      explanation,
+    }),
+  syncDiscoverySource: (id, revision, name) =>
+    post<DiscoverySession>(`/process-drafts/${id}/sources/${encodeURIComponent(name)}/sync`, {
+      revision,
+    }),
+  prepareDiscoverySession: (id, revision) =>
+    post<DiscoverySession>(`/process-drafts/${id}/prepare`, { revision }),
+  publishDiscoverySession: (id, revision) =>
+    post<DiscoverySession>(`/process-drafts/${id}/publish`, { revision }),
 
   summary: (processId) => get<ProcessSummary>(`/processes/${processId}/summary`),
   planeMetrics: <P extends Plane>(processId: number, plane: P) =>
