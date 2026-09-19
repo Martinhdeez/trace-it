@@ -14,6 +14,7 @@ COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./
 COPY processes /processes
+COPY tools/hiring_demo.py /srv/hiring_demo.py
 RUN useradd --uid 10001 --create-home trace \
     && mkdir -p /srv/.data /srv/.models && chown -R trace:trace /srv/.data /srv/.models
 USER 10001:10001

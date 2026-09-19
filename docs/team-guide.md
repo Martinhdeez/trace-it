@@ -135,6 +135,7 @@ The console: `cd frontend && npm install && npm run dev`, then http://127.0.0.1:
 | `TRACE_HEALTH_*` | `GET /health/planes` thresholds: window, error rates, p95 per plane, and `TRACE_HEALTH_MIN_SPANS` (default 5): below it a plane is `ok`, "not enough data" |
 | `TRACE_COMPILER_MODEL`, `TRACE_TESTER_MODEL`, `TRACE_ASSISTANT_MODEL` | One model per agent role, `provider:model` (any PydanticAI provider, or `helmcode:<model>` with `HELMCODE_API_KEY`). Default `helmcode:deepseek-v4-flash` for every role, with `TRACE_FALLBACK_MODELS` (`helmcode:glm5.3`, `helmcode:qwen3.6`) for roles the use case does not set (`app/core/config.py`) |
 | `TRACE_AUTO_ACTIVATE_MAX_CHANGE` | Share of past decisions a compiled rule may change and still activate by itself (default 0.05) |
+| `TRACE_DECISION_WORKERS` | Rule sandbox subprocesses evaluated concurrently (default 4) |
 | `TRACE_DATABASE_URL` | Set by Docker; the Makefile overrides it for tests |
 | `LOGFIRE_TOKEN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | Live monitoring (see Traces and observability). Unset: spans stay in `events` only |
 

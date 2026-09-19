@@ -36,6 +36,7 @@ class SourceProposal(BaseModel):
 class RuleProposal(BaseModel):
     name: str = Field(min_length=1)
     text: str = Field(min_length=1)
+    summary: str = ""  # one plain line for a non-technical reader
     type: Literal["requirement", "prohibition"]
     decision: str
     evidence: list[ProposalEvidence] = Field(min_length=1)

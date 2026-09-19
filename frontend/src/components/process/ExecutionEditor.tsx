@@ -65,7 +65,7 @@ export function ExecutionEditor({ value, onChange, onValidity }: {
         <Field label="OCR mode"><select value={value.extraction.mode} onChange={e => extraction({ mode: e.target.value as ExtractionSettings['mode'] })}>
           <option value="local">Local OCR</option><option value="api">API vision</option><option value="hybrid">Hybrid</option>
         </select></Field>
-        {(['primary_model_dir', 'verification_model_dir', 'vision_model', 'text_judge_model'] as const).map(key => <Field key={key} label={key.replaceAll('_', ' ')} hint={key.endsWith('_model') ? 'Blank disables. Vision: local:, compatible:, gemini:, helmcode:. Judge: local:, compatible:, jev:, helmcode:.' : 'Directory of installed local OCR weights.'}>
+        {(['primary_model_dir', 'verification_model_dir', 'vision_model', 'text_judge_model'] as const).map(key => <Field key={key} label={key.replaceAll('_', ' ')} hint={key.endsWith('_model') ? 'Blank disables. Vision: helmcode:qwen3.6, helmcode:gemma4, local:, compatible:. Judge: local:, compatible:, jev:, helmcode:.' : 'Directory of installed local OCR weights.'}>
           <Input value={value.extraction[key] ?? ''} onChange={e => extraction({ [key]: e.target.value || (key.endsWith('_model') ? null : '') })} />
         </Field>)}
         {(['dpi', 'vision_timeout_seconds', 'judge_timeout_seconds', 'vision_max_tokens', 'judge_max_tokens'] as const).map(key => <Field key={key} label={key.replaceAll('_', ' ')}>

@@ -2036,6 +2036,8 @@ export interface components {
             id: number;
             /** Text */
             text: string;
+            /** Summary */
+            summary: string | null;
             /** Decision */
             decision: string;
             /** Status */
@@ -2060,6 +2062,11 @@ export interface components {
         CreatedCheck: {
             /** Text */
             text: string;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
             /**
              * Type
              * @enum {string}
@@ -3661,6 +3668,8 @@ export interface components {
         RuleDefinition: {
             /** Text */
             text: string;
+            /** Summary */
+            summary?: string | null;
             /**
              * Type
              * @enum {string}
@@ -3681,6 +3690,8 @@ export interface components {
             norm_rule_id: number | null;
             /** Text */
             text: string;
+            /** Summary */
+            summary: string | null;
             /** Type */
             type: string;
             /** Decision */
@@ -3711,6 +3722,8 @@ export interface components {
         RuleIn: {
             /** Text */
             text: string;
+            /** Summary */
+            summary?: string | null;
             /**
              * Type
              * @enum {string}
@@ -3729,6 +3742,8 @@ export interface components {
             norm_rule_id: number | null;
             /** Text */
             text: string;
+            /** Summary */
+            summary: string | null;
             /** Type */
             type: string;
             /** Decision */
@@ -3756,6 +3771,11 @@ export interface components {
             /** Text */
             text: string;
             /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /**
              * Type
              * @enum {string}
              */
@@ -3780,6 +3800,8 @@ export interface components {
             reason: string;
             /** Rule Text */
             rule_text: string | null;
+            /** Rule Summary */
+            rule_summary: string | null;
             /** Norm Rule Id */
             norm_rule_id: number | null;
         };

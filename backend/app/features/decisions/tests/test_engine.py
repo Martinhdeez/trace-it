@@ -1,5 +1,6 @@
 """The engine on the invoice process: PAGAR by default, NO_PAGAR and ESCALAR by rule."""
 
+import threading
 from typing import Any
 
 import pytest
@@ -257,6 +258,37 @@ def test_each_instance_sees_the_others_but_not_itself() -> None:
         [{**NEW_IBAN, "_instance": "b"}],
         [{**CLEAN, "_instance": "a"}],
     ]
+
+
+def test_rules_can_run_in_parallel_without_changing_result_order() -> None:
+    lock = threading.Lock()
+    both_running = threading.Event()
+    active = 0
+
+    def run(code: str, instances: list, sources: dict, population: list) -> list:
+        nonlocal active
+        with lock:
+            active += 1
+            if active == 2:
+                both_running.set()
+        both_running.wait(1)
+        with lock:
+            active -= 1
+        return [{"fires": code == "order_already_paid", "reason": code}] * len(instances)
+
+    [verdict] = decide(
+        rules("iban_mismatch", "order_already_paid"),
+        OUTCOMES,
+        [(1, CLEAN)],
+        SOURCES,
+        [(1, CLEAN)],
+        run,
+        rule_workers=2,
+    )
+
+    assert both_running.is_set()
+    assert [result.rule_id for result in verdict.results] == [1, 2]
+    assert verdict.decision == "NO_PAGAR"
 
 
 # ADR 0025: a scan is read and decided, but a rejection on data read by OCR escalates.

@@ -231,6 +231,7 @@ async def approve(
                         k: artifact[k]
                         for k in ("text", "type", "decision", "code", "tests", "hash")
                     },
+                    summary=artifact.get("summary"),
                     status="active",
                     activated_at=datetime.now(UTC),
                     report={

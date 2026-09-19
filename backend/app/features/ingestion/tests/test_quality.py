@@ -1,4 +1,4 @@
-"""The evaluated default must not silently start with another OCR committee."""
+"""Historical committee certification is never silently transferred to a new reader."""
 
 import hashlib
 from dataclasses import replace
@@ -115,11 +115,11 @@ def test_experimental_local_starts_without_verified_model_manifest(settings):
         assert client.get("/v1/ocr/config").json()["mode"] == "local"
 
 
-def test_default_is_verified(settings, monkeypatch):
+def test_helmcode_default_does_not_claim_historical_verification(settings, monkeypatch):
     monkeypatch.delenv("TRACEPAY_OCR_PROFILE", raising=False)
     from app.features.ingestion.config import Settings
 
-    assert Settings().ocr_profile == "verified"
+    assert Settings().ocr_profile == "experimental"
     assert not quality.validate_quality_profile(settings)["verified"]
 
 

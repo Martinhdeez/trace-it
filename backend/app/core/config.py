@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # Rules one background job compiles at once (Helmcode allows 5 concurrent requests
     # per model).
     compile_concurrency: int = 5
+    # Independent rule sandboxes that may run at once. Four was the best measured
+    # default on the reference machine; higher values mostly add JSON and memory pressure.
+    decision_workers: int = 4
     # `GET /health/planes`: over the last `health_window_minutes`, a plane is `down` from
     # this error rate, `degraded` from the lower one or when its p95 span duration passes
     # its limit (`TRACE_HEALTH_P95_MS='{"agents": 90000}'`). Below `health_min_spans` spans

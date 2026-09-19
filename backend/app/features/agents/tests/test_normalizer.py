@@ -38,6 +38,7 @@ NORM = "1. Pagar solo si el IBAN coincide con el maestro. Ante duda, escalar."
 
 CHECK = {
     "text": "`iban` equals `suppliers.iban` of the issuer's row.",
+    "summary": "Bank account matches the supplier master",
     "type": "requirement",
     "decision": "NO_PAGAR",
     "decision_source": "policy",
@@ -254,6 +255,8 @@ async def test_the_norm_becomes_norm_rules_whose_checks_compile(api, monkeypatch
         assert rule["report"]["norm"]["decision_source"] == "policy"
     rule = (await client.get(f"/rules/{ids[0]}")).json()
     assert rule["norm_rule_id"] == first["id"]
+    assert rule["summary"] == CHECK["summary"]
+    assert first["checks"][0]["summary"] == CHECK["summary"]
     assert rule["report"]["norm"]["policies"] == ["When in doubt, escalate."]
     doubt = (await client.get(f"/rules/{ids[1]}")).json()["report"]["norm"]
     assert (doubt["kind"], doubt["kind_reason"]) == ("doubt", "Why")

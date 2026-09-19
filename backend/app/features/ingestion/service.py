@@ -164,6 +164,7 @@ class ExtractionService:
         invoice = [
             "pdf/extractor.py",
             "pdf/native.py",
+            "pdf/layout.py",
             "pdf/invoice.py",
             "pdf/committee.py",
             "pdf/uncertainty.py",

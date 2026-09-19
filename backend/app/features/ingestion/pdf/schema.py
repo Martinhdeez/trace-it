@@ -41,6 +41,9 @@ def extract_schema_pdf(content, options, settings, ocr, vlm, field_reader, field
         number = page["number"]
         text = "\n".join(line.text for line in page["lines"])
         chars = len(text.strip())
+        warnings.extend(
+            {"code": code, "page": number, "stage": "native"} for code in page.get("warnings", [])
+        )
         metrics["native_pages"] += int(bool(chars))
         observed, _ = read_schema_fields(lines, targets, settings.ocr_min_confidence)
         missing = any(reading.value is None for reading in observed.values())
@@ -48,6 +51,7 @@ def extract_schema_pdf(content, options, settings, ocr, vlm, field_reader, field
             chars < 40
             or text.count("\ufffd") / max(1, chars) > 0.02
             or (page["image_ratio"] > 0.5 and (missing or wants_transcript))
+            or (page.get("suspect_spacing", False) and (missing or wants_transcript))
         )
         report = {
             "page": number,
