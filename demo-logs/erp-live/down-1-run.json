@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "body": {
+    "decided": 4,
+    "by_decision": {
+      "ESCALAR": 2,
+      "NO_PAGAR": 2
+    },
+    "down_sources": {
+      "erp": "Sync of 'erp' failed; the previous snapshot stays stored, unused by runs. POST /erp/login : gave up after 6 attempts (last: transport error: ConnectError('All connection attempts failed'))"
+    }
+  }
+}

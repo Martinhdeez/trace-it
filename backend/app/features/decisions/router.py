@@ -25,6 +25,9 @@ router = APIRouter(tags=["decisions"])
     "/processes/{process_id}/run",
     operation_id="runProcess",
     summary="Decide every pending instance with the active rules",
+    description="Syncs the process's live sources first; a source that fails is down for "
+    "this run and listed in `down_sources` (ADR 0028).",
+    response_model_exclude_defaults=True,
 )
 async def run_process(process_id: int, session: Session) -> RunSummary:
     return await service.run(session, process_id)
@@ -38,7 +41,9 @@ async def run_process(process_id: int, session: Session) -> RunSummary:
     "decision that changes is written, as a new engine row; the history stays. An instance "
     "a person decided last or that awaits review is never replaced: a disagreement comes "
     "back in `conflicts`. `names` limits it to those instances. `dry_run=true` compares only "
-    "engine outcomes, with no reviewer calls. New engine decisions receive optional reviews.",
+    "engine outcomes, with no reviewer calls. New engine decisions receive optional reviews. "
+    "Like a run, it syncs the live sources first, except a dry run (ADR 0028).",
+    response_model_exclude_defaults=True,
 )
 async def reprocess_process(
     process_id: int, session: Session, body: ReprocessIn | None = None, dry_run: bool = False

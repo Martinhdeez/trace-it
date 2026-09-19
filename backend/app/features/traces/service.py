@@ -26,6 +26,7 @@ from app.features.ingestion.model import File, Instance
 from app.features.processes.model import Process
 from app.features.processes.service import get as get_process
 from app.features.rules.model import NormRule, Rule
+from app.features.sources import service as sources
 from app.features.traces.schemas import (
     AgentsMetrics,
     CompileStats,
@@ -773,6 +774,8 @@ async def health(session: AsyncSession) -> list[PlaneHealth]:
             status, reason = "degraded", f"{errors}/{spans} spans failed"
         elif p95 is not None and limit is not None and p95 > limit:
             status, reason = "degraded", f"p95 {p95:.0f} ms over {limit} ms"
+        elif p == Plane.ingestion and (down := await sources.down_sources(session, since)):
+            status, reason = "degraded", f"sources down: {', '.join(down)}"  # ADR 0028
         out.append(
             PlaneHealth(
                 plane=p,

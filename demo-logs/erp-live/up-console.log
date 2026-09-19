@@ -1,0 +1,210 @@
+upload 2026-01-08_P001.pdf PENDING
+upload 2026-03-28_P002.pdf PENDING
+upload 2026-07-08_P010.pdf PENDING
+upload 2026-03-19_P008.pdf PENDING
+== up-1-run.json
+{
+  "status": 200,
+  "body": {
+    "decided": 4,
+    "by_decision": {
+      "PAGAR": 1,
+      "NO_PAGAR": 3
+    }
+  }
+}
+== up-2-decisions.json
+[
+  {
+    "name": "2026-01-08_P001.pdf",
+    "decision": "PAGAR",
+    "reason": null
+  },
+  {
+    "name": "2026-03-28_P002.pdf",
+    "decision": "NO_PAGAR",
+    "reason": "The ERP says PAGADA | The ERP says PAGADA for PO20260476"
+  },
+  {
+    "name": "2026-07-08_P010.pdf",
+    "decision": "NO_PAGAR",
+    "reason": "IBAN_MISMATCH | Order supplier P010 != supplier P004"
+  },
+  {
+    "name": "2026-03-19_P008.pdf",
+    "decision": "NO_PAGAR",
+    "reason": "INVALID_DATE 2026-02-31"
+  }
+]
+== up-3-sources.json
+[
+  {
+    "id": 1,
+    "name": "suppliers",
+    "origin": "d7729db76ec7501f35e5cf4ef3383344c5b2bea4c6ea9ece36723663ca2a87ae",
+    "rows": 12,
+    "loaded_at": "2026-09-19T10:32:39.103005Z",
+    "status": null,
+    "error": null,
+    "checked_at": null
+  },
+  {
+    "id": 2,
+    "name": "orders",
+    "origin": "d7729db76ec7501f35e5cf4ef3383344c5b2bea4c6ea9ece36723663ca2a87ae",
+    "rows": 516,
+    "loaded_at": "2026-09-19T10:32:39.103005Z",
+    "status": null,
+    "error": null,
+    "checked_at": null
+  },
+  {
+    "id": 3,
+    "name": "parameters",
+    "origin": "d7729db76ec7501f35e5cf4ef3383344c5b2bea4c6ea9ece36723663ca2a87ae",
+    "rows": 1,
+    "loaded_at": "2026-09-19T10:32:39.103005Z",
+    "status": null,
+    "error": null,
+    "checked_at": null
+  },
+  {
+    "id": 4,
+    "name": "erp",
+    "origin": "erp:2026-09-19T10:32:39+00:00|http://127.0.0.1:8032",
+    "rows": 516,
+    "loaded_at": "2026-09-19T10:32:39.462724Z",
+    "status": "ok",
+    "error": null,
+    "checked_at": "2026-09-19T10:32:39.468151Z"
+  }
+]
+== up-4-health.json
+[
+  {
+    "plane": "ingestion",
+    "status": "ok",
+    "spans": 24,
+    "errors": 0,
+    "error_rate": 0.0,
+    "p95_ms": 204.89999999999992,
+    "reason": null
+  },
+  {
+    "plane": "agents",
+    "status": "ok",
+    "spans": 6,
+    "errors": 0,
+    "error_rate": 0.0,
+    "p95_ms": 54.8,
+    "reason": null
+  },
+  {
+    "plane": "execution",
+    "status": "ok",
+    "spans": 17,
+    "errors": 0,
+    "error_rate": 0.0,
+    "p95_ms": 2184.599999999997,
+    "reason": null
+  }
+]
+== up-5-run-trace.json
+[
+  {
+    "depth": 0,
+    "step": "run_process",
+    "status": "ok",
+    "ms": 5421,
+    "data": {
+      "failures": {},
+      "by_decision": {
+        "PAGAR": 1,
+        "NO_PAGAR": 3
+      },
+      "down_sources": {}
+    }
+  },
+  {
+    "depth": 1,
+    "step": "sync_source",
+    "status": "ok",
+    "ms": 5064,
+    "data": {
+      "diff": {
+        "added": 516,
+        "changed": 0,
+        "removed": 0
+      },
+      "rows": 516,
+      "source": "erp",
+      "rows_hash": "216c4e276f9c74fd801c62c3497256abeb6764fef8710fb660e05878ea3e6fbd"
+    }
+  },
+  {
+    "depth": 1,
+    "step": "decision",
+    "status": "ok",
+    "ms": null,
+    "data": {}
+  },
+  {
+    "depth": 1,
+    "step": "decision",
+    "status": "ok",
+    "ms": null,
+    "data": {}
+  },
+  {
+    "depth": 1,
+    "step": "decision",
+    "status": "ok",
+    "ms": null,
+    "data": {}
+  },
+  {
+    "depth": 1,
+    "step": "decision",
+    "status": "ok",
+    "ms": null,
+    "data": {}
+  }
+]
+== up-6-sync-spans.json
+[
+  {
+    "step": "sync_source",
+    "status": "ok",
+    "trace_id": "01a0b939ab28384266139c79e3009f5b",
+    "parent_id": "98fdd7277d989e6f",
+    "started_at": "2026-09-19T10:32:39.468151Z",
+    "data": {
+      "diff": {
+        "added": 516,
+        "changed": 0,
+        "removed": 0
+      },
+      "rows": 516,
+      "pages": 26,
+      "logins": 1,
+      "origin": "erp:2026-09-19T10:32:39+00:00|http://127.0.0.1:8032",
+      "source": "erp",
+      "status": {
+        "entries": "516",
+        "update_loaded": "NO"
+      },
+      "retries": 2,
+      "requests": 30,
+      "timeouts": 0,
+      "rows_hash": "216c4e276f9c74fd801c62c3497256abeb6764fef8710fb660e05878ea3e6fbd",
+      "source_id": 4,
+      "duration_ms": 5053,
+      "rate_limited": 0,
+      "invalid_values": 0,
+      "transient_errors": {
+        "ORA-00600": 2
+      },
+      "invalid_responses": 0
+    }
+  }
+]
