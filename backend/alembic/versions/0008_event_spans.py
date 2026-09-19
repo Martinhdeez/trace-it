@@ -4,8 +4,8 @@ The foreign keys go: an audit row must never block, or be blocked by, the transa
 describes (spans are written on their own connection). Existing rows become one-span
 traces. `cost` goes: cost is counted in tokens (`data.input_tokens`, `data.output_tokens`).
 
-Revision ID: 0006
-Revises: 0005
+Revision ID: 0008
+Revises: 0007
 """
 
 from collections.abc import Sequence
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0006"
-down_revision: str | None = "0005"
+revision: str = "0008"
+down_revision: str | None = "0007"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

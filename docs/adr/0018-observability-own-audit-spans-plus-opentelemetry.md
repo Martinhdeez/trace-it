@@ -39,7 +39,7 @@ audit must survive without any external service.
   - Cons: two writes per span; a small amount of code to own.
 
 ## Decision
-- `events` becomes a span table (migration `0006`): `trace_id`, `span_id`, `parent_id`,
+- `events` becomes a span table (migration `0008`): `trace_id`, `span_id`, `parent_id`,
   `step` (name), `status` (`ok`/`error`), `started_at`, `duration_ms`, `data` JSONB and the
   links `instance_id`, `process_id`, `rule_id`, `norm_rule_id`. No foreign keys: the audit
   never blocks the transaction it describes. `cost` is dropped: cost is tokens
@@ -62,7 +62,8 @@ audit must survive without any external service.
   model, tokens, retries, `config_id`, `prompt_hash` (ADR 0011).
 - Spans: `norm` > `normalize_norm` > `llm_run`; `compile_rules` > `compile_rule` > `llm_run`
   (tester), `coder_attempt` > (`llm_run`, `run_tests`), `impact_check`, `activate_rule`;
-  `run_process` > `evaluate_rule` per rule (instances, fired, errors) + a `decision` point
+  `run_process` (escalations by cause, `MISSING_DATA` included) > `evaluate_rule` per
+  rule (instances, fired, errors) + a `decision` point
   per instance (fired rules, reason, `rules_hash`); `upload_document` > `store_file`,
   `extraction` > `native_text`, `ocr`, `vision`, `text_judge`, then the `ingest_document`
   point with the reading and symbols; `sync_source` (the

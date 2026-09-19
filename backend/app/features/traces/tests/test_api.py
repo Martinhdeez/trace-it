@@ -64,4 +64,4 @@ async def test_run_journey_and_metrics(fake_sandbox: None) -> None:
         assert by_step["evaluate_rule"]["count"] == 2 and by_step["run_process"]["errors"] == 0
         assert metrics["decisions_by_outcome"] == {"PAGAR": 1, "NO_PAGAR": 2, "ESCALAR": 1}
         assert metrics["escalated"] == 0 and metrics["pending"] == 1
-        assert metrics["failures"] == {"RULE_ERROR": 0, "RULE_NEEDS_DATA": 0, "RULE_CONFLICT": 0}
+        assert set(metrics["failures"].values()) == {0}

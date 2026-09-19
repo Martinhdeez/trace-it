@@ -126,7 +126,7 @@ children nest by themselves across `await`, `gather` and threads.
 | `GET /traces/{trace_id}` | One trace as a tree (`children`) |
 | `GET /instances/{id}/trace` | An invoice's journey: file, reading spans, symbols with origin, decisions with each rule's answer (rule text, norm rule), resolutions, exports, `exported_decision` |
 | `GET /rules/{id}/trace` | How a rule was produced (norm sentence, normalizer run, each compilation: tester, coder attempts, test runs, reviews, impact check, activation) and its runtime in process runs (fired, errors, p50/p95) |
-| `GET /processes/{id}/metrics?since=` | Runs, instances/s, p50/p95 per step type, LLM calls/retries/errors/tokens by model and role, decisions by outcome, `RULE_ERROR`/`RULE_NEEDS_DATA`/`RULE_CONFLICT` counts, escalated and pending |
+| `GET /processes/{id}/metrics?since=` | Runs, instances/s, p50/p95 per step type, LLM calls/retries/errors/tokens by model and role, decisions by outcome, escalations by cause (`MISSING_DATA`, `RULE_ERROR`, `RULE_NEEDS_DATA`, `RULE_CONFLICT`), escalated and pending |
 
 Each `llm_run` span holds the exact instructions, user message, output and retry prompts.
 Cost is tokens (`input_tokens`, `output_tokens`).
@@ -141,7 +141,7 @@ The same spans go to OpenTelemetry through the Logfire SDK, but only when config
 
 ## Database and migrations
 
-The migration history starts at `alembic/versions/0001_initial_schema.py` (squashed); a database older than it needs `make reset-db && make setup`. `0004_norm_rules.py` adds `norm_rules` and `rules.norm_rule_id`; `0005_events_process_id.py` adds `events.process_id`, backfilled from each event's instance; `0006_event_spans.py` turns events into spans (ADR 0018). `0002_use_cases.py` moves each process's description into a use case of its own, so `alembic upgrade head` is enough from 0001.
+The migration history starts at `alembic/versions/0001_initial_schema.py` (squashed); a database older than it needs `make reset-db && make setup`. `0004_norm_rules.py` adds `norm_rules` and `rules.norm_rule_id`; `0005_events_process_id.py` adds `events.process_id`, backfilled from each event's instance; `0007_symbols_required.py` marks required symbols; `0008_event_spans.py` turns events into spans (ADR 0018). `0002_use_cases.py` moves each process's description into a use case of its own, so `alembic upgrade head` is enough from 0001.
 
 To change a table: edit the feature's `model.py` (a new table must be imported in `app/models.py`), then in `backend/`: `uv run alembic revision --autogenerate -m "add x to rules"`. Read the generated file before committing. Two branches generating migrations at once leave two heads: `uv run alembic merge heads` and tell the group.
 

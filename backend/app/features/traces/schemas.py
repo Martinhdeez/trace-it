@@ -119,7 +119,8 @@ class ProcessMetrics(BaseModel):
     steps: list[StepStats]  # every step type: rule compilations, LLM runs, rules, syncs...
     llm: list[LlmStats]  # by model and role
     decisions_by_outcome: dict[str, int] = Field(examples=[{"PAGAR": 433, "ESCALAR": 31}])
-    # Decisions that escalated because a rule failed, needed data or tied.
-    failures: dict[str, int] = Field(examples=[{"RULE_ERROR": 0, "RULE_NEEDS_DATA": 12}])
+    # Decisions that escalated because a required symbol was missing, a rule failed, needed
+    # data or tied.
+    failures: dict[str, int] = Field(examples=[{"MISSING_DATA": 29, "RULE_ERROR": 0}])
     escalated: int  # instances whose latest decision waits for a person
     pending: int  # instances not decided yet

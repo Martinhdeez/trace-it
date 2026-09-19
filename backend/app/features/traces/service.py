@@ -29,7 +29,7 @@ from app.features.traces.schemas import (
     StepStats,
 )
 
-FAILURES = ("RULE_ERROR", "RULE_NEEDS_DATA", "RULE_CONFLICT")
+FAILURES = ("MISSING_DATA", "RULE_ERROR", "RULE_NEEDS_DATA", "RULE_CONFLICT")
 
 
 def _nodes(rows: Iterable[Event]) -> dict[str, SpanNode]:
