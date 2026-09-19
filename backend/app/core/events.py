@@ -34,6 +34,7 @@ from opentelemetry import context as otel_context
 from opentelemetry import trace as otel_trace
 from sqlalchemy import BigInteger, DateTime, create_engine, insert
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -161,18 +162,31 @@ def _engine():
     return create_engine(
         settings.database_url,
         pool_pre_ping=True,
+        connect_args={"connect_timeout": 3},
         json_serializer=lambda o: json.dumps(o, default=str, ensure_ascii=False),
     )
 
 
+RETRY_AFTER_S = 30  # after an unreachable database, spans are dropped for this long
+_unreachable_until = 0.0
+
+
 def _write(rows: list[dict[str, Any]]) -> None:
-    """One insert per local trace. Losing the audit of a step must not fail the step."""
+    """One insert per local trace. Losing the audit of a step must not fail the step, nor
+    slow it down: with the database unreachable, spans are dropped for `RETRY_AFTER_S`
+    instead of waiting on a connection for each one."""
     # ponytail: a synchronous insert on the event loop (~ms per trace, not per span); a
     # queue and a writer thread if traces ever get hot.
+    global _unreachable_until
+    if time.monotonic() < _unreachable_until:
+        return
     try:
         with _engine().begin() as connection:
             connection.execute(insert(Event), rows)
-    except Exception:  # noqa: BLE001 - database down: the step itself already happened
+    except OperationalError:
+        _unreachable_until = time.monotonic() + RETRY_AFTER_S
+        logger.warning("Database unreachable: spans dropped for %ss", RETRY_AFTER_S)
+    except Exception:  # noqa: BLE001 - the step itself already happened
         logger.exception("Could not write %d spans", len(rows))
 
 

@@ -5,8 +5,26 @@ import asyncio
 import logfire
 import pytest
 import requests
+from sqlalchemy.exc import OperationalError
 
 from app.core import events
+
+
+def test_an_unreachable_database_is_not_retried_for_every_span(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts: list[int] = []
+
+    def down():
+        attempts.append(1)
+        raise OperationalError("connect", {}, Exception("refused"))
+
+    monkeypatch.setattr(events, "_engine", down)
+    monkeypatch.setattr(events, "_unreachable_until", 0.0)
+    for _ in range(3):
+        with events.span("step"):
+            pass
+    assert len(attempts) == 1
 
 
 @pytest.fixture
