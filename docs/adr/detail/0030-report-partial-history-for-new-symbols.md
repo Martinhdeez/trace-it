@@ -30,7 +30,9 @@ overstates the available evidence. The runtime requirement must still apply to n
    Keep independent rule results and real execution errors. Do not waive exceptions
    merely because a rule mentions a new field or its final verdict says `MISSING_DATA`.
 3. Report incomplete cases as not evaluable with available historical evidence. Do not
-   count them as unchanged, regressions, human-decision conflicts or successful validation.
+   count them as unchanged, changes, review conflicts or successful validation. (R01:
+   validation compares with the last engine decision; a person's resolution is reported in
+   `resolved_by_person` and never blocks.)
    Preserve blocking failures in rules that can be checked and normal comparisons for
    cases with sufficient evidence. Paired optional reviewer previews use evaluable cases.
 4. Return total, evaluated and not-evaluable historical counts, with per-case missing

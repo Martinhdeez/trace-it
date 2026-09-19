@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core import api_boundary
 from app.core.config import settings
 from app.features.ingestion.config import Settings as IngestionSettings
 from app.features.use_cases.schemas import ROLES, AgentSettings, Role
@@ -66,6 +67,13 @@ class ExecutionSettings(BaseModel):
 
     @model_validator(mode="after")
     def complete(self) -> Self:
+        api_boundary.endpoint(self.local_endpoint, settings.local_base_url)
+        api_boundary.endpoint(self.compatible_endpoint, IngestionSettings().vlm_url)
+        for directory in (
+            self.extraction.primary_model_dir,
+            self.extraction.verification_model_dir,
+        ):
+            api_boundary.model_directory(directory, IngestionSettings().model_dir)
         for endpoint in (self.local_endpoint, self.compatible_endpoint):
             if endpoint is None:
                 continue

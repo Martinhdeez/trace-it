@@ -3,6 +3,7 @@
 from app.core.database import Base
 from app.core.events import Event
 from app.features.alerts.model import Alert
+from app.features.database_api.model import DatabaseApiChange
 from app.features.decisions.model import Decision, DecisionReview, Finding
 from app.features.ingestion.model import File, Instance
 from app.features.learning.model import Adoption, Analysis, Proposal, Validation
@@ -21,6 +22,7 @@ from app.features.users.model import User
 from app.features.versions.model import Execution, ProcessDraft, ProcessVersion
 
 __all__ = [
+    "DatabaseApiChange",
     "Alert",
     "ManagerProposal",
     "Execution",

@@ -99,6 +99,9 @@ engine and audit. Scripted tests cover both entry points, manager conflicts, sta
 fixed acceptance examples, failed compilation and ERP sync, workbook precision and
 preservation of history. A synthetic hiring process exercises the same interface.
 This implementation is backend-only, as requested; no frontend is included.
+**Update (2026-09-19).** The console's Definition screen now drives discovery sessions
+(`/process-drafts`). Publication also carries the plan's description, decision types and
+symbols for an existing process (`draft_compilation.candidate`), as one version.
 
 ## Related
 

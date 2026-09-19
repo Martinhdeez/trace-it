@@ -7,6 +7,10 @@ September 2026): 500 supplier invoices, a chaotic workbook and a 2009 ERP, decid
 deterministic engine runs it, and every decision keeps its evidence, rule versions and
 latency.
 
+**Production API**: [interactive documentation](https://gex-dashboard.hopto.org/nexia/trace-it/api/docs)
+and the [complete API guide](docs/production-api.md). One Bearer token covers the business
+API and audited, application-scoped database administration.
+
 **Run the demo** (Docker, [uv](https://docs.astral.sh/uv/), OCR keys in `.env`; see
 [Run it](#run-it)):
 

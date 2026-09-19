@@ -42,14 +42,16 @@ to relational data (processes, rules, decisions). Everything must start with one
 - Contributors need Docker for Postgres; there is no in-memory database for tests.
 - Sandbox work must stay off the event loop (`asyncio.to_thread`).
 - The migration history was squashed into one `0001` once the schema settled; a local
-  database from before needs `make reset-db && make setup`.
+  database from before needs `make reset-db && make setup`. Later changes are migrations
+  `0002`-`0016` (there is no `0006`).
 
 ## Evidence
 - `docker-compose.yml`, `Makefile`, `backend/pyproject.toml`, `backend/alembic/`.
 - `uv run pytest -q` on `dev` at `d3745e9` against local Postgres, e2e included:
-  **258 passed in 53 s**.
-- Feature folders: `agents`, `decisions`, `ingestion`, `processes`, `rules`, `sources`,
-  `users`; shared code in `app/core` (settings, database, events) and `app/common`.
+  **258 passed in 53 s**. Today (2026-09-19): 723 unit tests pass, 2 skipped; 11 e2e pass
+  (`make check`).
+- Feature folders: `agents`, `alerts`, `decisions`, `ingestion`, `learning`, `processes`,
+  `proposals`, `rules`, `sources`, `traces`, `use_cases`, `users`, `versions`; shared code in `app/core` (settings, database, events) and `app/common`.
 
 ## Related
 ADR 0006, 0011. `docs/team-guide.md`.

@@ -1,5 +1,6 @@
 ---
-status: superseded by 0022
+status: superseded
+superseded_by: 0022
 ---
 
 # Extract symbols with two independent readings and deterministic validators, never retrying on a failed check
@@ -52,7 +53,7 @@ parser per invoice template in the core.
 - ~1,080 LLM calls per batch; extraction dominates cost and time (estimated 3-4 min with
   8 concurrent requests per provider; not measured yet).
 - More escalations than a retrying design; each one is a real doubt a person sees with
-  its reason. The 29 scans of batch 1 are escalated today because no symbol is read.
+  its reason. At the time, the 29 scans of batch 1 were escalated because no symbol was read.
 - **Proposed evolution: compiled extractors.** Agents write a deterministic
   `extract(text) -> dict` per document format, validated like a rule (ADR 0004) against
   values the double LLM reading agreed on, run in the sandbox (ADR 0005), with LLM reading
@@ -62,9 +63,9 @@ parser per invoice template in the core.
 ## Evidence
 - Today: `features/ingestion` reads PDFs (native text, two OCR engines, optional vision)
   and the workbook, and stores the readings as evidence (`docs/ingestion/README.md`); the
-  demo stand-in `tools/extractor.py` reads the 471 text PDFs by regex and finds all 8
+  historical text-layer helper `tools/extractor.py` (the demo no longer uses it) reads the 471 text PDFs by regex and finds all 8
   required symbols in all of them. Neither is the double LLM reading this ADR describes,
-  hence `proposed`.
+  hence superseded.
 - The deterministic parser over the text PDFs gives 433 PAGAR, 36 NO_PAGAR, 2 ESCALAR under
   the v3 rules (`.artifacts/specs/batch1-analysis.md`); zero-width characters in FA-4488
   and F26-3011 are correct once normalised.

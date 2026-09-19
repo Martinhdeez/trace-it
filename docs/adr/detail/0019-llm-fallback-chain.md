@@ -5,7 +5,8 @@ status: accepted
 # Move to the next model of a per-role chain when a provider fails
 
 ## Context
-Every agent (normalizer, tester, compiler, assistant) runs on one model per use case and
+Every agent (seven roles: compiler, tester, assistant, normalizer, decision_reviewer,
+learner, discovery) runs on one model per use case and
 role (ADR 0011). When that provider fails (5xx, 429 after the SDK's own retries, a timeout,
 a refused connection) the run fails closed: the rule is `blocked` with the error (ADR 0020), the
 assistant answers 502 (ADR 0006). Nothing wrong is decided, but a norm that arrives during
@@ -43,7 +44,7 @@ see a provider failure handled. The Helmcode key serves several flat-rate models
 - All models fail: `AgentError` 502 "every model failed: m1: ...; m2: ...", and the
   existing fail-closed path applies (the rule ends `blocked` with that error and every
   instance escalates with `RULE_COMPILE_FAILED`, ADR 0020; `draft` before 2026-09-19).
-  Since ADR 0022 (manager publication) the rule ends `draft` with the error again: the
+  Since ADR 0031 (manager publication) the rule ends `draft` with the error again: the
   draft cannot be published and the published version keeps deciding (verified live in
   [resilience](../../resilience.md)).
 - Invoice use case: every role starts on `deepseek-v4-flash`; compiler and normalizer fall
@@ -52,6 +53,9 @@ see a provider failure handled. The Helmcode key serves several flat-rate models
   tester, 300 s normalizer (it writes the whole norm), 120 s assistant. The assistant runs
   the compiler's chain. `max_tokens` per role, about twice the largest output measured
   (docs/scale-and-cost.md): normalizer and tester 8000, compiler 6000, assistant 4000.
+  **Update (2026-09-19):** the compiler now has 16000 (#84), and the use case also
+  configures `discovery` (same chain, 300 s, 16000); `decision_reviewer` and `learner` use
+  the platform defaults (`TRACE_<ROLE>_MODEL`, `TRACE_FALLBACK_MODELS`).
 
 ## Consequences
 - The OpenAI SDK retries twice before an error reaches the chain, so a hung provider costs
@@ -71,7 +75,8 @@ see a provider failure handled. The Helmcode key serves several flat-rate models
 - Tests (`agents/tests/test_llm.py`, scripted `FunctionModel`s): primary 503 -> the fallback
   answers and the span shows both; a `ModelRetry` stays on the primary; every model
   failing is a 502 naming both; a primary answer ending `length` -> the fallback answers;
-  through the API, a rule whose chain all fails ends `blocked` with that error.
+  through the API, a rule whose chain all fails ends `blocked` with that error (since
+  ADR 0031 the test asserts `draft`).
 - The assistant on the invoice use case's settings answered one real suggestion through
   Helmcode: `deepseek-v4-flash`, 6.3 s, 2.2k / 0.8k tokens, 1 validator retry.
 - Each fallback model answered a structured output through Helmcode (one call each):

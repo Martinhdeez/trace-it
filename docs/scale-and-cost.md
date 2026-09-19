@@ -215,7 +215,7 @@ the new check would have stopped can be paid. ADR 0020 fixes it by treating such
 a `blocked` rule (every instance escalates with the error) until it compiles, which is what
 ADR 0016 promises for a rule that cannot be evaluated.
 
-**Superseded by ADR 0022 (atomic publication):** step 3 and this gap no longer apply. A rule
+**Superseded by ADR 0031 (atomic publication):** step 3 and this gap no longer apply. A rule
 whose compile fails stays a `draft` that cannot be published, so the published version keeps
 deciding with its complete rule set; there is no `blocked` / `RULE_COMPILE_FAILED` for it.
 

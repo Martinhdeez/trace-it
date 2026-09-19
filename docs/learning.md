@@ -101,6 +101,6 @@ Analyses, proposals, validations and manager resolutions are append-only. Each a
 stores its exact norm, linked validation, generated rule IDs and a configuration snapshot
 of the process, rules, guidance and agent settings at publication. Decision rule hashes
 and reviewer norm references connect later execution to the adopted artifacts. Approval also publishes a complete immutable process version through the shared path
-in ADR 0022. Existing drafts remain separate and must be rebased after publication. Guidance replacement/retirement
+in ADR 0031. Existing drafts remain separate and must be rebased after publication. Guidance replacement/retirement
 and editing a proposed sentence are not part of this initial flow; reject unsuitable
 proposals rather than altering their evidence or text in place.

@@ -29,7 +29,8 @@ router = APIRouter(tags=["traces"])
     "process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, "
     "`sync_source`, `upload_document`...), status (`ok`, `error`), plane, time window "
     "(`since` <= start < `until`), rule, norm rule, use case, or a span's `model`, `role`, "
-    "`agent` (the agents plane's `by_role` key), `provider` and `operation`. Every row of "
+    "`agent` (the agents plane's `by_role` key), `provider`, `operation` and `source` (a "
+    "`sync_source` span's source). Every row of "
     "`/metrics/{plane}` carries its drill-down here as `traces`.",
 )
 async def list_spans(
@@ -48,6 +49,7 @@ async def list_spans(
     agent: str | None = None,
     provider: str | None = None,
     operation: str | None = None,
+    source: str | None = None,
     limit: int = Query(100, ge=1, le=1000),
 ) -> list[SpanOut]:
     return await service.list_spans(
@@ -68,6 +70,7 @@ async def list_spans(
             "agent": agent,
             "provider": provider,
             "operation": operation,
+            "source": source,
         },
     )
 

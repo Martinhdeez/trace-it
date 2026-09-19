@@ -41,6 +41,115 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/db/tables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tables
+         * @description Registered Trace-it application tables only; audit tables are read-only.
+         */
+        get: operations["listDatabaseTables"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/db/tables/{table_name}/schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Schema
+         * @description Columns, generated values, keys, checks and indexes. Names are not SQL expressions.
+         */
+        get: operations["getDatabaseTableSchema"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/db/tables/{table_name}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rows
+         * @description Primary-key ordered pages, including an etag for each complete row.
+         */
+        get: operations["listDatabaseRows"];
+        put?: never;
+        /**
+         * Create
+         * @description Insert one row and audit it atomically. Omit generated columns.
+         */
+        post: operations["createDatabaseRow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/db/tables/{table_name}/row": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Row */
+        get: operations["getDatabaseRow"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete
+         * @description Delete exactly one row by primary key and etag; foreign keys remain enforced.
+         */
+        delete: operations["deleteDatabaseRow"];
+        options?: never;
+        head?: never;
+        /**
+         * Update
+         * @description Update one locked row if its etag still matches; requires a reason.
+         */
+        patch: operations["updateDatabaseRow"];
+        trace?: never;
+    };
+    "/db/tables/{table_name}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export
+         * @description A bounded JSONL page. Follow X-Next-Offset until it is absent.
+         */
+        get: operations["exportDatabaseRows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/processes/{process_id}/versions": {
         parameters: {
             query?: never;
@@ -1119,7 +1228,7 @@ export interface paths {
         };
         /**
          * Recent spans, newest first
-         * @description Every step the system took, as spans of the audit trail (ADR 0018). Filter by process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, `sync_source`, `upload_document`...), status (`ok`, `error`), plane, time window (`since` <= start < `until`), rule, norm rule, use case, or a span's `model`, `role`, `agent` (the agents plane's `by_role` key), `provider` and `operation`. Every row of `/metrics/{plane}` carries its drill-down here as `traces`.
+         * @description Every step the system took, as spans of the audit trail (ADR 0018). Filter by process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, `sync_source`, `upload_document`...), status (`ok`, `error`), plane, time window (`since` <= start < `until`), rule, norm rule, use case, or a span's `model`, `role`, `agent` (the agents plane's `by_role` key), `provider`, `operation` and `source` (a `sync_source` span's source). Every row of `/metrics/{plane}` carries its drill-down here as `traces`.
          */
         get: operations["listSpans"];
         put?: never;
@@ -2121,6 +2230,118 @@ export interface components {
             /** Id */
             id: number;
         };
+        /** DatabaseCreate */
+        DatabaseCreate: {
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+            /** Reason */
+            reason: string;
+        };
+        /** DatabaseDelete */
+        DatabaseDelete: {
+            /** Key */
+            key: {
+                [key: string]: unknown;
+            };
+            /** Expected Etag */
+            expected_etag: string;
+            /** Reason */
+            reason: string;
+        };
+        /** DatabaseRow */
+        DatabaseRow: {
+            /** Key */
+            key: {
+                [key: string]: unknown;
+            };
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+            /** Etag */
+            etag: string;
+        };
+        /** DatabaseRows */
+        DatabaseRows: {
+            /** Rows */
+            rows: components["schemas"]["DatabaseRow"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Next Offset */
+            next_offset: number | null;
+        };
+        /** DatabaseSchema */
+        DatabaseSchema: {
+            /** Name */
+            name: string;
+            /** Primary Key */
+            primary_key: string[];
+            /** Writable */
+            writable: boolean;
+            /** Columns */
+            columns: {
+                [key: string]: unknown;
+            }[];
+            /** Foreign Keys */
+            foreign_keys: {
+                [key: string]: unknown;
+            }[];
+            /** Unique Constraints */
+            unique_constraints: {
+                [key: string]: unknown;
+            }[];
+            /** Check Constraints */
+            check_constraints: {
+                [key: string]: unknown;
+            }[];
+            /** Indexes */
+            indexes: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** DatabaseTable */
+        DatabaseTable: {
+            /** Name */
+            name: string;
+            /** Primary Key */
+            primary_key: string[];
+            /** Writable */
+            writable: boolean;
+        };
+        /** DatabaseUpdate */
+        DatabaseUpdate: {
+            /** Key */
+            key: {
+                [key: string]: unknown;
+            };
+            /** Expected Etag */
+            expected_etag: string;
+            /** Reason */
+            reason: string;
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+        };
+        /** DatabaseWriteResult */
+        DatabaseWriteResult: {
+            /** Key */
+            key: {
+                [key: string]: unknown;
+            };
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+            /** Etag */
+            etag: string;
+            /** Change Id */
+            change_id: number;
+        };
         /** DecisionOut */
         DecisionOut: {
             /** Version Id */
@@ -2619,6 +2840,10 @@ export interface components {
             };
             /** Escalated */
             escalated: number;
+            /** Escalation Reasons */
+            escalation_reasons: {
+                [key: string]: number;
+            };
             /** Pending */
             pending: number;
             /** Resolutions */
@@ -2986,6 +3211,8 @@ export interface components {
             abstentions_by_field: {
                 [key: string]: number;
             };
+            /** Sources */
+            sources: components["schemas"]["SourceStats"][];
         };
         /** InstanceDetail */
         InstanceDetail: {
@@ -3077,6 +3304,11 @@ export interface components {
             exported_decision: string | null;
             /** Spans */
             spans: components["schemas"]["SpanNode"][];
+            /**
+             * Sources Read
+             * @default []
+             */
+            sources_read: components["schemas"]["SourceRead"][];
         };
         /** LlmStats */
         LlmStats: {
@@ -3366,6 +3598,16 @@ export interface components {
             };
             /** Escalated */
             escalated: number;
+            /**
+             * Escalation Reasons
+             * @example {
+             *       "MISSING_DATA": 20,
+             *       "OTHER": 1
+             *     }
+             */
+            escalation_reasons: {
+                [key: string]: number;
+            };
             /** Pending */
             pending: number;
         };
@@ -3542,6 +3784,11 @@ export interface components {
              * @default 0
              */
             unpriced_requests: number;
+            /**
+             * Rate Limited
+             * @default 0
+             */
+            rate_limited: number;
             /** Traces */
             traces?: string | null;
         };
@@ -4165,6 +4412,59 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /**
+         * SourceRead
+         * @description The latest `sync_source` span of one source before the instance's latest decision.
+         */
+        SourceRead: {
+            /** Source */
+            source: string;
+            /**
+             * Status
+             * @example ok
+             * @example error
+             */
+            status: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Requests */
+            requests: number;
+            /** Retries */
+            retries: number;
+            /** Rate Limited */
+            rate_limited: number;
+            /** Timeouts */
+            timeouts: number;
+            /** Trace Id */
+            trace_id: string;
+        };
+        /**
+         * SourceStats
+         * @description `sync_source` spans of one source of truth, with its connector's stats.
+         */
+        SourceStats: {
+            /** Source */
+            source: string | null;
+            /** Syncs */
+            syncs: number;
+            /** Errors */
+            errors: number;
+            /** Requests */
+            requests: number;
+            /** Retries */
+            retries: number;
+            /** Rate Limited */
+            rate_limited: number;
+            /** P95 Ms */
+            p95_ms: number | null;
+            /** Traces */
+            traces?: string | null;
+        };
         /** SourceSummary */
         SourceSummary: {
             /** Id */
@@ -4645,6 +4945,267 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    listDatabaseTables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseTable"][];
+                };
+            };
+        };
+    };
+    getDatabaseTableSchema: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listDatabaseRows: {
+        parameters: {
+            query?: {
+                /** @description JSON equality filters, e.g. {"id":1} */
+                filters?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseRows"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    createDatabaseRow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseWriteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getDatabaseRow: {
+        parameters: {
+            query: {
+                /** @description Complete primary key as JSON, e.g. {"id":1} */
+                key: string;
+            };
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseRow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deleteDatabaseRow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseDelete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseWriteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    updateDatabaseRow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseWriteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exportDatabaseRows: {
+        parameters: {
+            query?: {
+                filters?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -6944,6 +7505,7 @@ export interface operations {
                 agent?: string | null;
                 provider?: string | null;
                 operation?: string | null;
+                source?: string | null;
                 limit?: number;
             };
             header?: never;
