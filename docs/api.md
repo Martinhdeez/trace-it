@@ -45,7 +45,8 @@ activating rules, document extraction and source uploads need it. CORS is open.
   engine's `results` list one entry per rule: `rule_id`, `hash`, `fires`, `reason`. Join
   `rule_id` with `GET /processes/{id}/rules` for the text. A person's row has no results.
 - **Escalation reasons** from the engine start with `RULE_ERROR <id>:` or `RULE_CONFLICT:`
-  when a rule could not run or two outcomes tied; otherwise it is the firing rule's reason.
+  when a rule could not run or two outcomes tied; otherwise it is the firing rule's reason
+  code (e.g. `IMPOSSIBLE_DATE 2026-02-31`, several joined by ` | `), never its text.
 - **Symbols** are stored as `{value, origin}`; `origin` says where extraction read it.
 - **Names** (`instance.name`) are the exact file names, accents included; they are the
   `file_id` of the export.

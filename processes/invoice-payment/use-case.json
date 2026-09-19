@@ -62,7 +62,8 @@
       "model_settings": {
         "temperature": 0
       },
-      "failed_check_decision": "NO_PAGAR"
+      "failed_check_decision": "NO_PAGAR",
+      "instructions": "Never paying the same order twice means two checks: the `erp` entry of the invoice's `purchase_order` already has `status` PAGADA (a `violation`), and another instance in `others` has the same normalised `purchase_order` (a `doubt`: the system cannot tell which invoice is the legitimate one, so every invoice sharing the order goes to a person)."
     }
   }
 }

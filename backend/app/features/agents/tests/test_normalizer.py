@@ -106,13 +106,26 @@ async def test_a_check_the_norm_does_not_decide_gets_the_policy(monkeypatch) -> 
     output, calls = await run(monkeypatch, [answer()], policy="ESCALAR")
 
     assert output.norm_rules[0].checks[0].decision == "ESCALAR"
-    assert "(`policy`):\n- ESCALAR" in user_prompt(calls[0])
+    assert "kind `violation`:\n- ESCALAR" in user_prompt(calls[0])
 
 
-async def test_an_explicit_decision_is_kept(monkeypatch) -> None:
-    output, _ = await run(monkeypatch, [answer([EXPLICIT])], policy="NO_PAGAR")
+@pytest.mark.parametrize("policy", ["NO_PAGAR", None])
+async def test_a_doubt_the_norm_does_not_decide_escalates(monkeypatch, policy) -> None:
+    """Several invoices on one order: nobody can tell which is legitimate, so a person
+    decides, whatever the model proposed and whatever the policy for violations says."""
+    doubt = {**CHECK, "kind": "doubt", "kind_reason": "Which invoice is legitimate?"}
+    output, calls = await run(monkeypatch, [answer([doubt])], policy=policy)
 
     assert output.norm_rules[0].checks[0].decision == "ESCALAR"
+    assert "kind `doubt`:\n- ESCALAR" in user_prompt(calls[0])
+
+
+@pytest.mark.parametrize("kind", ["violation", "doubt"])
+async def test_an_explicit_decision_is_kept(monkeypatch, kind: str) -> None:
+    named = {**EXPLICIT, "decision": "NO_PAGAR", "kind": kind}
+    output, _ = await run(monkeypatch, [answer([named])], policy="ESCALAR")
+
+    assert output.norm_rules[0].checks[0].decision == "NO_PAGAR"
 
 
 async def test_without_a_policy_the_model_decides(monkeypatch) -> None:
@@ -137,6 +150,7 @@ def test_the_invoice_use_case_rejects_what_fails_and_activates_valid_rules() -> 
 
     assert agents["normalizer"].failed_check_decision == "NO_PAGAR"
     normalizer.check_policy("NO_PAGAR", types)
+    assert "`doubt`" in agents["normalizer"].instructions  # the shared purchase order
     assert llm.Setup(agents["compiler"]).limit("auto_activate_max_change", 0.05) == 1.0
 
 
@@ -190,7 +204,7 @@ async def test_the_norm_becomes_norm_rules_whose_checks_compile(api, monkeypatch
     """Three checks in two norm rules: all compiled concurrently in one background job,
     each keeping the normalizer's reading next to the compiler's report."""
     client, process_id, headers = api
-    second = {**CHECK, "text": "`iban` is a valid IBAN.", "decision": "ESCALAR"}
+    second = {**CHECK, "text": "`iban` is a valid IBAN.", "kind": "doubt", "kind_reason": "Why"}
     third = {**CHECK, "text": "`iban` is not blacklisted."}
     reply = answer([CHECK, second])
     reply["norm_rules"].append(
@@ -221,6 +235,8 @@ async def test_the_norm_becomes_norm_rules_whose_checks_compile(api, monkeypatch
     rule = (await client.get(f"/rules/{ids[0]}")).json()
     assert rule["norm_rule_id"] == first["id"]
     assert rule["report"]["norm"]["policies"] == ["When in doubt, escalate."]
+    doubt = (await client.get(f"/rules/{ids[1]}")).json()["report"]["norm"]
+    assert (doubt["kind"], doubt["kind_reason"]) == ("doubt", "Why")
 
     norm_rules = (await client.get(f"/processes/{process_id}/norm-rules")).json()
     assert [n["text"] for n in norm_rules] == [first["text"], "Nunca pagar a la lista negra."]

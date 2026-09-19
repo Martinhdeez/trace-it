@@ -104,6 +104,16 @@ def test_one_rule_fires() -> None:
     assert verdict.reason == "order_already_paid"
 
 
+def test_the_reason_is_the_rules_reason_code_not_its_text() -> None:
+    [rule] = rules("order_already_paid")
+    rule.text = "The ERP entry of the purchase order must not be PAGADA."
+
+    def run(code: str, instances: list, sources: dict, population: list) -> list:
+        return [{"fires": True, "reason": "ORDER_PAID PO-2026-0474"}]
+
+    assert decide_invoice([rule], ALREADY_PAID, run=run).reason == "ORDER_PAID PO-2026-0474"
+
+
 def test_several_fire_and_the_highest_priority_wins() -> None:
     """The IBAN is unknown *and* the order is already paid: a person looks at it first."""
     active = rules("iban_mismatch", "order_already_paid")
