@@ -26,6 +26,7 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.usage import UsageLimits
 
+from app.common import prompts
 from app.common.exceptions import TraceError
 from app.core import events
 from app.core.config import settings
@@ -92,7 +93,7 @@ class Setup:
 
 def prompt(*names: str) -> str:
     """The platform prompts `prompts/<name>.md`, joined."""
-    return "\n\n".join((PROMPTS / f"{n}.md").read_text(encoding="utf-8").strip() for n in names)
+    return prompts.read(PROMPTS, *names)
 
 
 def model_for(role: str) -> Model | str:

@@ -10,11 +10,12 @@ from httpx import ASGITransport, AsyncClient
 from openpyxl import Workbook
 from sqlalchemy import func, select
 
+from app.common.exceptions import ConflictError
 from app.core.database import session_factory
 from app.features.agents import llm
 from app.features.decisions.model import Decision, Finding
 from app.features.ingestion.model import File, Instance
-from app.features.processes.draft_compilation import proposals
+from app.features.processes.draft_compilation import proposals, ready
 from app.features.processes.draft_schemas import DraftPlan
 from app.features.processes.model import Process
 from app.features.rules.model import Rule
@@ -588,3 +589,116 @@ async def test_discovery_does_not_overwrite_a_process_draft(api, monkeypatch):
     assert result.status_code == 409
     unchanged = (await api.get(f"/processes/{pid}/draft")).json()
     assert unchanged == staged.json()
+
+
+async def test_a_revision_that_omits_the_name_keeps_the_one_the_manager_gave(api, monkeypatch):
+    """Observed with the hiring pack: the third revision returned the whole plan with an
+    empty name, and preparation then refused the draft for a reason the manager could not
+    act on. The name is identity, not a proposal."""
+    proposed = plan()
+    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [proposed]}))
+    draft = (await api.post("/process-drafts", json={"name": proposed["name"]})).json()
+    draft = await post(api, draft, "messages", message="Discover the amount policy.")
+    assert draft["plan"]["name"] == proposed["name"]
+
+    nameless = plan(proposed["name"]) | {"name": ""}
+    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [nameless]}))
+    draft = await post(api, draft, "messages", message="Where my notes are silent, escalate.")
+    assert draft["plan"]["name"] == proposed["name"]
+    assert draft["plan"]["rules"], "the rest of the revision is kept as proposed"
+
+    draft = await accept(api, draft)
+    ready(DraftPlan.model_validate(draft["plan"]), draft["reviews"])  # no 409 about the name
+
+
+async def test_a_revision_returns_the_trace_of_the_agent_run_it_performed(api, monkeypatch):
+    """Observability: the caller gets a handle on what the agent just did, instead of
+    scanning recent spans and guessing which ones were its own."""
+    proposed = plan()
+    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [proposed]}))
+    draft = (await api.post("/process-drafts", json={"name": proposed["name"]})).json()
+    assert draft["trace_id"] is None
+    draft = await post(api, draft, "messages", message="Discover the amount policy.")
+
+    trace_id = draft["trace_id"]
+    assert trace_id and len(trace_id) == 32
+    spans = (await api.get(f"/traces/{trace_id}")).json()
+    steps = {s["step"] for s in spans} | {c["step"] for s in spans for c in s["children"]}
+    assert "discover_process" in steps and "llm_run" in steps
+    assert (await api.get(f"/process-drafts/{draft['id']}")).json()["trace_id"] == trace_id
+
+
+def workbook_plan():
+    """A plan whose source renames a spreadsheet column, as discovery's own proposals do."""
+    proposal = plan()
+    proposal["sources"] = [
+        {
+            "name": "positions",
+            "kind": "workbook",
+            "explanation": "Open roles",
+            "evidence": [{"reference": "abc:positions!A1", "explanation": "header"}],
+            "document": "abc",
+            "sheet": "positions",
+            "first_row": 2,
+            "last_row": 9,
+            "columns": {"position_code": "A", "status": "D"},
+        }
+    ]
+    return proposal
+
+
+def test_an_example_keyed_by_the_spreadsheet_header_is_refused_before_compiling():
+    """Observed with the hiring pack: the source mapped column A to `position_code`, the
+    examples supplied rows keyed `code`, and because an example's rows replace the real
+    table every rule failed in the sandbox after four minutes of compilation."""
+    proposal = workbook_plan()
+    proposal["examples"][0]["sources"] = {"positions": [{"code": "BE-1", "status": "open"}]}
+    reviews = dict.fromkeys(proposals(DraftPlan.model_validate(proposal)), "accepted")
+    with pytest.raises(ConflictError) as error:
+        ready(DraftPlan.model_validate(proposal), reviews)
+    assert "code" in str(error.value) and "position_code" in str(error.value)
+
+    proposal["examples"][0]["sources"] = {"positions": [{"position_code": "BE-1"}]}
+    ready(DraftPlan.model_validate(proposal), reviews)  # the mapped name is accepted
+
+
+def test_an_example_inventing_a_table_is_refused():
+    proposal = workbook_plan()
+    proposal["examples"][0]["sources"] = {"applicants": [{"email": "a@b"}]}
+    reviews = dict.fromkeys(proposals(DraftPlan.model_validate(proposal)), "accepted")
+    with pytest.raises(ConflictError) as error:
+        ready(DraftPlan.model_validate(proposal), reviews)
+    assert "applicants" in str(error.value)
+
+
+def symbol_plan(**extraction):
+    proposal = plan()
+    proposal["symbols"] = [
+        {"name": "amount", "type": "number", "required": True, "extraction": extraction}
+    ]
+    return proposal
+
+
+def test_a_symbol_that_can_only_read_the_whole_page_is_refused():
+    """Observed with the hiring pack: all seven symbols were published with
+    extraction.source "text", so each text field became the entire transcript, the typed
+    ones became null, and all 44 cases escalated on data the reader had in front of it."""
+    proposal = symbol_plan(source="text", labels=["Total"])
+    reviews = dict.fromkeys(proposals(DraftPlan.model_validate(proposal)), "accepted")
+    with pytest.raises(ConflictError) as error:
+        ready(DraftPlan.model_validate(proposal), reviews)
+    assert "whole transcript" in str(error.value) and "amount" in str(error.value)
+
+    proposal = symbol_plan(source="document", labels=["Total"])
+    ready(DraftPlan.model_validate(proposal), reviews)  # matching labels in the page is fine
+
+
+def test_one_free_text_symbol_may_still_hold_the_transcript():
+    """`text` exists for exactly that: a text symbol, with no labels to match."""
+    proposal = plan()
+    proposal["symbols"] = [
+        {"name": "free_text", "type": "text", "extraction": {"source": "text"}},
+        {"name": "amount", "type": "number", "required": True},
+    ]
+    reviews = dict.fromkeys(proposals(DraftPlan.model_validate(proposal)), "accepted")
+    ready(DraftPlan.model_validate(proposal), reviews)

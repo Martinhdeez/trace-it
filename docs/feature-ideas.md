@@ -4,6 +4,38 @@ Features other solutions to the same challenge build, how they build them, and w
 suggests for trace-it. Read from public repos on Saturday 19/09 morning; "Us" is our state on `dev`
 at that time.
 
+## Priority: adopt before the defence
+
+Three features the strongest solutions show as their bonus. We adopt them as product features of the
+invoice process, mentioned in passing; our bonus stays our own.
+
+**Money at risk in the escalation queue.** Read-only summary over the escalated invoices: the total
+amount at stake (each escalated file joined to its purchase order in the master), how many have no
+known amount, and the queue ordered by amount with a running total and the share of money it covers.
+The headline number is the smallest set of invoices that covers 80 % of the money (their run: 116,163.14
+EUR in 45 escalations, 3 invoices cover 80 %, led by the 84,700 EUR outlier). No data shows
+"PENDING", never a false zero. It never changes a decision. *Us:* `total` is already a symbol and the
+escalation type is known, so this is a query and a panel on the queue; order the queue by it.
+
+**Payment calendar and remittance draft.** For every PAGAR: due date = invoice date + the supplier's
+payment terms from the master (30/45/60 days), grouped by ISO week, overdue marked against the cut-off
+date (never the system clock). A remittance CSV per week with payee, IBAN, reference, amount and
+execution date (max of due date and cut-off), control totals, and a warnings file for whatever cannot
+be paid cleanly (missing terms or date, invalid or mismatched IBAN). Amounts with Decimal. Read-only.
+Two facts from their run to know before building it: at the 18/09 cut-off 431 of 438 PAGAR are already
+overdue, so the calendar shows mostly "overdue" unless the cut-off is moved; and none of the corpus
+IBANs passes the mod-97 check digit, so a strict remittance is empty and theirs marks every line.
+*Us:* no pack source reads the `Condiciones` column of the supplier sheet today; add it to the
+workbook source, then the calendar is a read-only export beside `outcomes.jsonl`. Combined with the
+money at risk, this is our prioritisation by due date and amount.
+
+**What-if simulator.** Re-decides stored extractions in memory, without opening a document or calling a
+model, under a named scenario: changed rule parameters ("tolerance 0.50"), changed policy thresholds,
+or changed source data ("this ledger entry becomes PAGADA"). It lists the decisions that would change,
+is saved as a scenario, and only an explicit "apply" turns it into real decisions (their 500 in 49 ms).
+*Us:* the impact check on a rule change and the dry-run reprocess already do this for rules; what is
+missing is overriding a source row or a threshold in a dry run, and naming and saving the scenario.
+
 ## Extraction
 
 **Extraction ladder with per-rung numbers.** Each PDF climbs cheap to expensive: text layer, raster
@@ -39,14 +71,6 @@ candidate values, and a person's correction to a field re-runs the decision. *Us
 human approval (ADR 0021) and a document pane. Worth checking the pane shows the page image, not only
 the text.
 
-**Escalations ranked by money at risk.** The escalation queue is ordered by amount, with the total at
-stake and "reviewing these N invoices covers 80 % of the money". *Us:* planned as prioritisation by due
-date and amount; mention it in passing.
-
-**Due-date calendar and remittance file.** Payment due dates (30/45/60 days from the master's terms)
-for the PAGAR invoices and a remittance file ready for the bank. *Us:* not built; fits the same
-prioritisation work.
-
 **Contingency at the deadline.** Any document still without facts when the export is due is escalated
 with the reason "no validated facts", recorded and reversible, so the export is never blocked.
 *Us:* covered by ADR 0016 (every instance gets a decision).
@@ -61,13 +85,6 @@ read the rules of this process, we generate the whole process for any case.
 **Live change and reprocess of the impacted.** In the demo the tribunal changes a value and the system
 answers "N of 540 recalculated, M change". *Us:* impact check before activation and a dry-run
 reprocess exist (`demo-logs/coverage/14-impact.json`, `15-reprocess-dry.json`); rehearse it live.
-
-**What-if simulator.** Before applying anything, the manager asks "what if the tolerance were 0.50",
-"what if the PAGAR threshold were 0.95" or "what if this ledger entry became PAGADA" and sees which
-decisions would change. The 500 decisions recalculate in 49 ms at zero model cost, and a new ERP
-snapshot expires only the decisions that depend on what changed. *Us:* a rule change is checked
-against past decisions before activation (ADR 0004). We lack the same preview for a change in a
-source value or a threshold, without writing a new rule.
 
 **Editable policy from the console.** The manager changes settings such as the extractor in use and
 the reference date from the console, and the pipeline honours them on the next run. *Us:* runtime

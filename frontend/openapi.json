@@ -31,6 +31,32 @@
         }
       }
     },
+    "/ready": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Ready",
+        "description": "Readiness includes PostgreSQL; liveness alone must not approve a release.",
+        "operationId": "ready",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Ready"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/processes/{process_id}/versions": {
       "get": {
         "tags": [
@@ -7487,6 +7513,17 @@
                 "type": "null"
               }
             ]
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
           },
           "id": {
             "type": "integer",

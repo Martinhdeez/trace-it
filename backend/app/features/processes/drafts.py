@@ -96,6 +96,7 @@ async def output(session, draft_id):
         connectors=list(await connectors(session, draft)),
         preview=data.get("preview"),
         changes=changes(data),
+        trace_id=data.get("trace_id"),
         execution=execution_choices.read(data) if "agents" in data else None,
     )
 
@@ -252,7 +253,8 @@ async def message(session, draft_id, body, user):
         else (await use_cases.setups(session, draft.use_case_id) if draft.use_case_id else {})
     )
     if body.mode == "discuss":
-        with events.span("discuss_process", process_id=draft.process_id, draft_id=draft_id):
+        with events.span("discuss_process", process_id=draft.process_id, draft_id=draft_id) as span:
+            data["trace_id"] = span.trace_id
             answer = await discovery.discuss(data, setups.get("discovery"))
         data["messages"].append(
             {
@@ -263,8 +265,13 @@ async def message(session, draft_id, body, user):
             }
         )
         return await save(session, draft_id, body.revision, data, user, "discuss_process")
-    with events.span("discover_process", draft_id=draft_id, author=user.name):
+    with events.span("discover_process", draft_id=draft_id, author=user.name) as span:
+        data["trace_id"] = span.trace_id
         plan = await discovery.discover(data, setups.get("discovery"))
+    if not plan.name.strip():
+        # A revision answers a question; it never renames the process. A model that omits
+        # the name would otherwise blank it, and preparation would refuse the whole draft.
+        plan.name = data["plan"].get("name", "")
     data["plan"] = plan.model_dump()
     data["messages"].append({"role": "assistant", "text": plan.summary})
     invalidate(data)
@@ -377,7 +384,8 @@ async def prepare(session, draft_id, revision, user):
         if "agents" in data
         else (await use_cases.setups(session, draft.use_case_id) if draft.use_case_id else {})
     )
-    with events.span("compile_process_draft", draft_id=draft_id, author=user.name):
+    with events.span("compile_process_draft", draft_id=draft_id, author=user.name) as span:
+        data["trace_id"] = span.trace_id
         compiled = await compilation.compile_plan(
             plan, tables, setups, data["base_configuration"], data.get("base_sources")
         )

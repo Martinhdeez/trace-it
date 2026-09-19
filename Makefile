@@ -1,8 +1,9 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync backup export-batch check-outcomes test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down check down reset-db
+.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync backup export-batch check-outcomes test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down hiring-data hiring-demo check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 DEMO_ARGS ?=
+HIRING_ARGS ?=
 
 setup:
 	test -f .env || cp .env.example .env
@@ -120,6 +121,15 @@ eval-norm:  # opt-in, real LLMs: the client's norm -> rules -> code -> batch 1 v
 demo-llm-down:  # real LLMs: the primary model's provider is unreachable, a fallback answers (ADR 0019)
 	cd backend && OPENAI_BASE_URL=http://127.0.0.1:9/v1 OPENAI_API_KEY=unreachable PYDANTIC_AI_NO_BANNER=1 \
 		uv run --env-file ../.env python ../tools/demo_llm_down.py
+
+# A second problem, born on stage: discovery from CVs, a messy policy and a workbook, then
+# the batch and a learning round; the report goes to docs/evaluations/ (processes/hiring-screening/README.md).
+# Needs `make setup` running and the agents' keys in .env. HIRING_ARGS="--auto" answers with manager-notes.md.
+hiring-demo:
+	uv run --project backend --locked python tools/hiring_demo.py $(HIRING_ARGS)
+
+hiring-data:  # regenerate processes/hiring-screening/data (deterministic; committed)
+	uv run --project backend --locked python tools/hiring_mock.py
 
 check:
 	cd backend && uv run ruff check . && uv run ruff format --check .

@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ready
+         * @description Readiness includes PostgreSQL; liveness alone must not approve a release.
+         */
+        get: operations["ready"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/processes/{process_id}/versions": {
         parameters: {
             query?: never;
@@ -2231,6 +2251,8 @@ export interface components {
         /** DiscoveryDraftOut */
         DiscoveryDraftOut: {
             execution?: components["schemas"]["ExecutionSettings"] | null;
+            /** Trace Id */
+            trace_id?: string | null;
             /** Id */
             id: number;
             /** Revision */
@@ -4483,6 +4505,28 @@ export interface components {
 export type $defs = Record<string, never>;
 export interface operations {
     health: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    ready: {
         parameters: {
             query?: never;
             header?: never;

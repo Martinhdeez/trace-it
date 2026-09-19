@@ -9,12 +9,32 @@ requirement fires when its condition is NOT satisfied, prohibition fires when it
 There must be one default outcome and at least one outcome requiring a human.
 Higher numeric priority wins when several rules fire. The default applies only when
 no rule fires; do not write a rule that produces the default outcome.
+A symbol is read from the document by its `extraction` hints. `labels` are the exact
+captions printed beside the value, one per language or wording the documents use ("Total",
+"Importe total"); the reader matches a label followed by ":", "#" or "=". `source` says
+where the value comes from: `document` (the default, match the labels in the page) is what
+you want for almost every symbol; `filename`; `text` ONLY for a single free-text symbol
+that is meant to hold the whole transcript; `none` for data supplied elsewhere. Never put
+`text` on a symbol that has labels or is not of type text: its value becomes the entire
+page or null, and every case escalates on data the reader could see.
+The description carries the conventions every rule follows, and it must say what happens
+when a value or a source row a rule needs is absent: a coder that is not told raises, and
+the case escalates even when another rule already covers the absence. State it once, for
+example "if a symbol a rule needs is missing the rule does not fire, and if no source row
+matches the lookup the rule does not fire".
+A rule reads the case's own symbols, the source tables, and `others`: every other case of
+the process, each as {symbol: value} plus `_instance`, its name. So a rule about duplicates,
+totals across cases or "the same X claimed twice" needs no batch column, timestamp or
+identifier in a source; say it reads `others` and give the example an `others` list. When
+several cases share something that should be unique, the check cannot tell which one is
+legitimate, so it fires on every one of them and a person decides.
 When existing_process is true, keep its name and identity. You may propose changes to
 rules, description, symbols, outcome definitions, source mappings, decision_review and
 guidance. Preserve every field not implicated by the manager's request, including existing
 subjective guidance and review settings. Explain changes and cite their evidence. Never
-silently remove an accepted choice. A separate editable version draft is read-only here;
-tell the manager it must be finished before these proposals can be prepared or published.
+silently remove an accepted choice. When editable_version_draft is not null, that separate
+draft is read-only here; tell the manager it must be finished before these proposals can be
+prepared or published. When it is null there is no such draft: say nothing about one.
 
 For subjective policy use guidance, with a stable name, text and evidence. It informs
 an optional reviewer's recommendation, never deterministic findings. Setting
@@ -64,7 +84,10 @@ and every example. When policy questions remain, start with at most four represe
 examples; add the other boundary cases after the answers. Never omit rules to save space.
 Each example's sources is a map of table names to ARRAYS OF ROW OBJECTS, including
 single-row parameters: {"parameters": [{"cut_off_date": "2026-01-01"}]}, never
-{"cut_off_date": "2026-01-01"}. Dates above are format examples, not policy evidence.
+{"cut_off_date": "2026-01-01"}. Write those rows with the field names YOUR source proposal
+maps, never the spreadsheet's own header: the example's rows replace the real table, so a
+row keyed by the header breaks every rule that reads it. Dates above are format examples,
+not policy evidence.
 Every non-missing-data example must supply all required instance fields and the complete
 source rows needed to isolate the intended check. Constants belong in source rows, not
 required instance symbols. Do not invent an unanswered parameter in the proposed sources.

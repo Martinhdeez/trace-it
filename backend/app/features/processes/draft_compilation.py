@@ -26,6 +26,66 @@ def proposals(plan: DraftPlan) -> list[str]:
     ]
 
 
+def source_fields(plan: DraftPlan) -> dict[str, set[str]]:
+    """The field names each proposed source will actually carry. A snapshot's rows come from
+    a connector, so the plan alone does not say."""
+    known = {}
+    for source in plan.sources:
+        if source.kind == "workbook":
+            known[source.name] = set(source.columns)
+        elif source.kind == "constant":
+            known[source.name] = {key for row in source.rows for key in row}
+    return known
+
+
+def consistent_examples(plan: DraftPlan) -> None:
+    """An example's rows replace the real table for that check, so a row written with the
+    spreadsheet's own header instead of the name the source maps breaks every rule reading
+    that table. Without this the mismatch only shows up as sandbox errors, after compiling
+    and testing every rule."""
+    known = source_fields(plan)
+    proposed = {s.name for s in plan.sources}
+    for example in plan.examples:
+        for table, rows in example.sources.items():
+            if table not in proposed:
+                raise ConflictError(
+                    f"Example `{example.name}` supplies rows for `{table}`, which is not a "
+                    f"proposed source ({', '.join(sorted(proposed)) or 'none proposed'})"
+                )
+            unknown = {key for row in rows for key in row} - known.get(table, set())
+            if table in known and unknown:
+                raise ConflictError(
+                    f"Example `{example.name}` gives `{table}` the field(s) "
+                    f"{', '.join(sorted(unknown))}, which its source does not map. Rules read "
+                    f"{', '.join(sorted(known[table]))}; write the example with those names"
+                )
+
+
+def usable_extraction(plan: DraftPlan) -> None:
+    """A symbol's `extraction.source` says where its value comes from: `document` (default,
+    the labels are matched in the page), `filename`, `text` (the WHOLE transcript, for one
+    free-text symbol) or `none`. Asking for the whole transcript while declaring labels, or
+    for anything that is not text, produces a symbol that can only be the entire page or
+    null. Observed with the hiring pack: every symbol was published as `text`, so each case
+    escalated on data the reader had in front of it."""
+    for symbol in plan.symbols:
+        extraction = symbol.extraction
+        if extraction is None or extraction.source != "text":
+            continue
+        if symbol.type not in {"text", "string"}:
+            raise ConflictError(
+                f"Symbol `{symbol.name}` is a {symbol.type} but reads the whole transcript "
+                '(extraction.source "text"), which can only be null. Use "document" to match '
+                "its labels in the page"
+            )
+        if extraction.labels:
+            raise ConflictError(
+                f"Symbol `{symbol.name}` declares labels but reads the whole transcript "
+                '(extraction.source "text"), so the labels are ignored and its value is the '
+                'entire page. Use "document" to match them'
+            )
+
+
 def ready(plan: DraftPlan, reviews: dict):
     if plan.questions:
         raise ConflictError("Answer the outstanding questions before compiling")
@@ -40,6 +100,8 @@ def ready(plan: DraftPlan, reviews: dict):
     known = {t.name for t in plan.decision_types}
     if any(e.decision not in known for e in plan.examples):
         raise ConflictError("An acceptance example names an unknown outcome")
+    consistent_examples(plan)
+    usable_extraction(plan)
 
 
 def compiled_rules(compilations: list[dict]) -> list[Rule]:

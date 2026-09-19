@@ -1,4 +1,4 @@
-export const BASE = import.meta.env.VITE_API_URL ?? '/api'
+export const BASE = import.meta.env.VITE_API_URL ?? `${import.meta.env.BASE_URL}api`
 
 export class ApiError extends Error {
   readonly status: number
