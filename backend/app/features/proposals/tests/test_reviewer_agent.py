@@ -215,7 +215,19 @@ async def test_a_long_summary_is_trimmed_without_asking_again(monkeypatch):
         _, headers, iid, seen = await resolved(api, monkeypatch, [wordy])
         proposal = await suggest(api, iid, headers)
     assert proposal["summary"] == "Escala un IBAN distinto."
-    assert retry_prompts(seen["assistant"][-1]) == []
+    assert len(seen["assistant"]) == 1 and retry_prompts(seen["assistant"][-1]) == []
+
+
+async def test_no_rule_given_with_a_rule_is_fixed_without_asking_again(monkeypatch):
+    """ "No rule" wins over a rule sent with it, and a made-up reference is dropped: one call."""
+    both = {**SUGGESTION, "no_rule_reason": NO_RULE["no_rule_reason"]}
+    both["evidence"] = [*SUGGESTION["evidence"], "escalation"]
+    async with client() as api:
+        _, headers, iid, seen = await resolved(api, monkeypatch, [both])
+        proposal = await suggest(api, iid, headers)
+    assert proposal["payload"]["text"] == "" and proposal["rationale"] == both["no_rule_reason"]
+    assert proposal["evidence"] == SUGGESTION["evidence"]
+    assert len(seen["assistant"]) == 1 and retry_prompts(seen["assistant"][-1]) == []
 
 
 async def test_the_agent_sees_the_related_cases_and_cannot_invent_their_values(monkeypatch):
@@ -279,6 +291,9 @@ async def test_the_reviewer_runs_without_reasoning_under_a_tight_cap(monkeypatch
     [settings] = received
     assert settings["openai_reasoning_effort"] == "none"
     assert settings["max_tokens"] <= 1500
+    # the same fast role as the decision assistant: short timeout, no hidden SDK repeats
+    assert settings["timeout"] <= 15 and setup.settings.model.endswith("-flash")
+    assert setup.settings.limits["http_retries"] == 0 and setup.settings.retries == 1
 
 
 async def test_the_model_call_is_in_the_case_trace(monkeypatch):

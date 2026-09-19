@@ -234,6 +234,22 @@ async def test_a_long_answer_is_trimmed_without_asking_again(case, monkeypatch) 
     assert suggestion.evidence == ["symbol:amount"]
 
 
+async def test_an_extra_option_and_a_file_name_need_no_second_call(case, monkeypatch) -> None:
+    """Keeping it escalated is not an option when a rule escalated it: dropped in place. A
+    file name is fine for a manager, even with an underscore."""
+    extra = {
+        **SUGGESTION,
+        "reasoning": "Como hosteleria_A_F26-0726.pdf, se paga.",
+        "options": [*SUGGESTION["options"], KEEP],
+    }
+    calls = script(monkeypatch, [extra])
+    async with session_factory() as s:
+        suggestion = await assistant.suggest(s, case["escalated"])
+    assert len(calls) == 1 and retry_prompts(calls[-1]) == []
+    assert [o.decision for o in suggestion.options] == ["PAGAR", "NO_PAGAR"]
+    assert suggestion.reasoning == extra["reasoning"]
+
+
 async def test_every_option_carries_its_rule(case, monkeypatch) -> None:
     bare = {**SUGGESTION, "options": [{**SUGGESTION["options"][0], "rule": None}]}
     bare["options"].append(SUGGESTION["options"][1])
@@ -318,6 +334,7 @@ async def test_both_invoices_of_one_order_are_advised_consistently(case, monkeyp
     await escalate_as(case, "x", "Same purchase order as: factura_41082.pdf")
     paired = {
         **SUGGESTION,
+        "decision": "PAGAR",
         "reasoning": "Se paga la primera recibida, esta; factura_41082.pdf es el duplicado.",
     }
     calls = script(monkeypatch, [SUGGESTION, paired])
@@ -328,10 +345,63 @@ async def test_both_invoices_of_one_order_are_advised_consistently(case, monkeyp
     assert (related["name"], related["decision"], related["received"]) == (
         "factura_41082.pdf",
         "NO_PAGAR",
-        "after this case: this case is the first received",
+        "after",
     )
+    assert user_json(calls[0])["escalation"]["first_received"] == "a"  # this case, by name
     [retry] = retry_prompts(calls[-1])
     assert "involves other cases (factura_41082.pdf)" in retry
+
+
+async def test_the_pair_is_advised_against_the_computed_first(case, monkeypatch) -> None:
+    """Live demo bug: case 1 proposed PAGAR while saying the other invoice, "the first
+    received", is paid. Which one came first is computed (invoice date, then arrival) and
+    the text and the decision must agree with it."""
+    async with session_factory() as s:
+        (await s.get(Instance, case["old"])).name = "factura_41082.pdf"
+        (await s.get(Instance, case["escalated"])).name = "catering.pdf"
+        await s.commit()
+    await escalate_as(case, "x", "Same purchase order as: factura_41082.pdf")
+    wrong_first = {
+        **SUGGESTION,
+        "decision": "NO_PAGAR",
+        "reasoning": "Se paga la primera recibida, factura_41082.pdf, y esta no.",
+    }
+    pays_other = {
+        **SUGGESTION,
+        "decision": "PAGAR",
+        "reasoning": "Es un duplicado: se paga factura_41082.pdf y esta no.",
+    }
+    right = {
+        **SUGGESTION,
+        "decision": "PAGAR",
+        "reasoning": "Esta es la primera recibida: se paga esta y factura_41082.pdf no.",
+    }
+    for wrong, said in (
+        (wrong_first, "the first received is catering.pdf (escalation.first_received)"),
+        (pays_other, "you say factura_41082.pdf is the one paid, so this case is not"),
+    ):
+        calls = script(monkeypatch, [wrong, right])
+        async with session_factory() as s:
+            suggestion = await assistant.suggest(s, case["escalated"])
+        assert suggestion.decision == "PAGAR"
+        [retry] = retry_prompts(calls[-1])
+        assert said in retry
+    calls = script(monkeypatch, [right])
+    async with session_factory() as s:
+        await assistant.suggest(s, case["escalated"])
+    assert len(calls) == 1
+
+
+def test_arrival_goes_by_invoice_date_then_by_order():
+    first, later, undated = (
+        Instance(id=i, name=str(i), symbols=symbols)
+        for i, symbols in (
+            (3, {"date": {"value": "2026-01-02", "origin": "text"}}),
+            (1, {"date": {"value": "2026-02-01", "origin": "text"}}),
+            (2, {}),
+        )
+    )
+    assert sorted([undated, later, first], key=assistant.arrival) == [first, later, undated]
 
 
 async def test_the_decision_assistant_runs_without_reasoning_under_a_tight_cap(monkeypatch):

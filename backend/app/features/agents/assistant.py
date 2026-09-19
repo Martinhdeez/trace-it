@@ -103,6 +103,8 @@ def cited(evidence: list[str], references: set[str]) -> list[str]:
 JARGON = re.compile(
     r"`|\bR\d{1,2}\b|\b(?:document|symbol|rule|resolution):|\b\w+_\w+\b|\b[a-z]+\.[a-z_]+\b"
 )
+# File names are fine for a manager (they name the invoice), even with an underscore.
+FILE_NAME = re.compile(r"\S+\.(?:pdf|png|jpe?g|tiff?|xml)\b", re.IGNORECASE)
 # The policy: an escalated case is decided by a person, never closed by the advice.
 NO_HUMAN = re.compile(
     r"sin (?:intervención|revisión|supervisión) humana|se cierra sin"
@@ -118,6 +120,7 @@ def plain(allowed: set[str], **texts: str | None) -> None:
     for name, text in texts.items():
         words = sorted(allowed, key=len, reverse=True)
         text = re.sub("|".join(map(re.escape, words)) or "$^", "", text or "")
+        text = FILE_NAME.sub("", text)
         if found := JARGON.findall(text):
             wrong.append(f"{name} uses {sorted(set(found))}")
         if NO_HUMAN.search(text):
@@ -156,6 +159,9 @@ class Deps:
     references: set[str]
     engine_code: str = ""  # the engine escalated by itself (MISSING_DATA...): a person decides
     related: tuple[str, ...] = ()  # the other cases the fired rules name (a duplicate order)
+    first: str = ""  # which of this case and `related` came first (`arrival`)
+    this: str = ""  # this case's name
+    paid: str = ""  # the default decision type: what paying means (PAGAR)
 
 
 # Its platform prompt is `prompts/assistant.md`; the use case adds guidance and model.
@@ -173,12 +179,15 @@ def _known_decision(ctx: RunContext[Deps], suggestion: Suggestion) -> Suggestion
     for option in suggestion.options:
         option.consequence = tidy(option.consequence, 1)
     suggestion.evidence = cited(suggestion.evidence, deps.references)
+    consistent_pair(deps, suggestion)
     if suggestion.no_rule_reason:  # "no rule" wins over a rule given with it
         suggestion.proposed_rule = suggestion.proposed_type = None
     if suggestion.decision not in deps.decision_types:
         raise ModelRetry(f"decision {suggestion.decision!r} is not one of {deps.decision_types}")
     human = [t for t in deps.decision_types if t not in deps.final_types][:1]
     expected = deps.final_types + (human if deps.engine_code else [])
+    # an extra option (keeping it escalated when the engine did not escalate by itself) goes
+    suggestion.options = [o for o in suggestion.options if o.decision in expected]
     options = [o.decision for o in suggestion.options]
     if sorted(options) != sorted(expected):
         keep = (
@@ -225,10 +234,63 @@ def _known_decision(ctx: RunContext[Deps], suggestion: Suggestion) -> Suggestion
     return suggestion
 
 
+PAID = r"(?<!no )\bse (?:paga|pagaría|pagará|debe pagar|debería pagar)\b"
+
+
+def consistent_pair(deps: Deps, suggestion: Suggestion) -> None:
+    """A duplicate pair advised against the facts: `first` is computed, never the model's.
+    Only `first` may be called the first received, and the decision must agree with which
+    one the text pays: the other one paid means this one is not, and the reverse."""
+    if not deps.related or not deps.first:
+        return
+    said = " ".join(
+        [suggestion.reasoning, *suggestion.why, *(o.consequence for o in suggestion.options)]
+    )
+    stems = {n: n.rsplit(".", 1)[0].casefold() for n in (deps.this, *deps.related)}
+
+    def named(text: str) -> set[str]:  # "esta" is this case, unless "esta segunda"
+        found = {
+            n
+            for n, stem in stems.items()
+            if re.search(rf"(?<![\w-]){re.escape(stem)}(?![\w-])", text)
+        }
+        return found | ({deps.this} if re.search(r"\best[ae]\b(?! segund)", text) else set())
+
+    wrong = [
+        m[0]
+        for m in re.finditer(r"[^.;]*?\bprimer\w*[^;]*?(?= y |;|\.\s|$)", said.casefold())
+        if (who := named(m[0])) and deps.first not in who
+    ]
+    if wrong:
+        raise ModelRetry(
+            f"the first received is {deps.first} (escalation.first_received), not what you "
+            f"say in: {' | '.join(w.strip() for w in wrong)}"
+        )
+    for clause in re.split(r"[;]|\.\s", suggestion.reasoning.casefold()):
+        paid = re.search(PAID + r"(?:(?! y ).)*", clause)  # up to "y la otra no"
+        who = named(paid[0]) if paid and deps.paid else set()
+        if len(who) != 1:
+            continue
+        if deps.this in who and suggestion.decision != deps.paid:
+            raise ModelRetry(f"you say this case is paid, so decision must be {deps.paid}")
+        if deps.this not in who and suggestion.decision == deps.paid:
+            raise ModelRetry(
+                f"you say {who.pop()} is the one paid, so this case is not: decision cannot "
+                f"be {deps.paid}"
+            )
+
+
+def arrival(instance: Instance) -> tuple:
+    """Which of two cases came first: the document's `date` (ISO), then the order they were
+    received in. A case without a date goes after the dated ones."""
+    date = str(flatten_symbols(instance.symbols or {}).get("date") or "")
+    return (not date, date, instance.id)
+
+
 async def related_cases(session: AsyncSession, instance: Instance, evidence: str) -> list[dict]:
     """The other cases `evidence` names (a duplicate order names the invoices it shares the
     order with): their symbols, which of them equal this case's, their current decision and
-    whether they were received before or after this one."""
+    whether they came before or after this one (`arrival`)."""
     from app.features.decisions.service import latest_decisions
 
     others = list(
@@ -258,10 +320,7 @@ async def related_cases(session: AsyncSession, instance: Instance, evidence: str
                 "symbols": flat,
                 "same_as_case": sorted(k for k in case if k in flat and flat[k] == case[k]),
                 "decision": latest[other.id].decision if other.id in latest else None,
-                # spelled out: a bare "after" was read as "the other one came first"
-                "received": "before this case: it is the first received"
-                if other.id < instance.id
-                else "after this case: this case is the first received",
+                "received": "before" if arrival(other) < arrival(instance) else "after",
             }
         )
     return related
@@ -369,8 +428,13 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
             for d, symbols in resolutions
         ],
     }
+    related = context["escalation"]["related_cases"]
+    if related:  # a fact, by name: the model misread a per-case "before"/"after"
+        before = [r["name"] for r in related if r["received"] == "before"]
+        context["escalation"]["first_received"] = before[0] if before else instance.name
     # the options to answer, one each: the final types, and keeping it escalated when the
     # engine escalated by itself
+    context["paid"] = next((t.name for t in all_types if t.is_default), "")
     context["option_types"] = [t for t in types if t not in human] + (
         human[:1] if context["escalation"]["engine_code"] else []
     )
@@ -391,7 +455,7 @@ async def suggest(session: AsyncSession, instance_id: int) -> Suggestion:
     links = {"instance_id": instance_id, "process_id": instance.process_id}
     with events.span("suggest_escalation", **links) as span:
         context, types = await _context(session, instance)
-        shown = {k: v for k, v in context.items() if k != "version_id"}  # not for the model
+        shown = {k: v for k, v in context.items() if k not in {"version_id", "paid"}}
         prompt = json.dumps(shown, ensure_ascii=False, default=str)
         process = await session.get(Process, instance.process_id)
         from app.features.versions.configuration import setups
@@ -420,6 +484,9 @@ async def suggest(session: AsyncSession, instance_id: int) -> Suggestion:
                 set(context["evidence_refs"]),
                 context["escalation"]["engine_code"] or "",
                 tuple(r["name"] for r in context["escalation"]["related_cases"]),
+                context["escalation"].get("first_received", ""),
+                instance.name,
+                context["paid"],
             ),
         )
         span.set(decision=suggestion.decision, model=trace.model)

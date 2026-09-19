@@ -270,25 +270,60 @@ The role's settings (`processes/invoice-payment/use-case.json`):
 | `limits.http_retries` | 0 | No hidden SDK repeats: a timeout goes straight to the next model and shows in `failed_attempts` |
 | `retries` | 1 | At most one extra call for a real error |
 
-The validators fix trivial problems in place, with no extra call. They cut a Spanish text
-to its sentence and character limits, remove backticks, write `R09` as «la regla 9», drop a
-made-up evidence reference, and keep "no rule" when a rule came with it. `ModelRetry` is
-left for real errors: the wrong decision set, a missing rule or reason, jargon that is still
-there, a case that "closes without a person", invented values, and a rule on fields that do
-not exist.
+The validators fix trivial problems in place, with no extra call. They:
 
-Measured on 2026-09-19 against a copy of the demo database, on the 10 % VAT, duplicate
-order and MISSING_DATA cases. Each request carried a unique id, because Helmcode caches
-identical temperature-0 requests and answers them in 0.35 s.
+- cut a Spanish text to its sentence and character limits;
+- remove backticks and write `R09` as «la regla 9»;
+- drop a made-up evidence reference and an extra "keep it escalated" option;
+- keep "no rule" when a rule came with it;
+- accept a file name even when it contains an underscore.
 
-| | Calls | p50 | p95 / max | Retries | 502 |
-|---|---|---|---|---|---|
-| Decision assistant, before | 15 | 3.6 s | 96 s | 7 of 15 | 2 |
-| Decision assistant, after | 12 | 3.4 s | 15 s (one stall, cut at 12 s) | 0 | 0 |
-| Reviewer agent, after | 3 | 1.7 s | 1.8 s | 0 | 0 |
+`ModelRetry` is left for real errors: the wrong decision set, a missing rule or reason,
+jargon that is still there, a case that "closes without a person", invented values, and a
+rule on fields that do not exist.
 
-The p50 is set by the provider's speed, at about 250 output tokens per second. Getting
-below 3 s needs a shorter answer (fewer tokens out) or a streamed one.
+**Duplicate pairs.** The context now states which invoice of the pair came first, as a fact
+(`escalation.first_received`, `arrival`). It goes by invoice `date`, then by the order the
+invoices arrived. In the live demo, case 1 proposed PAGAR and in the same answer said the
+other invoice, "the first received", was paid. `consistent_pair` sends such an answer back.
+Only the first invoice may be called the first received. The decision must also match the
+invoice the text pays: if the text pays the other invoice, this one is not paid, and the
+reverse.
+
+### Benchmark
+
+```bash
+createdb -T <a database where the pack ran> trace_bench_advice   # a copy: spans are written
+make bench-advice DB=trace_bench_advice N=5
+```
+
+`tools/bench_advice.py` runs the decision assistant on the demo cases: the 10 % VAT case,
+both invoices of the duplicate order, and MISSING_DATA. It runs the reviewer agent on a
+resolved 10 % VAT case. The settings come from `use-case.json` in the checkout, so running
+it on two branches compares them. For each case it prints p50, p95 and max latency, tokens,
+validator retries, fallbacks, the decisions, and one sample answer. Each request carries a
+unique id, because Helmcode caches identical temperature-0 requests and answers them in
+0.35 s. Without a key, it skips.
+
+Measured on 2026-09-19 on a copy of the demo database, N=4 (20 calls each):
+
+| Case | Before (dev): p50 / p95 | Retries | Decisions | After: p50 / p95 | Retries | Decisions |
+|---|---|---|---|---|---|---|
+| duplicate, catering | 6.5 / 7.9 s | 5 | NO_PAGAR ×4 | 3.7 / 5.0 s | 0 | NO_PAGAR ×4 |
+| duplicate, factura_41082 | 9.8 / 11.2 s | 8 | NO_PAGAR ×4 | 6.2 / 6.5 s | 4 | PAGAR ×4 |
+| 10 % VAT | 3.5 / 6.2 s | 1 | PAGAR ×4 | 3.6 / 3.9 s | 0 | PAGAR ×4 |
+| MISSING_DATA | 3.6 / 3.6 s | 0 | ESCALAR ×4 | 3.6 / 3.6 s | 0 | ESCALAR ×4 |
+| reviewer, 10 % VAT | 1.7 / 94.8 s (a stall) | 1 | rule ×4 | 1.9 / 2.2 s | 0 | rule ×4 |
+| **all** | **6.0 / 11.2 s, max 94.8 s** | 15 | | **3.6 / 6.2 s, max 6.5 s** | 4 | |
+
+Before, both invoices of the duplicate order got NO_PAGAR, so the order was never paid.
+After, the invoice dated first (factura_41082, 7 April) gets PAGAR and the other gets
+NO_PAGAR. factura_41082 still needs one retry every time: its first answer pays it in the
+text but proposes NO_PAGAR. An earlier N=5 run on dev returned two 502s on the duplicate,
+and a stall of 94-100 s showed up in about 1 run in 10.
+
+The p50 is set by the provider's speed, about 250 output tokens per second over about 600
+tokens. Getting below 3 s needs a shorter answer or a streamed one.
 
 ## Rejected vs ignored
 
