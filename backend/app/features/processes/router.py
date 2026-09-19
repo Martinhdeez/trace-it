@@ -29,9 +29,9 @@ async def load(body: Definition, session: Session, _: Manager) -> LoadResult:
     "/{process_id}",
     status_code=204,
     operation_id="deleteProcess",
-    summary="Delete an unpublished process without runtime history",
-    description="A process with cases, source loads, published versions or other append-only "
-    "history is kept.",
+    summary="Permanently delete a process and all its history",
+    description="Deletes the process and every process-owned case, source, version, file, "
+    "proposal, mail and audit record.",
 )
 async def delete_process(process_id: int, session: Session, _: Manager) -> None:
     await service.delete_process(session, process_id)

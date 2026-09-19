@@ -21,7 +21,7 @@ export const es = {
   },
   processes: {
     delete: 'Eliminar proceso',
-    confirmDelete: '¿Eliminar este proceso?',
+    confirmDelete: '¿Eliminar este proceso y todo su historial?',
     deleting: 'Eliminando…',
   },
   planes: {

@@ -31,7 +31,7 @@ The first manager comes from the pack (`make setup` loads its `users`).
 
 | Screen | Call | Notes |
 |---|---|---|
-| Processes | `GET /processes`, `DELETE /processes/{id}` | id, name, description; deletion is manager-only and only works before runtime history exists |
+| Processes | `GET /processes`, `DELETE /processes/{id}` | id, name, description; deletion is manager-only and permanently removes the process and its owned history |
 | Process page | `GET /processes/{id}/summary` | instances, `by_status`, `by_decision`, `queue`, `resolved`, rules with `fires`, current `sources`, `last_run_at` |
 | Process setup | `GET /processes/{id}` | decision types (priority, default, requires_human), symbols and optional `decision_review` guidance |
 | Extraction plan | `GET /processes/{id}/extraction-plan` | current fields, enforced rule references, warnings and content fingerprint; [configuration and caching](dynamic-extraction.md) |

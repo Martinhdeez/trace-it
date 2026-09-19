@@ -22,7 +22,7 @@ export const en: Messages = {
   },
   processes: {
     delete: 'Delete process',
-    confirmDelete: 'Delete this process?',
+    confirmDelete: 'Delete this process and all its history?',
     deleting: 'Deleting…',
   },
   planes: {
