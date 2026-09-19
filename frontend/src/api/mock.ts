@@ -240,6 +240,9 @@ function eventsOf(item: Row): TraceEvent[] {
       datos: {
         fuente: scanned ? 'vision · render 300 dpi' : 'pdftotext',
         simbolos: Object.keys(symbolsOf(item.instance.nombre)).length,
+        ...(scanned
+          ? { input_tokens: 2140, output_tokens: 96 }
+          : { input_tokens: 0, output_tokens: 0 }),
       },
       latencia_ms: scanned ? 1840 : 180,
       creado: NOW,

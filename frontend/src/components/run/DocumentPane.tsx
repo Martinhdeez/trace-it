@@ -7,6 +7,7 @@ import type { InvoiceDocument } from '../../api/types'
 import { keys } from '../../api/queries'
 import { extractedDocuments } from '../../data/documents.generated'
 import { formatEuro } from '../../lib/format'
+import { cn } from '../../lib/cn'
 
 /**
  * The facsimile of the document. A scan has no parsed version, which is exactly
@@ -15,9 +16,11 @@ import { formatEuro } from '../../lib/format'
 export function DocumentPane({
   instanceId,
   name,
+  embedded = false,
 }: {
   instanceId: number | undefined
   name: string | undefined
+  embedded?: boolean
 }) {
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -35,15 +38,32 @@ export function DocumentPane({
   }
 
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col px-2 pb-3">
-      <div className="flex items-end justify-between gap-3 px-3 pb-3 pt-1">
-        <div>
-          <p className="text-[11px] text-muted">Documento</p>
-          <h2 className="text-[20px] font-medium tracking-[-0.03em]">
-            {name ?? 'Sin archivo'}
-          </h2>
-        </div>
-        <div className="flex items-center gap-1 rounded-full bg-canvas px-1 py-1 ring-1 ring-black/[0.06]">
+    <section
+      className={cn(
+        'flex h-full min-h-0 min-w-0 flex-1 flex-col',
+        embedded ? '' : 'px-2 pb-3',
+      )}
+    >
+      <div
+        className={cn(
+          'flex gap-3',
+          embedded ? 'items-center px-3 py-2' : 'items-end justify-between px-3 pb-3 pt-1',
+        )}
+      >
+        {embedded ? null : (
+          <div>
+            <p className="text-[11px] text-muted">Documento</p>
+            <h2 className="text-[20px] font-medium tracking-[-0.03em]">
+              {name ?? 'Sin archivo'}
+            </h2>
+          </div>
+        )}
+        <div
+          className={cn(
+            'flex items-center gap-1 rounded-full bg-canvas px-1 py-1 ring-1 ring-black/[0.06]',
+            embedded && 'ml-auto',
+          )}
+        >
           <IconBtn
             label="Buscar en el documento"
             pressed={searchOpen}
@@ -101,7 +121,10 @@ export function DocumentPane({
       ) : null}
 
       <div
-        className="relative min-h-0 flex-1 overflow-auto rounded-[16px] bg-canvas ring-1 ring-black/[0.06]"
+        className={cn(
+          'relative min-h-0 flex-1 overflow-auto bg-canvas',
+          embedded ? '' : 'rounded-[16px] ring-1 ring-black/[0.06]',
+        )}
         onWheel={(event) => {
           if (!event.ctrlKey && !event.metaKey) return
           event.preventDefault()
@@ -143,7 +166,7 @@ export function DocumentPane({
         </div>
       </div>
 
-      {evidence.data ? (
+      {embedded ? null : evidence.data ? (
         <div className="flex items-center justify-between px-3 pt-2 text-[12px] text-muted">
           <span className="font-mono">{evidence.data.sha256.slice(0, 12)}</span>
           <span>

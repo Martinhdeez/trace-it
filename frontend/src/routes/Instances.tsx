@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, FileSearch, X } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { api } from '../api/client'
 import { keys } from '../api/queries'
-import { DocumentPane } from '../components/run/DocumentPane'
 import { QueueList } from '../components/run/QueueList'
 import { TracePane } from '../components/run/TracePane'
 import { ProcessScreen } from '../components/process/ProcessScreen'
 import { ExportButton } from '../components/process/ExportButton'
-import { Button, Input } from '../components/shell/Controls'
+import { Input } from '../components/shell/Controls'
 import { ErrorNotice } from '../components/shell/Notice'
 import { cn } from '../lib/cn'
 import { label } from '../lib/status'
@@ -20,7 +19,6 @@ export function Instances() {
   const [params, setParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('TODAS')
-  const [documentOpen, setDocumentOpen] = useState(false)
 
   const process = useQuery({
     queryKey: keys.process(processId),
@@ -77,15 +75,7 @@ export function Instances() {
         { label: process.data?.nombre ?? '…', to: paths.process(processId) },
         { label: 'Ejecuciones' },
       ]}
-      actions={
-        <>
-          <Button tone="soft" onClick={() => setDocumentOpen((open) => !open)}>
-            {documentOpen ? <X size={12} strokeWidth={2} /> : <FileSearch size={13} strokeWidth={1.7} />}
-            {documentOpen ? 'Cerrar documento' : 'Abrir documento'}
-          </Button>
-          <ExportButton processId={processId} />
-        </>
-      }
+      actions={<ExportButton processId={processId} />}
     >
 
       {instances.isError ? (
@@ -122,10 +112,7 @@ export function Instances() {
             </div>
           }
         />
-        {documentOpen ? (
-          <DocumentPane instanceId={detail.data?.id} name={detail.data?.nombre} />
-        ) : null}
-        <TracePane instance={detail.data} rules={rules.data ?? []} wide={!documentOpen} />
+        <TracePane instance={detail.data} rules={rules.data ?? []} />
       </div>
     </ProcessScreen>
   )
