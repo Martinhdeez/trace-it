@@ -181,3 +181,31 @@ def test_helmcode_primary_config_pins_qwen_in_the_version(settings, monkeypatch)
     config = SimpleNamespace(extraction=extraction, local_endpoint=None, compatible_endpoint=None)
     bound = execution.ingestion_settings(config, replace(settings, helmcode_api_key="secret"))
     assert bound.visual_chain() == [("helmcode", "qwen3.6")]
+
+
+def test_default_retry_budget_falls_back_within_two_seconds(settings, monkeypatch, isolated):
+    sleeps, _ = isolated
+    monkeypatch.delenv("TRACEPAY_PROVIDER_RETRY_MAX_WAIT_S")
+    monkeypatch.setattr(journal.random, "uniform", lambda *_: 1)
+
+    def respond(request):
+        if request.url.host == GEMINI:
+            return httpx.Response(429)
+        return httpx.Response(200, json=HELM_OK)
+
+    mock_client(monkeypatch, respond)
+    reader = VisionFallback(replace(settings, gemini_api_key="retired", helmcode_api_key="test"))
+    assert "visual:helmcode:qwen3.6:" in reader.transcribe(b"image", 1, (595, 842))[0].id
+    assert sleeps == [1.0]
+
+
+def test_new_defaults_never_select_retired_gemini(monkeypatch):
+    from app.features.ingestion.config import Settings
+
+    monkeypatch.delenv("TRACEPAY_VISION_PROVIDERS", raising=False)
+    monkeypatch.delenv("TRACEPAY_OCR_PROFILE", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "stale-key")
+    monkeypatch.setenv("HELMCODE_API_KEY", "test")
+    config = Settings()
+    assert config.ocr_profile == "experimental"
+    assert config.visual_chain() == [("helmcode", "qwen3.6"), ("helmcode", "gemma4")]

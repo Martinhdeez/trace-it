@@ -23,12 +23,13 @@ Set the server default in the ignored root `.env`:
 
 ```dotenv
 TRACEPAY_OCR_MODE=hybrid
-TRACEPAY_OCR_PROFILE=verified
+TRACEPAY_OCR_PROFILE=experimental
+TRACEPAY_VISION_PROVIDERS=helmcode
 ```
 
 For an offline reader, use `TRACEPAY_OCR_MODE=local`. For hosted image models without
 local weights, use `TRACEPAY_OCR_MODE=api`. Both alternative server configurations
-also require `TRACEPAY_OCR_PROFILE=experimental`. The default `verified` profile
+also use `TRACEPAY_OCR_PROFILE=experimental`. The historical `verified` profile
 checks the evaluated local weights and Gemini/Jev primary readers before startup;
 it cannot certify a different committee. For example, an API-only Helmcode server uses:
 
@@ -72,9 +73,8 @@ has granted access or has remaining quota.
 
 ```dotenv
 # Existing providers remain first. Unconfigured entries are skipped.
-TRACEPAY_VISION_PROVIDERS=compatible,gemini,helmcode
+TRACEPAY_VISION_PROVIDERS=helmcode
 TRACEPAY_TEXT_PROVIDERS=jev,helmcode
-TRACEPAY_GEMINI_MODEL=gemini-3.1-flash-lite
 TRACEPAY_JEV_MODEL=jev-1.13.0
 HELMCODE_API_KEY=your_private_key
 TRACEPAY_HELMCODE_VISION_MODELS=qwen3.6,gemma4
@@ -179,7 +179,7 @@ A definite HTTP refusal (4xx or 503) can be tried on a later extraction.
 At most `TRACEPAY_VISION_MAX_CONCURRENCY` (3) calls per provider are in flight
 at once. A 429 or 503 is retried within the same extraction after `Retry-After`,
 or exponential backoff with jitter, until `TRACEPAY_PROVIDER_RETRY_MAX_WAIT_S`
-(30) seconds of waiting; each attempt is its own `provider_call` span with
+(2) seconds of waiting; each attempt is its own `provider_call` span with
 `attempt`, `backoff_s` and `backoff_basis`. Then the provider gives up and
 rate/quota/transient failures have a short provider/model cooldown (15 seconds
 by default, or a bounded `Retry-After`); during it the chain can use the next

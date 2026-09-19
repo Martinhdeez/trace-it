@@ -2,6 +2,9 @@
 
 Target: **https://gex-dashboard.hopto.org/nexia/trace-it/**.
 
+For the challenge ERP frontend at `/nexia/erp/`, missing reference sources and
+interactive reader retry latency, see [ERP installation and repair](erp/README.md).
+
 ## Release policy
 
 `main` is the deployment source. PRs to `dev`/`main`, pushes to both branches and
