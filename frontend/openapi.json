@@ -12812,6 +12812,18 @@
             "title": "Review Pending",
             "default": false
           },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
+          },
           "file_hash": {
             "type": "string",
             "title": "File Hash"
@@ -12930,6 +12942,18 @@
             "type": "boolean",
             "title": "Review Pending",
             "default": false
+          },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
           }
         },
         "type": "object",

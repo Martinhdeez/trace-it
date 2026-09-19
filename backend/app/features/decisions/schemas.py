@@ -38,6 +38,8 @@ class InstanceOut(BaseModel):
     reason: str | None = None
     decided_at: datetime | None = None
     review_pending: bool = False
+    # The symbols as plain values ({name: value}), so a list can sort and show them.
+    values: dict[str, Any] | None = None
 
 
 class DecisionReviewOut(BaseModel):

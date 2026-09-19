@@ -803,7 +803,7 @@ function DraftSaved({ processId }: { processId: number }) {
       title="Queda en el borrador. Publica para que se aplique"
       action={
         <Link
-          to={`${paths.process(processId)}?publicar=1`}
+          to={`${paths.panel(processId)}?publicar=1`}
           className="text-[12px] text-muted hover:text-ink"
         >
           Publicar

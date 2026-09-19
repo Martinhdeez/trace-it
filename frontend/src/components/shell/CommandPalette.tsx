@@ -51,7 +51,8 @@ export function CommandPalette() {
     ]
     if (processId) {
       list.push(
-        { id: 'panel', label: 'Panel', hint: 'proceso', to: paths.process(processId) },
+        { id: 'inbox', label: 'Bandeja', hint: 'proceso', to: paths.process(processId) },
+        { id: 'panel', label: 'Panel', hint: 'proceso', to: paths.panel(processId) },
         { id: 'definition', label: 'Definición', hint: 'normas y contexto', to: paths.definition(processId) },
         { id: 'normas', label: 'Normas', hint: 'definición', to: paths.definition(processId) },
         { id: 'contexto', label: 'Contexto', hint: 'definición', to: paths.definitionContext(processId) },

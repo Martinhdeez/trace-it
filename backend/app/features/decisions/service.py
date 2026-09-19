@@ -196,6 +196,7 @@ def _out(
         reason=decision.reason if decision else None,
         decided_at=decision.created_at if decision else None,
         review_pending=bool(review and review.requires_human),
+        values=flatten_symbols(instance.symbols) if instance.symbols is not None else None,
     )
 
 

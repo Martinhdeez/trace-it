@@ -214,7 +214,7 @@ export function Process() {
         processId={processId}
         crumbs={[{ label: 'Procesos', to: paths.processes }, { label: String(processId) }]}
       >
-        <div className="px-8 py-6">
+        <div className="px-6 py-6">
           <ErrorNotice error={process.error} />
         </div>
       </ProcessScreen>
@@ -289,7 +289,7 @@ export function Process() {
         </Overlay>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
         {published != null ? (
           <div className="mb-6">
             <ReprocessAfterPublish
@@ -419,7 +419,7 @@ function Alerts({
       : null,
     draftVersion != null
       ? {
-          to: `${paths.process(processId)}?publicar=1`,
+          to: `${paths.panel(processId)}?publicar=1`,
           text: `Borrador sin publicar · Publicar v${draftVersion}`,
         }
       : null,
@@ -788,7 +788,7 @@ function VersionChips({
       )}
       {draft != null ? (
         <Link
-          to={`${paths.process(processId)}?publicar=1`}
+          to={`${paths.panel(processId)}?publicar=1`}
           className="inline-flex items-center gap-1.5 rounded-full bg-escalar-soft px-2.5 py-1 text-[11.5px] text-escalar hover:opacity-80"
         >
           <span className="font-mono font-medium">v{draft}</span>

@@ -11,7 +11,8 @@ export function Topbar({
   actions?: ReactNode
 }) {
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between gap-4 px-8">
+    // Actions sit as far from the top edge as from the right one: the page gutter.
+    <header className="flex min-h-[54px] shrink-0 items-center justify-between gap-4 px-6 pt-6">
       <nav className="flex min-w-0 items-center gap-2 text-[13px] text-muted">
         {crumbs.map((crumb, index) => (
           <span key={`${crumb.label}-${index}`} className="flex min-w-0 items-center gap-2">
