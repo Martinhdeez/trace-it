@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, model_validator
@@ -24,7 +23,7 @@ class MailSettings(BaseSettings):
     max_message_bytes: int = Field(default=52428800, ge=1, le=52428800)
     max_pdfs_per_message: int = Field(default=10, ge=1, le=100)
     max_messages_per_poll: int = Field(default=20, ge=1, le=100)
-    worker_concurrency: Literal[1] = 1
+    worker_concurrency: int = Field(default=1, ge=1, le=1)
     timeout_seconds: int = Field(default=30, ge=1, le=120)
 
     @model_validator(mode="after")

@@ -22,6 +22,7 @@ class Worker:
         self.settings, self.api, self.mailbox_factory = settings, api, mailbox_factory
         self.root = f"/mail-ingestion/{settings.process_id}"
         self.stopping = asyncio.Event()
+        self.phase = "waiting"
 
     async def request(self, method, path="", **kwargs):
         response = await self.api.request(method, self.root + path, **kwargs)
@@ -37,7 +38,7 @@ class Worker:
             or state["next_uid"] < state["initial_uid"]
         ):
             raise RuntimeError("Persisted mailbox cursor is missing or inconsistent")
-        if state["protocol_version"] != 1 or any(
+        if state["protocol_version"] != 2 or any(
             state[key] != value
             for key, value in (
                 ("host", self.settings.imap_host),
@@ -80,9 +81,10 @@ class Worker:
             if message["state"] in ("ignored", "failed"):
                 return
             for part in message["attachments"]:
-                if part["state"] != "discovered":
+                if part["state"] not in ("discovered", "reading"):
                     continue
                 attachment = path + f"/attachments/{part['id']}"
+                await self.request("POST", attachment + "/reading", headers=headers)
                 try:
                     content = await asyncio.to_thread(mailbox.download, message["uid"], part)
                 except RejectedDocument as error:
@@ -112,6 +114,7 @@ class Worker:
                 )
 
     async def cycle(self):
+        self.phase = "polling"
         state = await self.state()
         if state["state"] != "active":
             raise RuntimeError("Mailbox requires explicit initialization or operator recovery")
@@ -123,7 +126,9 @@ class Worker:
             ready = await self.request("POST", "/claim?ready_only=true")
             if ready is None:
                 break
+            self.phase = "processing"
             await self.process(None, ready)
+        self.phase = "polling"
         if state["retry_at"] and datetime.fromisoformat(state["retry_at"]) > datetime.now(UTC):
             return
         mailbox = self.mailbox_factory(self.settings)
@@ -149,6 +154,7 @@ class Worker:
                 message = await self.request("POST", "/claim")
                 if message is None:
                     break
+                self.phase = "processing"
                 # Reset bounded message accounting when resuming an already-saved manifest.
                 mailbox.connection.remaining_bytes = self.settings.max_message_bytes
                 await self.process(mailbox, message)
@@ -160,7 +166,27 @@ class Worker:
         finally:
             await asyncio.to_thread(mailbox.__exit__, None, None, None)
 
+    async def heartbeat(self):
+        while not self.stopping.is_set():
+            with contextlib.suppress(httpx.HTTPError):
+                await self.request("POST", "/heartbeat", json={"phase": self.phase})
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self.stopping.wait(), timeout=15)
+
     async def run(self):
+        await self.state()  # Reject incompatible releases before announcing a live worker.
+        heartbeat = asyncio.create_task(self.heartbeat())
+        try:
+            await self.run_cycles()
+        finally:
+            self.stopping.set()
+            heartbeat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat
+            with contextlib.suppress(httpx.HTTPError):
+                await self.request("POST", "/heartbeat", json={"phase": "stopped"})
+
+    async def run_cycles(self):
         failures = 0
         while not self.stopping.is_set():
             try:
@@ -172,6 +198,7 @@ class Worker:
                 if failures >= 6:
                     raise RuntimeError("Backend retry budget exhausted") from None
             delay = min(3600, self.settings.poll_interval_seconds * 2**failures)
+            self.phase = "waiting"
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self.stopping.wait(), timeout=delay)
 
@@ -182,7 +209,7 @@ async def main():
     command = parser.parse_args().command
     cfg = MailSettings()
     if command == "check":
-        print("mail-ingestion protocol=1; read-only IMAP worker available")
+        print("mail-ingestion protocol=2; read-only IMAP worker available")
         return
     if command == "run" and not cfg.ingestion_enabled:
         print("Mail ingestion disabled")

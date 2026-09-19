@@ -1,4 +1,5 @@
 import imaplib
+import re
 import ssl
 
 import pytest
@@ -99,6 +100,26 @@ def test_corrupt_encrypted_and_fake_pdf():
         validate_pdf(encrypted, 20971520)
     with pytest.raises(RejectedDocument, match="size_limit"):
         validate_pdf(pdf_bytes("x"), 5)
+
+
+def recoverable_pdf(text):
+    """Break only the xref pointer, preserving readable pages and original content."""
+    return re.sub(rb"startxref\s+\d+", b"startxref\n0", pdf_bytes(text))
+
+
+def test_recoverable_pdf_is_downloaded_unchanged_for_process_extraction(local_mail):
+    import pymupdf
+
+    server, cfg = local_mail
+    content = recoverable_pdf("Readable invoice")
+    with pymupdf.open(stream=content, filetype="pdf") as pdf:
+        assert pdf.is_repaired and len(pdf) == 1
+    uid = server.deliver(synthetic_mail([("invoice.pdf", content, "pdf")]))
+    before = dict(server.messages), dict(server.flags)
+    with Mailbox(cfg) as mailbox:
+        part = mailbox.manifest(uid)["parts"][0]
+        assert mailbox.download(uid, part) == content
+    assert before == (server.messages, server.flags)
 
 
 def test_nested_message_and_zip_not_processed():

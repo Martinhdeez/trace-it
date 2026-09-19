@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class MailState(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    protocol_version: int = 1
+    protocol_version: int = 2
     id: int
     process_id: int
     host: str
@@ -17,12 +17,26 @@ class MailState(BaseModel):
     initial_uid: int | None
     next_uid: int | None
     last_poll_at: datetime | None
+    heartbeat_at: datetime | None = None
+    worker_phase: str | None = None
     retry_at: datetime | None
     error: str | None
 
 
 class GatheringSettings(BaseModel):
     email: Literal["migration-test@j-aautomation.com"] | None = None
+
+
+class HeartbeatIn(BaseModel):
+    phase: Literal["polling", "processing", "waiting", "stopped"]
+
+
+class ReadActivityIn(BaseModel):
+    through_id: int = Field(ge=0)
+
+
+class RetryAttachmentIn(BaseModel):
+    expected_attempts: int = Field(ge=0)
 
 
 class InitializeIn(BaseModel):
@@ -84,6 +98,11 @@ class AttachmentOut(BaseModel):
     execution_id: int | None
     decision_id: int | None
     decision: str | None = None
+    reason: str | None = None
+    requires_review: bool = False
+    can_retry: bool = False
+    reading_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 class MessageOut(BaseModel):
@@ -108,3 +127,34 @@ class ClaimedMessage(MessageOut):
 class MailOverview(BaseModel):
     account: MailState | None
     messages: list[MessageOut]
+    next_before_id: int | None = None
+
+
+class ActivityOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    message_id: int
+    attachment_id: int | None
+    kind: str
+    data: dict
+    created_at: datetime
+
+
+class MailActivityFeed(BaseModel):
+    items: list[ActivityOut]
+    latest_id: int
+    through_id: int
+    initialized: bool
+    unread: int
+    has_more: bool = False
+
+
+class LegacyMailAudit(BaseModel):
+    id: int
+    created_at: datetime
+    data: dict
+
+
+class MailHistory(BaseModel):
+    activities: list[ActivityOut]
+    operator_audit: list[LegacyMailAudit]

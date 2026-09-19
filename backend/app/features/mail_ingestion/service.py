@@ -17,6 +17,7 @@ from app.features.ingestion.runtime import for_process
 from app.features.ingestion.schemas import ExtractOptions
 from app.features.versions.service import lock
 
+from . import activity
 from .config import MailSettings
 from .documents import RejectedDocument, safe_name, validate_pdf
 from .model import MailAccount, MailAttachment, MailMessage
@@ -123,13 +124,31 @@ async def attachments(session, message_id):
 
 async def message_out(session, message):
     result = MessageOut.model_validate(message)
-    result.attachments = [
-        AttachmentOut.model_validate(a) for a in await attachments(session, message.id)
-    ]
+    originals = {a.id: a for a in await attachments(session, message.id)}
+    result.attachments = [AttachmentOut.model_validate(a) for a in originals.values()]
+    account = await session.get(MailAccount, message.account_id)
     for part in result.attachments:
+        part.can_retry = activity.retry_allowed(account, message, originals[part.id])
         if part.decision_id:
             decision = await session.get(Decision, part.decision_id)
             part.decision = decision.decision if decision else None
+            if decision:
+                part.reason = decision.reason
+                # Keep the original mail outcome, but only invite review if the current
+                # decision still requires it (a person may already have resolved the case).
+                latest = await session.scalar(
+                    select(Decision)
+                    .where(Decision.instance_id == part.instance_id)
+                    .order_by(Decision.id.desc())
+                    .limit(1)
+                )
+                human = await decisions.historical_human_types(
+                    session, account.process_id, [latest]
+                )
+                reviews = await decisions.decision_reviewer.for_decisions(session, [latest])
+                part.requires_review = latest.decision in human[latest.id] or bool(
+                    reviews.get(latest.id) and reviews[latest.id].requires_human
+                )
     return result
 
 
@@ -146,7 +165,7 @@ async def claim(session, account, ready_only=False):
                     ~select(MailAttachment.id)
                     .where(
                         MailAttachment.message_id == MailMessage.id,
-                        MailAttachment.state == "discovered",
+                        MailAttachment.state.in_(("discovered", "reading")),
                     )
                     .exists(),
                 ]
@@ -164,6 +183,10 @@ async def claim(session, account, ready_only=False):
         return None
     if message.attempts >= MAX_ATTEMPTS:
         message.state, message.error = "failed", "attempts_exhausted"
+        await fail_unimported(session, message, "attempts_exhausted")
+        activity.record(
+            session, account, message, "failed", error=message.error, state=message.state
+        )
         await session.commit()
         return None
     message.attempts += 1
@@ -213,6 +236,19 @@ async def manifest(session, account, message, body):
                 )
             )
         message.state = "importing" if body.parts else "ignored"
+    activity.record(
+        session,
+        account,
+        message,
+        "received",
+        pdf_count=len(body.parts),
+        state=message.state,
+        error=message.error,
+    )
+    if message.state == "failed":
+        activity.record(
+            session, account, message, "failed", state=message.state, error=message.error
+        )
     await session.commit()
     return await message_out(session, message)
 
@@ -225,12 +261,13 @@ async def attachment(session, message, attachment_id):
 
 
 async def import_pdf(session, account, message, row, content, extraction_service):
-    if row.state != "discovered":
+    if row.state not in ("discovered", "reading"):
         return AttachmentOut.model_validate(row)
     try:
         await run_in_threadpool(validate_pdf, content, MailSettings().max_pdf_bytes)
     except RejectedDocument as error:
         row.state, row.error = "failed", str(error)
+        activity.record(session, account, message, "attachment_failed", row, error=row.error)
         await session.commit()
         return AttachmentOut.model_validate(row)
     digest = hashlib.sha256(content).hexdigest()
@@ -304,26 +341,43 @@ async def import_pdf(session, account, message, row, content, extraction_service
             commit=False,
         )
         row.instance_id, row.state = upload["instance_id"], "imported"
+    activity.record(
+        session,
+        account,
+        message,
+        "imported",
+        row,
+        instance_id=row.instance_id,
+        state=row.state,
+        error=row.error,
+    )
     await session.commit()
     return AttachmentOut.model_validate(row)
 
 
 async def finish(session, account, message, token):
+    if message.state in TERMINAL:
+        return await message_out(session, message)
     message_id = message.id
     rows = await attachments(session, message.id)
-    if any(row.state == "discovered" for row in rows):
+    if any(row.state in ("discovered", "reading") for row in rows):
         raise ConflictError("Import every candidate before evaluating this message")
-    selected = [row.instance_id for row in rows if row.state in ("imported", "completed")]
+    pending = [row for row in rows if row.state == "imported"]
+    selected = [row.instance_id for row in pending]
     # No connector-controlled IDs: the backend derives ownership from its ledger.
     if selected:
+        operation_key = f"mail-message:{message.id}"
+        if any(row.state == "completed" for row in rows):
+            operation_key += ":parts:" + ",".join(str(row.id) for row in pending)
         message.state = "evaluating"
+        activity.record(session, account, message, "evaluating", instance_ids=selected)
         await session.commit()
         await decisions.run(
             session,
             account.process_id,
             author=f"mail_ingestion:{account.id}",
             instance_ids=selected,
-            idempotency_key=f"mail-message:{message.id}",
+            idempotency_key=operation_key,
         )
         await session.refresh(account)
         message = await leased(session, account, message_id, token)
@@ -340,6 +394,7 @@ async def finish(session, account, message, token):
             if decision is None:
                 raise ConflictError("Imported instance has no decision; extraction requires review")
             row.state = "completed"
+            row.completed_at = now()
             row.decision_id, row.execution_id = decision.id, decision.execution_id
             # Another MIME part/message may have found this owned instance while it was
             # still pending. Preserve that provenance and complete its result links too.
@@ -359,8 +414,28 @@ async def finish(session, account, message, token):
     )
     message.lease_until = None
     message.error = "attachment_failure" if failures else None
+    result = await message_out(session, message)
+    activity.record(
+        session,
+        account,
+        message,
+        "failed" if message.state == "failed" else "completed",
+        state=message.state,
+        error=message.error,
+        attachment_count=len(rows),
+        review_count=sum(
+            p.requires_review or p.error == "manual_pending_conflict" for p in result.attachments
+        ),
+        failed_count=sum(p.state == "failed" for p in result.attachments),
+    )
     await session.commit()
     return await message_out(session, message)
+
+
+async def fail_unimported(session, message, error):
+    for row in await attachments(session, message.id):
+        if row.state in ("discovered", "reading"):
+            row.state, row.error = "failed", error
 
 
 async def fail_message(session, message, body):
@@ -370,5 +445,17 @@ async def fail_message(session, message, body):
     message.state = "failed" if body.permanent or message.attempts >= MAX_ATTEMPTS else "retry_wait"
     message.retry_at = now() + timedelta(seconds=min(3600, 60 * 2 ** min(message.attempts, 6)))
     message.lease_until = None
+    if message.state == "failed":
+        await fail_unimported(session, message, body.error)
+    account = await session.get(MailAccount, message.account_id)
+    activity.record(
+        session,
+        account,
+        message,
+        "failed",
+        error=body.error,
+        state=message.state,
+        retry_at=message.retry_at.isoformat(),
+    )
     await session.commit()
     return await message_out(session, message)
