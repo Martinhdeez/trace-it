@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     tester_model: str = "openai:gpt-5"
     assistant_model: str = "anthropic:claude-opus-5"
     decision_reviewer_model: str = "anthropic:claude-opus-5"
+    learner_model: str = "anthropic:claude-opus-5"
     normalizer_model: str = "anthropic:claude-opus-5"
     # Helmcode, an OpenAI-compatible API: select it with `helmcode:<model>` (e.g.
     # `helmcode:deepseek-v4-flash`). Its key is read like every provider's: HELMCODE_API_KEY.
@@ -29,6 +30,13 @@ class Settings(BaseSettings):
     # Rules one background job compiles at once (Helmcode allows 5 concurrent requests
     # per model).
     compile_concurrency: int = 5
+    # `GET /health/planes`: over the last `health_window_minutes`, a plane is `down` from
+    # this error rate, `degraded` from the lower one or when its p95 span duration passes
+    # its limit (`TRACE_HEALTH_P95_MS='{"agents": 90000}'`).
+    health_window_minutes: int = 15
+    health_degraded_error_rate: float = 0.05
+    health_down_error_rate: float = 0.5
+    health_p95_ms: dict[str, int] = {"ingestion": 10_000, "agents": 60_000, "execution": 5_000}
 
 
 settings = Settings()

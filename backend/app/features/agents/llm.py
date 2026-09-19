@@ -30,6 +30,7 @@ from app.core.config import settings
 from app.features.use_cases.schemas import AgentSettings
 
 PROMPTS = Path(__file__).parent / "prompts"
+TRUNCATED = "output token limit hit"  # a `failed_attempts` error: the answer was cut
 
 
 class AgentError(TraceError):
@@ -54,6 +55,7 @@ class Trace:
     config_id: int | None = None  # the AgentConfig version it ran with (None: defaults)
     prompt_hash: str = ""  # sha256[:12] of the effective instructions
     agent: str = ""  # the agent's name: tester, compiler, reviewer, normalizer, assistant
+    cached_tokens: int = 0  # input tokens the provider served from its prompt cache
 
     def as_data(self) -> dict[str, Any]:
         return {
@@ -66,6 +68,7 @@ class Trace:
             "retries": self.retries,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "cached_tokens": self.cached_tokens,
         }
 
 
@@ -116,7 +119,7 @@ def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackMode
     def truncated(response: ModelResponse) -> bool:
         if response.finish_reason != "length":
             return False
-        failed.append({"model": response.model_name or "", "error": "output token limit hit"})
+        failed.append({"model": response.model_name or "", "error": TRUNCATED})
         return True
 
     models = [setup.settings.model or model_for(role), *setup.settings.fallback_models]
@@ -126,6 +129,17 @@ def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackMode
 def _retry_prompts(messages: list[ModelMessage]) -> list[str]:
     """What the output validators sent back to the model to fix, in order."""
     return [p.model_response() for m in messages for p in m.parts if isinstance(p, RetryPromptPart)]
+
+
+def _spent(messages: list[ModelMessage]) -> dict[str, int]:
+    """What the model calls of a failed run cost, from the answers that came back."""
+    answers = [m for m in messages if isinstance(m, ModelResponse)]
+    return {
+        "requests": len(answers),
+        "input_tokens": sum(m.usage.input_tokens for m in answers),
+        "output_tokens": sum(m.usage.output_tokens for m in answers),
+        "cached_tokens": sum(m.usage.cache_read_tokens for m in answers),
+    }
 
 
 def _cost(usage: Any) -> float | None:
@@ -180,7 +194,11 @@ async def run(
                     model_settings=model_settings or None,
                 )
             except (AgentRunError, FallbackExceptionGroup, TimeoutError) as error:
-                span.set(retry_prompts=_retry_prompts(messages), failed_attempts=failed)
+                span.set(
+                    retry_prompts=_retry_prompts(messages),
+                    failed_attempts=failed,
+                    **_spent(messages),
+                )
                 if isinstance(error, FallbackExceptionGroup):
                     tried = "; ".join(f"{f['model']}: {f['error']}" for f in failed)
                     raise AgentError(f"{role}: every model failed: {tried}") from error
@@ -206,6 +224,7 @@ async def run(
             config_id=setup.config_id,
             prompt_hash=prompt_hash,
             agent=agent.name or "",
+            cached_tokens=usage.cache_read_tokens,
         )
         span.set(**trace.as_data())
     return result.output, trace

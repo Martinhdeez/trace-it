@@ -1,0 +1,230 @@
+{
+    "since": null,
+    "runs": 1,
+    "instances_decided": 11,
+    "instances_per_second": 22.7,
+    "steps": [
+        {
+            "step": "activate_rule",
+            "count": 17,
+            "errors": 0,
+            "p50_ms": 3.0,
+            "p95_ms": 6.199999999999996
+        },
+        {
+            "step": "coder_attempt",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 4086.0,
+            "p95_ms": 4086.0
+        },
+        {
+            "step": "compile_rule",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 8618.0,
+            "p95_ms": 8618.0
+        },
+        {
+            "step": "compile_rules",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 8620.0,
+            "p95_ms": 8620.0
+        },
+        {
+            "step": "decision",
+            "count": 11,
+            "errors": 0,
+            "p50_ms": null,
+            "p95_ms": null
+        },
+        {
+            "step": "evaluate_rule",
+            "count": 17,
+            "errors": 0,
+            "p50_ms": 26.0,
+            "p95_ms": 27.0
+        },
+        {
+            "step": "export_outcomes",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 6.0,
+            "p95_ms": 6.0
+        },
+        {
+            "step": "extraction",
+            "count": 12,
+            "errors": 0,
+            "p50_ms": 5.0,
+            "p95_ms": 171.34999999999988
+        },
+        {
+            "step": "impact_check",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 19.0,
+            "p95_ms": 19.0
+        },
+        {
+            "step": "ingest_document",
+            "count": 11,
+            "errors": 0,
+            "p50_ms": 4.0,
+            "p95_ms": 150.9999999999999
+        },
+        {
+            "step": "llm_run",
+            "count": 3,
+            "errors": 0,
+            "p50_ms": 4058.0,
+            "p95_ms": 4440.5
+        },
+        {
+            "step": "load_definition",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 31.0,
+            "p95_ms": 31.0
+        },
+        {
+            "step": "load_workbook",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": null,
+            "p95_ms": null
+        },
+        {
+            "step": "native_text",
+            "count": 11,
+            "errors": 0,
+            "p50_ms": 2.0,
+            "p95_ms": 2.999999999999999
+        },
+        {
+            "step": "norm",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 4188.0,
+            "p95_ms": 4188.0
+        },
+        {
+            "step": "normalize_norm",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 4159.0,
+            "p95_ms": 4159.0
+        },
+        {
+            "step": "ocr",
+            "count": 2,
+            "errors": 2,
+            "p50_ms": 144.5,
+            "p95_ms": 229.54999999999998
+        },
+        {
+            "step": "resolution",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": null,
+            "p95_ms": null
+        },
+        {
+            "step": "run_process",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 485.0,
+            "p95_ms": 485.0
+        },
+        {
+            "step": "run_tests",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 25.0,
+            "p95_ms": 25.0
+        },
+        {
+            "step": "store_file",
+            "count": 11,
+            "errors": 0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0
+        },
+        {
+            "step": "sync_source",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 5446.0,
+            "p95_ms": 5446.0
+        },
+        {
+            "step": "upload_document",
+            "count": 11,
+            "errors": 0,
+            "p50_ms": 18.0,
+            "p95_ms": 164.9999999999999
+        },
+        {
+            "step": "upload_workbook",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 220.0,
+            "p95_ms": 220.0
+        }
+    ],
+    "llm": [
+        {
+            "model": "deepseek/deepseek-v4.1-flash",
+            "role": "compiler",
+            "calls": 1,
+            "errors": 0,
+            "retries": 0,
+            "input_tokens": 5229,
+            "output_tokens": 656,
+            "cached_tokens": 0,
+            "requests": 1,
+            "fallbacks": 0,
+            "truncations": 0
+        },
+        {
+            "model": "deepseek/deepseek-v4.1-flash",
+            "role": "normalizer",
+            "calls": 1,
+            "errors": 0,
+            "retries": 0,
+            "input_tokens": 4267,
+            "output_tokens": 637,
+            "cached_tokens": 0,
+            "requests": 1,
+            "fallbacks": 0,
+            "truncations": 0
+        },
+        {
+            "model": "deepseek/deepseek-v4.1-flash",
+            "role": "tester",
+            "calls": 1,
+            "errors": 0,
+            "retries": 0,
+            "input_tokens": 2570,
+            "output_tokens": 1129,
+            "cached_tokens": 0,
+            "requests": 1,
+            "fallbacks": 0,
+            "truncations": 0
+        }
+    ],
+    "decisions_by_outcome": {
+        "ESCALAR": 1,
+        "NO_PAGAR": 1,
+        "PAGAR": 10
+    },
+    "failures": {
+        "MISSING_DATA": 1,
+        "RULE_ERROR": 0,
+        "RULE_NEEDS_DATA": 0,
+        "RULE_CONFLICT": 0
+    },
+    "escalated": 0,
+    "pending": 0
+}

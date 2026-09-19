@@ -45,7 +45,7 @@ backend/
 
 Inside a feature: `model.py` (SQLAlchemy tables), `schemas.py` (Pydantic in/out), `service.py` (logic, takes the session), `router.py` (thin: validate, call the service, return), `tests/`. A router runs no SQL. A feature imports another's `model.py` or `service.py`, never its `router.py`. Errors are `TraceError` subclasses (`app/common/exceptions.py`); the API maps them to status codes. Naming and vocabulary: `docs/CONVENTIONS.md`.
 
-Agents (tester, compiler, assistant, normalizer) run on PydanticAI: ADR 0006 and `features/agents/llm.py`.
+Agents (tester, compiler, assistant, normalizer, decision reviewer, learner) run on PydanticAI: ADR 0006 and `features/agents/llm.py`.
 
 ## Rule life cycle
 
@@ -63,7 +63,7 @@ A manager saves a rule in plain language (`POST /processes/{id}/rules`); nobody 
 
 ## Use cases and agent configuration
 
-A **use case** is what the app is used for (e.g. "Invoice payment"): its `description` (domain conventions) and how its agents work. A **process** is one set of rules inside a use case (`processes.use_case_id`); `ProcessOut.description` is its use case's. What an agent does is not in the code (ADR 0011): the platform prompt is a file in `features/agents/prompts/`, the same for every use case, and each use case adds a versioned configuration per role (`compiler`, `tester`, `assistant`, `normalizer`): model, fallback models, per-request timeout, domain guidance, model settings, limits, examples. A role without one runs with `TRACE_<ROLE>_MODEL` and the defaults in `compiler.py`. Every agent event records `config_id` and `prompt_hash` (sha256[:12] of the effective instructions). The pack file `processes/<pack>/use-case.json` seeds it (`processes/README.md`).
+A **use case** is what the app is used for (e.g. "Invoice payment"): its `description` (domain conventions) and how its agents work. A **process** is one set of rules inside a use case (`processes.use_case_id`); `ProcessOut.description` is its use case's. What an agent does is not in the code (ADR 0011): the platform prompt is a file in `features/agents/prompts/`, the same for every use case, and each use case adds a versioned configuration per role (`compiler`, `tester`, `assistant`, `normalizer`, `decision_reviewer`, `learner`): model, fallback models, per-request timeout, domain guidance, model settings, limits, examples. A role without one runs with `TRACE_<ROLE>_MODEL` and the defaults in `compiler.py`. Every agent event records `config_id` and `prompt_hash` (sha256[:12] of the effective instructions). The pack file `processes/<pack>/use-case.json` seeds it (`processes/README.md`).
 
 | Endpoint | Who | What |
 |---|---|---|
@@ -79,6 +79,8 @@ chain: ["deepseek-v4-flash", "glm5.3", "qwen3.6"]
 failed_attempts: [{"model": "deepseek-v4-flash", "error": "ModelAPIError: Connection error."}]
 model: "glm5.3"
 ```
+
+The [learning flow](learning.md) analyzes past cases on demand and prepares deterministic norms or subjective review guidance. A manager approves each validated norm before adoption. Preparation never enters the live rule-creation path.
 
 **The client's norm** (ADR 0017): `POST /processes/{id}/norm` (manager), body `{"text": ...}`, the norm as the client wrote it, in any language. The normalizer agent keeps each sentence as one **norm rule** (`norm_rules`, the unit the client owns) and splits it into atomic checks: ordinary rules (one code, one decision), compiled in one background job, at most `TRACE_COMPILE_CONCURRENCY` (default 5) at once, linked by `rules.norm_rule_id`, with the normalizer's reading in `report.norm`. Statements that are not checkable conditions become the norm rule's `policies`. `GET /processes/{id}/norm-rules` lists each norm rule with its checks. `make eval-norm` runs norm -> normalizer -> compiler -> engine on batch 1 against the golden outcomes (opt-in, real LLMs).
 

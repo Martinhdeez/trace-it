@@ -26,6 +26,8 @@ activating rules, document extraction and source uploads need it. CORS is open.
 | Rule | `GET /rules/{id}` | `code`, `tests`, `report` (`valid`, `tests`, `discrepancies`, `attempts`, `reviews`; `needs_data` when blocked) |
 | Norm | `POST /processes/{id}/norm`, `GET /processes/{id}/norm-rules` | the client's norm split into norm rules, each with its rules |
 | Rule lifecycle | `POST /processes/{id}/rules` (compiles in the background), `POST /rules/{id}/compile`, `GET /rules/{id}/impact`, `POST /rules/{id}/activate`, `POST /rules/{id}/retire` | impact = `unchanged`, `changes`, `conflicts`; activate/retire need a manager |
+| Learning | `POST /processes/{id}/learning`, `GET /processes/{id}/learning` | Manager-only analysis and proposed norms; [full flow](learning.md) |
+| Norm proposal | `GET /norm-proposals/{id}`, `POST .../validate`, `POST .../approve`, `POST .../reject` | Isolated previews; explicit manager adoption with a validation ID |
 | Sources | `GET /processes/{id}/sources` | current load per source: rows count, origin, `loaded_at` |
 | Source rows | `GET /processes/{id}/sources/{name}` | same plus `data` |
 | Sync the ERP | `POST /processes/{id}/sources/{name}/sync`, `GET .../diff` | |
@@ -38,6 +40,12 @@ activating rules, document extraction and source uploads need it. CORS is open.
 | Workbook | `POST /processes/{id}/sources/workbook` (multipart `file`, optional `cut_off_date`) | appends supplier/order snapshots; never replaces ERP |
 | Re-extract | `POST /instances/{id}/extract` (JSON `{}` or reader options) | pending documents only; current snapshots, preserved evidence; 409 if already decided |
 | Users | `GET /users`, `POST /users`, `POST /login`, `GET /me` | roles `manager`, `operator` |
+| Metrics | `GET /processes/{id}/metrics?since=` | runs, step durations, LLM tokens by model and role, outcomes (unchanged) |
+| Monitoring: ingestion | `GET /processes/{id}/metrics/ingestion?since=`, `GET /metrics/ingestion` (all processes) | `files`, `files_per_second`, `pages`, `ocr_calls`, `vision_calls`, `judge_calls`, `focused_reads`, `cache_hits`, `abstentions`, `abstentions_by_field`, `steps[]` |
+| Monitoring: agents | `GET /processes/{id}/metrics/agents?since=`, `GET /metrics/agents` | tokens in/out/cached, requests, retries, fallbacks, truncations `by_model`, `by_role`, `by_rule`, `by_norm_rule`, `by_use_case`; `per_hour[]`; `compile` (success rate, attempts); `norms[]` (tokens, `seconds_to_active`) |
+| Monitoring: execution | `GET /processes/{id}/metrics/execution?since=`, `GET /metrics/execution` | `runs`, `instances_per_second`, `rules[]` (p50/p95 per rule), `decisions_by_outcome`, `failures`, `escalated`, `pending`, `resolutions_by_author`, `resolution_p50_s`/`p95_s` |
+| Plane health | `GET /health/planes` | per plane `status` `ok`/`degraded`/`down`, `error_rate`, `p95_ms`, `reason` (thresholds `TRACE_HEALTH_*`) |
+| Live feed | `GET /events/stream?plane=&process_id=&after=` | server-sent events: `event` = plane, `id` = span id, `data` = a span as in `GET /traces`; `: ping` every idle second. Use `EventSource` |
 
 ## Shapes worth knowing
 

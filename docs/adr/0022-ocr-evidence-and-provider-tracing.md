@@ -82,6 +82,9 @@ the shared event schema and OpenTelemetry export.
    tokens. Token totals include only network attempts, never replayed historical
    usage. Existing agent `llm` metrics remain separate. These are reported usage
    counters, not a complete invoice from the provider: unreported usage is unknown.
+   `provider_call` belongs to the ingestion monitoring plane, including its health
+   and live event stream. The ingestion plane exposes the same `providers` totals
+   through its process and global endpoints; agent `llm_run` remains in `agents`.
 
 ## Consequences
 

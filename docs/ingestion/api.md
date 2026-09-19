@@ -137,6 +137,10 @@ counts failed or blocked operations. Input/output token totals exclude replay.
 Unavailable token counts cannot establish zero actual cost; these counters are
 reported usage, not a billing statement. Existing agent `llm` totals are unchanged.
 
+The same `providers` totals appear in `GET /processes/{id}/metrics/ingestion` and
+`GET /metrics/ingestion`. Provider operations are classified as ingestion in
+`GET /events/stream?plane=ingestion` and the monitoring-plane health summaries.
+
 ## Batches and errors
 
 `POST /v1/batches` accepts multipart `files` and returns 202.
