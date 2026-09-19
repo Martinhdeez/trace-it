@@ -61,7 +61,8 @@ A definition without `use_case` gets a use case of its own, with the process's n
   instructions). Case data goes in the user message, so the hash means something.
 - Secrets are referenced by variable name (e.g. in `sources.json`), never stored inline.
 
-Not implemented: presets (`quality`, `cheap`, `fast`), model fallback chains, per-role
+Model fallback chains and a per-request timeout were added later (ADR 0019).
+Not implemented: presets (`quality`, `cheap`, `fast`), per-role
 retry and request limits, exporting a version back to a file, and an event for each
 activation (the version row keeps author, note and time).
 
