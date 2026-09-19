@@ -52,10 +52,13 @@ export type ProposalStatus = Proposal['status']
 export type DecisionProposalPayload = {
   proposed: string
   why?: string[]
-  options?: { decision: string; consequence: string }[]
+  /** `rule`: the English rule that justifies the option, null on a "no rule" answer. */
+  options?: { decision: string; consequence: string; rule?: string | null }[]
   escalation_reason?: string | null
   fired_rules?: number[]
-  proposed_rule?: { text: string; type: RuleIn['type'] }
+  proposed_rule?: { text: string; type: RuleIn['type'] } | null
+  /** Spanish: why no rule should decide cases like this one (a person always looks). */
+  no_rule_reason?: string | null
 }
 /**
  * `payload` of a reviewer-agent rule suggestion (`channel: escalation`, `kind: rule`).
@@ -72,6 +75,11 @@ export type RuleProposalPayload = {
   decision: string
   resolved_as: string
   version_id: number
+  /**
+   * A "no rule" answer: `text` is empty and this Spanish reason is also the `rationale`.
+   * The manager rejects it, or writes a rule in the textarea and accepts that.
+   */
+  no_rule_reason?: string | null
 }
 /** `outcome` of a settled proposal: accepted rule suggestion, rejection or expiry. */
 export type ProposalOutcome = {

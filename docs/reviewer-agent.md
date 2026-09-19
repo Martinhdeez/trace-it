@@ -35,11 +35,23 @@ FE-4 and FE-5 in #162 ([their merge notes](#fe-4fe-5-merge-notes)).
    fired rule's own reason (`escalation.rule_evidence`), the other cases that reason names
    with their symbols and `same_as_case` (`escalation.related_cases`: the other invoice of
    a duplicate order), and the suggestions the manager already rejected on this case with
-   their reason (`rejected_suggestions`). Its answer is sent back once when it names the
+   their reason (`rejected_suggestions`). Its answer is sent back (up to twice) when it names the
    case or a related one, repeats a rejected rule, or quotes an identifier (a nif, an iban,
    an order) that is none of the values it was shown. It runs on the `assistant` role's
    settings with reasoning off and `max_tokens` 1500: about 450 output tokens a call,
    against 3.5k per call (9-15k with the fallbacks) when reasoning ran into the cap.
+   The manager's own reason (`resolution.reason`) is its main input. Its answer is short
+   by contract: `summary` one line (180 characters), `rationale` at most two sentences (320),
+   `text` at most 600 characters; a longer answer is sent back, up to two retries.
+   **"No rule" is a valid answer**: when the reason rests on something outside the data (a
+   call, a document) or no condition separates the cases, the agent answers
+   `no_rule_reason` instead of forcing a rule. It is stored as an ordinary open proposal
+   with `payload.text: ""`, `payload.no_rule_reason`, the reason as `rationale` and a
+   `summary` that starts `Sin regla:`. It uses the existing statuses: the manager dismisses
+   it with Rechazar, or writes a rule in the textarea and accepts that. Accepting it with no
+   text is 409. Why a stored proposal and not a 409: it is traced and auditable like any
+   agent answer, it survives a reload without a second model call, and the current card
+   already renders it (summary and rationale, an empty textarea, Aceptar disabled).
 6. **The manager decides on the suggestion:**
    - **Accept** → `POST /proposals/{id}/accept`. The new rule is created in the process
      draft and `payload.replaces` is retired there; the rule compiles in the background.
@@ -121,6 +133,16 @@ typed contract is already regenerated (`frontend/openapi.json`, `src/api/schema.
   `edited: true, original_text` when the text was edited): link to the Rule
   page (`/rules/{rule_id}`, status `compiling` → `draft`) and to Panel → Publicar.
 - Rechazar → `POST /proposals/{id}/reject` `{reason}`.
+- A "no rule" answer (`payload.no_rule_reason` set, `payload.text` empty) already renders
+  sensibly in the current card: `summary` ("Sin regla: ..."), the reason as `rationale`, an
+  empty textarea and Aceptar disabled until the manager writes a rule. When Carlos styles
+  it: show it as an answer, not a form. Title "Sin regla: que lo siga decidiendo una
+  persona", the reason below, hide "Sustituye a la regla N" and the textarea, and offer
+  "Entendido" (Rechazar with reason "Sin regla") plus an optional "Escribir yo la regla"
+  that opens the textarea (Aceptar with `text`).
+- The decision proposal (`Suggested`) can show each option's `rule` under its
+  `consequence`, and `payload.no_rule_reason` as a line "Sin regla: ..." when set; today
+  it shows the consequence only, which already pairs the decision with its rule in Spanish.
 - A suggestion that comes back `superseded` shows why from `outcome.cause`: `ignored`,
   `version_published`, `case_changed`, `superseded`.
 - Done when resolve works with the card untouched and Aceptar stages the rule.

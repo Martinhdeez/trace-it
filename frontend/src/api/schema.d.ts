@@ -4267,6 +4267,8 @@ export interface components {
             decision: string;
             /** Consequence */
             consequence: string;
+            /** Rule */
+            rule?: string | null;
         };
         /** PaginationConfig */
         PaginationConfig: {
@@ -5500,12 +5502,11 @@ export interface components {
             /** Evidence */
             evidence: string[];
             /** Proposed Rule */
-            proposed_rule: string;
-            /**
-             * Proposed Type
-             * @enum {string}
-             */
-            proposed_type: "requirement" | "prohibition";
+            proposed_rule?: string | null;
+            /** Proposed Type */
+            proposed_type?: ("requirement" | "prohibition") | null;
+            /** No Rule Reason */
+            no_rule_reason?: string | null;
         };
         /**
          * SymbolExtraction

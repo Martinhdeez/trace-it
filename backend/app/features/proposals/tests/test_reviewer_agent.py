@@ -124,6 +124,7 @@ async def test_the_suggestion_amends_the_rule_that_escalated(monkeypatch):
         "decision": "ESCALAR",
         "resolved_as": "PAGAR",
         "version_id": engine["version_id"],
+        "no_rule_reason": None,
     }
     [messages] = seen["assistant"]
     context = user_json(messages)
@@ -165,6 +166,57 @@ def naming(other: str):
         ]
 
     return run_dataset
+
+
+NO_RULE = {
+    "summary": "Sin regla: un IBAN distinto del maestro sigue yendo a una persona",
+    "no_rule_reason": "La persona pagó tras llamar al proveedor: ningún dato distingue este "
+    "cambio de cuenta de un fraude.",
+    "evidence": ["resolution:1", "symbol:iban"],
+}
+
+
+async def test_no_rule_is_a_proposal_the_manager_dismisses(monkeypatch):
+    """The agent may answer that no rule should learn the case: stored with an empty text
+    and the Spanish reason as rationale. It cannot be accepted as is; rejecting it and
+    asking again sends a second "no rule" back, so the manager gets a rule."""
+    async with client() as api:
+        _, headers, iid, seen = await resolved(api, monkeypatch, [])
+        resolution = (await api.get(f"/instances/{iid}")).json()["decisions"][-1]["id"]
+        no_rule = {**NO_RULE, "evidence": [f"resolution:{resolution}", "symbol:iban"]}
+        seen["assistant"] = []
+        monkeypatch.setattr(
+            llm, "model_for", per_role({"assistant": [no_rule, no_rule, SUGGESTION]}, seen)
+        )
+        first = await suggest(api, iid, headers)
+        accept = await api.post(f"/proposals/{first['id']}/accept", headers=headers)
+        r = await api.post(
+            f"/proposals/{first['id']}/reject", json={"reason": "Sí hay regla"}, headers=headers
+        )
+        assert r.status_code == 200, r.text
+        second = await suggest(api, iid, headers)
+
+    assert first["summary"] == NO_RULE["summary"]
+    assert first["rationale"] == NO_RULE["no_rule_reason"]
+    assert first["payload"]["text"] == "" and first["payload"]["type"] == "prohibition"
+    assert first["payload"]["no_rule_reason"] == NO_RULE["no_rule_reason"]
+    assert accept.status_code == 409 and "no trae regla" in accept.json()["message"]
+    assert second["payload"]["text"] == SUGGESTION["text"]
+    assert user_json(seen["assistant"][-1])["rejected_suggestions"] == [
+        {"text": "", "reject_reason": "Sí hay regla"}
+    ]
+    [retry] = retry_prompts(seen["assistant"][-1])
+    assert "already rejected a no-rule answer" in retry
+
+
+async def test_a_long_summary_is_sent_back(monkeypatch):
+    wordy = {**SUGGESTION, "summary": "Escala un IBAN distinto. Salvo pedido pendiente."}
+    async with client() as api:
+        _, headers, iid, seen = await resolved(api, monkeypatch, [wordy, SUGGESTION])
+        proposal = await suggest(api, iid, headers)
+    assert proposal["summary"] == SUGGESTION["summary"]
+    [retry] = retry_prompts(seen["assistant"][-1])
+    assert "Be concise: summary must be one line and one sentence" in retry
 
 
 async def test_the_agent_sees_the_related_cases_and_cannot_invent_their_values(monkeypatch):
