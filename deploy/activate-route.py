@@ -4,6 +4,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,13 +19,22 @@ snippet = b"""\t# trace-it managed subpath
 \t}
 
 """
+route = b"/nexia/trace-it"
+if sys.argv[1:] == ["--erp"]:
+    marker = b"# trace-it ERP managed subpath"
+    snippet = snippet.replace(b"# trace-it managed subpath", marker)
+    snippet = snippet.replace(b"/nexia/trace-it", b"/nexia/erp")
+    snippet = snippet.replace(b"127.0.0.1:18173", b"127.0.0.1:18009")
+    route = b"/nexia/erp"
+elif sys.argv[1:]:
+    raise SystemExit("Usage: activate-route.py [--erp]")
 if marker in original:
     if snippet not in original:
         raise SystemExit(
             "Existing trace-it route differs; inspect it instead of overwriting it"
         )
     raise SystemExit(0)
-if b"/nexia/trace-it" in original:
+if route in original:
     raise SystemExit("An existing trace-it route needs operator review")
 anchor = b"\thandle_path /nexia/* {"
 if original.count(anchor) != 1 or original.count(b"gex-dashboard.hopto.org {") != 1:

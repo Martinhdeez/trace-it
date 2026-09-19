@@ -141,7 +141,7 @@ def recorded_call(
     # A 429/503 was refused, not delivered, so the journal lets the same request go again:
     # wait (Retry-After, else exponential with jitter) within a total budget, then give up
     # and let the caller's fallback chain take over. Each attempt is its own provider_call.
-    budget = float(os.getenv("TRACEPAY_PROVIDER_RETRY_MAX_WAIT_S", "30"))
+    budget = float(os.getenv("TRACEPAY_PROVIDER_RETRY_MAX_WAIT_S", "2"))
     waited, retry = 0.0, {}
     for attempt in range(1, 100):
         try:
