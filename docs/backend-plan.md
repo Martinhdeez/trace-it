@@ -48,6 +48,7 @@ The (a) and (c) rows, and who covers them:
 | B6 | The 4 ingestion errors in the last demo | none (the fix may need #93) | investigation: yes | M |
 | B7 | Batch-2 rehearsal with manager auth and step 1d | #92 (done), B8 | yes | M |
 | B8 | Verify `tools/` and `make demo` after #92 | #92 (done) | yes | S |
+| B10 | Plane metrics for the three dashboards ([observability-dashboards.md](observability-dashboards.md)): one typed response per plane, agent `known_cost_usd`/`unpriced_requests` priced like ingestion, a `traces` drill-down link on every row, new `/traces` filters | none | yes | S |
 
 ### B0. Automated frontend-backend check
 

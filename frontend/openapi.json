@@ -3745,7 +3745,7 @@
           "traces"
         ],
         "summary": "Recent spans, newest first",
-        "description": "Every step the system took, as spans of the audit trail (ADR 0018). Filter by process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, `sync_source`, `upload_document`...) or status (`ok`, `error`).",
+        "description": "Every step the system took, as spans of the audit trail (ADR 0018). Filter by process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, `sync_source`, `upload_document`...), status (`ok`, `error`), plane, time window (`since` <= start < `until`), rule, norm rule, use case, or a span's `model`, `role`, `agent` (the agents plane's `by_role` key), `provider` and `operation`. Every row of `/metrics/{plane}` carries its drill-down here as `traces`.",
         "operationId": "listSpans",
         "parameters": [
           {
@@ -3794,6 +3794,184 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "name": "plane",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Plane"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Plane"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rule Id"
+            }
+          },
+          {
+            "name": "norm_rule_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Norm Rule Id"
+            }
+          },
+          {
+            "name": "use_case_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Use Case Id"
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
+            }
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "operation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation"
             }
           },
           {
@@ -4030,14 +4208,14 @@
         }
       }
     },
-    "/processes/{process_id}/metrics/{plane}": {
+    "/processes/{process_id}/metrics/ingestion": {
       "get": {
         "tags": [
           "traces"
         ],
-        "summary": "One monitoring plane of a process: ingestion, agents or execution",
-        "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, provider attempts, network requests, replays and reported tokens), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: tokens by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution). Each has `steps` with count, errors, p50/p95. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
-        "operationId": "getProcessPlaneMetrics",
+        "summary": "The ingestion plane of a process",
+        "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
+        "operationId": "getProcessIngestionMetrics",
         "parameters": [
           {
             "name": "process_id",
@@ -4046,14 +4224,6 @@
             "schema": {
               "type": "integer",
               "title": "Process Id"
-            }
-          },
-          {
-            "name": "plane",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/Plane"
             }
           },
           {
@@ -4080,18 +4250,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/IngestionMetrics"
-                    },
-                    {
-                      "$ref": "#/components/schemas/AgentsMetrics"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ExecutionMetrics"
-                    }
-                  ],
-                  "title": "Response Getprocessplanemetrics"
+                  "$ref": "#/components/schemas/IngestionMetrics"
                 }
               }
             }
@@ -4109,21 +4268,73 @@
         }
       }
     },
-    "/metrics/{plane}": {
+    "/metrics/ingestion": {
       "get": {
         "tags": [
           "traces"
         ],
-        "summary": "One monitoring plane across every process",
-        "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, provider attempts, network requests, replays and reported tokens), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: tokens by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution). Each has `steps` with count, errors, p50/p95. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
-        "operationId": "getPlaneMetrics",
+        "summary": "The ingestion plane across every process",
+        "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
+        "operationId": "getIngestionMetrics",
         "parameters": [
           {
-            "name": "plane",
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionMetrics"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/processes/{process_id}/metrics/agents": {
+      "get": {
+        "tags": [
+          "traces"
+        ],
+        "summary": "The agents plane of a process",
+        "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
+        "operationId": "getProcessAgentsMetrics",
+        "parameters": [
+          {
+            "name": "process_id",
             "in": "path",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/Plane"
+              "type": "integer",
+              "title": "Process Id"
             }
           },
           {
@@ -4150,18 +4361,169 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/IngestionMetrics"
-                    },
-                    {
-                      "$ref": "#/components/schemas/AgentsMetrics"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ExecutionMetrics"
-                    }
-                  ],
-                  "title": "Response Getplanemetrics"
+                  "$ref": "#/components/schemas/AgentsMetrics"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics/agents": {
+      "get": {
+        "tags": [
+          "traces"
+        ],
+        "summary": "The agents plane across every process",
+        "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
+        "operationId": "getAgentsMetrics",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentsMetrics"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/processes/{process_id}/metrics/execution": {
+      "get": {
+        "tags": [
+          "traces"
+        ],
+        "summary": "The execution plane of a process",
+        "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
+        "operationId": "getProcessExecutionMetrics",
+        "parameters": [
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionMetrics"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics/execution": {
+      "get": {
+        "tags": [
+          "traces"
+        ],
+        "summary": "The execution plane across every process",
+        "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
+        "operationId": "getExecutionMetrics",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionMetrics"
                 }
               }
             }
@@ -5815,6 +6177,9 @@
             "type": "array",
             "title": "Steps"
           },
+          "total": {
+            "$ref": "#/components/schemas/TokenStats"
+          },
           "llm": {
             "items": {
               "$ref": "#/components/schemas/LlmStats"
@@ -5883,6 +6248,7 @@
           "spans",
           "errors",
           "steps",
+          "total",
           "llm",
           "by_model",
           "by_role",
@@ -8007,7 +8373,8 @@
           "resolution_p95_s",
           "open_alerts"
         ],
-        "title": "ExecutionMetrics"
+        "title": "ExecutionMetrics",
+        "description": "The engine never calls a model (ADR 0002): this plane spends 0 tokens by design."
       },
       "ExecutionOut": {
         "properties": {
@@ -8887,7 +9254,8 @@
           "abstentions",
           "abstentions_by_field"
         ],
-        "title": "IngestionMetrics"
+        "title": "IngestionMetrics",
+        "description": "Tokens and USD cost per provider in `providers`; no LLM run of the agents counts."
       },
       "InstanceDetail": {
         "properties": {
@@ -9229,6 +9597,27 @@
             "type": "integer",
             "title": "Truncations",
             "default": 0
+          },
+          "known_cost_usd": {
+            "type": "number",
+            "title": "Known Cost Usd",
+            "default": 0
+          },
+          "unpriced_requests": {
+            "type": "integer",
+            "title": "Unpriced Requests",
+            "default": 0
+          },
+          "traces": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traces"
           }
         },
         "type": "object",
@@ -9590,6 +9979,10 @@
               }
             ],
             "title": "Seconds To Active"
+          },
+          "traces": {
+            "type": "string",
+            "title": "Traces"
           }
         },
         "type": "object",
@@ -9601,7 +9994,8 @@
           "input_tokens",
           "output_tokens",
           "rules_activated",
-          "seconds_to_active"
+          "seconds_to_active",
+          "traces"
         ],
         "title": "NormStats",
         "description": "One norm submitted: what its agents spent, and when its rules went live."
@@ -10259,6 +10653,17 @@
             "type": "integer",
             "title": "Unpriced Requests",
             "default": 0
+          },
+          "traces": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traces"
           }
         },
         "type": "object",
@@ -10955,6 +11360,17 @@
               }
             ],
             "title": "P95 Ms"
+          },
+          "traces": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traces"
           }
         },
         "type": "object",
@@ -12128,6 +12544,17 @@
               }
             ],
             "title": "P95 Ms"
+          },
+          "traces": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traces"
           }
         },
         "type": "object",
@@ -12377,6 +12804,17 @@
           "cached_tokens": {
             "type": "integer",
             "title": "Cached Tokens"
+          },
+          "traces": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traces"
           }
         },
         "type": "object",
@@ -12437,6 +12875,25 @@
           "cached_tokens": {
             "type": "integer",
             "title": "Cached Tokens"
+          },
+          "known_cost_usd": {
+            "type": "number",
+            "title": "Known Cost Usd"
+          },
+          "unpriced_requests": {
+            "type": "integer",
+            "title": "Unpriced Requests"
+          },
+          "traces": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traces"
           }
         },
         "type": "object",
@@ -12450,7 +12907,9 @@
           "truncations",
           "input_tokens",
           "output_tokens",
-          "cached_tokens"
+          "cached_tokens",
+          "known_cost_usd",
+          "unpriced_requests"
         ],
         "title": "TokenStats",
         "description": "LLM calls grouped by one key: a model, a role, a rule, a norm rule or a use case."

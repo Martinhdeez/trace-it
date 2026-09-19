@@ -27,16 +27,49 @@ router = APIRouter(tags=["traces"])
     summary="Recent spans, newest first",
     description="Every step the system took, as spans of the audit trail (ADR 0018). Filter by "
     "process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, "
-    "`sync_source`, `upload_document`...) or status (`ok`, `error`).",
+    "`sync_source`, `upload_document`...), status (`ok`, `error`), plane, time window "
+    "(`since` <= start < `until`), rule, norm rule, use case, or a span's `model`, `role`, "
+    "`agent` (the agents plane's `by_role` key), `provider` and `operation`. Every row of "
+    "`/metrics/{plane}` carries its drill-down here as `traces`.",
 )
 async def list_spans(
     session: Session,
     process_id: int | None = None,
     name: str | None = None,
     status: str | None = None,
+    plane: Plane | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    rule_id: int | None = None,
+    norm_rule_id: int | None = None,
+    use_case_id: int | None = None,
+    model: str | None = None,
+    role: str | None = None,
+    agent: str | None = None,
+    provider: str | None = None,
+    operation: str | None = None,
     limit: int = Query(100, ge=1, le=1000),
 ) -> list[SpanOut]:
-    return await service.list_spans(session, process_id, name, status, limit)
+    return await service.list_spans(
+        session,
+        process_id,
+        name,
+        status,
+        limit,
+        plane=plane,
+        since=since,
+        until=until,
+        rule_id=rule_id,
+        norm_rule_id=norm_rule_id,
+        use_case_id=use_case_id,
+        data={
+            "model": model,
+            "role": role,
+            "agent": agent,
+            "provider": provider,
+            "operation": operation,
+        },
+    )
 
 
 @router.get(
@@ -87,42 +120,52 @@ async def get_process_metrics(
 
 PLANES_DOC = (
     "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span "
-    "name to one): `ingestion` (upload, store, extraction, native text, OCR, vision, "
-    "workbook, source sync: files/s, pages, calls, cache hits, abstentions, provider "
-    "attempts, network requests, replays and reported tokens), `agents` "
+    "name to one), never mixed into one total (`docs/observability-dashboards.md`): "
+    "`ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source "
+    "sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, "
+    "network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` "
     "(normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, "
-    "impact, activation: tokens by model, role, rule, norm rule, use case and hour, "
-    "fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, "
-    "decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the "
-    "human queue, time to resolution). Each has `steps` with count, errors, p50/p95. "
-    "Provider token totals exclude journal replay and reflect reported usage, not billing. "
-    "`since` keeps what happened from that moment on."
+    "impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use "
+    "case and hour, fallbacks, truncations, compile success, norm to active), `execution` "
+    "(runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, "
+    "escalation causes, the human queue, time to resolution; 0 tokens by design). Each has "
+    "`steps` with count, errors, p50/p95. Cost is USD where the model's price is known; "
+    "`unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its "
+    "drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect "
+    "reported usage, not billing. `since` keeps what happened from that moment on."
 )
-PlaneOut = IngestionMetrics | AgentsMetrics | ExecutionMetrics
 
 
-@router.get(
-    "/processes/{process_id}/metrics/{plane}",
-    operation_id="getProcessPlaneMetrics",
-    summary="One monitoring plane of a process: ingestion, agents or execution",
-    description=PLANES_DOC,
-)
-async def get_process_plane_metrics(
-    process_id: int, plane: Plane, session: Session, since: datetime | None = None
-) -> PlaneOut:
-    return await service.plane_metrics(session, plane, process_id, since)
+def _plane_routes(plane: Plane, out: type) -> None:
+    """`GET /metrics/{plane}` and `GET /processes/{id}/metrics/{plane}`, one typed response
+    each, so the OpenAPI contract names every field of every plane."""
+    name = plane.value.capitalize()
+
+    async def of_process(process_id: int, session: Session, since: datetime | None = None):
+        return await service.plane_metrics(session, plane, process_id, since)
+
+    async def everywhere(session: Session, since: datetime | None = None):
+        return await service.plane_metrics(session, plane, None, since)
+
+    router.get(
+        f"/processes/{{process_id}}/metrics/{plane.value}",
+        operation_id=f"getProcess{name}Metrics",
+        summary=f"The {plane.value} plane of a process",
+        description=PLANES_DOC,
+        response_model=out,
+    )(of_process)
+    router.get(
+        f"/metrics/{plane.value}",
+        operation_id=f"get{name}Metrics",
+        summary=f"The {plane.value} plane across every process",
+        description=PLANES_DOC,
+        response_model=out,
+    )(everywhere)
 
 
-@router.get(
-    "/metrics/{plane}",
-    operation_id="getPlaneMetrics",
-    summary="One monitoring plane across every process",
-    description=PLANES_DOC,
-)
-async def get_plane_metrics(
-    plane: Plane, session: Session, since: datetime | None = None
-) -> PlaneOut:
-    return await service.plane_metrics(session, plane, None, since)
+_plane_routes(Plane.ingestion, IngestionMetrics)
+_plane_routes(Plane.agents, AgentsMetrics)
+_plane_routes(Plane.execution, ExecutionMetrics)
 
 
 @router.get(
