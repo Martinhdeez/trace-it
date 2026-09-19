@@ -23,6 +23,7 @@ from pydantic_ai.models import Model
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.usage import UsageLimits
 
 from app.common.exceptions import TraceError
 from app.core import events
@@ -79,6 +80,10 @@ class Setup:
     settings: AgentSettings = field(default_factory=AgentSettings)
     config_id: int | None = None
 
+    local_only: bool = False
+    local_endpoint: str | None = None
+    execution_hash: str | None = None
+
     def limit(self, name: str, default: float) -> float:
         return self.settings.limits.get(name, default)
 
@@ -93,9 +98,17 @@ def model_for(role: str) -> Model | str:
     return getattr(settings, f"{role}_model")
 
 
-def resolve(model: Model | str) -> Model | str:
+def resolve(model: Model | str, local_endpoint: str | None = None) -> Model | str:
     """`helmcode:<model>` runs on Helmcode's OpenAI-compatible API (EU inference, key in
     `HELMCODE_API_KEY`); any other `provider:model` string goes to PydanticAI as is."""
+    if isinstance(model, str) and model.startswith("local:"):
+        return OpenAIChatModel(
+            model.removeprefix("local:"),
+            provider=OpenAIProvider(
+                base_url=local_endpoint or settings.local_base_url,
+                api_key=os.environ.get("LOCAL_LLM_API_KEY") or "local",
+            ),
+        )
     if isinstance(model, str) and model.startswith("helmcode:"):
         provider = OpenAIProvider(
             base_url=settings.helmcode_base_url, api_key=os.environ.get("HELMCODE_API_KEY")
@@ -123,7 +136,19 @@ def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackMode
         return True
 
     models = [setup.settings.model or model_for(role), *setup.settings.fallback_models]
-    return FallbackModel(*map(resolve, models), fallback_on=[on_failure, truncated])
+    if setup.local_only and any(
+        not isinstance(model, str) or not model.startswith("local:") for model in models
+    ):
+        raise AgentError(f"{role}: local-only execution cannot call a hosted model")
+    return FallbackModel(
+        *(
+            resolve(model, setup.local_endpoint)
+            if isinstance(model, str) and model.startswith("local:")
+            else resolve(model)
+            for model in models
+        ),
+        fallback_on=[on_failure, truncated],
+    )
 
 
 def _retry_prompts(messages: list[ModelMessage]) -> list[str]:
@@ -177,6 +202,9 @@ async def run(
         model=model.models[0].model_name,  # the answering model replaces it
         chain=[m.model_name for m in model.models],
         config_id=setup.config_id,
+        execution_hash=setup.execution_hash,
+        local_endpoint=setup.local_endpoint,
+        model_settings=model_settings,
         prompt_hash=prompt_hash,
         # Exactly what the model saw (ADR 0018): instructions with the use case's guidance and
         # examples, and the case in the user message.
@@ -192,6 +220,10 @@ async def run(
                     deps=deps,
                     instructions=instructions,
                     model_settings=model_settings or None,
+                    retries=setup.settings.retries,
+                    usage_limits=UsageLimits(request_limit=setup.settings.request_limit)
+                    if setup.settings.request_limit is not None
+                    else None,
                 )
             except (AgentRunError, FallbackExceptionGroup, TimeoutError) as error:
                 span.set(
@@ -226,5 +258,5 @@ async def run(
             agent=agent.name or "",
             cached_tokens=usage.cache_read_tokens,
         )
-        span.set(**trace.as_data())
+        span.set(**trace.as_data(), cost=trace.cost, latency_ms=trace.latency_ms)
     return result.output, trace

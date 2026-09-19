@@ -10,6 +10,9 @@ CriticalField = Literal["supplier_tax_id", "payment_iban", "purchase_order_ref"]
 class ExtractOptions(BaseModel):
     mode: Literal["local", "api", "hybrid"] | None = None
     ocr: bool = True
+    secondary_ocr: bool = True
+    focused_verification: bool = True
+    source_verification: bool = True
     vlm: bool | None = None
     jev: bool | None = None
     verify_fields: list[CriticalField] = Field(default_factory=list, max_length=3)

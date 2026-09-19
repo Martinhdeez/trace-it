@@ -23,6 +23,7 @@ class Settings:
             os.getenv("TRACEPAY_MODEL_DIR", str(REPOSITORY_ROOT / ".models"))
         )
     )
+    verification_model_dir: Path | None = None
     max_file_bytes: int = 25 * 1024 * 1024
     max_pages: int = 40
     max_image_pixels: int = 18_000_000
@@ -44,6 +45,11 @@ class Settings:
     vlm_timeout: float = field(
         default_factory=lambda: float(os.getenv("TRACEPAY_PROVIDER_TIMEOUT_S", "60"))
     )
+    vision_max_tokens: int = 4096
+    judge_url: str | None = None
+    judge_api_key: str | None = field(default=None, repr=False)
+    judge_timeout: float = 60.0
+    judge_max_tokens: int = 4096
     helmcode_api_key: str | None = field(
         default_factory=lambda: os.getenv("HELMCODE_API_KEY"), repr=False
     )

@@ -8,6 +8,7 @@ from app.features.processes import drafts
 from app.features.processes.draft_schemas import (
     DraftOut,
     DraftStart,
+    ExecutionIn,
     MessageIn,
     ReviewIn,
     RevisionIn,
@@ -121,3 +122,10 @@ async def prepare(draft_id: int, body: RevisionIn, session: Session, user: Curre
 @router.post("/{draft_id}/publish", operation_id="publishDiscoverySession")
 async def publish(draft_id: int, body: RevisionIn, session: Session, user: CurrentUser) -> DraftOut:
     return await drafts.publish(session, draft_id, body.revision, user)
+
+
+@router.put("/{draft_id}/execution", operation_id="configureDiscoveryExecution")
+async def configure_execution(
+    draft_id: int, body: ExecutionIn, session: Session, user: CurrentUser
+) -> DraftOut:
+    return await drafts.configure_execution(session, draft_id, body, user)

@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal, Self
 from pydantic import BaseModel, Field, model_validator
 
 from app.features.processes.definition import Definition
+from app.features.processes.execution import ExecutionSettings
 from app.features.processes.schemas import DecisionReviewConfig, DecisionTypeIO, SymbolIO
 
 
@@ -87,6 +88,7 @@ class DraftPlan(BaseModel):
 
 
 class DraftStart(BaseModel):
+    execution: ExecutionSettings | None = None
     process_id: int | None = None
     use_case_id: int | None = None
     name: str = Field(default="", max_length=200)
@@ -94,6 +96,10 @@ class DraftStart(BaseModel):
 
 class RevisionIn(BaseModel):
     revision: int = Field(ge=1)
+
+
+class ExecutionIn(RevisionIn):
+    execution: ExecutionSettings
 
 
 class MessageIn(RevisionIn):
@@ -108,6 +114,7 @@ class ReviewIn(RevisionIn):
 
 
 class DraftOut(BaseModel):
+    execution: ExecutionSettings | None = None
     id: int
     revision: int
     process_id: int | None

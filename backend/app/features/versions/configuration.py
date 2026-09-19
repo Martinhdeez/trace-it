@@ -61,9 +61,14 @@ def outcomes(snapshot: dict) -> Outcomes:
 
 
 def setups(snapshot: dict) -> dict[str, llm.Setup]:
+    execution = snapshot.get("execution", {})
     return {
         role: llm.Setup(
-            settings=AgentSettings.model_validate(row["settings"]), config_id=row["config_id"]
+            settings=AgentSettings.model_validate(row["settings"]),
+            config_id=row["config_id"],
+            local_only=execution.get("local_only", False),
+            local_endpoint=execution.get("local_endpoint"),
+            execution_hash=digest({"execution": execution, "agents": snapshot["agents"]}),
         )
         for role, row in snapshot["agents"].items()
     }
@@ -116,10 +121,14 @@ async def workspace(session, process_id: int) -> dict:
         .where(Rule.process_id == process_id, Rule.status.in_(ENFORCED))
         .order_by(Rule.id)
     )
-    return {
+    snapshot = {
         "process": detail.model_dump(mode="json", exclude={"active_version_id"}),
         "rules": [artifact(r) for r in rows],
         "guidance": await guidance.approved(session, process_id),
         "agents": await agents(session, process.use_case_id),
         "reviewer_prompt": llm.prompt("decision_reviewer"),
     }
+    from app.features.processes import execution as execution_config
+
+    execution_config.write(snapshot, execution_config.read(snapshot))
+    return snapshot

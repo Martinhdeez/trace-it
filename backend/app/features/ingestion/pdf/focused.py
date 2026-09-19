@@ -108,6 +108,8 @@ def verify_identifiers(
     content, fields, readers, pages, settings, ocr, vlm, options, vision_enabled, metrics
 ):
     reports = {}
+    if not options.focused_verification:
+        return reports
     if options.mode == "api":
         if not vision_enabled:
             return reports
@@ -215,7 +217,7 @@ def verify_identifiers(
         high_png = None
         for family, method, enabled, reader in (
             ("primary", "recognize", options.ocr, ocr),
-            ("secondary", "verify", options.ocr, ocr),
+            ("secondary", "verify", options.ocr and options.secondary_ocr, ocr),
             ("visual", "transcribe", vision_enabled, vlm),
             ("primary_scale", "recognize", options.ocr, ocr),
         ):
@@ -333,6 +335,8 @@ def verify_identifiers(
             if transformed is not None:
                 png, transform = transformed
                 for family, method in (("primary", "recognize"), ("secondary", "verify")):
+                    if family == "secondary" and not options.secondary_ocr:
+                        continue
                     if not hasattr(ocr, method):
                         continue
                     try:
