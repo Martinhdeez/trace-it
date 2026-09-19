@@ -7,7 +7,6 @@ import { api } from '../../api/client'
 import { keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
 import { ErrorNotice } from './Notice'
-import { StatusBadge } from './StatusBadge'
 import { t } from '../../i18n'
 import { paths, processFromPath } from '../../lib/paths'
 import { useAppState } from '../../state/app'
@@ -43,6 +42,12 @@ function NavItem({
 }
 
 const HEALTH_ORDER = ['ok', 'degraded', 'down']
+const HEALTH_COLOR: Record<string, string> = {
+  ok: 'bg-emerald-500',
+  degraded: 'bg-amber-500',
+  down: 'bg-red-500',
+}
+const COMMIT = (import.meta.env.VITE_COMMIT_SHA || 'local').slice(0, 7)
 
 /** The most severe status among the planes, or nothing until they are loaded. */
 function worstHealth(planes: { status: string }[] | undefined): string | undefined {
@@ -76,7 +81,16 @@ export function Sidebar() {
         <p className="text-[13px] font-medium tracking-[-0.03em] text-ink">
           trace<span className="text-faint">[.]</span>it
         </p>
-        {health ? <StatusBadge value={health}>{t(`health.${health}`)}</StatusBadge> : null}
+        {health ? (
+          <span
+            className={cn('h-2 w-2 rounded-full', HEALTH_COLOR[health] ?? 'bg-faint')}
+            title={t(`health.${health}`)}
+            aria-label={t(`health.${health}`)}
+          />
+        ) : null}
+        <span className="font-mono text-[9px] text-faint" title={`Commit ${COMMIT}`}>
+          {COMMIT}
+        </span>
       </Link>
 
       <div className="px-3 pb-5">
