@@ -35,6 +35,8 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("TRACE_HELMCODE_BASE_URL", "HELMCODE_URL"),
     )
     ai_gateway_base_url: str = "https://ai-gateway.vercel.sh/v1"
+    # The console the exported `trace_url` links to, without a trailing slash.
+    console_base_url: str = "https://gex-dashboard.hopto.org/nexia/trace-it"
     # The deployment's trusted local OpenAI-compatible server. Key: LOCAL_LLM_API_KEY.
     local_base_url: str = "http://localhost:11434/v1"
     # Optional per-preset model/effort overrides. No credentials in this JSON.

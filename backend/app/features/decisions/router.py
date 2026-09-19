@@ -177,6 +177,8 @@ async def resolve_instance(
     "/processes/{process_id}/export",
     operation_id="exportOutcomes",
     summary="outcomes.jsonl, one line per instance",
+    description="`trace=true` adds a `trace_url` per line: the console screen with that "
+    "case's trace.",
     response_class=PlainTextResponse,
     responses={
         200: {
@@ -192,8 +194,10 @@ async def resolve_instance(
         409: {"description": "An instance has no exportable outcome or is awaiting human review"},
     },
 )
-async def export_outcomes(process_id: int, session: Session) -> PlainTextResponse:
-    body, duplicates = await service.export(session, process_id)
+async def export_outcomes(
+    process_id: int, session: Session, trace: bool = False
+) -> PlainTextResponse:
+    body, duplicates = await service.export(session, process_id, trace=trace)
     # JSON in ASCII: a header value cannot carry every character a file name can.
     headers = {"X-Duplicate-Names": json.dumps(duplicates)} if duplicates else None
     return PlainTextResponse(body, media_type="application/x-ndjson", headers=headers)

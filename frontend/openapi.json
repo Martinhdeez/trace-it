@@ -5141,6 +5141,7 @@
           "decisions"
         ],
         "summary": "outcomes.jsonl, one line per instance",
+        "description": "`trace=true` adds a `trace_url` per line: the console screen with that case's trace.",
         "operationId": "exportOutcomes",
         "security": [
           {
@@ -5155,6 +5156,16 @@
             "schema": {
               "type": "integer",
               "title": "Process Id"
+            }
+          },
+          {
+            "name": "trace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Trace"
             }
           }
         ],
