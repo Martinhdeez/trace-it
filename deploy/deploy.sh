@@ -72,18 +72,6 @@ if [[ ! -f INITIALIZED ]]; then
   touch INITIALIZED
 fi
 "${compose[@]}" up -d --wait --wait-timeout 180 backend frontend
-# Keep both bundled demonstrations available in production. The hiring driver is
-# idempotent for already-uploaded CVs; discovery only runs when the process is absent.
-process_id=$("${compose[@]}" exec -T backend python -c '
-import json, urllib.request
-rows=json.load(urllib.request.urlopen("http://backend:8000/processes"))
-print(next((row["id"] for row in rows if row["name"] == "Hiring screening"), ""))
-')
-hiring_args=(--base-url http://backend:8000 --auto --skip-learning --report /tmp/hiring-bootstrap.md)
-if [[ -n "$process_id" ]]; then
-  hiring_args+=(--process "$process_id")
-fi
-"${compose[@]}" exec -T backend python /srv/hiring_demo.py "${hiring_args[@]}"
 curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18173/internal-health >/dev/null
 python3 /opt/trace-it/activate-route.py
 curl --config secrets/curl.conf --fail --silent --show-error --max-time 20 \
