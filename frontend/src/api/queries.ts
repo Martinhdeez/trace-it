@@ -14,6 +14,7 @@ export const keys = {
   document: (instanceId: number) => ['document', instanceId] as const,
   trace: (instanceId: number) => ['trace', instanceId] as const,
   runs: (processId: number) => ['runs', processId] as const,
+  alerts: (processId: number, status: string) => ['alerts', processId, status] as const,
   run: (id: number) => ['run', id] as const,
   queue: (processId: number, outcome: string) => ['queue', processId, outcome] as const,
   suggestion: (instanceId: number) => ['suggestion', instanceId] as const,

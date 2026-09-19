@@ -63,6 +63,15 @@ export const es = {
     total: 'Total',
     free_text: 'Texto libre',
   },
+  alertStatus: {
+    open: 'Abierta',
+    acknowledged: 'Vista',
+    resolved: 'Resuelta',
+  },
+  alertTrigger: {
+    source_sync: 'Cambio en la fuente',
+    rule_change: 'Cambio de reglas',
+  },
   roles: {
     manager: 'Responsable',
     operator: 'Operador',

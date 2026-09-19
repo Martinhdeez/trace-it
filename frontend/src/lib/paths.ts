@@ -1,3 +1,6 @@
+/** The Revisión tab that lists open alerts. */
+export const ALERTS_TAB = 'alertas'
+
 export const paths = {
   landing: '/',
   processes: '/processes',

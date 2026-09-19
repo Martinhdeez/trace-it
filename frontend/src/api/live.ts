@@ -1,4 +1,5 @@
 import type {
+  AlertOut,
   ApiClient,
   DocumentUpload,
   InstanceDetail,
@@ -346,6 +347,9 @@ export const liveClient: ApiClient = {
       creado: item.created_at,
     }))
   },
+  listAlerts: (processId, status) =>
+    get<AlertOut[]>(`/processes/${processId}/alerts${query({ status })}`),
+  ackAlert: (id, note) => post<AlertOut>(`/alerts/${id}/ack`, { note: note || null }),
   exportOutcomes: (processId) => getText(`/processes/${processId}/export`),
 
   uploadFiles: async (processId, files, onProgress) => {
