@@ -18,3 +18,4 @@ the API running on :8010.
 
 Raw logs (`api*.log`, `erp.log`, `monitor.log`) and captured outputs (`integrated/`,
 `outcomes*.jsonl`) are as the runs left them.
+The `outcomes*.jsonl` files here (`outcomes_norm.jsonl`, `outcomes_p3.jsonl`, `integrated/outcomes.jsonl`) are old run artifacts, not the delivery: the batch-1 candidates are `delivery/outcomes_system.jsonl` and `delivery/outcomes_mateo_review.jsonl` at the repository root (`delivery/README.md`).

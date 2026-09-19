@@ -59,6 +59,7 @@ challenge inputs). The challenge Makefile expects the CSV at
 | 1a | Only if the frozen process has no instances yet (`curl -s $API/processes/$P/summary`): `make erp` in another terminal, then `uv run --project backend --locked --env-file .env python tools/demo_run.py --api-url $API --process $P --output output/friday-run` | `run: {'decided': 500, ...}`; about 10 min, of which about 8 on the 29 scans | Without `--process $P` the driver picks the process named `Invoice payment` (hand-written rules). Check `.models/` and both manifests first (`docs/ingestion/setup.md`) |
 | 1b | `curl -s $API/processes/$P/summary \| python3 -m json.tool \| head -20` | `by_status: {"DECIDED": 500}`, no `PENDING` | Pending instances: `curl -X POST $API/processes/$P/run` first |
 | 1c | `make export-batch PACK=$FROZEN FILES=$B1 OUT=output/friday/outcomes.jsonl` | `OK: one line per file ...` with Friday's counts | Without `PACK=$FROZEN` it exports the hand-written process. This file is the reference to diff against later |
+| 1d | Compiler token limit, once per database: the commands in [Compiler token limit](#compiler-token-limit-before-step-6) | `draft N compiler 16000` | Without it a v4 check can come back `blocked` with the output token limit hit (`finish_reason` length) |
 | 2 | `make backup` | `backups/trace-<time>.dump`, about 6.5 MB | Container name: `docker ps --format '{{.Names}}' \| grep db`, then `make backup DB_CONTAINER=<name>` |
 | 3 | `ls $L2/facturas \| wc -l`; `comm -12 <(ls $B1 \| sort) <(ls $L2/facturas \| sort)` | `40`; nothing printed | A name shared with batch 1: stop and ask the organisers. Export keeps only the newest instance of a name (`X-Duplicate-Names`), so batch 1's file would change |
 | 4 | Stop `make erp` (Ctrl+C), then `make -C .context/500-sombras-de-alberto erp-lote2 LOTE2_ERP=$L2/erp_export_lote2.csv` (keep it running) | `actualizacion cargada: N asientos nuevos, M actualizados` | `faltan columnas`: the CSV is not the ERP export format; ask. Port busy: `ERP_PORT=8010` and `TRACE_ERP_URL=http://127.0.0.1:8010` |
@@ -82,6 +83,33 @@ challenge inputs). The challenge Makefile expects the CSV at
 | 10 | `make export-batch PACK=$FROZEN FILES=$L2/facturas OUT=output/delivery/outcomes_lote2.jsonl` | `40 lines for 40 PDFs`, `OK: one line per file, valid results {...}` | `missing`: a PDF with no instance (step 7 skipped it); `not a file of the batch (same as ... once normalised)`: accent spelled differently, tell Álvaro |
 | 10b | `make export-batch PACK=$FROZEN FILES=$B1 OUT=output/delivery/outcomes.jsonl`; `diff <(sort output/friday/outcomes.jsonl) <(sort output/delivery/outcomes.jsonl)` | `500 lines`, `OK`; the diff shows exactly the changes of step 5 | A difference not listed in step 5: stop |
 | 11 | Delivery: copy `output/delivery/outcomes.jsonl`, `outcomes_lote2.jsonl` and `albertitos_plan.pdf` to the root of `la-caja-outcomes`, `make check-outcomes OUT=<repo>/outcomes_lote2.jsonl FILES=$L2/facturas` (and batch 1), commit, push | Three files at the root, nothing else | Never commit them to this repo (`output/` is ignored) |
+
+## Compiler token limit (before step 6)
+
+`processes/invoice-payment/use-case.json` gives the compiler `max_tokens` 16000 (was 6000: on
+2026-09-19 `total = base + vat_amount` failed to compile, `deepseek-v4-flash` and `qwen3.6` cut
+by the output limit). A running database does not pick this up by itself, in two places:
+
+1. Agent configs are versioned per use case (`agent_configs`, append-only, ADR 0011). Step 1's
+   `make load-frozen` loads the file's compiler config as a new, **inactive** version; a
+   manager activates it. Both processes share the use case `Invoice payment`.
+2. A process compiles with the agent configs pinned in its draft, or else in its published
+   version (`agents/compiler.py` `read_process`). The frozen version pinned 6000, so the draft
+   of `$P` must refresh its agents. Without this, step 6 still compiles with 6000.
+
+```bash
+UC=$(curl -s $API/use-cases | python3 -c 'import json,sys; print(next(u["id"] for u in json.load(sys.stdin) if u["name"] == "Invoice payment"))')
+CFG=$(curl -s $API/use-cases/$UC/agents/compiler/versions | python3 -c 'import json,sys; print([c for c in json.load(sys.stdin) if c["config"]["model_settings"].get("max_tokens") == 16000][-1]["id"])')
+curl -s -X POST $API/agent-configs/$CFG/activate -H "$MANAGER" | python3 -m json.tool | head -5   # 409 "already active": fine
+REV=$(curl -s $API/processes/$P/draft -H "$MANAGER" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("revision", "null"))')   # null: no draft yet
+curl -s -X PUT $API/processes/$P/draft -H "$MANAGER" -H 'Content-Type: application/json' -d "{"refresh_agents": true, "expected_revision": $REV}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("draft", d["revision"], "compiler", d["snapshot"]["agents"]["compiler"]["settings"]["model_settings"].get("max_tokens"))'
+```
+
+Expect `draft N compiler 16000`. `CFG` fails with `IndexError`: step 1 ran on an older
+checkout; update `dev` and run `make load-frozen MANAGER_ID=1` again. The refresh pins the
+active config of every role, and only the compiler's changed. The draft is published with the
+v4 checks in step 6e; runs and reprocess keep reading the published version meanwhile.
+Rollback: activate the previous version's id from the same `versions` list and refresh again.
 
 ## Does norm v4 re-decide batch 1?
 

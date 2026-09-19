@@ -15,7 +15,7 @@
       "timeout_seconds": 180,
       "model_settings": {
         "temperature": 0,
-        "max_tokens": 6000
+        "max_tokens": 16000
       },
       "instructions": "Symbols come from OCR and document parsing: numbers may arrive as text with a comma or a dot as decimal separator; never assume a type, convert as the description says. Put the helpers you need (normalise, cents) inside the code: there is no shared library.",
       "limits": {
