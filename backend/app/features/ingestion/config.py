@@ -31,6 +31,9 @@ class Settings:
     max_excel_rows: int = 25_000
     max_excel_cols: int = 100
     workers: int = field(default_factory=lambda: int(os.getenv("TRACEPAY_WORKERS", "2")))
+    extraction_timeout: float = field(
+        default_factory=lambda: float(os.getenv("TRACEPAY_EXTRACTION_TIMEOUT_S", "120"))
+    )
     ocr_threads: int = field(default_factory=lambda: int(os.getenv("TRACEPAY_OCR_THREADS", "4")))
     ocr_use_cuda: bool = field(default_factory=lambda: os.getenv("TRACEPAY_OCR_CUDA", "0") == "1")
     ocr_dpi: int = 240
@@ -70,6 +73,8 @@ class Settings:
     vision_providers: tuple[str, ...] = field(
         default_factory=lambda: _providers("TRACEPAY_VISION_PROVIDERS", "helmcode")
     )
+    # Explicit versioned readers override the deployment's default chain.
+    visual_readers: tuple[tuple[str, str], ...] | None = None
     text_providers: tuple[str, ...] = field(
         default_factory=lambda: _providers("TRACEPAY_TEXT_PROVIDERS", "jev,helmcode")
     )
@@ -97,7 +102,7 @@ class Settings:
             raise ValueError("Use 1-8 workers and 1-16 OCR threads to bound memory and CPU use")
         if self.ocr_mode not in {"local", "api", "hybrid"}:
             raise ValueError("TRACEPAY_OCR_MODE must be local, api, or hybrid")
-        if self.vlm_timeout <= 0:
+        if self.vlm_timeout <= 0 or self.extraction_timeout <= 0:
             raise ValueError("TRACEPAY_PROVIDER_TIMEOUT_S must be positive")
         if set(self.vision_providers) - {"compatible", "gemini", "helmcode"}:
             raise ValueError("Unknown TRACEPAY_VISION_PROVIDERS entry")
@@ -111,6 +116,9 @@ class Settings:
         return {
             "profile": self.ocr_profile,
             "mode": self.ocr_mode,
+            "independent_visual_readers": len(
+                {model.rsplit("/", 1)[-1].lower() for _, model in self.visual_chain()}
+            ),
             "vision": [
                 {"provider": provider, "model": model} for provider, model in self.visual_chain()
             ],
@@ -126,6 +134,14 @@ class Settings:
         }
 
     def visual_chain(self) -> list[tuple[str, str]]:
+        if self.visual_readers is not None:
+            return [
+                (provider, model)
+                for provider, model in self.visual_readers
+                if (provider == "compatible" and self.vlm_url)
+                or (provider == "gemini" and self.gemini_api_key)
+                or (provider == "helmcode" and self.helmcode_api_key)
+            ]
         chain = []
         for provider in self.vision_providers:
             if provider == "compatible" and self.vlm_url and self.vlm_model:

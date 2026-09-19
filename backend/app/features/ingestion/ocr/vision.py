@@ -3,10 +3,9 @@
 import base64
 import hashlib
 import json
-import threading
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from pathlib import Path
-
-import httpx
 
 from app.common import prompts
 from app.common.extraction import TextLine
@@ -15,6 +14,7 @@ from app.features.ingestion.config import Settings
 
 from .errors import ProviderUnavailable, note_provider_failure, provider_on_cooldown
 from .gemini import GENERATION, PROMPT, generate, output_text
+from .http import ProviderHTTP
 from .journal import record_response, recorded_call, retry_after
 from .transcript import remote_lines, transcript_warnings
 
@@ -33,9 +33,13 @@ def _prompt(fields):
 class VisionFallback:
     """Configured image readers; downstream code must corroborate their output."""
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, *, http=None):
         self.settings = settings
-        self.lock = threading.Lock()
+        self.http = http or ProviderHTTP()
+
+    @property
+    def independent_readers(self):
+        return len({model.rsplit("/", 1)[-1].lower() for _, model in self.settings.visual_chain()})
 
     @property
     def configured(self):
@@ -97,27 +101,43 @@ class VisionFallback:
         readers = {}
         successful_models = set()
         namespace = str(self.settings.data_dir)
-        for index, (provider, model) in enumerate(self.settings.visual_chain()):
-            identity = f"visual:{provider}:{model}"
-            nominal_model = model.rsplit("/", 1)[-1].lower()
-            if (
-                identity in readers
-                or nominal_model in successful_models
-                or provider_on_cooldown(provider, model, namespace)
-            ):
-                continue
+        pending = list(enumerate(self.settings.visual_chain()))
+
+        def read(index, provider, model):
             try:
-                lines = self._read(
+                return self._read(
                     provider, model, png, page, point_size, fields=fields, fallback=index > 0
                 )
             except ProviderUnavailable as exc:
                 note_provider_failure(provider, model, namespace, exc)
-                continue
-            if lines:
-                readers[identity] = lines
-                successful_models.add(nominal_model)
-            if len(readers) == 2:
-                break
+                return []
+
+        # Two independent readers at a time. Failed readers can be replaced by
+        # later entries; wrappers around the same model never gain another vote.
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="vision") as executor:
+            while pending and len(readers) < 2:
+                batch, deferred = [], []
+                selected = set(successful_models)
+                for index, (provider, model) in pending:
+                    nominal = model.rsplit("/", 1)[-1].lower()
+                    if nominal in successful_models or provider_on_cooldown(
+                        provider, model, namespace
+                    ):
+                        continue
+                    if nominal in selected or len(batch) >= 2 - len(readers):
+                        deferred.append((index, (provider, model)))
+                        continue
+                    selected.add(nominal)
+                    future = executor.submit(copy_context().run, read, index, provider, model)
+                    batch.append((provider, model, nominal, future))
+                pending = deferred
+                if not batch:
+                    break
+                for provider, model, nominal, future in batch:
+                    lines = future.result()
+                    if lines:
+                        readers[f"visual:{provider}:{model}"] = lines
+                        successful_models.add(nominal)
         if not readers:
             raise ProviderUnavailable("No configured image reader succeeded")
         return readers
@@ -131,9 +151,7 @@ class VisionFallback:
             generation = {**GENERATION, "maxOutputTokens": self.settings.vision_max_tokens}
 
             def call(mark_network_attempt):
-                with httpx.Client(
-                    timeout=self.settings.vlm_timeout, follow_redirects=False
-                ) as client:
+                with self.http.session(self.settings.vlm_timeout) as client:
                     response = generate(
                         client,
                         model,
@@ -192,12 +210,7 @@ class VisionFallback:
             }
 
             def call(mark_network_attempt):
-                with (
-                    self.lock,
-                    httpx.Client(
-                        timeout=self.settings.vlm_timeout, follow_redirects=False
-                    ) as client,
-                ):
+                with self.http.session(self.settings.vlm_timeout) as client:
                     mark_network_attempt()
                     response = client.post(endpoint, json=body, headers=headers)
                 trace_provider = "vision" if provider == "compatible" else provider

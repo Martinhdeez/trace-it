@@ -111,8 +111,9 @@ def verify_identifiers(
     if not options.focused_verification:
         return reports
     if options.mode == "api":
-        if not vision_enabled:
+        if not vision_enabled or getattr(vlm, "independent_readers", 2) < 2:
             return reports
+        regions = {}
         sizes = {page["number"]: page["size"] for page in pages}
         for name in sorted(CRITICAL_FIELDS):
             field = fields[name]
@@ -132,13 +133,33 @@ def verify_identifiers(
                 "value": None,
                 "reason": "insufficient_independent_support",
             }
+            values = {c.value for c in field.candidates if c.value is not None and not c.error}
+            if len(values) > 1 or any(c.error for c in field.candidates):
+                # Original conflicts are immutable; another crop cannot erase them.
+                report["reason"] = "focused_conflict"
+                reports[name] = report
+                continue
             try:
-                png = render_region(content, page, box, settings, dpi=150)
-                generated_readers = vlm.transcribe_readers(
-                    png, page, (box[2] - box[0], box[3] - box[1])
-                )
-                metrics["vlm_calls"] += len(generated_readers)
-                metrics["focused_calls"] = metrics.get("focused_calls", 0) + len(generated_readers)
+                key = (page, tuple(box))
+                if key not in regions:
+                    try:
+                        with events.span("render_region", page=page, dpi=150) as span:
+                            png = render_region(content, page, box, settings, dpi=150)
+                            span.set(image_bytes=len(png))
+                        regions[key] = vlm.transcribe_readers(
+                            png, page, (box[2] - box[0], box[3] - box[1])
+                        )
+                        metrics["vlm_calls"] += len(regions[key])
+                        metrics["focused_calls"] = metrics.get("focused_calls", 0) + len(
+                            regions[key]
+                        )
+                    except Exception as exc:
+                        regions[key] = exc
+                else:
+                    metrics["focused_region_reuses"] = metrics.get("focused_region_reuses", 0) + 1
+                generated_readers = regions[key]
+                if isinstance(generated_readers, Exception):
+                    raise generated_readers
                 for reader, generated in generated_readers.items():
                     located = [
                         line.model_copy(

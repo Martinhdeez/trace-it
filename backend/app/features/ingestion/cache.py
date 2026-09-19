@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
@@ -12,6 +13,7 @@ from pathlib import Path
 from filelock import FileLock
 
 _usage = ContextVar("extraction_reader_usage", default=None)
+_usage_lock = threading.Lock()
 
 
 def fingerprint(value):
@@ -49,7 +51,8 @@ def package_version(name):
 def count_reader(name):
     usage = _usage.get()
     if usage is not None:
-        usage[name] = usage.get(name, 0) + 1
+        with _usage_lock:
+            usage[name] = usage.get(name, 0) + 1
 
 
 @contextmanager

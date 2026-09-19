@@ -210,7 +210,7 @@ def test_same_model_through_two_providers_never_counts_twice(settings):
     assert len(result.data["provenance"]["visual_models"]) == 2
 
 
-def test_provenance_records_actual_fallback_and_text_judge_models(settings):
+def test_provenance_records_fallback_without_useless_text_judgment(settings):
     class Judge:
         configured = True
 
@@ -229,7 +229,8 @@ def test_provenance_records_actual_fallback_and_text_judge_models(settings):
     provenance = result.data["provenance"]
     assert provenance["visual_model"] == "fallback"
     assert provenance["visual_models"] == [{"provider": "fake", "model": "fallback"}]
-    assert provenance["text_judge_model"] == "helmcode-text"
+    assert provenance["text_judge_model"] is None
+    assert result.metrics["jev_calls_this_request"] == 0
 
 
 def test_api_schema_can_map_an_exact_quote_from_native_narrative(settings):

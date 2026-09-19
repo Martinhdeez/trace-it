@@ -8,7 +8,7 @@ import time
 import unicodedata
 import uuid
 from collections import OrderedDict
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from copy import copy
 from pathlib import Path
 
@@ -18,6 +18,7 @@ from app.common.exceptions import NotFoundError
 from app.core import events
 from app.features.ingestion.cache import file_identity, fingerprint, package_version, reader_usage
 from app.features.ingestion.config import Settings
+from app.features.ingestion.ocr.budget import acquired, extraction_budget, remaining
 from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.ocr.local import LocalOCR
 from app.features.ingestion.ocr.vision import VisionFallback
@@ -84,8 +85,14 @@ class ExtractionService:
                 != (self.settings.verification_model_dir or self.settings.model_dir / "verify")
             ):
                 service.ocr = LocalOCR(service.settings)
-            service.vlm = VisionFallback(service.settings)
-            service.judge = TextJudge(service.settings)
+            service.vlm = VisionFallback(
+                service.settings,
+                http=self.vlm.http if isinstance(self.vlm, VisionFallback) else None,
+            )
+            service.judge = TextJudge(
+                service.settings,
+                http=self.judge.http if isinstance(self.judge, TextJudge) else None,
+            )
             service.field_reader = SchemaFieldReader(service.settings)
             service.execution_hash = key
             self.configured_services[key] = service
@@ -185,10 +192,19 @@ class ExtractionService:
                 "ocr/gemini.py",
                 "ocr/journal.py",
                 "ocr/errors.py",
+                "ocr/budget.py",
+                "ocr/http.py",
                 "ocr/pricing.py",
             ]
         if judge:
-            invoice += ["ocr/judge.py", "ocr/journal.py", "ocr/errors.py", "ocr/pricing.py"]
+            invoice += [
+                "ocr/judge.py",
+                "ocr/journal.py",
+                "ocr/errors.py",
+                "ocr/budget.py",
+                "ocr/http.py",
+                "ocr/pricing.py",
+            ]
         paths = shared + (
             ["features/ingestion/" + path for path in invoice]
             if item["kind"] == "invoice"
@@ -284,15 +300,18 @@ class ExtractionService:
 
     def extract(self, item, options: ExtractOptions):
         options = options.normalized(self.settings)
-        with events.span(
-            "extraction",
-            kind=item["kind"],
-            sha256=item["sha256"],
-            extraction_id=item["id"],
-            pipeline_version=PIPELINE_VERSION,
-            options=options.model_dump(),
-            execution_hash=self.execution_hash,
-        ) as span:
+        with (
+            extraction_budget(self.settings.extraction_timeout),
+            events.span(
+                "extraction",
+                kind=item["kind"],
+                sha256=item["sha256"],
+                extraction_id=item["id"],
+                pipeline_version=PIPELINE_VERSION,
+                options=options.model_dump(),
+                execution_hash=self.execution_hash,
+            ) as span,
+        ):
             result = self._extract(item, options)
             provenance = result.data.get("provenance", {})
             span.set(
@@ -310,7 +329,10 @@ class ExtractionService:
         key = self.cache_key(item, options)
         lock_path = self.settings.data_dir / "extraction-locks" / (key + ".lock")
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.locks[int(key[:8], 16) % len(self.locks)], FileLock(str(lock_path), timeout=600):
+        with (
+            acquired(self.locks[int(key[:8], 16) % len(self.locks)]),
+            FileLock(str(lock_path), timeout=remaining(600)),
+        ):
             cached = not self.settings.ocr_force_recompute and self.store.cached(key)
             if cached:
                 result = ExtractionResult.model_validate(cached)
@@ -324,6 +346,7 @@ class ExtractionService:
                     **result.metrics,
                     "request_ms": round((time.perf_counter() - started) * 1000, 2),
                     "ocr_calls_this_request": 0,
+                    "worker_wait_ms": 0,
                     "vlm_calls_this_request": 0,
                     "jev_calls_this_request": 0,
                     "ocr_cache_hits_this_request": 0,
@@ -332,7 +355,7 @@ class ExtractionService:
                 }
                 self.store.save(result)
                 return result
-            with self.slots, reader_usage() as usage:
+            with self.worker_slot() as worker_wait_ms, reader_usage() as usage:
                 content = (self.objects / item["sha256"]).read_bytes()
                 if item["kind"] == "invoice":
                     fields, data, warnings, pages, metrics = extract_pdf(
@@ -378,6 +401,7 @@ class ExtractionService:
                             for name in ("ocr", "vlm", "jev")
                         },
                         "bytes": len(content),
+                        "worker_wait_ms": worker_wait_ms,
                     }
                 )
                 result = ExtractionResult(
@@ -418,6 +442,7 @@ class ExtractionService:
         key = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
         started = time.perf_counter()
         with (
+            extraction_budget(self.settings.extraction_timeout),
             events.span(
                 "extraction",
                 adapter="schema",
@@ -426,7 +451,7 @@ class ExtractionService:
                 execution_hash=self.execution_hash,
                 fields=[field.name for field in fields],
             ) as span,
-            self.locks[int(key[:8], 16) % len(self.locks)],
+            acquired(self.locks[int(key[:8], 16) % len(self.locks)]),
         ):
             cached = not self.settings.ocr_force_recompute and self.store.cached(key)
             if cached:
@@ -456,6 +481,7 @@ class ExtractionService:
                 result.metrics.update(
                     request_ms=round((time.perf_counter() - started) * 1000, 2),
                     ocr_calls_this_request=0,
+                    worker_wait_ms=0,
                     vlm_calls_this_request=0,
                     jev_calls_this_request=0,
                     schema_calls_this_request=0,
@@ -467,7 +493,7 @@ class ExtractionService:
                 self.store.save(result)
                 span.set(cache_hit=True, cached_from_extraction_id=previous_id)
                 return result
-            with self.slots, reader_usage() as usage:
+            with self.worker_slot() as worker_wait_ms, reader_usage() as usage:
                 readings, data, warnings, pages, metrics = extract_schema_pdf(
                     (self.objects / item["sha256"]).read_bytes(),
                     options,
@@ -527,6 +553,7 @@ class ExtractionService:
                 elapsed = round((time.perf_counter() - started) * 1000, 2)
                 metrics.update(
                     extraction_ms=elapsed,
+                    worker_wait_ms=worker_wait_ms,
                     request_ms=elapsed,
                     ocr_calls_this_request=metrics["ocr_calls"] - usage.get("ocr_cache_hits", 0),
                     vlm_calls_this_request=(
@@ -557,6 +584,15 @@ class ExtractionService:
                 span.set(cache_hit=False, warnings=len(result.warnings), **metrics)
                 return result
 
+    @contextmanager
+    def worker_slot(self):
+        queued = time.perf_counter()
+        with acquired(self.slots):
+            wait_ms = round((time.perf_counter() - queued) * 1000, 2)
+            if events.current() is not None:
+                events.current().set(worker_wait_ms=wait_ms)
+            yield wait_ms
+
     def start(self):
         self.store.recover()
         for i in range(self.settings.workers):
@@ -568,6 +604,9 @@ class ExtractionService:
         self.stop.set()
         for thread in self.threads:
             thread.join()
+        for reader in (self.vlm, self.judge):
+            if isinstance(reader, (VisionFallback, TextJudge)):
+                reader.http.close()
 
     def _worker(self):
         while not self.stop.is_set():

@@ -68,7 +68,11 @@ export function ExecutionEditor({ value, onChange, onValidity }: {
         {(['primary_model_dir', 'verification_model_dir', 'vision_model', 'text_judge_model'] as const).map(key => <Field key={key} label={key.replaceAll('_', ' ')} hint={key.endsWith('_model') ? 'Blank disables. Vision: helmcode:qwen3.6, helmcode:gemma4, local:, compatible:. Judge: local:, compatible:, jev:, helmcode:.' : 'Directory of installed local OCR weights.'}>
           <Input value={value.extraction[key] ?? ''} onChange={e => extraction({ [key]: e.target.value || (key.endsWith('_model') ? null : '') })} />
         </Field>)}
-        {(['dpi', 'vision_timeout_seconds', 'judge_timeout_seconds', 'vision_max_tokens', 'judge_max_tokens'] as const).map(key => <Field key={key} label={key.replaceAll('_', ' ')}>
+        <Field label="Independent visual readers, comma separated" hint="Use different models to verify scans, for example helmcode:gemma4 or gemini:gemini-3.1-flash-lite. Later entries replace unavailable readers.">
+          <Input defaultValue={(value.extraction.vision_verification_models ?? []).join(', ')} onChange={e => extraction({ vision_verification_models: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} />
+        </Field>
+        {value.extraction.mode === 'api' && !(value.extraction.vision_verification_models ?? []).length && <p role="status" className="text-sm text-amber-700">Scans need two independent visual readers to produce verified fields. Add a verification reader.</p>}
+        {(['dpi', 'vision_timeout_seconds', 'judge_timeout_seconds', 'vision_max_tokens', 'judge_max_tokens', 'timeout_seconds'] as const).map(key => <Field key={key} label={key.replaceAll('_', ' ')}>
           <Input type="number" min={1} value={value.extraction[key]} onChange={e => extraction({ [key]: Number(e.target.value) })} />
         </Field>)}
         {(['ocr', 'secondary_ocr', 'focused_verification', 'source_verification'] as const).map(key => <label key={key} className="flex items-center gap-2 text-sm">

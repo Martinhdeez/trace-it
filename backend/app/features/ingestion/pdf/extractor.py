@@ -39,7 +39,9 @@ def extract_pdf(
     def image(page):
         number = page["number"]
         if number not in images:
-            images[number] = render(content, number, settings)
+            with events.span("render_page", page=number, dpi=settings.ocr_dpi) as span:
+                images[number] = render(content, number, settings)
+                span.set(image_bytes=len(images[number]))
         return images[number]
 
     def failure(code, stage, exc, page=None):
@@ -118,6 +120,8 @@ def extract_pdf(
         )
     )
     if vision_enabled and needs_vision:
+        if options.mode == "api" and getattr(vlm, "independent_readers", 2) < 2:
+            warnings.append({"code": "INSUFFICIENT_VISUAL_READERS", "stage": "configuration"})
         for page in pages:
             try:
                 if options.mode == "api":
@@ -126,6 +130,10 @@ def extract_pdf(
                             image(page), page["number"], page["size"]
                         )
                         span.set(readers=len(generated_readers))
+                    if len(generated_readers) < min(2, getattr(vlm, "independent_readers", 1)):
+                        warnings.append(
+                            {"code": "VLM_ERROR", "stage": "verification", "page": page["number"]}
+                        )
                     metrics["vlm_calls"] += len(generated_readers)
                     for reader, generated in generated_readers.items():
                         readers.setdefault(reader, []).extend(
@@ -149,7 +157,16 @@ def extract_pdf(
     fields, decisions, final_warnings = reconcile(readers, settings.ocr_min_confidence)
     blocked_fields = block_conflicts(fields, pages)
     focused = verify_identifiers(
-        content, fields, readers, pages, settings, ocr, vlm, options, vision_enabled, metrics
+        content,
+        fields,
+        readers,
+        pages,
+        settings,
+        ocr,
+        vlm,
+        options,
+        vision_enabled and not any(w["code"] == "VLM_ERROR" for w in warnings),
+        metrics,
     )
     blocked_fields.update(block_conflicts(fields, pages))
     for name, report in focused.items():
@@ -166,6 +183,10 @@ def extract_pdf(
         if field.status != "OBSERVED"
         and not focused.get(name, {}).get("value")
         and any(c.value is not None and not c.error for c in field.candidates)
+        and (
+            options.mode != "api"
+            or len({c.value for c in field.candidates if c.value is not None and not c.error}) > 1
+        )
     }
     if (
         judge_enabled
