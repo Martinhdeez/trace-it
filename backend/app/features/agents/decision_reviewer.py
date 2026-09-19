@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.features.agents import llm
 from app.features.decisions.model import Decision, DecisionReview
 from app.features.ingestion.model import File, Instance
+from app.features.learning import guidance
 from app.features.processes.schemas import ProcessDetail
 from app.features.rules.model import Rule
 from app.features.sources.model import Source
@@ -71,6 +72,7 @@ async def assess(
     setup = setup or llm.Setup()
     evidence = {
         "guidance": config.guidance,
+        **await guidance.approved(session, process.id),
         **{f"symbol:{k}": v for k, v in (instance.symbols or {}).items()},
         **{f"rule:{r.id}": {"text": r.text, "decision": r.decision, "hash": r.hash} for r in rules},
         **{f"source:{s.id}": {"name": s.name, "origin": s.origin, "rows": s.rows} for s in sources},

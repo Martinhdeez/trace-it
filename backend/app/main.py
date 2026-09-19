@@ -12,6 +12,7 @@ from app.features.decisions.router import router as decisions_router
 from app.features.ingestion.process_router import router as ingestion_router
 from app.features.ingestion.router import create_router as create_extraction_router
 from app.features.ingestion.runtime import ingestion_lifespan
+from app.features.learning.router import router as learning_router
 from app.features.processes.router import router as processes_router
 from app.features.rules import service as rules_service
 from app.features.rules.router import router as rules_router
@@ -69,6 +70,7 @@ for router in (
     sources_router,
     use_cases_router,
     traces_router,
+    learning_router,
 ):
     app.include_router(router)
 

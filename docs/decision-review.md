@@ -59,3 +59,10 @@ outcomes only; they do not preview agent recommendations. Reloading guidance or 
 
 The current frontend uses an older API contract. This flow is available through the
 backend API and process packs; console integration is separate.
+
+## Learning guidance
+
+Managers can adopt process-specific subjective norms through the [learning flow](learning.md).
+Enabled reviews receive adopted guidance as `norm:<adoption_id>` evidence, alongside the
+pack's base guidance. Each review snapshots the text it used. Draft and rejected norms
+have no effect, and adopting guidance never grants permission to override an engine decision.
