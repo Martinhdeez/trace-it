@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, PlayCircle } from 'lucide-react'
 import { api } from '../api/client'
 import { keys } from '../api/queries'
 import { QueueList } from '../components/run/QueueList'
@@ -9,7 +9,7 @@ import { TracePane } from '../components/run/TracePane'
 import { ProcessScreen } from '../components/process/ProcessScreen'
 import { ExportButton } from '../components/process/ExportButton'
 import { Input } from '../components/shell/Controls'
-import { ErrorNotice, Notice } from '../components/shell/Notice'
+import { EmptyState, ErrorNotice, Notice } from '../components/shell/Notice'
 import { cn } from '../lib/cn'
 import { t } from '../i18n'
 import { formatRunDate } from '../lib/format'
@@ -125,6 +125,23 @@ export function Instances() {
         </div>
       ) : null}
 
+      {!runId && summary.data?.instances === 0 ? (
+        <EmptyState
+          icon={PlayCircle}
+          title="Aún no hay ejecuciones"
+          className="flex-1 justify-center"
+          action={
+            <Link
+              to={paths.process(processId)}
+              className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-[12px] font-medium text-on-ink hover:bg-ink/90"
+            >
+              Ir al Panel
+            </Link>
+          }
+        >
+          Ejecuta un lote desde el Panel. Cada documento aparecerá aquí con su decisión y su traza.
+        </EmptyState>
+      ) : (
       <div className="flex min-h-0 flex-1">
         <QueueList
           items={rows}
@@ -157,8 +174,9 @@ export function Instances() {
             </div>
           }
         />
-        <TracePane instance={detail.data} trace={trace.data} />
+        <TracePane instance={detail.data} trace={trace.data} schema={process.data?.symbols} />
       </div>
+      )}
     </ProcessScreen>
   )
 }

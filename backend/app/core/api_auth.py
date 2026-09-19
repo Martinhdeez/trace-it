@@ -21,6 +21,14 @@ def bearer_identity(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
 ) -> bool:
     """Basic/browser callers keep their existing identity; invalid Bearers never fall back."""
+    path = request.scope["path"]
+    root = request.scope.get("root_path", "")
+    if root and path.startswith(root):
+        path = path[len(root) :]
+    if path.startswith("/mail-ingestion/"):
+        # These routes require their own process-scoped MailIdentity dependency.
+        # A mailbox token never authenticates as the unrestricted API manager.
+        return False
     authorization = request.headers.get("authorization", "")
     parts = authorization.split(maxsplit=1)
     if not parts or parts[0].lower() != "bearer":

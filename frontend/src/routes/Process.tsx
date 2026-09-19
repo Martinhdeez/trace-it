@@ -18,6 +18,7 @@ import { MetricCells, PlaneDashboards } from '../components/process/PlaneDashboa
 import { PublishDraft } from '../components/process/PublishDraft'
 import { ReprocessAfterPublish } from '../components/process/ReprocessAfterPublish'
 import { ExportButton } from '../components/process/ExportButton'
+import { ProcessAbout } from '../components/process/ProcessAbout'
 import {
   revokePreview,
   toPreview,
@@ -28,11 +29,10 @@ import { BatchRunPanel } from '../components/run/BatchRunPanel'
 import { Button } from '../components/shell/Controls'
 import { Overlay } from '../components/shell/Overlay'
 import { ErrorNotice } from '../components/shell/Notice'
-import { ExpandableText } from '../components/shell/ExpandableText'
 import { NestedCard } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { ALERTS_TAB, paths } from '../lib/paths'
-import type { RunOut, UploadProgress, ExecutionMetrics, NormRule, ProcessDetail, ProcessMetrics, ProcessSummary, Rule } from '../api/contracts'
+import type { VersionOut, RunOut, UploadProgress, ExecutionMetrics, NormRule, ProcessDetail, ProcessMetrics, ProcessSummary, Rule } from '../api/contracts'
 import { t } from '../i18n'
 import { formatEuro, formatMs, formatRunDate } from '../lib/format'
 import { decisionTone, type DecisionTone } from '../lib/process'
@@ -45,7 +45,8 @@ export function Process() {
   const { isManager } = useSession()
   const [runPanelOpen, setRunPanelOpen] = useState(false)
   const [queue, setQueue] = useState<QueuedFile[]>([])
-  const [progress, setProgress] = useState<UploadProgress | null>(null)
+  // Every upload event of the batch, in order: the panel's live output.
+  const [progress, setProgress] = useState<UploadProgress[]>([])
   const [published, setPublished] = useState<number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const publishOpen = searchParams.get('publicar') === '1'
@@ -122,8 +123,10 @@ export function Process() {
 
   const upload = useMutation({
     mutationFn: (incoming: File[]) => {
-      setProgress(null)
-      return api.uploadFiles(processId, incoming, setProgress)
+      setProgress([])
+      return api.uploadFiles(processId, incoming, (event) =>
+        setProgress((current) => [...current, event]),
+      )
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: keys.instances(processId) })
@@ -135,6 +138,7 @@ export function Process() {
   const compiling = rules.data?.filter((rule) => rule.status === 'compiling').length ?? 0
   const waiting = summary.data?.queue ?? 0
   const currentVersion = Math.max(0, ...(versions.data ?? []).map((version) => version.number))
+  const latestPublished = versions.data?.find((version) => version.number === currentVersion)
   const nextVersion = currentVersion + 1
   const busy = run.isPending || upload.isPending
   const startBlocked =
@@ -286,16 +290,18 @@ export function Process() {
           </div>
         ) : null}
         <header className="mb-6">
-          <p className="text-[13px] text-muted">
-            {currentVersion ? `v${currentVersion} publicada` : 'Sin versión publicada'}
-          </p>
-          <h1 className="mt-1 text-[32px] font-medium leading-[1.1] tracking-[-0.045em]">
+          <VersionChips
+            processId={processId}
+            published={latestPublished}
+            draft={hasDraft && draft.data ? nextVersion : undefined}
+          />
+          <h1 className="mt-2 text-[32px] font-medium leading-[1.1] tracking-[-0.045em]">
             {process.data?.name ?? '…'}
           </h1>
-          <ExpandableText
+          <ProcessAbout
             key={processId}
-            text={process.data?.description ?? ''}
-            className="mt-2 max-w-2xl text-[14.5px] leading-6 text-muted"
+            name={process.data?.name ?? ''}
+            description={process.data?.description ?? ''}
           />
         </header>
 
@@ -727,5 +733,49 @@ function EmptyPanel({
         )}
       </div>
     </section>
+  )
+}
+
+/** Which version decides today, and whether a draft waits to be published. */
+function VersionChips({
+  processId,
+  published,
+  draft,
+}: {
+  processId: number
+  published: VersionOut | undefined
+  draft: number | undefined
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {published ? (
+        <span
+          title={published.reason || undefined}
+          className="inline-flex items-center gap-1.5 rounded-full bg-pagar-soft py-1 pl-2 pr-2.5 text-[11.5px] text-pagar"
+        >
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pagar opacity-40 motion-reduce:animate-none" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-pagar" />
+          </span>
+          <span className="font-mono font-medium">v{published.number}</span>
+          <span>en vigor</span>
+          <span className="text-pagar/60">· {formatRunDate(published.created_at)}</span>
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-canvas px-2.5 py-1 text-[11.5px] text-muted ring-1 ring-line">
+          <span className="h-1.5 w-1.5 rounded-full bg-faint/60" />
+          Sin versión publicada
+        </span>
+      )}
+      {draft != null ? (
+        <Link
+          to={`${paths.process(processId)}?publicar=1`}
+          className="inline-flex items-center gap-1.5 rounded-full bg-escalar-soft px-2.5 py-1 text-[11.5px] text-escalar hover:opacity-80"
+        >
+          <span className="font-mono font-medium">v{draft}</span>
+          borrador · publicar
+        </Link>
+      ) : null}
+    </div>
   )
 }

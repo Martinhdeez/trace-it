@@ -1,15 +1,15 @@
-import { useRef, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { Link } from 'react-router'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { ArrowRight, Check, Circle, FileText, LoaderCircle, Play, Upload, X } from 'lucide-react'
+import { ArrowRight, Check, Circle, LoaderCircle, Play, Upload, X } from 'lucide-react'
 import type { ProcessDetail, RunSummary, UploadProgress } from '../../api/contracts'
 import { FileChip, type FilePreview } from '../process/FileChip'
 import { ErrorNotice, Notice } from '../shell/Notice'
+import { TerminalLoader } from '../shell/TerminalLoader'
 import { cn } from '../../lib/cn'
 import { paths } from '../../lib/paths'
 import { decisionTone, type DecisionTone } from '../../lib/process'
 
-const stages = ['Lectura', 'Símbolos', 'Reglas', 'Decisión'] as const
 const ease = [0.23, 1, 0.32, 1] as const
 
 /** More files than this and the queue shows a count instead of every chip. */
@@ -46,7 +46,7 @@ export function BatchRunPanel({
   startBlocked?: string
   error?: unknown
   /** Files uploaded so far, reported by the client after each one. */
-  progress: UploadProgress | null
+  progress: UploadProgress[]
   result: RunSummary | undefined
   onFiles: (files: File[]) => void
   onRemove: (id: string) => void
@@ -114,8 +114,8 @@ export function BatchRunPanel({
           queue={queue}
           uploading={uploading}
           running={running}
-          finished={finished}
-          uploaded={progress?.done ?? 0}
+          rulesCount={rulesCount}
+          events={progress}
         />
       )}
     </section>
@@ -245,130 +245,208 @@ function Collect({
   )
 }
 
+/** Output lines kept on screen; a 500-file batch writes a thousand. */
+const LOG_LINES = 200
+
+type FileState =
+  | { phase: 'queued' }
+  | { phase: 'reading' }
+  | { phase: 'read'; read?: number; expected?: number }
+
+/**
+ * A batch on its way: every file with its state on the left, the output as it arrives
+ * on the right. Reading reports per file; deciding is one call, so it shows as one step.
+ */
 function Progress({
   queue,
   uploading,
   running,
-  finished,
-  uploaded,
+  rulesCount,
+  events,
 }: {
   queue: FilePreview[]
   uploading: boolean
   running: boolean
-  finished: boolean
-  uploaded: number
+  rulesCount: number
+  events: UploadProgress[]
 }) {
   const reduceMotion = useReducedMotion()
+  const log = useRef<HTMLOListElement>(null)
+  const files = useRef<HTMLUListElement>(null)
 
-  // A file is done once its upload returns. Deciding starts after the last one.
-  const activeIndex = running || finished ? queue.length : Math.min(uploaded, queue.length)
-  // Reading while files go up, then an open-ended Decisión while the engine runs.
-  const activeStage = finished ? stages.length : running ? stages.length - 1 : 0
-  const progress = queue.length === 0 ? 100 : Math.round((activeIndex / queue.length) * 100)
-  const start = Math.max(0, activeIndex - 2)
-  const visible = queue.slice(start, start + 7)
+  const states = new Map<number, FileState>()
+  for (const event of events) {
+    states.set(
+      event.index,
+      event.phase === 'read'
+        ? { phase: 'read', read: event.read, expected: event.expected }
+        : { phase: 'reading' },
+    )
+  }
+  const done = events.filter((event) => event.phase === 'read').length
+  const percent = queue.length ? Math.round((done / queue.length) * 100) : 100
+
+  // Big batches: keep the file being read in view, and the newest output line.
+  useEffect(() => {
+    log.current?.scrollTo({ top: log.current.scrollHeight })
+    const list = files.current
+    const row = list?.querySelector<HTMLElement>('[data-reading]')
+    if (list && row && (row.offsetTop < list.scrollTop || row.offsetTop > list.scrollTop + list.clientHeight - row.offsetHeight)) {
+      list.scrollTop = row.offsetTop - list.clientHeight / 2
+    }
+  }, [events.length, running])
+  const shown = events.slice(-LOG_LINES)
 
   return (
-    <div className="grid min-h-[284px] lg:grid-cols-[minmax(0,1fr)_250px]">
+    <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="min-w-0 px-5 py-4">
-        <div className="mb-4 flex items-center justify-between font-mono text-[10px] text-faint">
-          <span>{running ? 'DECIDIENDO' : `LEÍDOS ${activeIndex} DE ${queue.length}`}</span>
-          <span>{progress}%</span>
+        <div className="mb-3 flex items-center justify-between font-mono text-[10px] text-faint">
+          <span>{running ? 'DECIDIENDO' : `LEÍDOS ${done} DE ${queue.length}`}</span>
+          <span>{running ? `${rulesCount} reglas` : `${percent}%`}</span>
         </div>
-        <div className="mb-5 h-px overflow-hidden bg-rule">
+        <div className="relative mb-4 h-[3px] overflow-hidden rounded-full bg-rule">
           <motion.div
-            className="h-full origin-left bg-pagar"
+            className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-pagar"
             initial={false}
-            animate={{ transform: `scaleX(${progress / 100})` }}
-            transition={reduceMotion ? { duration: 0 } : { duration: 0.3, ease }}
+            animate={{ transform: `scaleX(${running ? 1 : percent / 100})` }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.35, ease }}
           />
+          {running && !reduceMotion ? (
+            <motion.div
+              className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/70 to-transparent"
+              initial={{ left: '-33%' }}
+              animate={{ left: '100%' }}
+              transition={{ duration: 1.1, ease: 'easeInOut', repeat: Infinity }}
+            />
+          ) : null}
         </div>
 
-        <div className="space-y-1">
-          <AnimatePresence mode="popLayout" initial={false}>
-            {visible.map((item, visibleIndex) => {
-              const index = start + visibleIndex
-              const done = index < activeIndex
-              const active = uploading && index === activeIndex
-              return (
-                <motion.div
-                  layout
-                  key={item.id}
-                  initial={reduceMotion ? false : { opacity: 0 }}
-                  animate={{ opacity: done || active ? 1 : 0.38 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.16 }}
-                  className={cn(
-                    'flex min-w-0 items-center gap-3 rounded-[10px] px-3 py-2',
-                    active && 'bg-canvas',
-                  )}
-                >
-                  {done ? (
-                    <Check size={13} strokeWidth={2} className="shrink-0 text-pagar" />
-                  ) : active ? (
-                    <LoaderCircle
-                      size={13}
-                      strokeWidth={1.8}
-                      className={cn('shrink-0 text-ink', !reduceMotion && 'animate-spin')}
-                    />
-                  ) : (
-                    <Circle size={11} strokeWidth={1.5} className="shrink-0 text-faint" />
-                  )}
-                  <FileText size={13} strokeWidth={1.5} className="shrink-0 text-faint" />
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
-                    {item.name}
-                  </span>
-                  <span className="shrink-0 font-mono text-[10px] text-faint">
-                    {done ? 'terminado' : active ? stages[0] : 'en espera'}
-                  </span>
-                </motion.div>
-              )
-            })}
-          </AnimatePresence>
-        </div>
-
-      </div>
-
-      <aside className="border-t border-hairline bg-canvas px-5 py-4 lg:border-l lg:border-t-0">
-        <p className="mb-4 font-mono text-[10px] text-faint">DOCUMENTO ACTUAL</p>
-        <ol className="space-y-3">
-          {stages.map((stage, index) => {
-            const done = index < activeStage
-            const active = index === activeStage
+        <ul ref={files} className="relative max-h-[300px] space-y-0.5 overflow-y-auto">
+          {queue.map((item, index) => {
+            const state = states.get(index) ?? { phase: 'queued' as const }
             return (
-              <li key={stage} className="flex items-center gap-3">
+              <li
+                key={item.id}
+                data-reading={state.phase === 'reading' ? '' : undefined}
+                className={cn(
+                  'flex min-w-0 items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 transition-colors',
+                  state.phase === 'reading' && 'bg-canvas',
+                )}
+              >
+                <FileStatus state={state} deciding={running} reduceMotion={Boolean(reduceMotion)} />
                 <span
                   className={cn(
-                    'grid h-5 w-5 place-items-center rounded-full ring-1',
-                    done
-                      ? 'bg-pagar text-white ring-pagar'
-                      : active
-                        ? 'text-ink ring-ink/40'
-                        : 'text-faint ring-line',
+                    'min-w-0 flex-1 truncate font-mono text-[11px] transition-opacity',
+                    state.phase === 'queued' && !running && 'opacity-40',
                   )}
                 >
-                  {done ? (
-                    <Check size={11} strokeWidth={2.5} />
-                  ) : active ? (
-                    <LoaderCircle
-                      size={11}
-                      strokeWidth={1.8}
-                      className={cn(!reduceMotion && 'animate-spin')}
-                    />
-                  ) : (
-                    <span className="font-mono text-[9px]">{index + 1}</span>
-                  )}
+                  {item.name}
                 </span>
-                <span className={cn('text-[12px]', active ? 'text-ink' : 'text-muted')}>
-                  {stage}
+                <span className="shrink-0 font-mono text-[10px] text-faint">
+                  {running
+                    ? 'decidiendo'
+                    : state.phase === 'read'
+                      ? state.expected
+                        ? `${state.read}/${state.expected} datos`
+                        : 'leído'
+                      : state.phase === 'reading'
+                        ? 'leyendo'
+                        : 'en cola'}
                 </span>
               </li>
             )
           })}
+        </ul>
+      </div>
+
+      <aside className="flex min-h-[280px] flex-col border-t border-hairline bg-canvas lg:border-l lg:border-t-0">
+        <p className="px-5 pb-2 pt-4 font-mono text-[10px] text-faint">SALIDA</p>
+        <ol
+          ref={log}
+          className="max-h-[300px] min-h-0 flex-1 space-y-1 overflow-y-auto px-5 pb-4 font-mono text-[11px] leading-5"
+        >
+          <AnimatePresence initial={false}>
+            {shown.map((event, index) => (
+              <motion.li
+                key={events.length - shown.length + index}
+                initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18, ease }}
+                className="flex min-w-0 gap-2"
+              >
+                <span className={event.phase === 'read' ? 'text-pagar' : 'text-faint'}>
+                  {event.phase === 'read' ? '✓' : '›'}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-ink">{event.name}</span>
+                <span className="shrink-0 text-faint">
+                  {event.phase === 'read'
+                    ? event.expected
+                      ? `${event.read}/${event.expected} datos`
+                      : 'leído'
+                    : 'leyendo'}
+                </span>
+              </motion.li>
+            ))}
+          </AnimatePresence>
+          {running ? (
+            <li className="pt-1">
+              <TerminalLoader
+                verbs={[
+                  `aplicando ${rulesCount} reglas`,
+                  'cruzando con las fuentes',
+                  'decidiendo cada documento',
+                ]}
+              />
+            </li>
+          ) : uploading && events.length === 0 ? (
+            <li>
+              <TerminalLoader verbs={['subiendo el lote']} />
+            </li>
+          ) : null}
         </ol>
       </aside>
     </div>
   )
+}
+
+function FileStatus({
+  state,
+  deciding,
+  reduceMotion,
+}: {
+  state: FileState
+  deciding: boolean
+  reduceMotion: boolean
+}) {
+  if (deciding) {
+    return (
+      <span className="grid h-[13px] w-[13px] shrink-0 place-items-center">
+        <span className={cn('h-1.5 w-1.5 rounded-full bg-ink/60', !reduceMotion && 'animate-pulse')} />
+      </span>
+    )
+  }
+  if (state.phase === 'read') {
+    return (
+      <motion.span
+        initial={reduceMotion ? false : { scale: 0.4, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 500, damping: 28 }}
+        className="shrink-0"
+      >
+        <Check size={13} strokeWidth={2} className="text-pagar" />
+      </motion.span>
+    )
+  }
+  if (state.phase === 'reading') {
+    return (
+      <LoaderCircle
+        size={13}
+        strokeWidth={1.8}
+        className={cn('shrink-0 text-ink', !reduceMotion && 'animate-spin')}
+      />
+    )
+  }
+  return <Circle size={11} strokeWidth={1.5} className="mx-px shrink-0 text-faint" />
 }
 
 const TONE_BAR: Record<DecisionTone, string> = {

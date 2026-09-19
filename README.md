@@ -93,6 +93,7 @@ hand-written rules run without agent keys. See `.env.example` and the setup guid
   [ERP connector](docs/sources-http.md), [ingestion](docs/ingestion/README.md),
   [frontend](frontend/README.md)
 - [Contributing](CONTRIBUTING.md)
+- [Mail ingestion](docs/mail-ingestion.md): process gathering email, local tests and disabled deployment.
 
 The challenge data lives in the `.context/500-sombras-de-alberto` submodule and is never
 modified. Credentials, model weights and local results stay out of Git.

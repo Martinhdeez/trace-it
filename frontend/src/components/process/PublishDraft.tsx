@@ -85,12 +85,17 @@ export function PublishDraft({
             <summary className="cursor-pointer text-[12px] text-muted">Detalles técnicos del borrador y la validación</summary>
             <pre className="max-h-96 overflow-auto text-xs">{JSON.stringify(draft, null, 2)}</pre>
           </details>
-          <Field label="Motivo de la publicación">
-            <Textarea value={reason} onChange={(event) => setReason(event.target.value)} />
+          <Field label="Motivo (opcional)">
+            <Textarea
+              rows={2}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Por qué publicas esta versión. Queda en el historial."
+            />
           </Field>
           <Button
             tone="primary"
-            disabled={busy || blocked || !validation.valid || !reason.trim()}
+            disabled={busy || blocked || !validation.valid}
             onClick={() => publish.mutate()}
           >
             Publicar

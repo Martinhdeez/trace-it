@@ -54,7 +54,7 @@ def stored_upload(instance, result):
 
 
 async def attach_document(
-    session, process_id, user_id, content, result, symbols=None, context=None
+    session, process_id, user_id, content, result, symbols=None, context=None, *, commit=True
 ):
     from app.features.versions.service import lock
 
@@ -104,7 +104,8 @@ async def attach_document(
         },
         duration_ms=round(result.metrics.get("extraction_ms", 0)),
     )
-    await session.commit()
+    if commit:
+        await session.commit()
     return {
         "instance_id": instance.id,
         "process_id": process_id,
