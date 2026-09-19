@@ -11,7 +11,7 @@ from app.core.events import Event
 from app.features.processes.model import Process
 
 from .model import File, Instance
-from .process_extraction import reusable_evidence
+from .process_extraction import name_symbols, reusable_evidence
 from .schemas import ExtractionResult
 
 
@@ -122,7 +122,7 @@ async def attach_document(
 
 async def document_result(session, instance_id):
     event = await document_event(session, instance_id)
-    return ExtractionResult.model_validate(event.data["extraction"])
+    return name_symbols(ExtractionResult.model_validate(event.data["extraction"]), event.data)
 
 
 async def document_event(session, instance_id):

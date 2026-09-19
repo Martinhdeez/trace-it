@@ -1,6 +1,13 @@
 .git
-.env
-.env.*
+.context
+.artifacts
+.models*
+.data
+backups
+demo-logs
+frontend
+output
+backend/reports
 **/.env
 **/.env.*
 **/.htpasswd
@@ -10,10 +17,5 @@
 **/.pytest_cache
 **/.ruff_cache
 **/dist
-.models*
-.data
-.artifacts
-output
 **/test-results
 **/playwright-report
-.context

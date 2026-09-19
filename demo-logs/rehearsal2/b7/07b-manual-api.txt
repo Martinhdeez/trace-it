@@ -1,0 +1,4 @@
+$ for f in $L2/facturas/lote2_factura_2886.pdf; do curl --fail-with-body -sS "$API/processes/$P/files" -H "$MANAGER" -F "file=@$f" -F "ocr=true" -o /dev/null -w "%{http_code} $(basename $f)\n"; done; curl --fail-with-body -sS -X POST "$API/processes/$P/run" -H "$MANAGER"; echo
+201 lote2_factura_2886.pdf
+{"decided":0,"by_decision":{}}
+[exit 0] [5.47 s] [14:53:47]

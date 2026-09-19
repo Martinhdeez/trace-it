@@ -329,3 +329,107 @@ def test_precedence_with_a_source_down() -> None:
     assert combine([("NO_PAGAR", None, "RULE_ERROR 1: boom"), DOWN])[1] == (
         "RULE_ERROR 1: boom | SOURCE_UNAVAILABLE 2: erp"
     )
+
+
+FROZEN_RULES = pack.PACK / "invoice-payment" / "frozen" / "2026-09-19" / "rules"
+P001 = {"issuer_nif": "B12345678", "purchase_order": "PO-1", "date": "2026-01-08"}
+CATERING = {"issuer_nif": "B99999999", "purchase_order": "PO-9", "date": "2026-02-03"}
+
+
+async def workbook_process(loads: dict[str, list[dict]]) -> int:
+    """A process with the frozen supplier, order and cut-off rules, a P001-like and a
+    catering-like invoice, and only the source loads in `loads`."""
+    from tests.support.rows import process, publish_fixture
+
+    async with session_factory() as session:
+        row = await process(session, f"no-workbook-{uuid.uuid4().hex[:8]}")
+        for t, priority, default, human in (
+            ("ESCALAR", 3, False, True),
+            ("NO_PAGAR", 2, False, False),
+            ("PAGAR", 1, True, False),
+        ):
+            session.add(
+                DecisionType(
+                    process_id=row.id,
+                    name=t,
+                    priority=priority,
+                    is_default=default,
+                    requires_human=human,
+                )
+            )
+        for file_name, symbols in (("P001.pdf", P001), ("catering.pdf", CATERING)):
+            digest = uuid.uuid4().hex
+            session.add(File(hash=digest, name=file_name, content=b"%PDF", text=""))
+            session.add(
+                Instance(
+                    process_id=row.id, file_hash=digest, name=file_name, symbols=stored(symbols)
+                )
+            )
+        for name, rows in loads.items():
+            session.add(Source(process_id=row.id, name=name, origin="t", rows=rows))
+        for stem in ("n1-1", "n2-1", "n4-2"):
+            session.add(
+                Rule(
+                    process_id=row.id,
+                    text=stem,
+                    type="prohibition",
+                    decision="NO_PAGAR",
+                    code=(FROZEN_RULES / f"{stem}.py").read_text(),
+                    hash=f"hash-{stem}",
+                    status="active",
+                    report={"valid": True},
+                )
+            )
+        await session.flush()
+        process_id = row.id
+        await publish_fixture(session, process_id)
+    return process_id
+
+
+async def test_a_source_never_loaded_escalates_instead_of_reading_empty() -> None:
+    """No workbook: the supplier and order rules would reject both invoices on empty tables;
+    they do not run, and both escalate. Never NO_PAGAR on data nobody loaded."""
+    process_id = await workbook_process({})
+    async with client() as api:
+        r = await api.post(f"/processes/{process_id}/run")
+        assert r.status_code == 200, r.text
+        assert r.json()["down_sources"] == {
+            "orders": "never loaded",
+            "parameters": "never loaded",
+            "suppliers": "never loaded",
+        }
+        unavailable = ("ESCALAR", "SOURCE_UNAVAILABLE: orders, parameters, suppliers")
+        assert await decisions(api, process_id) == {
+            "P001.pdf": unavailable,
+            "catering.pdf": unavailable,
+        }
+
+
+async def test_no_cut_off_row_does_not_pass_silently() -> None:
+    process_id = await workbook_process(
+        {"suppliers": [{"nif": "B12345678"}], "orders": [{"purchase_order": "PO-1"}]}
+    )
+    async with client() as api:
+        r = await api.post(f"/processes/{process_id}/run")
+        assert r.json()["down_sources"] == {"parameters": "never loaded"}
+        assert (await decisions(api, process_id))["P001.pdf"] == (
+            "ESCALAR",
+            "SOURCE_UNAVAILABLE: parameters",
+        )
+
+
+async def test_a_loaded_empty_table_is_still_a_table() -> None:
+    process_id = await workbook_process(
+        {
+            "suppliers": [{"nif": "B12345678"}],
+            "orders": [],
+            "parameters": [{"cut_off_date": "2026-09-18"}],
+        }
+    )
+    async with client() as api:
+        r = await api.post(f"/processes/{process_id}/run")
+        assert "down_sources" not in r.json()
+        assert (await decisions(api, process_id))["P001.pdf"] == (
+            "NO_PAGAR",
+            "PURCHASE_ORDER_NOT_FOUND PO-1",
+        )

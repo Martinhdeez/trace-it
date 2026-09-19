@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.core.database import Session
 from app.features.sources import service
 from app.features.sources.service import Diff, SourceDetail, SourceOut, SyncResult
+from app.features.users.dependencies import Manager
 
 router = APIRouter(prefix="/processes", tags=["sources"])
 
@@ -35,7 +36,7 @@ async def get_source(process_id: int, name: str, session: Session) -> SourceDeta
     "retries and the diff against the previous snapshot.",
     responses={502: {"description": "The source failed; nothing was stored"}},
 )
-async def sync_source(process_id: int, name: str, session: Session) -> SyncResult:
+async def sync_source(process_id: int, name: str, session: Session, _: Manager) -> SyncResult:
     return await service.sync_process(session, process_id, name)
 
 

@@ -65,6 +65,9 @@ class InstanceDetail(InstanceOut):
 class ResolveIn(BaseModel):
     decision: str = Field(examples=["NO_PAGAR"])  # must be a decision type of the process
     reason: str
+    # The assistant's open proposal this answers (POST /instances/{id}/proposal): it is
+    # accepted if the decision is the proposed one, rejected otherwise.
+    proposal_id: int | None = None
 
 
 class RuleSummary(BaseModel):
@@ -92,7 +95,8 @@ class ProcessSummary(BaseModel):
     instances: int
     by_status: dict[str, int] = Field(examples=[{"PENDING": 0, "DECIDED": 500}])
     by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
-    # Live sources whose pre-run sync failed, name -> why; omitted when none (ADR 0028).
+    # Sources whose pre-run sync failed or that were never loaded, name -> why; omitted when
+    # none (ADR 0028).
     down_sources: dict[str, str] = {}
     queue: int  # latest decision is one a person must look at
     resolved: int  # instances whose latest decision a person took
@@ -104,7 +108,8 @@ class ProcessSummary(BaseModel):
 class RunSummary(BaseModel):
     decided: int
     by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
-    # Live sources whose pre-run sync failed, name -> why; omitted when none (ADR 0028).
+    # Sources whose pre-run sync failed or that were never loaded, name -> why; omitted when
+    # none (ADR 0028).
     down_sources: dict[str, str] = {}
 
 
@@ -136,6 +141,40 @@ class ReprocessSummary(BaseModel):
     changes: list[ChangeOut]  # the engine decided it before and decides otherwise now
     conflicts: list[ChangeOut]  # a person decided it last; left alone, for the manager
     down_sources: dict[str, str] = {}  # as in RunSummary; omitted when none
+
+
+class RunOut(BaseModel):
+    """One stored execution (a run or a reprocess), read back from its row and its span."""
+
+    id: int  # the execution id; decisions carry it as `execution_id`
+    kind: str | None = Field(examples=["run", "reprocess"])  # None: stored before run history
+    started_at: datetime
+    finished_at: datetime | None
+    author: str | None  # the manager who started it
+    version_id: int
+    version_number: int
+    rules_hash: str | None
+    instances: int  # instances the engine evaluated
+    decided: int  # decisions this execution appended (a reprocess only writes changes)
+    # The engine's outcome for every evaluated instance, written or not, so runs compare.
+    by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
+    escalated: int  # outcomes whose decision type requires a human
+    escalation_reasons: dict[str, int] = Field(examples=[{"SOURCE_UNAVAILABLE": 3}])
+    down_sources: dict[str, str] = {}
+    trace_id: str | None  # `GET /traces/{trace_id}`
+
+
+class RunDecisionOut(BaseModel):
+    decision_id: int
+    instance_id: int
+    name: str
+    decision: str
+    reason: str | None
+    created_at: datetime
+
+
+class RunDetail(RunOut):
+    decisions: list[RunDecisionOut]  # the rows this execution appended, by instance id
 
 
 class FindingOut(BaseModel):

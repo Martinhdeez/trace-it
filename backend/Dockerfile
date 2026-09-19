@@ -4,7 +4,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils l
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 WORKDIR /srv
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv PATH=/opt/venv/bin:$PATH
-COPY pyproject.toml uv.lock ./
+COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
-COPY . .
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+COPY backend/ .
+COPY processes/ /processes/
+CMD ["sh", "-c", "alembic upgrade head && python -m app.cli seed-hiring /processes/travel-expenses.json && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

@@ -109,9 +109,11 @@ benchmark and golden-reference tools also need `pdftotext` (poppler).
 | `make demo` | Uploads workbook and 500 PDFs through the production API, syncs the ERP, runs decisions and exports `output/outcomes.jsonl` (`tools/README.md`). Requires the backend and ERP running, plus downloaded OCR weights for scans |
 | `make demo DEMO_ARGS="--limit 5 --local-only"` | Small API run with local OCR and no Gemini/Jev requests; use a fresh database for comparable results |
 | `make trace-decision FILE=<file_id>` | One invoice through the API, as text: state, decisions (author, reason, process version, rules hash), symbols with origin, latency per step, errors and retries, pending work and alerts. `PROCESS=<id>` picks a process |
+| `make openapi` | Dumps the API contract to `frontend/openapi.json` (no server needed) and regenerates `frontend/src/api/schema.d.ts`. Run it after changing a route or schema; a unit test fails while they are stale |
 | `make test` | Unit tests (`-m "not e2e and not llm"`) |
 | `make test-e2e` | Golden outcomes of batch 1 and the API flow (needs the challenge submodule) |
 | `make check` | `ruff check`, `ruff format --check` (backend and `tools/`), then `test` and `test-e2e`. Run before every PR |
+| `make e2e-integration` | The demo path through the real console and API in Chromium, on a fresh `trace_e2e_test` database with the frozen pack; no LLM key (`tests/integration/README.md`). Run before every PR into `integration` |
 | `make eval-compiler` | Opt-in, calls real LLMs: compiles the 16 rules and compares with `rules-v3/`; report in `backend/evals/reports/` |
 | `make eval-norm` | Opt-in, calls real LLMs: the client's `Norma_Pagos_v3` -> normalizer -> compiler -> batch 1 vs golden; report in `backend/evals/reports/` |
 | `make demo-llm-down` | Opt-in, calls real LLMs (Helmcode): the normalizer's primary provider is unreachable and a fallback model answers; prints the `llm_run` span (ADR 0019) |
@@ -119,6 +121,8 @@ benchmark and golden-reference tools also need `pdftotext` (poppler).
 | `make reset-db` | Deletes the database volume. Then `make setup` |
 
 Without Docker for the backend (faster loop): `docker compose up db -d`, then in `backend/`: `uv sync`, `uv run alembic upgrade head`, `uv run uvicorn app.main:app --env-file ../.env --reload` (the settings read `.env` from the working directory, so without `--env-file` the keys in the root `.env` are missed).
+
+The console: `cd frontend && npm install && npm run dev`, then http://127.0.0.1:5173. It proxies `/api` to the API of `make setup` (:8000); for another port set `VITE_API_TARGET=http://127.0.0.1:<port>`. It always talks to the real API; `VITE_API_MODE=mock` is the only way to see the simulator, and it says so on screen (`frontend/README.md`).
 
 ## Environment
 

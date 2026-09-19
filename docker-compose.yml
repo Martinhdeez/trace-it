@@ -13,7 +13,9 @@ services:
       retries: 20
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     env_file: [{path: .env, required: false}]
     environment:
       TRACE_DATABASE_URL: postgresql+psycopg://trace:trace@db:5432/trace

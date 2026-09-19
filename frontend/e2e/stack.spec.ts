@@ -3,9 +3,18 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { test, expect, request as requests, type APIRequestContext, type Page } from '@playwright/test'
 
+// Writes are manager-only; ci-stack.sh loads the pack, which seeds this manager.
+async function seededManager(request: APIRequestContext) {
+  const login = await request.post('api/login', { data: { email: 'martin@trace-it.local' } })
+  expect(login.status(), await login.text()).toBe(200)
+  return { 'X-User-Id': String((await login.json()).id) }
+}
+
 async function managerFixture(request: APIRequestContext, page?: Page) {
   const email = `${randomUUID()}@ci.invalid`
-  const created = await request.post('api/users', { data: { name: 'CI manager', email, role: 'manager' } })
+  const created = await request.post('api/users', {
+    headers: await seededManager(request), data: { name: 'CI manager', email, role: 'manager' },
+  })
   expect(created.status()).toBe(201)
   const login = await request.post('api/login', { data: { email } })
   expect(login.status()).toBe(200)
@@ -14,16 +23,17 @@ async function managerFixture(request: APIRequestContext, page?: Page) {
     await page.goto('settings')
     const user = page.getByRole('button', { name: new RegExp(email.replaceAll('.', '\\.')) })
     await expect(user).toContainText('CI manager')
-    await expect(user).toContainText('responsable')
+    await expect(user).toContainText(/responsable/i)
     await user.click()
-    await expect(page.getByRole('button', { name: 'Salir', exact: true })).toBeVisible()
+    // The sidebar now names the chosen identity.
+    await expect(page.getByRole('link', { name: /CI manager\s*Responsable/ })).toBeVisible()
   }
   return headers
 }
 
 async function processFixture(request: APIRequestContext) {
   const name = `Browser CI ${randomUUID()}`
-  const response = await request.post('api/processes/definition', { data: {
+  const response = await request.post('api/processes/definition', { headers: await seededManager(request), data: {
     name, description: 'Isolated end-to-end test',
     decision_types: [
       { name: 'ACCEPT', priority: 0, is_default: true },
@@ -92,14 +102,14 @@ test('production never substitutes mock data for an unavailable API', async ({ p
   const process = await processFixture(request)
   await page.route('**/api/**', route => route.fulfill({ status: 503, body: 'Unavailable' }))
   await page.goto('processes')
-  await expect(page.getByText('503 Service Unavailable', { exact: false })).toBeVisible()
+  await expect(page.getByText('El backend no responde').first()).toBeVisible()
   await expect(page.getByRole('link', { name: process.name })).toHaveCount(0)
   await expect(page.getByRole('link', { name: /Pago de facturas/i })).toHaveCount(0)
 })
 
 test('HTTP flow persists PDF evidence, decisions, human resolution and export', async ({ request, page }, testInfo) => {
-  const process = await processFixture(request)
   const headers = await managerFixture(request, page)
+  const process = await processFixture(request)
   const validated = await request.post(`api/processes/${process.id}/draft/validate`, { headers })
   expect(validated.status(), await validated.text()).toBe(200)
   const draft = await validated.json()
@@ -122,7 +132,7 @@ test('HTTP flow persists PDF evidence, decisions, human resolution and export', 
   expect(document.symbols.holder.value).toBe('Ana')
   const evidence = await request.get(`api/instances/${instanceId}/document`, { headers })
   expect(evidence.status()).toBe(200)
-  const run = await request.post(`api/processes/${process.id}/run`)
+  const run = await request.post(`api/processes/${process.id}/run`, { headers })
   expect(run.status(), await run.text()).toBe(200)
   expect((await run.json()).decided, 'Uploaded PDF must reach the decision engine').toBe(1)
   const before = await (await request.get(`api/instances/${instanceId}`)).json()

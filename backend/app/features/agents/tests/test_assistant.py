@@ -36,6 +36,12 @@ pytestmark = pytest.mark.skipif(not _db_available(), reason="Local Postgres not 
 SUGGESTION = {
     "decision": "NO_PAGAR",
     "reasoning": "amount=5000 (text) exceeds the limit of the rule 'amount > 1000'",
+    "why": ["The invoice is over 1000, and amounts above it need a person."],
+    "options": [
+        {"decision": "PAGAR", "consequence": "The invoice is paid."},
+        {"decision": "NO_PAGAR", "consequence": "The invoice is not paid."},
+    ],
+    "evidence": ["symbol:amount", "file"],
     "proposed_rule": "If amount (invoice text) > 4000 and supplier (Excel) = 'ACME', do not pay",
     "proposed_type": "prohibition",
 }
@@ -160,6 +166,16 @@ async def test_invalid_decision_retries_once(case, monkeypatch) -> None:
 
 async def test_two_invalid_decisions_give_502(case, monkeypatch) -> None:
     script(monkeypatch, [{**SUGGESTION, "decision": "REJECT"}] * 2)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        r = await api.get(f"/instances/{case['escalated']}/suggestion")
+    assert r.status_code == 502, r.text
+    assert r.json()["code"] == "llm_error"
+
+
+async def test_no_llm_key_gives_502(case, monkeypatch) -> None:
+    for key in ("HELMCODE_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.setenv(key, "")
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         r = await api.get(f"/instances/{case['escalated']}/suggestion")
     assert r.status_code == 502, r.text

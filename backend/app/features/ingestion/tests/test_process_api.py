@@ -119,8 +119,8 @@ async def test_document_locations_and_page_preserve_saved_reading(process_api):
     assert (await client.get(endpoint + "/pages/2")).status_code == 404
     assert (await client.get(endpoint)).json() == before
     client.headers.pop("X-User-Id")
-    assert (await client.get(endpoint + "/locations")).status_code == 422
-    assert (await client.get(endpoint + "/pages/1")).status_code == 422
+    assert (await client.get(endpoint + "/locations")).status_code == 401
+    assert (await client.get(endpoint + "/pages/1")).status_code == 401
 
 
 async def test_reupload_preserves_instance_state_and_distinguishes_file_names(process_api):

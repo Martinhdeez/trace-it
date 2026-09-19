@@ -22,7 +22,7 @@ from app.features.users.dependencies import CurrentUser
 
 from . import process_service
 from .errors import InvalidDocumentError
-from .extraction_plan import ExtractionPlan, load_extraction_plan
+from .extraction_plan import ExtractionPlan, ExtractionPlanOut, load_extraction_plan
 from .pdf.locations import DocumentLocations, locate_document, render_page
 from .process_extraction import read_document, reextract_document
 from .runtime import current_service
@@ -64,7 +64,9 @@ class DocumentUpload(BaseModel):
     operation_id="getProcessExtractionPlan",
     summary="Inspect the current fields and rule dependencies used for document extraction",
 )
-async def extraction_plan(process_id: int, session: Session, user: CurrentUser) -> dict:
+async def extraction_plan(
+    process_id: int, session: Session, user: CurrentUser
+) -> ExtractionPlanOut:
     await process_service.require_process(session, process_id)
     plan: ExtractionPlan = await load_extraction_plan(session, process_id)
     return {**plan.model_dump(mode="json"), "fingerprint": plan.fingerprint}
@@ -154,7 +156,11 @@ async def get_document(instance_id: int, session: Session, user: CurrentUser):
     return await process_service.document_result(session, instance_id)
 
 
-@router.get("/instances/{instance_id}/document/locations", response_model=DocumentLocations)
+@router.get(
+    "/instances/{instance_id}/document/locations",
+    response_model=DocumentLocations,
+    operation_id="getDocumentLocations",
+)
 async def get_document_locations(
     instance_id: int, session: Session, user: CurrentUser, service: Service
 ):
@@ -175,7 +181,11 @@ async def get_document_locations(
     return locations
 
 
-@router.get("/instances/{instance_id}/document/pages/{page_number}", response_class=Response)
+@router.get(
+    "/instances/{instance_id}/document/pages/{page_number}",
+    response_class=Response,
+    operation_id="getDocumentPage",
+)
 async def get_document_page(
     instance_id: int, page_number: int, session: Session, user: CurrentUser
 ):
@@ -216,7 +226,7 @@ async def upload_workbook(
     user: CurrentUser,
     service: Service,
     file: Annotated[UploadFile, File()],
-    cut_off_date: Annotated[date | None, Form()] = None,
+    cut_off_date: Annotated[date, Form()],  # required, no default: the manager sets it (Q4)
 ):
     try:
         await process_service.require_process(session, process_id)

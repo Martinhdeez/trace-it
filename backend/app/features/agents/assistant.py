@@ -8,7 +8,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_ai import Agent, ModelRetry, RunContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,9 +28,17 @@ MAX_TEXT = 12_000  # chars of the file's text sent to the model
 MAX_RESOLUTIONS = 10
 
 
-class Suggestion(BaseModel):
+class Option(BaseModel):
     decision: str
+    consequence: str  # what happens to the case if the person takes this decision
+
+
+class Suggestion(BaseModel):
+    decision: str  # the proposed one of `options`
     reasoning: str
+    why: list[str] = Field(min_length=1)  # why the case escalated, in plain language
+    options: list[Option] = Field(min_length=1)  # every final decision type, one each
+    evidence: list[str] = Field(min_length=1)  # references from `evidence_refs`
     proposed_rule: str  # rule text, to be compiled like any other rule if accepted
     proposed_type: Literal["requirement", "prohibition"]
 
@@ -38,6 +46,8 @@ class Suggestion(BaseModel):
 @dataclass(frozen=True)
 class Deps:
     decision_types: list[str]
+    final_types: list[str]  # the ones that close a case: every option
+    references: set[str]
 
 
 # Its platform prompt is `prompts/assistant.md`; the use case adds guidance and model.
@@ -50,6 +60,14 @@ def _known_decision(ctx: RunContext[Deps], suggestion: Suggestion) -> Suggestion
         raise ModelRetry(
             f"decision {suggestion.decision!r} is not one of {ctx.deps.decision_types}"
         )
+    options = [o.decision for o in suggestion.options]
+    if sorted(options) != sorted(ctx.deps.final_types):
+        raise ModelRetry(f"options must be exactly one per type of {ctx.deps.final_types}")
+    if suggestion.decision not in options:
+        raise ModelRetry("decision must be one of the options")
+    unknown = set(suggestion.evidence) - ctx.deps.references
+    if unknown:
+        raise ModelRetry(f"cite only references in evidence_refs: {sorted(unknown)}")
     return suggestion
 
 
@@ -134,6 +152,7 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
         ],
         "human_resolutions": [
             {
+                "ref": f"resolution:{d.id}",
                 "symbols": flatten_symbols(symbols or {}),
                 "decision": d.decision,
                 "author": d.author,
@@ -142,6 +161,13 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
             for d, symbols in resolutions
         ],
     }
+    context["evidence_refs"] = sorted(
+        {f"symbol:{name}" for name in instance.symbols or {}}
+        | {f"rule:{r['id']}" for r in context["escalation"]["fired_rules"] if r["id"]}
+        | {r["ref"] for r in context["human_resolutions"]}
+        | ({"file"} if context["case"]["file_text"] else set())
+        | {"escalation"}
+    )
     return context, types
 
 
@@ -173,7 +199,11 @@ async def suggest(session: AsyncSession, instance_id: int) -> Suggestion:
             prompt,
             instructions=llm.prompt("assistant"),
             setup=setup,
-            deps=Deps(types),
+            deps=Deps(
+                types,
+                [t for t in types if t not in context["human_decision_types"]],
+                set(context["evidence_refs"]),
+            ),
         )
         span.set(decision=suggestion.decision, model=trace.model)
     return suggestion

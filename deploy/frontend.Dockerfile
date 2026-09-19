@@ -1,9 +1,10 @@
 FROM node:24-bookworm-slim AS build
+ARG REVISION=local
 WORKDIR /src
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
-ENV VITE_API_MODE=live VITE_API_URL=/nexia/trace-it/api
+ENV VITE_API_MODE=live VITE_API_URL=/nexia/trace-it/api VITE_COMMIT_SHA=$REVISION
 RUN npm run lint && npm run build -- --base=/nexia/trace-it/
 
 FROM nginxinc/nginx-unprivileged:1.28-alpine

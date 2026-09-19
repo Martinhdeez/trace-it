@@ -1,6 +1,9 @@
 import { X } from 'lucide-react'
 import { useState } from 'react'
-import type { InstanceDetail, TraceEvent } from '../../api/contracts'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../../api/client'
+import type { InstanceDetail, InstanceTrace, SpanNode } from '../../api/contracts'
+import { keys } from '../../api/queries'
 import { formatMs } from '../../lib/format'
 import { label } from '../../lib/status'
 import { Overlay } from '../shell/Overlay'
@@ -9,15 +12,23 @@ import { DocumentPane } from './DocumentPane'
 
 export function DocumentPopup({
   instance,
+  trace,
   onClose,
   initialSymbol,
 }: {
   instance: InstanceDetail
+  trace: InstanceTrace | undefined
   onClose: () => void
   initialSymbol?: string
 }) {
   const [showInfo, setShowInfo] = useState(false)
-  const cost = processingCost(instance.eventos)
+  // Same key as the pane's, so this reads the cache.
+  const document = useQuery({
+    queryKey: keys.document(instance.id),
+    queryFn: () => api.getDocument(instance.id),
+  })
+  const cost = processingCost(trace?.spans ?? [])
+  const file = trace?.file
   const current = label(instance)
 
   return (
@@ -27,7 +38,7 @@ export function DocumentPopup({
           <header className="flex shrink-0 items-center justify-between gap-3 border-b border-hairline px-4 py-3">
             <div className="min-w-0">
               <p className="text-[11px] text-muted">Documento</p>
-              <h2 className="truncate font-mono text-[13px]">{instance.nombre}</h2>
+              <h2 className="truncate font-mono text-[13px]">{instance.name}</h2>
             </div>
             <button
               type="button"
@@ -47,7 +58,7 @@ export function DocumentPopup({
               <X size={14} strokeWidth={1.75} />
             </button>
           </header>
-          <DocumentPane instanceId={instance.id} name={instance.nombre} embedded initialSymbol={initialSymbol} />
+          <DocumentPane instanceId={instance.id} name={instance.name} embedded initialSymbol={initialSymbol} />
         </div>
 
         {showInfo ? <aside id="document-info" aria-label="Document information" className="max-h-[35%] shrink-0 overflow-y-auto border-t border-hairline px-4 py-4 md:max-h-none md:w-[220px] md:border-t-0 md:border-l">
@@ -56,10 +67,19 @@ export function DocumentPopup({
               <span className="text-[12px] text-muted">Resultado</span>
               <StatusBadge value={current} />
             </div>
-            <Row label="hash" value={instance.fichero_hash.slice(0, 12)} mono />
+            <Row label="hash" value={instance.file_hash.slice(0, 12)} mono />
+            {document.data ? (
+              <>
+                <Row label="origen" value={document.data.pipeline_version} />
+                <Row label="páginas" value={String(document.data.pages?.length ?? '—')} />
+              </>
+            ) : null}
+            {file ? (
+              <Row label="tamaño" value={`${Math.round(file.size_bytes / 1024)} KB`} />
+            ) : null}
             <Row
               label="símbolos"
-              value={String(Object.keys(instance.simbolos ?? {}).length)}
+              value={String(Object.keys(instance.symbols ?? {}).length)}
             />
           </Section>
 
@@ -79,30 +99,30 @@ export function DocumentPopup({
             ) : null}
           </Section>
 
-          <Section title={`Runs · ${instance.eventos.length}`}>
-            {instance.eventos.length === 0 ? (
+          <Section title={`Runs · ${instance.events.length}`}>
+            {instance.events.length === 0 ? (
               <p className="text-[12px] text-muted">Este documento aún no tiene pasos.</p>
             ) : (
               <ol className="-mx-1">
-                {instance.eventos.map((event, index) => (
+                {instance.events.map((event, index) => (
                   <li
-                    key={`${event.paso}-${index}`}
+                    key={`${event.step}-${index}`}
                     className="flex items-baseline justify-between gap-2 rounded-[8px] px-1 py-1.5"
                   >
-                    <span className="min-w-0 truncate font-mono text-[11px] text-ink">{event.paso}</span>
+                    <span className="min-w-0 truncate font-mono text-[11px] text-ink">{event.step}</span>
                     <span className="shrink-0 font-mono text-[10.5px] text-faint">
-                      {event.latencia_ms == null ? '—' : formatMs(event.latencia_ms)}
+                      {event.duration_ms == null ? '—' : formatMs(event.duration_ms)}
                     </span>
                   </li>
                 ))}
               </ol>
             )}
-            {instance.decisiones.length > 1 ? (
+            {instance.decisions.length > 1 ? (
               <ul className="mt-2 border-t border-hairline pt-2">
-                {instance.decisiones.map((decision) => (
+                {instance.decisions.map((decision) => (
                   <li key={decision.id} className="flex items-baseline justify-between gap-2 py-1">
                     <StatusBadge value={decision.decision} />
-                    <span className="truncate text-[10.5px] text-faint">{decision.autor}</span>
+                    <span className="truncate text-[10.5px] text-faint">{decision.author}</span>
                   </li>
                 ))}
               </ul>
@@ -140,19 +160,21 @@ function Row({
   )
 }
 
-function processingCost(events: TraceEvent[]) {
-  let totalMs = 0
+/** Time is the root spans'; tokens and money are what the provider calls reported. */
+function processingCost(spans: SpanNode[]) {
+  const totalMs = spans.reduce((sum, span) => sum + (span.duration_ms ?? 0), 0)
   let input = 0
   let output = 0
   let usd = 0
-  for (const event of events) {
-    totalMs += event.latencia_ms ?? 0
-    const data = event.datos
-    if (!data) continue
-    input += asNumber(data.input_tokens)
-    output += asNumber(data.output_tokens)
-    usd += asNumber(data.cost)
+  const visit = (span: SpanNode) => {
+    if (span.step === 'provider_call' && span.data) {
+      input += asNumber(span.data.input_tokens)
+      output += asNumber(span.data.output_tokens)
+      usd += asNumber(span.data.cost_usd)
+    }
+    span.children.forEach(visit)
   }
+  spans.forEach(visit)
   return { totalMs, input, output, usd }
 }
 

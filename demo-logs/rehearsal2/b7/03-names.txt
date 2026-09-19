@@ -1,0 +1,3 @@
+$ ls $L2/facturas | wc -l; comm -12 <(ls $B1 | sort) <(ls $L2/facturas | sort)
+      10
+[exit 0] [0.01 s] [14:50:23]

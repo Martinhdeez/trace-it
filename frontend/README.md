@@ -8,29 +8,41 @@ npm install
 npm run dev
 ```
 
-Opens on http://127.0.0.1:5173. `/api` proxies to `http://127.0.0.1:8000`, where the
-backend serves at the root.
+Opens on http://127.0.0.1:5173. `/api` proxies to `http://127.0.0.1:8000`, where
+`make setup` serves the backend at the root. For an API on another port, set
+`VITE_API_TARGET` in the shell or in `frontend/.env.local`:
 
-`VITE_API_MODE` picks the client in `src/api/client.ts`:
+```bash
+VITE_API_TARGET=http://127.0.0.1:8001 npm run dev
+```
 
-| Value | What happens |
-|---|---|
-| `auto` (default) | Every call tries the backend and falls back to the in-memory mock when the endpoint answers 501, 502, is not mounted, or the backend is down |
-| `live` | Only the backend. Errors surface as they are |
-| `mock` | Only the mock, with the Caja lote 1 loaded. No backend needed |
+There is no mock: the console only shows backend data, and its errors surface as they
+are ("El backend no responde" when it is down).
 
-Settings shows, per API method, which of the two answered.
+## Identity
+
+There is no login screen: the console is local. On start it calls `POST /login` with
+`VITE_DEFAULT_USER_EMAIL` (default `martin@trace-it.local`, the pack's manager) and sends
+that id as `X-User-Id` on every request, so each action keeps its author in the trace.
+A 401 or 403 asks for the identity again and the screen shows the backend's message.
+Ajustes can switch to another user of the process.
+
+## Typed API
+
+`src/api/schema.d.ts` holds the backend's types, generated from `openapi.json`. After a
+backend route or schema changes, run `make openapi` from the repo root: it dumps
+`openapi.json` from the FastAPI app (no server needed) and then runs `npm run gen:api`.
+Commit both files. A backend test fails while they are out of date.
 
 ## Layout
 
 | Folder | Holds |
 |---|---|
-| `src/api/` | `contracts.ts` mirrors the backend schemas; `live.ts` and `mock.ts` implement them; `client.ts` picks one |
+| `src/api/` | `contracts.ts` aliases the generated `schema.d.ts`; `live.ts` calls the API; `client.ts` exports it as `api` |
 | `src/routes/` | One file per screen, mounted in `App.tsx` |
 | `src/components/shell/` | Chrome: sidebar, topbar, command palette, buttons, tables |
 | `src/components/run/` | The three panes of the instance console |
 | `src/lib/` | Paths, formatting, derived counts |
 
-Code, file names and identifiers are English. Payload keys keep the Spanish the API
-sends (`nombre`, `tipos_decision`, `requiere_persona`), and so do the strings a user
-reads, which live in `src/i18n/es.ts`.
+Code, file names, identifiers and API codes are English. Only the strings a user reads
+are Spanish, and they live in `src/i18n/es.ts`.

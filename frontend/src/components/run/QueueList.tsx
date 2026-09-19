@@ -1,5 +1,7 @@
 import { FileText } from 'lucide-react'
-import type { Instance } from '../../api/contracts'
+import type { DecisionMeta } from '../../lib/status'
+import type { InstanceOut } from '../../api/contracts'
+import { t } from '../../i18n'
 import { cn } from '../../lib/cn'
 import { label } from '../../lib/status'
 import { StatusBadge } from '../shell/StatusBadge'
@@ -10,12 +12,14 @@ export function QueueList({
   selectedId,
   onSelect,
   header,
+  decisionTypes,
 }: {
-  items: Instance[]
+  items: InstanceOut[]
   total: number
   selectedId?: number
-  onSelect: (item: Instance) => void
+  onSelect: (item: InstanceOut) => void
   header?: React.ReactNode
+  decisionTypes?: DecisionMeta[]
 }) {
   return (
     <section className="flex h-full min-h-0 w-[300px] shrink-0 flex-col px-2 pb-3">
@@ -40,8 +44,12 @@ export function QueueList({
               )}
             >
               <FileText size={13} strokeWidth={1.5} className="shrink-0 text-faint" />
-              <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{item.nombre}</span>
-              <StatusBadge value={label(item)} className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{item.name}</span>
+              <StatusBadge value={label(item)} decisionTypes={decisionTypes} className="shrink-0">
+                {item.decision && item.status === 'DECIDED'
+                  ? undefined
+                  : t(`instanceStatus.${item.status}`)}
+              </StatusBadge>
             </button>
           </li>
         ))}

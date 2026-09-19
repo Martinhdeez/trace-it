@@ -15,7 +15,7 @@ from app.common.normalization import clean_text, fold, invoice_date
 
 from .extraction_plan import ExtractionField
 from .ocr.errors import ProviderUnavailable, note_provider_failure, provider_on_cooldown
-from .ocr.journal import record_response, recorded_call
+from .ocr.journal import record_response, recorded_call, retry_after
 from .pdf.layout import table_cells
 from .schemas import FieldReading
 
@@ -492,7 +492,9 @@ class SchemaFieldReader:
             with httpx.Client(timeout=self.settings.vlm_timeout, follow_redirects=False) as client:
                 mark_network_attempt()
                 response = client.post(endpoint, headers=headers, json=body)
-            record_response(trace_provider, response.status_code)
+            record_response(
+                trace_provider, response.status_code, retry_after_s=retry_after(response)
+            )
             if not response.is_success:
                 raise RuntimeError(f"Schema provider returned HTTP {response.status_code}")
             data = response.json()

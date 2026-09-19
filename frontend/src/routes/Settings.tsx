@@ -1,27 +1,27 @@
-import { useSyncExternalStore } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, apiTrace, mode } from '../api/client'
+import { useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { api } from '../api/client'
 import { keys } from '../api/queries'
-import { Button, Input, Segmented } from '../components/shell/Controls'
-import { Empty, ErrorNotice } from '../components/shell/Notice'
+import { Segmented, Select } from '../components/shell/Controls'
+import { UseCaseModels } from '../components/process/UseCaseModels'
+import { ErrorNotice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
 import { Topbar } from '../components/shell/Topbar'
 import { NestedCard, PageIntro } from '../components/shell/Well'
+import { t } from '../i18n'
 import { useSession } from '../state/session'
 import { useTheme, type Theme } from '../state/theme'
 
 export function Settings() {
-  const { user, use, signOut } = useSession()
-  const queryClient = useQueryClient()
+  const { user, signIn } = useSession()
 
   const users = useQuery({ queryKey: keys.users, queryFn: () => api.listUsers() })
-  const llm = useQuery({ queryKey: keys.llm, queryFn: () => api.listLlmConfig() })
+  const useCases = useQuery({ queryKey: keys.useCases, queryFn: () => api.listUseCases() })
+  const [picked, setPicked] = useState<number | null>(null)
+  const useCaseId = picked ?? useCases.data?.[0]?.id
 
-  const change = useMutation({
-    mutationFn: ({ role, model }: { role: string; model: string }) =>
-      api.setLlmConfig(role, model),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.llm }),
-  })
+  const switchUser = useMutation({ mutationFn: (email: string) => signIn(email) })
+
 
   return (
     <>
@@ -38,13 +38,6 @@ export function Settings() {
 
           <NestedCard
             label="usuario"
-            action={
-              user ? (
-                <Button tone="ghost" onClick={signOut}>
-                  Salir
-                </Button>
-              ) : null
-            }
           >
             <div className="space-y-2 px-3.5 py-3">
               <p className="text-[12px] text-muted">
@@ -52,12 +45,13 @@ export function Settings() {
                 y retirar reglas solo lo puede hacer un responsable.
               </p>
               {users.isError ? <ErrorNotice error={users.error} /> : null}
+              {switchUser.isError ? <ErrorNotice error={switchUser.error} /> : null}
               <ul className="space-y-1">
                 {(users.data ?? []).map((candidate) => (
                   <li key={candidate.id}>
                     <button
                       type="button"
-                      onClick={() => use(candidate)}
+                      onClick={() => switchUser.mutate(candidate.email)}
                       className={
                         candidate.id === user?.id
                           ? 'flex w-full items-center justify-between rounded-[10px] bg-well px-3 py-2 text-left ring-1 ring-line'
@@ -65,15 +59,15 @@ export function Settings() {
                       }
                     >
                       <span className="text-[13px]">
-                        {candidate.nombre}
+                        {candidate.name}
                         <span className="ml-2 font-mono text-[11px] text-faint">
                           {candidate.email}
                         </span>
                       </span>
                       <StatusBadge
-                        value={candidate.rol === 'responsable' ? 'activa' : 'borrador'}
+                        value={candidate.role === 'manager' ? 'activa' : 'borrador'}
                       >
-                        {candidate.rol}
+                        {t(`roles.${candidate.role}`)}
                       </StatusBadge>
                     </button>
                   </li>
@@ -82,32 +76,26 @@ export function Settings() {
             </div>
           </NestedCard>
 
-          <NestedCard label="modelo por papel">
+          <NestedCard label="modelos del caso de uso (compartidos)">
             <div className="space-y-2 px-3.5 py-3">
               <p className="text-[12px] text-muted">
                 Configuración activa por caso de uso y papel. Cada cambio crea una versión nueva:
                 compilador, tester ciego, normalizador y asistente pueden usar modelos distintos.
               </p>
-              {llm.isError ? <ErrorNotice error={llm.error} /> : null}
-              {llm.data?.length === 0 ? <Empty>Sin papeles configurados.</Empty> : null}
-              {(llm.data ?? []).map((config) => (
-                <div key={config.papel} className="flex items-center gap-2">
-                  <span className="w-32 shrink-0 font-mono text-[12px] text-muted">
-                    {config.papel}
-                  </span>
-                  <Input
-                    defaultValue={config.modelo}
-                    className="font-mono"
-                    onBlur={(event) => {
-                      const model = event.target.value.trim()
-                      if (model && model !== config.modelo) {
-                        change.mutate({ role: config.papel, model })
-                      }
-                    }}
-                  />
-                </div>
-              ))}
-              {change.isError ? <ErrorNotice error={change.error} /> : null}
+              {useCases.isError ? <ErrorNotice error={useCases.error} /> : null}
+              {(useCases.data?.length ?? 0) > 1 ? (
+                <Select
+                  value={useCaseId}
+                  onChange={(event) => setPicked(Number(event.target.value))}
+                >
+                  {useCases.data?.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
+              {useCaseId != null ? <UseCaseModels useCaseId={useCaseId} /> : null}
             </div>
           </NestedCard>
 
@@ -140,46 +128,18 @@ function Appearance() {
   )
 }
 
-/** Which calls the real backend answered and which ones the mock covered. */
+/** Where the console gets its data: only the backend. */
 function ApiStatus() {
-  useSyncExternalStore(apiTrace.subscribe, apiTrace.snapshot)
-  const entries = apiTrace.entries()
-  const live = entries.filter(([, source]) => source === 'live').length
-
   return (
     <NestedCard label="api">
       <div className="space-y-2 px-3.5 py-3">
         <div className="flex items-baseline justify-between text-[13px]">
-          <span className="text-muted">Modo</span>
-          <span className="font-mono">
-            {mode} · {import.meta.env.VITE_API_URL ?? '/api'}
-          </span>
+          <span className="text-muted">Base</span>
+          <span className="font-mono">{import.meta.env.VITE_API_URL ?? '/api'}</span>
         </div>
         <p className="text-[12px] text-muted">
-          En <span className="font-mono">auto</span> cada llamada intenta el backend real y cae al
-          simulador si el endpoint responde 501, 502 o no existe. {live} de {entries.length}{' '}
-          llamadas de esta sesión salieron del backend.
+          Todo sale del backend real y sus errores se muestran tal cual.
         </p>
-        {entries.length === 0 ? (
-          <Empty>Todavía no se ha llamado a nada.</Empty>
-        ) : (
-          <ul className="grid gap-x-6 gap-y-0.5 sm:grid-cols-2">
-            {entries.map(([method, source]) => (
-              <li key={method} className="flex items-baseline justify-between gap-2">
-                <span className="truncate font-mono text-[11.5px] text-muted">{method}</span>
-                <span
-                  className={
-                    source === 'live'
-                      ? 'font-mono text-[10px] text-pagar'
-                      : 'font-mono text-[10px] text-faint'
-                  }
-                >
-                  {source}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
     </NestedCard>
   )

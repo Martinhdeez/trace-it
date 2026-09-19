@@ -8,6 +8,7 @@ from httpx import ASGITransport, AsyncClient
 from app.core.database import session_factory
 from app.features.use_cases import service
 from app.main import app
+from tests.support.users import manager
 
 
 @pytest.fixture
@@ -18,12 +19,13 @@ async def api():
         use_case = await service.ensure(session, f"use case {suffix}", "Conventions")
         await session.commit()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        headers = {}
-        for role in ("manager", "operator"):
-            r = await client.post(
-                "/users", json={"name": role, "email": f"{role}-{suffix}@x.com", "role": role}
-            )
-            headers[role] = {"X-User-Id": str(r.json()["id"])}
+        headers = {"manager": await manager(name="manager")}
+        r = await client.post(
+            "/users",
+            json={"name": "operator", "email": f"operator-{suffix}@x.com", "role": "operator"},
+            headers=headers["manager"],
+        )
+        headers["operator"] = {"X-User-Id": str(r.json()["id"])}
         yield client, use_case.id, headers
 
 

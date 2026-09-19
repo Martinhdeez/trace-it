@@ -15,7 +15,7 @@ from app.features.ingestion.config import Settings
 
 from .errors import ProviderUnavailable, note_provider_failure, provider_on_cooldown
 from .gemini import GENERATION, PROMPT, generate, output_text
-from .journal import record_response, recorded_call
+from .journal import record_response, recorded_call, retry_after
 from .transcript import remote_lines, transcript_warnings
 
 PROMPTS = Path(__file__).parents[1] / "prompts"
@@ -201,7 +201,9 @@ class VisionFallback:
                     mark_network_attempt()
                     response = client.post(endpoint, json=body, headers=headers)
                 trace_provider = "vision" if provider == "compatible" else provider
-                record_response(trace_provider, response.status_code)
+                record_response(
+                    trace_provider, response.status_code, retry_after_s=retry_after(response)
+                )
                 if not response.is_success:
                     raise ProviderUnavailable(
                         f"Image provider returned HTTP {response.status_code}"

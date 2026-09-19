@@ -1,3 +1,6 @@
+/** The Revisión tab that lists open alerts. */
+export const ALERTS_TAB = 'alertas'
+
 export const paths = {
   landing: '/',
   processes: '/processes',
@@ -14,7 +17,8 @@ export const paths = {
   rules: (id: number | string) => `/processes/${id}/definition`,
   rule: (processId: number | string, ruleId: number | string) =>
     `/processes/${processId}/rules/${ruleId}`,
-  instances: (id: number | string) => `/processes/${id}/instances`,
+  instances: (id: number | string, runId?: number) =>
+    `/processes/${id}/instances${runId ? `?run=${runId}` : ''}`,
   instance: (processId: number | string, instanceId: number | string) =>
     `/processes/${processId}/instances?i=${instanceId}`,
   queue: (id: number | string) => `/processes/${id}/review`,

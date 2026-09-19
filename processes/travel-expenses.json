@@ -12,7 +12,14 @@
     {"name": "has_receipt", "type": "boolean", "description": "The report attaches a receipt."}
   ],
   "rules": [
-    {"text": "`has_receipt` is true.", "type": "requirement", "decision": "REJECT"},
-    {"text": "`amount` is greater than 500.", "type": "prohibition", "decision": "ESCALATE"}
+    {"text": "`has_receipt` is true.", "type": "requirement", "decision": "REJECT", "code": "travel-expenses/rules/has-receipt.py"},
+    {"text": "`amount` is greater than 500.", "type": "prohibition", "decision": "ESCALATE", "code": "travel-expenses/rules/amount-over-500.py"}
+  ],
+  "users": [
+    {"name": "Martín", "email": "martin@trace-it.local", "role": "manager"},
+    {"name": "Mateo", "email": "mateo@trace-it.local", "role": "operator"},
+    {"name": "Álvaro", "email": "alvaro@trace-it.local", "role": "operator"},
+    {"name": "Carlos", "email": "carlos@trace-it.local", "role": "operator"},
+    {"name": "Varsovia", "email": "varsovia@trace-it.local", "role": "operator"}
   ]
 }
