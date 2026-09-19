@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.exceptions import ConflictError, NotFoundError, PermissionDeniedError
+from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
 from app.features.proposals.model import ManagerProposal
 from app.features.proposals.schemas import ManagerProposalOut
@@ -30,11 +30,6 @@ ITEMS = (
 
 def out(row: ManagerProposal) -> ManagerProposalOut:
     return ManagerProposalOut.model_validate(row, from_attributes=True)
-
-
-def manager(user) -> None:
-    if user.role != "manager":
-        raise PermissionDeniedError("Only a manager can review proposals")
 
 
 def settle(row: ManagerProposal, status: str, author: str, outcome: dict | None = None) -> None:
@@ -273,7 +268,6 @@ async def _stage(session, row, user) -> dict:
 
 
 async def accept(session: AsyncSession, proposal_id: int, reason: str, user) -> ManagerProposalOut:
-    manager(user)
     row = await get(session, proposal_id, lock=True)
     if row.status != "open":
         raise ConflictError(f"Proposal {proposal_id} is {row.status}")
@@ -332,7 +326,6 @@ async def _adopt(session, row, reason, user) -> None:
 
 
 async def reject(session: AsyncSession, proposal_id: int, reason: str, user) -> ManagerProposalOut:
-    manager(user)
     row = await get(session, proposal_id, lock=True)
     if row.status != "open":
         raise ConflictError(f"Proposal {proposal_id} is {row.status}")

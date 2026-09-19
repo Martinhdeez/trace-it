@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from app.core.database import Session
 from app.features.proposals import service
 from app.features.proposals.schemas import ManagerProposalOut, SettleIn
-from app.features.users.dependencies import CurrentUser
+from app.features.users.dependencies import Manager
 
 router = APIRouter(tags=["proposals"])
 
@@ -24,9 +24,7 @@ router = APIRouter(tags=["proposals"])
         502: {"description": "The assistant's model failed"},
     },
 )
-async def propose_decision(
-    instance_id: int, session: Session, user: CurrentUser
-) -> ManagerProposalOut:
+async def propose_decision(instance_id: int, session: Session, user: Manager) -> ManagerProposalOut:
     return await service.propose_decision(session, instance_id)
 
 
@@ -39,10 +37,9 @@ async def propose_decision(
 async def list_proposals(
     process_id: int,
     session: Session,
-    user: CurrentUser,
+    user: Manager,
     status: Literal["open", "accepted", "rejected", "superseded"] | None = None,
 ) -> list[ManagerProposalOut]:
-    service.manager(user)
     return await service.list_for(session, process_id, status)
 
 
@@ -58,7 +55,7 @@ async def list_proposals(
     responses={409: {"description": "Not open, stale, or not validated yet"}},
 )
 async def accept(
-    proposal_id: int, session: Session, user: CurrentUser, body: SettleIn | None = None
+    proposal_id: int, session: Session, user: Manager, body: SettleIn | None = None
 ) -> ManagerProposalOut:
     return await service.accept(session, proposal_id, body.reason if body else "", user)
 
@@ -70,6 +67,6 @@ async def accept(
     responses={409: {"description": "Not open"}},
 )
 async def reject(
-    proposal_id: int, session: Session, user: CurrentUser, body: SettleIn | None = None
+    proposal_id: int, session: Session, user: Manager, body: SettleIn | None = None
 ) -> ManagerProposalOut:
     return await service.reject(session, proposal_id, body.reason if body else "", user)

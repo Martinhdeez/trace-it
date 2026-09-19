@@ -62,7 +62,7 @@ async def payment_api(settings):
     definition = pack.definition()
     async with session_factory() as session:
         process = await rows.process(session, "Payment API " + uuid.uuid4().hex)
-        user = User(name="Operator", email=uuid.uuid4().hex + "@test.invalid", role="operator")
+        user = User(name="Manager", email=uuid.uuid4().hex + "@test.invalid", role="manager")
         session.add(user)
         await session.flush()
         for spec in definition["decision_types"]:
@@ -262,6 +262,22 @@ async def test_workbook_validation_is_atomic_and_never_overwrites_erp(payment_ap
             await session.scalars(select(Source).where(Source.process_id == process_id))
         )
         assert len(snapshots) == 7
+
+
+async def test_workbook_without_a_cut_off_date_is_refused(payment_api):
+    """The cut-off is the manager's input, never a default (Q4): nothing is stored."""
+    client, process_id, _, _ = payment_api
+    response = await client.post(
+        f"/processes/{process_id}/sources/workbook",
+        files={"file": ("master.xlsx", workbook())},
+    )
+    assert response.status_code == 422, response.text
+    assert "cut_off_date" in response.text
+    async with session_factory() as session:
+        names = set(
+            await session.scalars(select(Source.name).where(Source.process_id == process_id))
+        )
+    assert names == {"erp"}
 
 
 async def test_pending_reextraction_uses_new_snapshots_and_keeps_both_events(payment_api):

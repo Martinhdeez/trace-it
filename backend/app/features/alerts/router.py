@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from app.core.database import Session
 from app.features.alerts import service
 from app.features.alerts.schemas import AckIn, AlertOut
-from app.features.users.dependencies import CurrentUser
+from app.features.users.dependencies import Manager
 
 router = APIRouter(tags=["alerts"])
 
@@ -35,6 +35,6 @@ async def list_alerts(
     responses={409: {"description": "Already acknowledged"}},
 )
 async def ack_alert(
-    alert_id: int, session: Session, user: CurrentUser, body: AckIn | None = None
+    alert_id: int, session: Session, user: Manager, body: AckIn | None = None
 ) -> AlertOut:
     return await service.ack(session, alert_id, body.note if body else None, user)

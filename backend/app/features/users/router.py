@@ -3,7 +3,7 @@ from sqlalchemy import select
 
 from app.common.exceptions import ConflictError, NotFoundError
 from app.core.database import Session
-from app.features.users.dependencies import CurrentUser
+from app.features.users.dependencies import CurrentUser, Manager
 from app.features.users.model import User
 from app.features.users.schemas import LoginIn, UserIn, UserOut
 
@@ -26,7 +26,7 @@ async def list_users(session: Session) -> list[UserOut]:
     summary="Create a user",
     responses={409: {"description": "Email already in use"}},
 )
-async def create_user(body: UserIn, session: Session) -> UserOut:
+async def create_user(body: UserIn, session: Session, _: Manager) -> UserOut:
     if await session.scalar(select(User).where(User.email == body.email)):
         raise ConflictError(f"A user with email {body.email} already exists")
     user = User(**body.model_dump())

@@ -13,6 +13,7 @@ from app.features.learning.tests.test_api import norm, prepare, scripts, seed
 from app.features.processes.tests.test_drafts import api as api
 from app.features.processes.tests.test_drafts import post, prepare_new
 from tests.support.models import per_role, user_json
+from tests.support.users import anonymous
 
 PROPOSAL = {
     "decision": "NO_PAGAR",
@@ -129,7 +130,10 @@ async def test_only_a_manager_settles(monkeypatch):
         denied = await api.post(f"/proposals/{proposal['id']}/accept", headers=other)
         hidden = await api.get(f"/processes/{pid}/proposals", headers=other)
         missing = await api.post("/proposals/0/reject", headers=headers)
+    nobody = await anonymous("POST", f"/proposals/{proposal['id']}/accept")
     assert denied.status_code == 403 and hidden.status_code == 403
+    assert denied.json()["code"] == "permission_denied"
+    assert nobody.status_code == 401 and nobody.json()["code"] == "unauthenticated"
     assert missing.status_code == 404
 
 

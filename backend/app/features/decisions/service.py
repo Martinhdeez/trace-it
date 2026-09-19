@@ -11,6 +11,7 @@ from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
 from app.core.events import Event
 from app.features.agents import decision_reviewer, sandbox
+from app.features.decisions import runs
 from app.features.decisions.engine import Outcomes, RunDataset, Verdict, decide
 from app.features.decisions.model import ENGINE, Decision, DecisionReview, Finding
 from app.features.decisions.schemas import (
@@ -187,7 +188,7 @@ def _out(
     )
 
 
-async def run(session: AsyncSession, process_id: int) -> RunSummary:
+async def run(session: AsyncSession, process_id: int, author: str | None = None) -> RunSummary:
     """Decide every PENDING instance that already has its symbols.
 
     Runs against the rules active now and the latest load of each source. A rule never
@@ -218,10 +219,12 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
         captured = Execution(process_id=process_id, version_id=version.id, inputs=inputs)
         session.add(captured)
         await session.flush()
+        span.set(execution_id=captured.id, author=author)
         evaluated = await execution.evaluate(
             session, version.snapshot, inputs, [i.id for i in pending]
         )
         verdicts = [evaluated[i.id] for i in pending]
+        stats = runs.outcomes(verdicts, version.snapshot)  # before commit expires version
 
         count: Counter[str] = Counter()
         for instance, verdict in zip(pending, verdicts, strict=True):
@@ -253,6 +256,7 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
             by_decision=count,
             down_sources=down,
             **_causes(verdicts),
+            **stats,
         )
     return RunSummary(decided=sum(count.values()), by_decision=dict(count), down_sources=down)
 
@@ -311,7 +315,11 @@ def _append(
 
 
 async def reprocess(
-    session: AsyncSession, process_id: int, names: list[str] | None, dry_run: bool = False
+    session: AsyncSession,
+    process_id: int,
+    names: list[str] | None,
+    dry_run: bool = False,
+    author: str | None = None,
 ) -> ReprocessSummary:
     """Decide the decided instances again with the rules active now and the latest sources.
 
@@ -346,10 +354,12 @@ async def reprocess(
         if not dry_run:
             session.add(captured)
             await session.flush()
+            span.set(execution_id=captured.id, author=author)
         evaluated = await execution.evaluate(
             session, version.snapshot, inputs, [i.id for i in selected]
         )
         verdicts = [evaluated[i.id] for i in selected]
+        stats = runs.outcomes(verdicts, version.snapshot)  # before commit expires version
 
         unchanged = 0
         changed: list[ChangeOut] = []
@@ -403,6 +413,7 @@ async def reprocess(
             conflicts=len(conflicts),
             down_sources=down,
             **_causes(verdicts),
+            **stats,
         )
     return ReprocessSummary(
         unchanged=unchanged, changes=changed, conflicts=conflicts, down_sources=down
