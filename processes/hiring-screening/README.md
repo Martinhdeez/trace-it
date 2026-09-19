@@ -48,10 +48,16 @@ make hiring-demo HIRING_ARGS="--process 7 --skip-learning"   # rerun the batch o
 ```
 
 The run of 19 September is in
-[docs/evaluations/hiring-screening-2026-09-19.md](../../docs/evaluations/hiring-screening-2026-09-19.md):
-discovery settled every question in three rounds and proposed twelve rules that match the
-policy, then preparation refused the candidate over the fifth gap below, which is now
-caught before compilation instead.
+[docs/evaluations/hiring-screening-2026-09-19.md](../../docs/evaluations/hiring-screening-2026-09-19.md).
+It went the whole way: discovery settled every question in two rounds, proposed eleven rules
+that match the policy, compiled them all, passed twelve of thirteen acceptance examples,
+published, and read all 44 CVs. Then it decided every single case `REVIEW`.
+
+Not one symbol was extracted. Every case escalated for missing data the reader had in front
+of it, and the headline "18 of 44 as the policy implies" is an illusion: those eighteen are
+the categories whose expected outcome happens to be `REVIEW`. The cause is the seventh gap
+below. Read that run as the experiment working exactly as intended: the platform never
+guessed, never decided on absent evidence, and sent every uncertain case to a person.
 
 `tools/hiring_demo.py` starts a discovery draft, uploads the workbook, pastes `policy.md`,
 relays questions and answers until none remain, reviews every proposal, prepares (the agents
@@ -65,7 +71,7 @@ scripted manager for reruns.
 
 ## What the experiment changed so far
 
-Five gaps showed up the first time a problem that was not invoices went through discovery.
+Seven gaps showed up the first time a problem that was not invoices went through discovery.
 Each is fixed here, with a regression test:
 
 - **A revision could blank the process name.** The third answer came back with the whole
@@ -93,6 +99,22 @@ Each is fixed here, with a regression test:
   manager saw a wall of sandbox errors rather than "no such field". `ready` now refuses an
   example whose rows use a field its source does not map, or that invents a table, before
   anything is compiled, and the prompt says which names to use.
+
+- **A rule that cannot find its row raised instead of not firing.** The coder is told to
+  raise when a value it needs is missing and nothing says otherwise, and it was right to:
+  the platform escalates rather than guessing. But the process description never carried the
+  convention, so an unknown position code crashed four rules instead of letting the one rule
+  that covers absence fire cleanly. Both existing packs state it ("if a symbol the rule needs
+  is missing (None), the rule does not fire"); discovery was never told to. The prompt now
+  requires the description to say what happens when a value or a source row is absent.
+- **A symbol could be published in a shape that can never be read.** All seven symbols went
+  out with `extraction.source: "text"`, which hands a field the entire page transcript. The
+  four text symbols became the whole CV, the number and date symbols became null, and all 44
+  cases escalated. The discovery prompt never documented `extraction.labels` or
+  `extraction.source` at all, so the agent read "text" as "read it from the text". The prompt
+  now explains both, and `ready` refuses a symbol that reads the whole transcript while
+  declaring labels or while typed as anything but text: it can only ever be the entire page
+  or null.
 
 ## What the agents did, in the report
 

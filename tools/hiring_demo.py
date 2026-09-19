@@ -157,23 +157,37 @@ def read_block() -> str:
 
 
 class Api:
-    def __init__(self, base_url: str, report: Report):
+    def __init__(self, base_url: str, report: Report, attempts: int = 3, pause: float = 5.0):
         self.http = httpx.AsyncClient(base_url=base_url, timeout=httpx.Timeout(60, read=None))
         self.report = report
+        self.attempts = attempts  # a 502 from an agent is resent: the backend wrote nothing
+        self.pause = pause  # seconds between attempts
         self.marker = 0  # highest span id already reported
 
     async def call(self, method: str, path: str, expected: tuple[int, ...] = (), **kwargs):
-        """One request; a failure is logged verbatim unless its status is `expected`."""
-        response = await self.http.request(method, path, **kwargs)
-        if response.status_code >= 400:
+        """One request, resent while the answer is a recoverable agent failure.
+
+        A 502 `llm_error` means the model's output failed its validators or every provider
+        in the chain refused; the backend wrote nothing, the draft keeps its revision and
+        the same request can simply be sent again. Every attempt is reported, so a run that
+        only finished because a model was asked twice says so.
+        """
+        for attempt in range(1, self.attempts + 1):
+            response = await self.http.request(method, path, **kwargs)
+            if response.status_code < 400:
+                if response.headers.get("content-type", "").startswith("application/json"):
+                    return response.json()
+                return response.text
+            retryable = response.status_code == 502 and attempt < self.attempts
             if response.status_code not in expected:
                 self.report.error(
                     f"{method} {path} -> {response.status_code}: {response.text[:800]}"
+                    + (f" (attempt {attempt} of {self.attempts}, resending)" if retryable else "")
                 )
-            raise ApiError(response.status_code, response.text)
-        if response.headers.get("content-type", "").startswith("application/json"):
-            return response.json()
-        return response.text
+            if not retryable:
+                raise ApiError(response.status_code, response.text)
+            await asyncio.sleep(self.pause)
+        raise ApiError(response.status_code, response.text)
 
     async def login(self, email: str, name: str) -> dict:
         try:
@@ -594,6 +608,9 @@ def parse_args(argv=None):
     parser.add_argument("--process", type=int, help="skip discovery; screen with this process")
     parser.add_argument("--auto", action="store_true", help="manager-notes.md answers, accept all")
     parser.add_argument("--max-rounds", type=int, default=4)
+    parser.add_argument(
+        "--attempts", type=int, default=3, help="tries per request before a 502 is fatal"
+    )
     parser.add_argument("--mode", choices=["local", "hybrid", "api"], help="per-upload OCR mode")
     parser.add_argument("--skip-learning", action="store_true")
     parser.add_argument(
@@ -608,7 +625,7 @@ async def main(argv=None) -> int:
     args = parse_args(argv)
     report = Report(args.report)
     manager = Manager(args.auto, (PACK / "manager-notes.md").read_text(encoding="utf-8"))
-    api = Api(args.base_url, report)
+    api = Api(args.base_url, report, attempts=args.attempts)
     header = [
         f"# Hiring screening: discovery run, {datetime.now(UTC):%d %B %Y}",
         "",
