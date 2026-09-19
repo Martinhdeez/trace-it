@@ -380,7 +380,7 @@ export function ProcessDraftChat({
 
   if (!current) {
     return (
-      <div className={cn('min-h-0 flex-1 overflow-y-auto px-6 py-6', className)}>
+      <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6', className)}>
         {error ? <ErrorNotice error={error} /> : null}
         <EmptyState
           icon={MessageSquareText}
@@ -400,7 +400,7 @@ export function ProcessDraftChat({
 
   if (current.published_process_id != null) {
     return (
-      <div className={cn('min-h-0 flex-1 overflow-y-auto px-6 py-6', className)}>
+      <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6', className)}>
         <Notice
           title="Proceso publicado"
           action={

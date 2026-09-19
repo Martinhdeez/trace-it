@@ -22,7 +22,7 @@ export function QueueList({
   decisionTypes?: DecisionMeta[]
 }) {
   return (
-    <section className="flex h-full min-h-0 w-[300px] shrink-0 flex-col px-2 pb-3">
+    <section className="flex max-h-[320px] min-h-0 w-full shrink-0 flex-col px-2 pb-3 lg:h-full lg:max-h-none lg:w-[300px]">
       <div className="flex items-baseline justify-between px-2.5 py-3">
         <h2 className="text-[13px] font-medium tracking-[-0.02em]">Instancias</h2>
         <span className="font-mono text-[11px] text-muted">

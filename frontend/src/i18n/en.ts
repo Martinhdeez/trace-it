@@ -19,6 +19,10 @@ export const en: Messages = {
     runs: 'Runs',
     signIn: 'Sign in',
     anonymous: 'anonymous',
+    menu: 'Menu',
+    close: 'Close',
+    collapse: 'Collapse sidebar',
+    expand: 'Expand sidebar',
   },
   processes: {
     delete: 'Delete process',

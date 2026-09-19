@@ -27,7 +27,7 @@ export function Settings() {
   return (
     <>
       <Topbar crumbs={[{ label: t('settings.title') }]} />
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-10 pt-4 sm:px-6">
         <div className="max-w-3xl">
           <Segmented<Tab>
             value={tab}

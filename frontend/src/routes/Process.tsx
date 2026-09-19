@@ -216,7 +216,7 @@ export function Process() {
         processId={processId}
         crumbs={[{ label: 'Procesos', to: paths.processes }, { label: String(processId) }]}
       >
-        <div className="px-6 py-6">
+        <div className="px-4 py-6 sm:px-6">
           <ErrorNotice error={process.error} />
         </div>
       </ProcessScreen>
@@ -291,7 +291,7 @@ export function Process() {
         </Overlay>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-10 pt-4 sm:px-6">
         {published != null ? (
           <div className="mb-6">
             <ReprocessAfterPublish

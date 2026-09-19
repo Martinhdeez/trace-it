@@ -47,7 +47,7 @@ export function ProcessTabs({ processId }: { processId: number }) {
   const error = process.error ?? summary.error
 
   return (
-    <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-hairline px-6">
+    <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-hairline px-4 sm:px-6">
       {error ? (
         <ErrorNotice error={error} />
       ) : (
