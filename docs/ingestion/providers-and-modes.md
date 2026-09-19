@@ -175,5 +175,11 @@ not blindly sent again; fallback uses another configured reader. Saved responses
 do not become additional independent evidence. Keep originals, proposal values
 and conflicts available for review, including after a provider fails.
 
+A definite HTTP refusal (4xx or 503) can be tried on a later extraction.
+Rate/quota/transient failures have a short provider/model cooldown (15 seconds
+by default, or a bounded `Retry-After`); during it the chain can use the next
+provider. A timeout or rejected HTTP 200 response remains uncertain and does
+not acquire retry permission merely because the cooldown has ended.
+
 See [ADR 0027](../adr/0027-ocr-execution-modes-and-provider-fallback.md), the
 [API contract](api.md), and the [measured 500-document run](benchmark-2026-09-19.md).

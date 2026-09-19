@@ -95,8 +95,9 @@ invoice result format. Origins continue to use `document:<extraction_id>`.
    new result. Changing a field's description, labels, type or source invalidates it.
 3. Provider calls have a persistent journal keyed by requested fields, transcript,
    model and prompt. Rule hashes are excluded, so unchanged requests replay without
-   another network call. Failed or uncertain provider operations retain the existing
-   journal's no-automatic-retry behavior.
+   another network call. Timeouts, dropped connections and rejected successful
+   responses remain blocked as uncertain deliveries. Definite HTTP refusals
+   (4xx or 503) can be attempted on a later extraction after provider cooldown.
 
 Keeping all declared symbols covers computed rule references conservatively. Optional
 fields can therefore also trigger reading or model assistance. Mark data that should not
