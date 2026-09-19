@@ -21,7 +21,7 @@ The committed contract is `frontend/openapi.json` (`make openapi`), with typed
 user is the manager, who handles only escalations (Q5 in [integration.md](integration.md)).
 Reads stay open. These need a manager: run, reprocess, source sync,
 `POST /processes/definition`, draft validate and publish, resolve, alert ack, `POST /users`,
-rule activate and retire, learning. A missing header, or an id that does not exist, answers
+rule activate and retire, learning, proposals (propose, list, accept, reject). A missing header, or an id that does not exist, answers
 401 `{"code": "unauthenticated"}`; a user who is not a manager answers 403
 `{"code": "permission_denied"}`. Uploads, extraction and rule creation need any known user.
 The first manager comes from the pack (`make setup` loads its `users`).
@@ -43,7 +43,8 @@ The first manager comes from the pack (`make setup` loads its `users`).
 | Provider activity | `GET /traces?process_id={id}&name=provider_call` | model, HTTP status, request fingerprint, replay/network outcome and reported tokens |
 | Metrics | `GET /processes/{id}/metrics` | stage timings, agent `llm` usage and separate reader `providers` totals; replay does not count as network usage |
 | Assistant | `GET /instances/{id}/suggestion` | decision, reasoning and a proposed rule. 409 if not escalated, 502 if the model failed |
-| Resolve | `POST /instances/{id}/resolve` `{decision, reason}` | manager; adds a decision, the engine's stays |
+| Resolve | `POST /instances/{id}/resolve` `{decision, reason, proposal_id?}` | manager; adds a decision, the engine's stays. With `proposal_id`, the resolution event records it and settles that proposal |
+| Proposals | `GET /processes/{id}/proposals?status=open`, `POST /proposals/{id}/accept`, `POST /proposals/{id}/reject` `{reason?}`, `POST /instances/{id}/proposal` | everything an agent proposes, in one shape; manager-only. See [Proposals](#proposals) |
 | Rules | `GET /processes/{id}/rules?status=` | compiling, draft, active, blocked, retired |
 | Rule | `GET /rules/{id}` | `code`, `tests`, `report` (`valid`, `tests`, `discrepancies`, `attempts`, `reviews`; `needs_data` when blocked) |
 | Norm | `POST /processes/{id}/norm`, `GET /processes/{id}/norm-rules` | the client's norm split into norm rules, each with its rules |
@@ -72,6 +73,52 @@ The first manager comes from the pack (`make setup` loads its `users`).
 | Monitoring: execution | `GET /processes/{id}/metrics/execution?since=`, `GET /metrics/execution` | `runs`, `instances_per_second`, `rules[]` (p50/p95 per rule), `decisions_by_outcome`, `failures`, `escalated`, `pending`, `resolutions_by_author`, `resolution_p50_s`/`p95_s`, `open_alerts` |
 | Plane health | `GET /health/planes` | per plane `status` `ok`/`degraded`/`down`, `error_rate`, `p95_ms`, `reason` (thresholds `TRACE_HEALTH_*`); ingestion is at least `degraded` (`sources down: <process>:<source>`) while a source's latest sync in the window failed |
 | Live feed | `GET /events/stream?plane=&process_id=&after=` | server-sent events: `event` = plane, `id` = span id, `data` = a span as in `GET /traces`; `: ping` every idle second. Use `EventSource` |
+
+## Proposals
+
+Agents propose and the manager decides. Three channels write proposals, and the same
+three calls list them and settle them. No proposal changes a decision or the published
+process by itself.
+
+| Channel | Created by | `kind` | Accepting it |
+|---|---|---|---|
+| `escalation` | `POST /instances/{id}/proposal` on an escalated instance (the assistant) | `decision` | resolves the instance with `payload.proposed`, as `POST /instances/{id}/resolve` with `proposal_id` |
+| `chat` | a `revise` message in a process chat on an existing process (`/process-drafts/{id}/messages`) | `context` (description, decision types, review), `input` (symbols), `rule` (rules, guidance), `source` | accepts that change in the chat draft (`reviews`). `context` and `input` share the draft's `setup` review, which is accepted once all of them are. Publishing stays `/prepare` then `/publish` |
+| `learning` | `POST /processes/{id}/learning` (the learner) | `rule` (a norm), `context`, `input`, `source` | `rule`: adopts the norm's latest valid validation (run `/norm-proposals/{id}/validate` first; 409 otherwise). `context` and `input`: staged in the version draft (`/processes/{id}/draft`), then published separately. `source`: recorded only; load it through Sources |
+
+Rejecting a proposal applies nothing. A chat rejection marks the draft review `rejected`, and a learned
+norm gets its rejection through `/norm-proposals/{id}/reject`, which also settles the
+proposal. A newer escalation proposal for the same instance, or a new chat revision,
+marks the open ones `superseded`. Resolving an instance with a `proposal_id` and another
+decision marks the proposal `rejected`, with that decision in `outcome`.
+
+```json
+{
+  "id": 12, "process_id": 3, "instance_id": 417, "channel": "escalation", "kind": "decision",
+  "summary": "NO_PAGAR for factura_1217.pdf",
+  "rationale": "The purchase order PO-2026-0813 is already paid in the ERP.",
+  "evidence": ["symbol:purchase_order", "rule:41", "escalation"],
+  "payload": {
+    "proposed": "NO_PAGAR",
+    "why": ["Two rules disagree about this invoice, so a person must look at it."],
+    "options": [
+      {"decision": "PAGAR", "consequence": "The supplier is paid now."},
+      {"decision": "NO_PAGAR", "consequence": "The invoice is held and not paid."}
+    ],
+    "decision_id": 9001, "escalated_as": "ESCALAR", "escalation_reason": "RULE_CONFLICT: ...",
+    "fired_rules": [41, 44], "proposed_rule": {"text": "...", "type": "prohibition"}
+  },
+  "status": "accepted", "author": "assistant", "created_at": "2026-09-19T18:02:11Z",
+  "resolved_by": "Ana", "resolved_at": "2026-09-19T18:03:40Z",
+  "outcome": {"decision_id": 9002, "decision": "NO_PAGAR"}
+}
+```
+
+Chat payloads carry `{draft_id, revision, review_key, before, after}`. Learning payloads
+carry `{analysis_id, norm_proposal_id, norm_kind, ...}` for a norm, and
+`{analysis_id, kind, name, type, text}` for a definition change. Spans:
+`propose_decision`, `accept_proposal` and `reject_proposal`, the last two with
+`proposal_id`, `channel` and `kind`.
 
 ## Shapes worth knowing
 

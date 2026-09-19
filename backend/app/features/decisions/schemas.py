@@ -65,6 +65,9 @@ class InstanceDetail(InstanceOut):
 class ResolveIn(BaseModel):
     decision: str = Field(examples=["NO_PAGAR"])  # must be a decision type of the process
     reason: str
+    # The assistant's open proposal this answers (POST /instances/{id}/proposal): it is
+    # accepted if the decision is the proposed one, rejected otherwise.
+    proposal_id: int | None = None
 
 
 class RuleSummary(BaseModel):

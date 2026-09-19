@@ -26,9 +26,15 @@ export class ApiError extends Error {
 }
 
 let userId: number | null = null
+let onUnauthenticated: (() => void) | null = null
 
 export function setUserId(id: number | null) {
   userId = id
+}
+
+/** Called when the backend refuses the signed-in user's identity (401, or a 422 on `x-user-id`). */
+export function setOnUnauthenticated(callback: (() => void) | null) {
+  onUnauthenticated = callback
 }
 
 function headers(extra?: HeadersInit): Headers {
@@ -40,17 +46,25 @@ function headers(extra?: HeadersInit): Headers {
 async function fail(response: Response): Promise<never> {
   let code = 'http_error'
   let message = `${response.status} ${response.statusText}`
+  let badIdentity = response.status === 401
   try {
     const body = await response.json()
     if (typeof body?.code === 'string') code = body.code
     if (typeof body?.message === 'string') message = body.message
     else if (typeof body?.detail === 'string') message = body.detail
-    else if (Array.isArray(body?.detail)) message = body.detail.map(
-      (error: { loc?: string[]; msg?: string }) => `${error.loc?.join('.') ?? 'Configuration'}: ${error.msg ?? 'Invalid value'}`,
-    ).join('; ')
+    else if (Array.isArray(body?.detail)) {
+      badIdentity ||= response.status === 422 && body.detail.some(
+        (error: { loc?: string[] }) => error.loc?.includes('x-user-id'),
+      )
+      message = body.detail.map(
+        (error: { loc?: string[]; msg?: string }) => `${error.loc?.join('.') ?? 'Configuration'}: ${error.msg ?? 'Invalid value'}`,
+      ).join('; ')
+    }
   } catch {
     // Body was not the `{code, message}` envelope. Keep the status text.
   }
+  // With no user set the header was never sent, and the console already shows Login.
+  if (badIdentity && userId != null) onUnauthenticated?.()
   throw new ApiError(response.status, code, message)
 }
 

@@ -19,9 +19,22 @@ class ProposedNorm(BaseModel):
     limitations: Text
 
 
+class DefinitionChange(BaseModel):
+    """A change to the process definition itself, not a norm. Accepting one stages it in
+    the version draft (context, input) or records it (source); it is never published here."""
+
+    kind: Literal["context", "input", "source"]  # description, symbol, source of truth
+    name: str = Field(default="", pattern=r"^([a-z][a-z0-9_]*)?$")  # symbol or source
+    type: str = ""  # symbol type: text, number, date...
+    text: Text  # a convention to add, what the symbol holds, what the source provides
+    reasoning: Text
+    evidence: list[str] = Field(min_length=1, max_length=100)
+
+
 class LearningOutput(BaseModel):
     reasoning: Text
     proposals: list[ProposedNorm] = Field(default_factory=list, max_length=5)
+    definition_changes: list[DefinitionChange] = Field(default_factory=list, max_length=5)
 
 
 class ValidationOut(BaseModel):

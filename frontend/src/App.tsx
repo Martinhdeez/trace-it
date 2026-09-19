@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes, useParams } from 'react-router'
 import { AppShell } from './components/shell/AppShell'
 import { Instances } from './routes/Instances'
 import { Landing } from './routes/Landing'
+import { Login } from './routes/Login'
 import { NewProcess } from './routes/NewProcess'
 import { Process } from './routes/Process'
 import { Processes } from './routes/Processes'
@@ -11,11 +12,13 @@ import { Settings } from './routes/Settings'
 import { Definition } from './routes/Definition'
 import { ProcessSettings } from './routes/ProcessSettings'
 import { paths } from './lib/paths'
+import { useSession } from './state/session'
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/login" element={<Login />} />
       <Route element={<Console />}>
         <Route path="/processes" element={<Processes />} />
         <Route path="/processes/new" element={<NewProcess />} />
@@ -39,6 +42,8 @@ export default function App() {
 }
 
 function Console() {
+  const { user } = useSession()
+  if (!user) return <Navigate to={paths.login} replace />
   return (
     <AppShell>
       <div className="relative flex min-h-0 flex-1 flex-col">

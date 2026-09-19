@@ -109,6 +109,8 @@ PLANES: dict[str, Plane] = {
     "validate_norm": _AGENTS,
     "adopt_norm": _AGENTS,
     "reject_norm": _AGENTS,
+    "accept_proposal": _AGENTS,  # a manager settles any proposal (docs/api.md, Proposals)
+    "reject_proposal": _AGENTS,
     # Running compiled code over instances, and the people acting on its decisions.
     "run_process": _EXECUTION,
     "evaluate_rule": _EXECUTION,
@@ -116,6 +118,7 @@ PLANES: dict[str, Plane] = {
     "reprocess": _EXECUTION,
     "review_decision": _EXECUTION,
     "suggest_escalation": _EXECUTION,
+    "propose_decision": _EXECUTION,
     "resolution": _EXECUTION,
     "export_outcomes": _EXECUTION,
     "detect_stale_decisions": _EXECUTION,  # ADR 0026

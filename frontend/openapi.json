@@ -4876,6 +4876,313 @@
         }
       }
     },
+    "/instances/{instance_id}/proposal": {
+      "post": {
+        "tags": [
+          "proposals"
+        ],
+        "summary": "The assistant proposes a decision for an escalated instance; a manager settles it",
+        "description": "Why the case escalated, the options with their consequence, the proposed one and its evidence, in `payload`. Only a proposal: no decision is taken until a manager accepts it (or resolves the instance with its `proposal_id`). A new one supersedes the instance's open proposal.",
+        "operationId": "proposeDecision",
+        "parameters": [
+          {
+            "name": "instance_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Instance Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProposalOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Instance not escalated"
+          },
+          "502": {
+            "description": "The assistant's model failed"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/processes/{process_id}/proposals": {
+      "get": {
+        "tags": [
+          "proposals"
+        ],
+        "summary": "Proposals from the escalation assistant, the process chat and learning",
+        "description": "Newest first. `kind` is decision, rule, context, input or source.",
+        "operationId": "listProposals",
+        "parameters": [
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "open",
+                    "accepted",
+                    "rejected",
+                    "superseded"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ManagerProposalOut"
+                  },
+                  "title": "Response Listproposals"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/proposals/{proposal_id}/accept": {
+      "post": {
+        "tags": [
+          "proposals"
+        ],
+        "summary": "The manager accepts a proposal; its channel's own workflow applies it",
+        "description": "decision: resolves the instance with the proposed decision. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.",
+        "operationId": "acceptProposal",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Proposal Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SettleIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProposalOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not open, stale, or not validated yet"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/proposals/{proposal_id}/reject": {
+      "post": {
+        "tags": [
+          "proposals"
+        ],
+        "summary": "The manager rejects a proposal; nothing it proposed is applied",
+        "operationId": "rejectProposal",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Proposal Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SettleIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProposalOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not open"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/ocr/config": {
       "get": {
         "tags": [
@@ -8994,6 +9301,143 @@
         ],
         "title": "LoginIn"
       },
+      "ManagerProposalOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "process_id": {
+            "type": "integer",
+            "title": "Process Id"
+          },
+          "instance_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance Id"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "escalation",
+              "chat",
+              "learning"
+            ],
+            "title": "Channel"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "decision",
+              "rule",
+              "context",
+              "input",
+              "source"
+            ],
+            "title": "Kind"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "accepted",
+              "rejected",
+              "superseded"
+            ],
+            "title": "Status"
+          },
+          "author": {
+            "type": "string",
+            "title": "Author"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "process_id",
+          "instance_id",
+          "channel",
+          "kind",
+          "summary",
+          "rationale",
+          "evidence",
+          "payload",
+          "status",
+          "author",
+          "created_at",
+          "resolved_by",
+          "resolved_at",
+          "outcome"
+        ],
+        "title": "ManagerProposalOut",
+        "description": "One thing an agent proposes; only a manager accepts or rejects it."
+      },
       "MessageIn": {
         "properties": {
           "revision": {
@@ -9161,6 +9605,24 @@
         ],
         "title": "NormStats",
         "description": "One norm submitted: what its agents spent, and when its rules went live."
+      },
+      "Option": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "consequence": {
+            "type": "string",
+            "title": "Consequence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision",
+          "consequence"
+        ],
+        "title": "Option"
       },
       "Plane": {
         "type": "string",
@@ -9984,6 +10446,17 @@
           "reason": {
             "type": "string",
             "title": "Reason"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
           }
         },
         "type": "object",
@@ -11065,6 +11538,18 @@
         ],
         "title": "RunSummary"
       },
+      "SettleIn": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 8000,
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "SettleIn"
+      },
       "SourceDetail": {
         "properties": {
           "id": {
@@ -11665,6 +12150,30 @@
             "type": "string",
             "title": "Reasoning"
           },
+          "why": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Why"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/Option"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Options"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Evidence"
+          },
           "proposed_rule": {
             "type": "string",
             "title": "Proposed Rule"
@@ -11682,6 +12191,9 @@
         "required": [
           "decision",
           "reasoning",
+          "why",
+          "options",
+          "evidence",
           "proposed_rule",
           "proposed_type"
         ],
