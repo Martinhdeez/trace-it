@@ -1,0 +1,18 @@
+## 2026-09-19T10:14:36Z the ERP is down
+
+### Transient ORA-00600: retried, the sync completes (from 02)
+  erp sync span: requests=30 retries=2 transient_errors={"ORA-00600": 2} status=ok
+  erp sync span: requests=31 retries=3 transient_errors={"ORA-00600": 3} status=ok
+
+current erp snapshot: 15 rows=516 loaded_at 2026-09-19 10:14:22.888746+00
+$ kill the ERP (port 8039 closed)
+$ POST /processes/1/sources/erp/sync
+  {"code":"source_unavailable","message":"Sync of 'erp' failed; the previous snapshot stays current. POST /erp/login : gave up after 6 attempts (last: transport error: ConnectError('All connection attempts failed'))"}
+    HTTP 502  (11 s: 6 attempts with backoff, then the breaker)
+current erp snapshot: 15 rows=516 loaded_at 2026-09-19 10:14:22.888746+00   (unchanged)
+sync_source span: error requests=12 retries=10 timeouts=0 error=SourceUnavailableError: Sync of 'erp' failed; the previous snapshot stays current. POST /erp/login : gave up after 6 attempts (last: transport error: ConnectErr
+$ POST /processes/1/reprocess?dry_run=true   (decisions still use the previous snapshot; the 38 changes are rule 30, published in 06 and not yet reprocessed)
+   {'unchanged': 462, 'changes': 38, 'conflicts': 0}
+$ restart the ERP and sync again
+   {'rows': 516, 'retries': 2, 'transient_errors': {'ORA-00600': 2}}
+current erp snapshot: 16 rows=516 loaded_at 2026-09-19 10:14:50.815513+00

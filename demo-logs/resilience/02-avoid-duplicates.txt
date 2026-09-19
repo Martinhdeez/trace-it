@@ -1,0 +1,35 @@
+## 2026-09-19T10:06:39Z avoid duplicates (DB trace_resilience, after 01)
+
+### Same PDF uploaded twice (a decided one now)
+   {'instance_id': 1, 'created': False, 'status': 'DECIDED'} sha256 12a5e1eff429 cache_hit True
+   {'instance_id': 1, 'created': False, 'status': 'DECIDED'} sha256 12a5e1eff429 cache_hit True
+instances named 2026-01-08_P001.pdf: 1, decisions: 1
+
+### Run twice
+decisions before: 500
+$ POST /processes/1/run -> {"decided":0,"by_decision":{}}
+$ POST /processes/1/run -> {"decided":0,"by_decision":{}}
+decisions after: 500, instances with more than one decision: 0
+(run decides only PENDING instances: a second run is a no-op. reprocess appends a row only for a decision that changes)
+$ POST /processes/1/reprocess -> {'unchanged': 500, 'changes': 0, 'conflicts': 0}
+decisions after reprocess: 500
+
+### Export: one line per file
+$ GET /processes/1/export -> 500 records (wc -l says 499: no trailing newline), X-Duplicate-Names: (none)
+lines 500, unique file_id 500, results {'PAGAR': 436, 'ESCALAR': 28, 'NO_PAGAR': 36}
+golden agreement 471/471
+$ make check-outcomes OUT=export.jsonl FILES=.context/500-sombras-de-alberto/facturas
+  /private/tmp/claude-501/-Users-apple-orca-workspaces-trace-pay-pelican/81951f95-6768-4335-9ebf-6930a2d5a39b/scratchpad/res/export.jsonl: 500 lines for 500 PDFs in /Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-a9d710321dffacbec/.context/500-sombras-de-alberto/facturas
+  OK: one line per file, valid results {'ESCALAR': 28, 'NO_PAGAR': 36, 'PAGAR': 436}
+
+### Alerts are unique on (decision_id, after)
+uq_alerts_decision_id_after|UNIQUE (decision_id, after)
+ERP restarted with a Saturday-style change (3 rows: AS-00476 -> PENDIENTE, AS-00096 -> PAGADA, AS-00471 -> PENDIENTE)
+$ POST /processes/1/sources/erp/sync -> {'id': None, 'rows': 516, 'stats': {'requests': 30, 'pages': 26, 'retries': 2, 'logins': 1, 'rate_limited': 0, 'transient_errors': {'ORA-00600': 2}, 'timeouts': 0, 'invalid_responses': 0, 'invalid_values': 0, 'duration_ms': 5198, 'status': {'entries': '516', 'update_loaded': 'SI'}}}
+  alerts: 2
+$ POST /processes/1/sources/erp/sync -> {'id': None, 'rows': 516, 'stats': {'requests': 31, 'pages': 26, 'retries': 3, 'logins': 1, 'rate_limited': 0, 'transient_errors': {'ORA-00600': 3}, 'timeouts': 0, 'invalid_responses': 0, 'invalid_values': 0, 'duration_ms': 5410, 'status': {'entries': '516', 'update_loaded': 'SI'}}}
+  alerts: 2
+  1|2026-03-28_P002.pdf|NO_PAGAR|PAGAR|source_sync|open
+  2|2026-05-28_P003.pdf|NO_PAGAR|PAGAR|source_sync|open
+$ detection run twice more by hand with the same trigger (alerts.service.detect):
+  {"alerts_before": 2, "created_first": [], "created_second": [], "alerts_after": 2}

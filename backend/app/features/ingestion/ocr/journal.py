@@ -87,8 +87,8 @@ def recorded_call(
 
 def _recorded_call(path, identity, call, trace=None, reader=None):
     with FileLock(str(path) + ".lock", timeout=60):
-        if path.exists():
-            record = json.loads(path.read_text(encoding="utf-8"))
+        record = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+        if record is not None and record["state"] != "refused":  # refused: call again
             if trace is not None:
                 trace.set(journal_hit=True)
             if record["state"] != "complete":
@@ -118,7 +118,16 @@ def _recorded_call(path, identity, call, trace=None, reader=None):
             if trace is not None:
                 trace.set(outcome="success", network_succeeded=trace.data["network_attempted"])
         except Exception as exc:
-            record.update(state="uncertain_or_failed", error_type=type(exc).__name__)
+            # The provider answered and refused (429 rate limit, 503, a bad key): nothing was
+            # delivered, so the next call may try again. A timeout, a dropped connection or a
+            # 2xx whose body failed validation stays uncertain and blocks until inspected.
+            status = trace.data.get("http_status_code") if trace is not None else None
+            refused = status is not None and (400 <= status < 500 or status == 503)
+            record.update(
+                state="refused" if refused else "uncertain_or_failed",
+                error_type=type(exc).__name__,
+                **({"http_status_code": status} if refused else {}),
+            )
             if trace is not None:
                 trace.set(outcome="error")
             raise
