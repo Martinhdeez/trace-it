@@ -23,6 +23,7 @@ export const paths = {
   // newer version from Carlos, keep his paths and preserve: review?i=<instance>.
   reviewCase: (processId: number | string, instanceId: number | string) =>
     `/processes/${processId}/review?i=${instanceId}`,
+  metrics: (id: number | string) => `/processes/${id}/metrics`,
   processSettings: (id: number | string) => `/processes/${id}/settings`,
   rules: (id: number | string) => `/processes/${id}/definition`,
   rule: (processId: number | string, ruleId: number | string) =>
