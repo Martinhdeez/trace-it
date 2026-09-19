@@ -28,18 +28,12 @@ import { ErrorNotice, Notice } from '../components/shell/Notice'
 import { NestedCard } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { paths } from '../lib/paths'
-import type { UploadProgress, ExecutionMetrics, NormRule, ProcessDetail, ProcessMetrics, ProcessSummary, Rule } from '../api/contracts'
+import type { RunOut, UploadProgress, ExecutionMetrics, NormRule, ProcessDetail, ProcessMetrics, ProcessSummary, Rule } from '../api/contracts'
 import { t } from '../i18n'
-import { formatEuro, formatMs } from '../lib/format'
+import { formatEuro, formatMs, formatRunDate } from '../lib/format'
 import { decisionTone, type DecisionTone } from '../lib/process'
 
 type QueuedFile = FilePreview & { file: File }
-
-type SessionRun = {
-  finishedAt: Date
-  decided: number
-  split: string
-}
 
 export function Process() {
   const processId = Number(useParams().processId)
@@ -47,7 +41,6 @@ export function Process() {
   const { isManager } = useSession()
   const [runPanelOpen, setRunPanelOpen] = useState(false)
   const [queue, setQueue] = useState<QueuedFile[]>([])
-  const [runs, setRuns] = useState<SessionRun[]>([])
   const [progress, setProgress] = useState<UploadProgress | null>(null)
   const [published, setPublished] = useState<number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -95,6 +88,10 @@ export function Process() {
     queryKey: keys.norm(processId),
     queryFn: () => api.listNormRules(processId),
   })
+  const runs = useQuery({
+    queryKey: keys.runs(processId),
+    queryFn: () => api.listRuns(processId),
+  })
   const findings = useQuery({
     queryKey: keys.findings(processId),
     queryFn: () => api.listFindings(processId),
@@ -102,16 +99,8 @@ export function Process() {
 
   const run = useMutation({
     mutationFn: () => api.run(processId),
-    onSuccess: (data) => {
-      const split = Object.entries(data.by_decision)
-        .map(([name, value]) => `${value} ${name.replaceAll('_', ' ')}`)
-        .join(', ')
-      setRuns((current) => [
-        { finishedAt: new Date(), decided: data.decided, split },
-        ...current,
-      ])
-      void queryClient.invalidateQueries()
-    },
+    // Everything counts instances, and the new run joins the history.
+    onSuccess: () => void queryClient.invalidateQueries(),
   })
 
   const upload = useMutation({
@@ -301,7 +290,12 @@ export function Process() {
           pending={summary.data?.by_status.PENDING ?? 0}
         />
 
-        <Runs processId={processId} runs={runs} documentCount={summary.data?.instances ?? 0} />
+        <Runs
+          processId={processId}
+          runs={runs.data ?? []}
+          error={runs.error}
+          documentCount={summary.data?.instances ?? 0}
+        />
 
         <Split summary={summary.data} process={process.data} />
         <ProcessExecutionSettings processId={processId} />
@@ -422,13 +416,23 @@ function Metrics({
   )
 }
 
+/** ESCALAR first: it is what a rerun after learning should shrink. */
+function runSplit(run: RunOut): string {
+  return Object.entries(run.by_decision)
+    .sort(([a], [b]) => (a === 'ESCALAR' ? -1 : b === 'ESCALAR' ? 1 : a.localeCompare(b)))
+    .map(([name, value]) => `${value} ${name.replaceAll('_', ' ')}`)
+    .join(', ')
+}
+
 function Runs({
   processId,
   runs,
+  error,
   documentCount,
 }: {
   processId: number
-  runs: SessionRun[]
+  runs: RunOut[]
+  error: unknown
   documentCount: number
 }) {
   return (
@@ -437,7 +441,7 @@ function Runs({
         <div>
           <h2 className="text-[18px] font-medium tracking-[-0.03em]">Ejecuciones</h2>
           <p className="mt-1 text-[12.5px] text-muted">
-            Las de esta sesión. El historial durable llega cuando el backend publique runs.
+            Cada ejecución, con la versión que decidió. Abre una para ver sus casos.
           </p>
         </div>
         <Link to={paths.instances(processId)} className="text-[12px] text-muted hover:text-ink">
@@ -445,33 +449,33 @@ function Runs({
         </Link>
       </div>
       <div className="overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
-        {runs.length === 0 ? (
+        {error ? (
+          <ErrorNotice error={error} />
+        ) : runs.length === 0 ? (
           <p className="px-4 py-5 text-[13px] text-muted">
             {documentCount
               ? `${documentCount} documentos en el proceso. Ejecutar abre la cola del lote.`
-              : 'Aún no has ejecutado este proceso en esta sesión.'}
+              : 'Aún no se ha ejecutado este proceso.'}
           </p>
         ) : (
           <ul className="divide-y divide-hairline">
-            {runs.map((item, index) => (
-              <li key={`${item.finishedAt.toISOString()}-${index}`}>
+            {runs.map((item) => (
+              <li key={item.id}>
                 <Link
-                  to={paths.instances(processId)}
+                  to={paths.instances(processId, item.id)}
                   className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-canvas"
                 >
                   <div className="min-w-0">
                     <p className="text-[13px] text-ink">
-                      {item.decided} decisiones
+                      {item.decided} decisiones · v{item.version_number}
                     </p>
                     <p className="truncate text-[12px] text-muted">
-                      {item.split || 'Sin salidas'}
+                      {runSplit(item) || 'Sin salidas'}
+                      {item.author ? ` · ${item.author}` : ''}
                     </p>
                   </div>
                   <span className="shrink-0 font-mono text-[11px] text-faint">
-                    {item.finishedAt.toLocaleTimeString('es-ES', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {formatRunDate(item.started_at)}
                   </span>
                 </Link>
               </li>
