@@ -26,7 +26,7 @@ from app.features.ingestion.model import Instance
 from app.features.ingestion.symbols import flatten_symbols
 from app.features.processes.model import DecisionType
 from app.features.processes.service import get as get_process
-from app.features.rules.model import Rule
+from app.features.rules.model import ENFORCED, Rule
 from app.features.sources.model import Source
 from app.features.users.model import User
 
@@ -92,7 +92,7 @@ async def active_rules(session: AsyncSession, process_id: int) -> list[Rule]:
     return list(
         await session.scalars(
             select(Rule)
-            .where(Rule.process_id == process_id, Rule.status == "active")
+            .where(Rule.process_id == process_id, Rule.status.in_(ENFORCED))
             .order_by(Rule.id)
         )
     )

@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,15 +11,25 @@ from app.features.ingestion.process_router import router as ingestion_router
 from app.features.ingestion.router import create_router as create_extraction_router
 from app.features.ingestion.runtime import ingestion_lifespan
 from app.features.processes.router import router as processes_router
+from app.features.rules import service as rules_service
 from app.features.rules.router import router as rules_router
 from app.features.sources.router import router as sources_router
+from app.features.use_cases.router import router as use_cases_router
 from app.features.users.dependencies import current_user
 from app.features.users.router import router as users_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with ingestion_lifespan(app):
+        await rules_service.resume_compilations()
+        yield
+
 
 app = FastAPI(
     title="trace-it",
     version="0.1.0",
-    lifespan=ingestion_lifespan,
+    lifespan=lifespan,
     description=(
         "Deterministic decision processes with rules compiled to code by agents.\n\n"
         "Identify with the `X-User-Id` header (see `POST /login`). Errors are "
@@ -49,6 +61,7 @@ for router in (
     agents_router,
     ingestion_router,
     sources_router,
+    use_cases_router,
 ):
     app.include_router(router)
 

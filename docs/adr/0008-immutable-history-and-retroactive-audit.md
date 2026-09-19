@@ -52,7 +52,7 @@ second; the table `findings` stores audit findings.
   rule that needs a symbol never extracted requires extracting it from the stored text
   first (P10, open).
 - Full linear versioning (list of versions, activate an older one) is iteration 2 (F9).
-  Today rules have states draft/active/retired, a hash of text + both codes, and every
+  Today rules have states draft/active/retired, a hash of text + code, and every
   decision stores the rule-set hash, enough to map old decisions to versions later.
 - History grows without bound; acceptable at hackathon scale.
 

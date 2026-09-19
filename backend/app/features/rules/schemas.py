@@ -13,6 +13,7 @@ class RuleIn(BaseModel):
 class RuleOut(BaseModel):
     id: int
     process_id: int
+    norm_rule_id: int | None  # the sentence of the client's norm it checks, if any
     text: str
     type: str
     decision: str
@@ -26,3 +27,19 @@ class RuleOut(BaseModel):
 class RuleDetail(RuleOut):
     code: str | None
     tests: list[dict[str, Any]] | None
+
+
+class CheckOut(BaseModel):
+    id: int
+    text: str
+    decision: str
+    status: str
+
+
+class NormRuleOut(BaseModel):
+    id: int
+    number: int
+    text: str  # the sentence exactly as the client wrote it
+    policies: list[str]
+    created_at: datetime
+    rules: list[CheckOut]  # its atomic checks

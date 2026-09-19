@@ -20,7 +20,7 @@ Organised by feature, not by file type (ADR 0012).
 ```
 backend/
   pyproject.toml              # dependencies (uv)
-  alembic/versions/           # one migration: 0001_initial_schema.py
+  alembic/versions/           # 0001_initial_schema.py, 0002_use_cases.py
   app/
     main.py                   # FastAPI app, routers, TraceError -> {"code", "message"}
     models.py                 # imports every model (Alembic needs it)
@@ -29,22 +29,52 @@ backend/
     common/exceptions.py      # TraceError and its subclasses
     features/
       users/                  # users, roles manager/operator, X-User-Id
+      use_cases/              # use cases and the versioned configuration of their agents
       processes/              # process, decision types, symbols; definition.py loads a pack
-      rules/                  # rule life cycle draft -> active -> retired; compile, impact
+      rules/                  # rule life cycle (below); compile, impact
       decisions/              # engine.py (pure), service.py (run, queue, resolve, export), audit.py
       instances/              # files, instances, symbols.py (stored shape <-> rule shape)
       sources/                # sources of truth, snapshots; http_connector.py (the ERP)
-      agents/                 # llm.py (PydanticAI seam), compiler.py, assistant.py, sandbox.py
+      agents/                 # llm.py (PydanticAI seam), compiler.py, assistant.py, sandbox.py, prompts/*.md
   tests/
     support/                  # challenge.py, pack.py, fakes.py, models.py, prepare_db.py
     golden/                   # expected outcomes of batch 1 (README there)
     e2e/                      # golden engine run, API flow
-  evals/                      # opt-in compiler evaluation against the hand-written rules
+  evals/                      # opt-in evaluations: compiler vs hand-written rules, norm vs golden
 ```
 
 Inside a feature: `model.py` (SQLAlchemy tables), `schemas.py` (Pydantic in/out), `service.py` (logic, takes the session), `router.py` (thin: validate, call the service, return), `tests/`. A router runs no SQL. A feature imports another's `model.py` or `service.py`, never its `router.py`. Errors are `TraceError` subclasses (`app/common/exceptions.py`); the API maps them to status codes. Naming and vocabulary: `docs/CONVENTIONS.md`.
 
-Agents (compiler A/B, assistant) run on PydanticAI: ADR 0006 and `features/agents/llm.py`. The model per role comes from `Settings` (`TRACE_*_MODEL`). Tests script the model with `FunctionModel` (`tests/support/models.py`): no network, no keys. Before writing PydanticAI code, read `.context/pydantic-ai/START-HERE.md`: the v2 API differs from what a model remembers.
+Agents (tester, compiler, assistant, normalizer) run on PydanticAI: ADR 0006 and `features/agents/llm.py`.
+
+## Rule life cycle
+
+A manager saves a rule in plain language (`POST /processes/{id}/rules`); nobody has to press anything else.
+
+| Status | Meaning | Enforced by the engine |
+|---|---|---|
+| `compiling` | Saved; tester and coder are writing its tests and code in the background (1-4 min). A restart re-queues it | no |
+| `active` | Its code passed the tests and changes few past decisions (ADR 0004), or a manager activated it | yes |
+| `blocked` | The agents answered NeedsData: the process lacks a symbol or source it needs. Every instance escalates with `RULE_NEEDS_DATA` (ADR 0016) until the data exists and it is recompiled | yes, as an escalation |
+| `draft` | Compiled but waiting for a person: failing tests, too much impact, or `report.error` (LLM down) | no |
+| `retired` | Taken out of the process by a manager | no |
+
+`POST /rules/{id}/compile` recompiles a `draft` or `blocked` rule and waits for the result; `make compile` does the same for every draft. A `blocked` rule that compiles goes through the impact check, where undoing its own escalations does not count: it becomes `active` by itself unless it would contradict a person.
+
+## Use cases and agent configuration
+
+A **use case** is what the app is used for (e.g. "Invoice payment"): its `description` (domain conventions) and how its agents work. A **process** is one set of rules inside a use case (`processes.use_case_id`); `ProcessOut.description` is its use case's. What an agent does is not in the code (ADR 0011): the platform prompt is a file in `features/agents/prompts/`, the same for every use case, and each use case adds a versioned configuration per role (`compiler`, `tester`, `assistant`, `normalizer`): model, domain guidance, model settings, limits, examples. A role without one runs with `TRACE_<ROLE>_MODEL` and the defaults in `compiler.py`. Every agent event records `config_id` and `prompt_hash` (sha256[:12] of the effective instructions). The pack file `processes/<pack>/use-case.json` seeds it (`processes/README.md`).
+
+| Endpoint | Who | What |
+|---|---|---|
+| `GET /use-cases`, `GET /use-cases/{id}` | anyone | Use cases; one with the active configuration of each role |
+| `GET /use-cases/{id}/agents/{role}/versions` | anyone | Every version of a role's configuration, oldest first |
+| `PUT /use-cases/{id}/agents/{role}` | manager | Body `{config, note}`: a new version, active from now on |
+| `POST /agent-configs/{id}/activate` | manager | Activate an existing version: rollback, or adopt one loaded from the pack |
+
+**The client's norm** (ADR 0017): `POST /processes/{id}/norm` (manager), body `{"text": ...}`, the norm as the client wrote it, in any language. The normalizer agent keeps each sentence as one **norm rule** (`norm_rules`, the unit the client owns) and splits it into atomic checks: ordinary rules (one code, one decision), compiled in one background job, at most `TRACE_COMPILE_CONCURRENCY` (default 5) at once, linked by `rules.norm_rule_id`, with the normalizer's reading in `report.norm`. Statements that are not checkable conditions become the norm rule's `policies`. `GET /processes/{id}/norm-rules` lists each norm rule with its checks. `make eval-norm` runs norm -> normalizer -> compiler -> engine on batch 1 against the golden outcomes (opt-in, real LLMs).
+
+Versions are append-only: only `active` moves. Tests script the model with `FunctionModel` (`tests/support/models.py`): no network, no keys. Before writing PydanticAI code, read `.context/pydantic-ai/START-HERE.md`: the v2 API differs from what a model remembers.
 
 ## Running locally
 
@@ -62,6 +92,7 @@ Requirements: Docker, [uv](https://docs.astral.sh/uv/), `pdftotext` (poppler) fo
 | `make test-e2e` | Golden outcomes of batch 1 and the API flow (needs the challenge submodule) |
 | `make check` | `ruff check`, `ruff format --check`, then `test` and `test-e2e`. Run before every PR |
 | `make eval-compiler` | Opt-in, calls real LLMs: compiles the 16 rules and compares with `rules-v3/`; report in `backend/evals/reports/` |
+| `make eval-norm` | Opt-in, calls real LLMs: the client's `Norma_Pagos_v3` -> normalizer -> compiler -> batch 1 vs golden; report in `backend/evals/reports/` |
 | `make down` | Stops the containers; data stays |
 | `make reset-db` | Deletes the database volume. Then `make setup` |
 
@@ -75,12 +106,13 @@ Without Docker for the backend (faster loop): `docker compose up db -d`, then in
 |---|---|
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` | LLM providers. Only `make compile`, `make eval-compiler` and the assistant need them |
 | `TRACE_ERP_USER`, `TRACE_ERP_PASSWORD`, `TRACE_ERP_URL` | The ERP connector, named in `processes/invoice-payment/sources.json`. Docker sets the URL to `host.docker.internal:8009` |
-| `TRACE_COMPILER_A_MODEL`, `TRACE_COMPILER_B_MODEL`, `TRACE_ASSISTANT_MODEL` | One model per agent role, `provider:model`. Defaults in `app/core/config.py`; A and B must differ (ADR 0004) |
+| `TRACE_COMPILER_MODEL`, `TRACE_TESTER_MODEL`, `TRACE_ASSISTANT_MODEL` | One model per agent role, `provider:model` (any PydanticAI provider, or `helmcode:<model>` with `HELMCODE_API_KEY`). Defaults in `app/core/config.py`; tester and compiler should differ (ADR 0004) |
+| `TRACE_AUTO_ACTIVATE_MAX_CHANGE` | Share of past decisions a compiled rule may change and still activate by itself (default 0.05) |
 | `TRACE_DATABASE_URL` | Set by Docker; the Makefile overrides it for tests |
 
 ## Database and migrations
 
-The migration history was squashed into `alembic/versions/0001_initial_schema.py`. An existing local database predates it: `make reset-db && make setup`.
+The migration history starts at `alembic/versions/0001_initial_schema.py` (squashed); a database older than it needs `make reset-db && make setup`. `0004_norm_rules.py` adds `norm_rules` and `rules.norm_rule_id`. `0002_use_cases.py` moves each process's description into a use case of its own, so `alembic upgrade head` is enough from 0001.
 
 To change a table: edit the feature's `model.py` (a new table must be imported in `app/models.py`), then in `backend/`: `uv run alembic revision --autogenerate -m "add x to rules"`. Read the generated file before committing. Two branches generating migrations at once leave two heads: `uv run alembic merge heads` and tell the group.
 

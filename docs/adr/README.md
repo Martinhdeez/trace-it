@@ -11,19 +11,20 @@ wins over any other document. Superseded plans live in `.artifacts/archive/`.
 | [0001](0001-configurable-decision-process.md) | Build a configurable decision process with reviewed learning | accepted | Reusable decision system; invoices are the first configured process; managers approve every rule change |
 | [0002](0002-deterministic-engine-llm-never-decides.md) | Decide with a deterministic engine; the LLM never decides at runtime | accepted | All active rules run as code, combined by decision-type priority; LLMs only compile, extract, explain and propose |
 | [0003](0003-rules-compiled-to-python-by-agents.md) | Compile each rule's text to free Python code with agents | accepted | No closed DSL; one contract `evaluate(instance, sources, others) -> {fires, reason}`; the decision comes from the approved rule |
-| [0004](0004-dual-blind-compilation-with-cross-tests.md) | Verify generated code with two blind compilers and cross-tests | accepted | A and B write code + tests blind; all tests on both codes; agreement on history; the check is at compile time, and code A alone runs |
+| [0004](0004-blind-tester-and-autonomous-coder.md) | Verify generated rule code against a blind tester, and activate it by impact | accepted | Tester writes tests from the text only; coder iterates against them and may dispute a test; NeedsData instead of invented fields; auto-activation when impact on history is small |
 | [0005](0005-in-house-sandbox-for-rule-code.md) | Run rule code in an in-house sandbox | accepted | AST allowlist, restricted builtins/imports, separate process with timeouts and rlimits, one subprocess per rule over the whole dataset |
 | [0006](0006-pydanticai-agent-framework.md) | Build every agent on PydanticAI | accepted | Typed output, output validators with bounded retries, one run entry point that traces cost; models per role from settings; scripted models in tests |
 | [0007](0007-declarative-process-packs.md) | Keep all domain knowledge in declarative process packs | accepted | `<name>.json` holds decision types, symbols, rules (with optional hand-written code), users; `<name>/sources.json` the connectors; idempotent loader |
 | [0008](0008-immutable-history-and-retroactive-audit.md) | Never rewrite history | accepted | Content-hashed files, append-only decisions, audits over stored symbols that only produce findings; linear rule versions |
 | [0009](0009-review-state-and-export-semantics.md) | Treat REVIEW as an internal state and export the decision the process policy names | superseded by 0016 | Kept for why the export is the engine's decision and one line per file name |
 | [0010](0010-double-extraction-with-deterministic-validators.md) | Extract symbols with two readings and deterministic validators | proposed | Readings must agree; IBAN/NIF/arithmetic validators never retry the model; cache by file hash. Ingestion today reads documents; the double LLM reading is not built |
-| [0011](0011-configuration-layers.md) | Separate bootstrap files, versioned runtime configuration and secrets | proposed | Repo presets → append-only agent config versions in the DB; prompt hash in every trace. Today: models from settings |
+| [0011](0011-configuration-layers.md) | Separate bootstrap files, versioned runtime configuration and secrets | accepted | Use case holds the domain description and append-only agent config versions (model, guidance, limits, examples); platform prompts as files; `config_id` + prompt hash in every trace. No presets or fallback chains |
 | [0012](0012-stack-and-feature-based-structure.md) | Use FastAPI, PostgreSQL and a feature-based layout | accepted | Async FastAPI + SQLAlchemy + Alembic on Postgres, Docker Compose, uv; one folder per feature; English conventions |
 | [0013](0013-fault-tolerant-erp-client.md) | Read the ERP only through a fault-tolerant client | accepted | Token renewal, backoff with jitter, Retry-After, client rate limiter, validation, paginated snapshot, diff between snapshots |
 | [0014](0014-rules-only-decision-step.md) | Combine rule findings by decision-type priority only | accepted | Refines ADR 0001: process context feeds compilers and the assistant, never the automatic decision; a failed rule or a tie escalates |
 | [0015](0015-immutable-process-versions.md) | Snapshot the whole process as an immutable version on every activation | proposed | Decision types, symbols, description and active rules; decisions reference their version; loader writes drafts |
 | [0016](0016-every-instance-gets-a-decision.md) | Decide every instance: a rule that cannot be evaluated escalates the case | accepted | No REVIEW state; failure or tie decides the process's `requires_human` type with the reason; export is the engine's decision; code A alone at runtime |
+| [0017](0017-autonomous-norm-normalizer.md) | Turn the client's norm into rules with an autonomous normalizer | accepted | Each norm sentence is a norm rule the client owns; the normalizer splits it into atomic checks (ordinary rules) with the norm's own tie-breaker; no human review; batch-1 golden eval as the external check |
 
 ## Glossary
 - **Rule finding:** the result of one rule on one instance (`fires`, `reason`).
@@ -56,7 +57,7 @@ Five decisions that best explain the system to the jury:
 1. **Deterministic engine with compiled rules** (0002 + 0003 + 0014): no LLM in the
    decision path, findings combined by decision-type priority only, zero tokens per
    decision, every decision replayable.
-2. **Dual blind compilation** (0004): how we trust LLM-written code without reading it.
+2. **Blind tester and autonomous coder** (0004): how we trust LLM-written code without reading it.
 3. **Process packs** (0007): the invoice challenge is configuration, not code; a second
    pack runs on the same code.
 4. **Immutable history and export semantics** (0008 + 0016): rule and process changes are

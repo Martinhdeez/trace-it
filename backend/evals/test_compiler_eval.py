@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.mark.e2e
 async def test_the_harness_scores_the_reference_code_at_100(monkeypatch) -> None:
-    """A scripted model that answers with the reference code must agree 100% with it."""
+    """Scripted agents that answer with the reference code must agree 100% with it."""
     defn = pack.definition()
     rule = pack.rules(defn)[1]  # R02: the issuer is in the master
     master = challenge.sources()["suppliers"][:1]
@@ -32,20 +32,17 @@ async def test_the_harness_scores_the_reference_code_at_100(monkeypatch) -> None
         }
         for nif in [master[0]["nif"], "B00000000", "X1", "B00000001", "B00000002", "B00000003"]
     ]
-    answer = {"code": rule.code, "tests": tests}
-    monkeypatch.setattr(
-        llm, "model_for", per_role({r: [answer] for r in ("compiler_a", "compiler_b")})
-    )
+    scripts = {"tester": [{"tests": tests}], "compiler": [{"code": rule.code}]}
+    monkeypatch.setattr(llm, "model_for", per_role(scripts))
 
-    compiled = await eval_compiler.compile_both(rule, defn)
-    report = eval_compiler.evaluate(rule, compiled)
+    report = eval_compiler.evaluate(await eval_compiler.compile_one(rule, defn))
 
-    assert [c.error for c in compiled] == [None, None]
-    assert report.agreement == {"compiler_a": 100.0, "compiler_b": 100.0}
-    assert report.reference_on_tests == "12/12"
+    assert report.error is None
+    assert report.agreement == 100.0
+    assert report.reference_on_tests == "6/6"
     assert report.valid
     table = eval_compiler.render([report], {}, datetime.now(UTC))
-    assert "| R02 | NO_PAGAR | yes | 100.0% | 100.0% |" in table
+    assert "| R02 | NO_PAGAR | yes | True | 100.0% | 6/6 | 1 | 0 |" in table
 
 
 @pytest.mark.llm

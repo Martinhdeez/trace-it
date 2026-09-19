@@ -20,6 +20,7 @@ from app.core.database import session_factory
 from app.features.ingestion.model import File, Instance
 from app.features.processes.definition import Definition, load_definition
 from app.features.sources.model import Source
+from app.features.use_cases import service as use_cases
 from app.main import app
 from tests.golden import golden
 from tests.support import challenge, pack
@@ -79,6 +80,7 @@ async def load(defn: dict[str, Any], files: dict[str, dict[str, Any]]) -> int:
     files, the real sources, and one instance per file with the golden symbols stored as
     extraction writes them."""
     async with session_factory() as session:
+        await use_cases.load(session, pack.use_case())
         result = await load_definition(session, Definition.model_validate(defn), pack.PACK)
         process_id = result.process.id
         for name, rows in challenge.sources().items():

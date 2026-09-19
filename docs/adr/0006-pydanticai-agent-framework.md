@@ -39,12 +39,13 @@ in PostgreSQL.
 
 ## Decision
 - `pydantic-ai-slim[anthropic,google,openai]>=2`, pinned by `uv.lock`.
-- One `Agent` per agent type (`compiler.compiler`, `assistant.assistant`), created once
-  with its instructions and `output_type`; the model is chosen per run from the role's
-  setting (`TRACE_COMPILER_A_MODEL`, `TRACE_COMPILER_B_MODEL`, `TRACE_ASSISTANT_MODEL`,
-  `provider:model` names). The two compilers are one Agent run with two roles.
+- One `Agent` per agent type (`compiler.tester`, `compiler.coder`, `compiler.reviewer`,
+  `assistant.assistant`), created once with its instructions and `output_type`; the model
+  is chosen per run from the role's setting (`TRACE_COMPILER_MODEL`, `TRACE_TESTER_MODEL`,
+  `TRACE_ASSISTANT_MODEL`, `provider:model` names; `helmcode:<model>` is resolved to an
+  OpenAI-compatible model in `llm.resolve`).
 - `ModelRetry` only where the error helps the model fix itself, in output validators:
-  compiler (sandbox check and the agent's own tests, `retries=2`), assistant (decision must
+  tester (well-formed tests over known symbols) and coder (sandbox check), `retries=2`, assistant (decision must
   be a process type, `retries=1`). Never in extraction (ADR 0010).
 - A single entry point (`agents/llm.run`) runs an agent for a role and returns the output
   with a trace (role, model that answered, requests, retries, tokens, cost, latency) that

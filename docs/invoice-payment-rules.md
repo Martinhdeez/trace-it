@@ -2,7 +2,7 @@
 
 **Source of truth:** `processes/invoice-payment.json`, loaded by `make setup`. This document says where each rule comes from and which team decisions it encodes; the rule texts below are quoted from that file.
 
-The sixteen rules ship with hand-written code, `processes/rules-v3/r01-...py` to `r16-...py` (one file per rule, in the order of the JSON); `make activate` (`python -m app.cli load ... --activate`) puts them into the process without any model. The compiler (`make compile`) can regenerate the code from the texts with two blind agents (ADR 0004), and `make eval-compiler` compares what it produces with the hand-written code on the golden instances of batch 1. Rule numbers here are the file numbers, R01 to R16. Note: three texts in the JSON still refer to other rules by an older 0-based number: "(R01)" and "(R03)" inside R03 mean R02 and R04, and "R04" inside R13 means R05.
+The sixteen rules ship with hand-written code, `processes/rules-v3/r01-...py` to `r16-...py` (one file per rule, in the order of the JSON); `make activate` (`python -m app.cli load ... --activate`) puts them into the process without any model. The compiler (`make compile`) can regenerate the code from the texts with a blind tester and a coder (ADR 0004), and `make eval-compiler` compares what it produces with the hand-written code on the golden instances of batch 1. Rule numbers here are the file numbers, R01 to R16. Note: three texts in the JSON still refer to other rules by an older 0-based number: "(R01)" and "(R03)" inside R03 mean R02 and R04, and "R04" inside R13 means R05.
 
 **Basis:** `Norma_Pagos_v3` (workbook sheet) and the batch-1 analysis in `.artifacts/specs/batch1-analysis.md`. Checked against the 471 PDFs with a text layer, the `Proveedores` and `Pedidos_2026` sheets and the ERP data: 433 clean text invoices; the remaining 38 match the trap table.
 
@@ -76,7 +76,7 @@ Principle: a datum that contradicts the master data, the order or the ERP is NO_
 
 ## 4. Ambiguities the texts close
 
-Two agents compile each text blind; these are the readings the wording must not leave open.
+A tester and a coder read each text separately; these are the readings the wording must not leave open.
 
 | Risk | How the text closes it |
 |---|---|
