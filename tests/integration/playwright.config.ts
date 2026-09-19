@@ -25,6 +25,7 @@ const database =
 
 export default defineConfig({
   testDir: '.',
+  testIgnore: 'mail.spec.ts', // Runs separately with its isolated IMAP/API fixture.
   timeout: 60_000,
   expect: { timeout: 15_000 },
   retries: 0,

@@ -98,6 +98,8 @@ jobs:
           (cd tests/integration && npm ci && npx playwright install --with-deps chromium)
       - name: make e2e-integration
         run: make e2e-integration
+      - name: Local IMAP, worker, API, PostgreSQL and browser
+        run: make e2e-mail
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:

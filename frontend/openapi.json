@@ -548,6 +548,911 @@
         }
       }
     },
+    "/processes/{process_id}/gathering": {
+      "get": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "Gathering",
+        "operationId": "getProcessGathering",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatheringSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "Set Gathering",
+        "operationId": "setProcessGathering",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GatheringSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatheringSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mail-ingestion/{process_id}": {
+      "get": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "State",
+        "operationId": "getMailState",
+        "security": [
+          {
+            "TraceItBearer": []
+          },
+          {
+            "MailIngestionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mail-ingestion/{process_id}/initialize": {
+      "post": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "Initialize",
+        "operationId": "initializeMailCursor",
+        "security": [
+          {
+            "TraceItBearer": []
+          },
+          {
+            "MailIngestionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitializeIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mail-ingestion/{process_id}/discover": {
+      "post": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "Discover",
+        "operationId": "discoverMailMessages",
+        "security": [
+          {
+            "TraceItBearer": []
+          },
+          {
+            "MailIngestionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoverIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mail-ingestion/{process_id}/poll-failure": {
+      "post": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "Poll Failure",
+        "operationId": "recordMailPollFailure",
+        "security": [
+          {
+            "TraceItBearer": []
+          },
+          {
+            "MailIngestionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailFailureIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mail-ingestion/{process_id}/claim": {
+      "post": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "Claim",
+        "operationId": "claimMailMessage",
+        "security": [
+          {
+            "TraceItBearer": []
+          },
+          {
+            "MailIngestionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          },
+          {
+            "name": "ready_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Ready Only"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ClaimedMessage"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Claimmailmessage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mail-ingestion/{process_id}/messages/{message_id}/manifest": {
+      "put": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "Manifest",
+        "operationId": "saveMailManifest",
+        "security": [
+          {
+            "TraceItBearer": []
+          },
+          {
+            "MailIngestionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Message Id"
+            }
+          },
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          },
+          {
+            "name": "X-Mail-Lease",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 48,
+              "maxLength": 48,
+              "title": "X-Mail-Lease"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManifestIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mail-ingestion/{process_id}/messages/{message_id}/attachments/{attachment_id}": {
+      "put": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "Import Pdf",
+        "operationId": "importMailPDF",
+        "security": [
+          {
+            "TraceItBearer": []
+          },
+          {
+            "MailIngestionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Message Id"
+            }
+          },
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Attachment Id"
+            }
+          },
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          },
+          {
+            "name": "X-Mail-Lease",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 48,
+              "maxLength": 48,
+              "title": "X-Mail-Lease"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mail-ingestion/{process_id}/messages/{message_id}/attachments/{attachment_id}/failure": {
+      "post": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "Reject",
+        "operationId": "rejectMailAttachment",
+        "security": [
+          {
+            "TraceItBearer": []
+          },
+          {
+            "MailIngestionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Message Id"
+            }
+          },
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Attachment Id"
+            }
+          },
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          },
+          {
+            "name": "X-Mail-Lease",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 48,
+              "maxLength": 48,
+              "title": "X-Mail-Lease"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailFailureIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mail-ingestion/{process_id}/messages/{message_id}/finish": {
+      "post": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "Finish",
+        "operationId": "evaluateMailMessage",
+        "security": [
+          {
+            "TraceItBearer": []
+          },
+          {
+            "MailIngestionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Message Id"
+            }
+          },
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          },
+          {
+            "name": "X-Mail-Lease",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 48,
+              "maxLength": 48,
+              "title": "X-Mail-Lease"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mail-ingestion/{process_id}/messages/{message_id}/failure": {
+      "post": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "Fail",
+        "operationId": "recordMailMessageFailure",
+        "security": [
+          {
+            "TraceItBearer": []
+          },
+          {
+            "MailIngestionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Message Id"
+            }
+          },
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          },
+          {
+            "name": "X-Mail-Lease",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 48,
+              "maxLength": 48,
+              "title": "X-Mail-Lease"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailFailureIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/processes/{process_id}/mail-ingestion": {
+      "get": {
+        "tags": [
+          "mail ingestion"
+        ],
+        "summary": "Overview",
+        "operationId": "getMailOverview",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailOverview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/processes/{process_id}/versions": {
       "get": {
         "tags": [
@@ -2815,6 +3720,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RunIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -7609,6 +8531,120 @@
         ],
         "title": "ApproveIn"
       },
+      "AttachmentOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "part": {
+            "type": "string",
+            "title": "Part"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "safe_name": {
+            "type": "string",
+            "title": "Safe Name"
+          },
+          "encoding": {
+            "type": "string",
+            "title": "Encoding"
+          },
+          "advertised_size": {
+            "type": "integer",
+            "title": "Advertised Size"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "file_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Hash"
+          },
+          "instance_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance Id"
+          },
+          "execution_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Id"
+          },
+          "decision_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Id"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "part",
+          "original_name",
+          "safe_name",
+          "encoding",
+          "advertised_size",
+          "state",
+          "error",
+          "file_hash",
+          "instance_id",
+          "execution_id",
+          "decision_id"
+        ],
+        "title": "AttachmentOut"
+      },
       "Body_extractDocument": {
         "properties": {
           "file": {
@@ -8004,6 +9040,101 @@
           "status"
         ],
         "title": "CheckOut"
+      },
+      "ClaimedMessage": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "uid": {
+            "type": "integer",
+            "title": "Uid"
+          },
+          "uidvalidity": {
+            "type": "integer",
+            "title": "Uidvalidity"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "metadata_saved": {
+            "type": "boolean",
+            "title": "Metadata Saved"
+          },
+          "envelope": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Envelope"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "retry_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentOut"
+            },
+            "type": "array",
+            "title": "Attachments",
+            "default": []
+          },
+          "lease_token": {
+            "type": "string",
+            "title": "Lease Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "uid",
+          "uidvalidity",
+          "state",
+          "metadata_saved",
+          "envelope",
+          "attempts",
+          "error",
+          "retry_at",
+          "created_at",
+          "lease_token"
+        ],
+        "title": "ClaimedMessage"
       },
       "CompileStats": {
         "properties": {
@@ -8903,6 +10034,41 @@
           "current_id"
         ],
         "title": "Diff"
+      },
+      "DiscoverIn": {
+        "properties": {
+          "uidvalidity": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Uidvalidity"
+          },
+          "expected_cursor": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Expected Cursor"
+          },
+          "through_uid": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Through Uid"
+          },
+          "uids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Uids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uidvalidity",
+          "expected_cursor",
+          "through_uid",
+          "uids"
+        ],
+        "title": "DiscoverIn"
       },
       "DiscoveryDraftOut": {
         "properties": {
@@ -10563,6 +11729,24 @@
         ],
         "title": "FindingOut"
       },
+      "GatheringSettings": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "migration-test@j-aautomation.com"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "title": "GatheringSettings"
+      },
       "GuidanceProposal": {
         "properties": {
           "name": {
@@ -10772,6 +11956,26 @@
         ],
         "title": "IngestionMetrics",
         "description": "Tokens and USD cost per provider in `providers`; no LLM run of the agents counts."
+      },
+      "InitializeIn": {
+        "properties": {
+          "uidvalidity": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Uidvalidity"
+          },
+          "uidnext": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Uidnext"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uidvalidity",
+          "uidnext"
+        ],
+        "title": "InitializeIn"
       },
       "InstanceDetail": {
         "properties": {
@@ -11214,6 +12418,179 @@
         ],
         "title": "LoginIn"
       },
+      "MailFailureIn": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "imap_unavailable",
+              "invalid_credentials",
+              "uidvalidity_changed",
+              "invalid_pdf",
+              "size_limit",
+              "invalid_mime",
+              "message_missing",
+              "infrastructure_error",
+              "attempts_exhausted"
+            ],
+            "title": "Error"
+          },
+          "permanent": {
+            "type": "boolean",
+            "title": "Permanent",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "MailFailureIn"
+      },
+      "MailOverview": {
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MailState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/MessageOut"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "account",
+          "messages"
+        ],
+        "title": "MailOverview"
+      },
+      "MailState": {
+        "properties": {
+          "protocol_version": {
+            "type": "integer",
+            "title": "Protocol Version",
+            "default": 1
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "process_id": {
+            "type": "integer",
+            "title": "Process Id"
+          },
+          "host": {
+            "type": "string",
+            "title": "Host"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "uidvalidity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uidvalidity"
+          },
+          "initial_uid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Uid"
+          },
+          "next_uid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Uid"
+          },
+          "last_poll_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Poll At"
+          },
+          "retry_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "process_id",
+          "host",
+          "username",
+          "folder",
+          "state",
+          "uidvalidity",
+          "initial_uid",
+          "next_uid",
+          "last_poll_at",
+          "retry_at",
+          "error"
+        ],
+        "title": "MailState"
+      },
       "ManagerProposalOut": {
         "properties": {
           "id": {
@@ -11351,6 +12728,59 @@
         "title": "ManagerProposalOut",
         "description": "One thing an agent proposes; only a manager accepts or rejects it."
       },
+      "ManifestIn": {
+        "properties": {
+          "sender": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Sender",
+            "default": ""
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Subject",
+            "default": ""
+          },
+          "message_id": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Message Id",
+            "default": ""
+          },
+          "sent_at": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Sent At",
+            "default": ""
+          },
+          "internal_date": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Internal Date",
+            "default": ""
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Size"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/PartIn"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Parts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "size",
+          "parts"
+        ],
+        "title": "ManifestIn"
+      },
       "MessageIn": {
         "properties": {
           "revision": {
@@ -11380,6 +12810,96 @@
           "message"
         ],
         "title": "MessageIn"
+      },
+      "MessageOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "uid": {
+            "type": "integer",
+            "title": "Uid"
+          },
+          "uidvalidity": {
+            "type": "integer",
+            "title": "Uidvalidity"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "metadata_saved": {
+            "type": "boolean",
+            "title": "Metadata Saved"
+          },
+          "envelope": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Envelope"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "retry_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentOut"
+            },
+            "type": "array",
+            "title": "Attachments",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "uid",
+          "uidvalidity",
+          "state",
+          "metadata_saved",
+          "envelope",
+          "attempts",
+          "error",
+          "retry_at",
+          "created_at"
+        ],
+        "title": "MessageOut"
       },
       "NormIn": {
         "properties": {
@@ -11541,6 +13061,39 @@
           "consequence"
         ],
         "title": "Option"
+      },
+      "PartIn": {
+        "properties": {
+          "part": {
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^[1-9][0-9]*(\\.[1-9][0-9]*)*$",
+            "title": "Part"
+          },
+          "original_name": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Original Name"
+          },
+          "encoding": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Encoding"
+          },
+          "advertised_size": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Advertised Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "part",
+          "original_name",
+          "encoding",
+          "advertised_size"
+        ],
+        "title": "PartIn"
       },
       "Plane": {
         "type": "string",
@@ -13452,6 +15005,37 @@
         ],
         "title": "RunDetail"
       },
+      "RunIn": {
+        "properties": {
+          "instance_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Instance Ids"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "instance_ids"
+        ],
+        "title": "RunIn"
+      },
       "RunOut": {
         "properties": {
           "id": {
@@ -13600,6 +15184,25 @@
       },
       "RunSummary": {
         "properties": {
+          "execution_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Id"
+          },
+          "decision_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Decision Ids",
+            "default": []
+          },
           "decided": {
             "type": "integer",
             "title": "Decided"
@@ -15095,6 +16698,10 @@
       "TraceItBearer": {
         "type": "http",
         "description": "The deployment's Trace-it API token. Acts as the dedicated API manager.",
+        "scheme": "bearer"
+      },
+      "MailIngestionBearer": {
+        "type": "http",
         "scheme": "bearer"
       }
     }

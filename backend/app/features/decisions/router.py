@@ -15,6 +15,7 @@ from app.features.decisions.schemas import (
     ReprocessSummary,
     ResolveIn,
     RunDetail,
+    RunIn,
     RunOut,
     RunSummary,
 )
@@ -32,8 +33,18 @@ router = APIRouter(tags=["decisions"])
     "loaded (ADR 0028).",
     response_model_exclude_defaults=True,
 )
-async def run_process(process_id: int, session: Session, user: Manager) -> RunSummary:
-    return await service.run(session, process_id, author=user.name)
+async def run_process(
+    process_id: int, session: Session, user: Manager, body: RunIn | None = None
+) -> RunSummary:
+    return await service.run(
+        session,
+        process_id,
+        author=user.name,
+        instance_ids=body.instance_ids if body else None,
+        idempotency_key=f"user:{user.id}:{body.idempotency_key}"
+        if body and body.idempotency_key
+        else None,
+    )
 
 
 @router.post(

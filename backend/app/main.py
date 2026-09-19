@@ -19,6 +19,7 @@ from app.features.ingestion.process_router import router as ingestion_router
 from app.features.ingestion.router import create_router as create_extraction_router
 from app.features.ingestion.runtime import ingestion_lifespan
 from app.features.learning.router import router as learning_router
+from app.features.mail_ingestion.router import router as mail_router
 from app.features.processes.draft_router import router as draft_router
 from app.features.processes.router import router as processes_router
 from app.features.proposals.router import router as proposals_router
@@ -92,6 +93,7 @@ async def ready(session: Session) -> dict[str, str]:
 
 for router in (
     database_router,
+    mail_router,
     versions_router,
     users_router,
     processes_router,

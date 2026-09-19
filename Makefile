@@ -111,6 +111,14 @@ test-e2e: test-db  # golden outcomes of batch 1 + API flow (needs the challenge 
 # A fresh database with the frozen pack published; Playwright starts the ERP, API and console.
 E2E_DB_URL ?= postgresql+psycopg://trace:trace@localhost:$${DB_PORT:-5432}/trace_e2e_test
 E2E_DB = cd backend && TRACE_DATABASE_URL=$(E2E_DB_URL)
+MAIL_TEST_DB_URL ?= postgresql+psycopg://trace:trace@localhost:$${DB_PORT:-5432}/trace_mail_browser_test
+.PHONY: e2e-mail
+e2e-mail:
+	cd backend && TRACE_DATABASE_URL=$(MAIL_TEST_DB_URL) uv run python -m tests.support.prepare_db
+	cd backend && TRACE_DATABASE_URL=$(MAIL_TEST_DB_URL) uv run alembic upgrade head
+	cd tests/integration && npm ci && npx playwright install chromium
+	cd tests/integration && MAIL_TEST_DATABASE_URL=$(MAIL_TEST_DB_URL) npx playwright test --config mail.config.ts
+
 e2e-integration:
 	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
 	$(E2E_DB) uv run python -m tests.support.prepare_db || (docker compose up db -d --wait && $(E2E_DB) uv run python -m tests.support.prepare_db)

@@ -126,6 +126,11 @@ carry `{analysis_id, norm_proposal_id, norm_kind, ...}` for a norm, and
 
 ## Shapes worth knowing
 
+Mail gathering settings and the scoped service API are documented in
+[mail-ingestion.md](mail-ingestion.md). Manual `POST /processes/{id}/run` calls retain the
+no-body behavior; a body can select nonempty `instance_ids` and an `idempotency_key`.
+The mail worker always evaluates only its imported instances.
+
 - **Instance status** is `PENDING` or `DECIDED`. The queue and `summary.queue` include
   decisions whose type has `requires_human` and cases with `review_pending: true`.
   Optional review never changes the engine outcome or instance status. Its configuration,

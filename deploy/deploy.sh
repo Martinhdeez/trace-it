@@ -61,6 +61,15 @@ rollback() {
   exit 1
 }
 trap rollback ERR
+# Stop the optional mail writer before backend shutdown, backups or migrations.
+# Discover by this project's exact Compose labels; never affect another stack.
+# Do not restart it automatically on success or rollback. Activation is explicit.
+mapfile -t mail_containers < <(docker ps -q \
+  --filter label=com.docker.compose.project=trace-it \
+  --filter label=com.docker.compose.service=mail-ingestion)
+if (( ${#mail_containers[@]} )); then
+  docker stop --time 300 "${mail_containers[@]}"
+fi
 "${compose[@]}" stop frontend backend
 "${compose[@]}" exec -T db pg_dump -U trace -d trace -Fc > "$backup/database.dump"
 "${compose[@]}" exec -T db pg_restore --list < "$backup/database.dump" > "$backup/database.list"
