@@ -190,7 +190,7 @@ test('HTTP flow persists PDF evidence, decisions, human resolution and export', 
   const evidence = await request.get(`api/instances/${instanceId}/document`, { headers })
   expect(evidence.status()).toBe(200)
   await page.goto(`processes/${process.id}`)
-  await expect(page.getByRole('heading', { name: '1 documento por evaluar', exact: true })).toBeVisible()
+  await expect(page.getByText('1 documento recibido, pendiente de evaluación.', { exact: false })).toBeVisible()
   await expect(page.getByText('Documentos pendientes de evaluar', { exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Ir a la consola para evaluar' })).toHaveAttribute('href', new RegExp(`/processes/${process.id}/panel$`))
   const run = await request.post(`api/processes/${process.id}/run`, { headers })

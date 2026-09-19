@@ -136,7 +136,7 @@ test('the console acts as the manager, with no login screen', async () => {
 test('the process inbox opens its real console panel', async () => {
   await page.getByRole('link', { name: PROCESS }).first().click()
   await expect(page).toHaveURL(new RegExp(`/processes/${processId}$`))
-  await expect(page.getByRole('heading', { level: 1, name: 'Sin revisiones pendientes', exact: true })).toBeVisible()
+  await expect(page.getByText('Sin revisiones pendientes', { exact: true })).toBeVisible()
   await realAndClean()
   await page.getByRole('link', { name: 'Consola', exact: true }).click()
   await expect(page).toHaveURL(new RegExp(`/processes/${processId}/panel$`))
@@ -194,7 +194,7 @@ test('upload a scan and run', async ({ request }) => {
 
 test('the queue shows the escalated invoices', async () => {
   await page.goto(`/processes/${processId}/review`)
-  await expect(page.getByRole('heading', { name: 'ESCALAR' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^ESCALAR \d+$/ })).toBeVisible()
   for (const name of [...ESCALATED, SCAN]) {
     await expect(page.getByRole('button', { name })).toBeVisible()
   }
