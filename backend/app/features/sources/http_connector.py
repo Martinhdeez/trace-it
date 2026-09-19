@@ -68,6 +68,10 @@ class AuthConfig(_Strict):
         return self
 
 
+class NoAuthConfig(_Strict):
+    type: Literal["none"]
+
+
 class PaginationConfig(_Strict):
     path: str
     page_param: str
@@ -114,7 +118,7 @@ class HttpSourceConfig(_Strict):
     type: Literal["http"]
     base_url: EnvValue
     format: FormatConfig
-    auth: AuthConfig
+    auth: AuthConfig | NoAuthConfig
     pagination: PaginationConfig
     key: str
     fields: dict[str, FieldConfig]
@@ -355,7 +359,8 @@ class HttpConnector:
             if attempt > 1:
                 self.stats.retries += 1
             headers = {}
-            if authenticated:
+            use_auth = authenticated and self.config.auth.type != "none"
+            if use_auth:
                 await self._ensure_token()
                 headers[self.config.auth.token_header] = self._token
                 self._token_uses_left -= 1  # the server spends a use even on a failed call
@@ -384,7 +389,7 @@ class HttpConnector:
                 continue
             if (
                 response.status_code == 401
-                and authenticated
+                and use_auth
                 and (code in self.config.auth.expired_codes or code is None)
             ):
                 self._token = None  # log in again on the next attempt
@@ -441,6 +446,8 @@ class HttpConnector:
 
     async def _ensure_token(self) -> None:
         a = self.config.auth
+        if a.type == "none":
+            return
         if (
             self._token
             and time.monotonic() < self._token_deadline

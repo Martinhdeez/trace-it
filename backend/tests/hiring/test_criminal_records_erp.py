@@ -32,9 +32,7 @@ def test_fixture_has_unique_ids_and_one_known_hiring_candidate():
     ]
 
 
-def test_session_accepts_valid_tokens_and_rejects_unknown_tokens():
+def test_registry_does_not_define_credentials():
     module = load_module()
-    state = module.State()
-    token = state.login()
-    assert state.authenticate(token)
-    assert not state.authenticate("unknown")
+    assert not hasattr(module, "USER")
+    assert not hasattr(module, "PASSWORD")

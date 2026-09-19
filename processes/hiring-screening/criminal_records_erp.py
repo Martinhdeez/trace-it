@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Synthetic legacy criminal-records service for the hiring discovery demo.
 
-It deliberately resembles the challenge ERP: form login, header token, ISO-8859-1 XML
-and page-number pagination. Unlike the challenge fixture, this service is reliable.
+It deliberately resembles the challenge ERP: ISO-8859-1 XML and page-number pagination.
+Unlike the challenge fixture, this service is reliable and needs no authentication.
 It uses only the Python standard library and is evidence for process discovery. It is
 not a process definition and does not decide whether somebody should be hired.
 """
@@ -10,17 +10,11 @@ not a process definition and does not decide whether somebody should be hired.
 from __future__ import annotations
 
 import argparse
-import secrets
-import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 from xml.sax.saxutils import escape
 
-USER = "people"
-PASSWORD = "SCREENING2009"
 PAGE_SIZE = 10
-TOKEN_SECONDS = 900
-TOKEN_USES = 100
 VERSION = "Registro Central · bridge legacy 1.4 (2009)"
 
 # Synthetic records. Ana Molina also appears in the committed hiring CV corpus. The
@@ -65,30 +59,6 @@ RECORDS = [
 ]
 
 
-class State:
-    def __init__(self) -> None:
-        self.lock = threading.Lock()
-        self.sessions: dict[str, dict[str, float | int]] = {}
-
-    def login(self) -> str:
-        token = secrets.token_hex(16)
-        self.sessions[token] = {"uses": 0}
-        return token
-
-    def authenticate(self, token: str | None) -> bool:
-        if not token or token not in self.sessions:
-            return False
-        session = self.sessions[token]
-        if session["uses"] >= TOKEN_USES:
-            del self.sessions[token]
-            return False
-        session["uses"] = int(session["uses"]) + 1
-        return True
-
-
-STATE: State
-
-
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "CentralRecordsBridge/1.4"
@@ -97,9 +67,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         print(f"[criminal-records] {format % args}")
 
-    def respond(
-        self, status: int, body: str, headers: dict[str, str] | None = None
-    ) -> None:
+    def respond(self, status: int, body: str, headers: dict[str, str] | None = None) -> None:
         payload = body.encode("iso-8859-1", errors="replace")
         self.send_response(status)
         self.send_header("Content-Type", "text/xml; charset=ISO-8859-1")
@@ -109,26 +77,6 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header(name, value)
         self.end_headers()
         self.wfile.write(payload)
-
-    def do_POST(self) -> None:
-        if urlparse(self.path).path != "/criminal/login":
-            self.respond(404, "<error><code>REG-404</code></error>")
-            return
-        length = int(self.headers.get("Content-Length", "0"))
-        form = parse_qs(self.rfile.read(length).decode("ascii", errors="replace"))
-        if form.get("usuario") != [USER] or form.get("clave") != [PASSWORD]:
-            self.respond(403, "<error><code>AUTH-403</code></error>")
-            return
-        with STATE.lock:
-            token = STATE.login()
-        self.respond(
-            200,
-            "<login>"
-            f"<token>{token}</token>"
-            f"<caduca_en_segundos>{TOKEN_SECONDS}</caduca_en_segundos>"
-            f"<usos_maximos>{TOKEN_USES}</usos_maximos>"
-            "</login>",
-        )
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -140,11 +88,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path != "/criminal/records":
             self.respond(404, "<error><code>REG-404</code></error>")
-            return
-        with STATE.lock:
-            authenticated = STATE.authenticate(self.headers.get("X-Registry-Token"))
-        if not authenticated:
-            self.respond(401, "<error><code>SES-401</code></error>")
             return
         try:
             page = int(parse_qs(parsed.query).get("page", ["1"])[0])
@@ -176,14 +119,13 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=VERSION)
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8010)
     args = parser.parse_args()
-    global STATE
-    STATE = State()
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"[criminal-records] {VERSION}")
     print(
-        f"[criminal-records] listening on http://127.0.0.1:{args.port}, records: {len(RECORDS)}"
+        f"[criminal-records] listening on http://{args.host}:{args.port}, records: {len(RECORDS)}"
     )
     try:
         server.serve_forever()

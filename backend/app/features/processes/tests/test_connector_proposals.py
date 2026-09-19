@@ -31,18 +31,7 @@ def connector_plan() -> DraftPlan:
                             "encoding": "iso-8859-1",
                             "error_code_path": "code",
                         },
-                        "auth": {
-                            "type": "form_token",
-                            "login_path": "/criminal/login",
-                            "credentials": {
-                                "usuario": "TRACE_CRIMINAL_RECORDS_USER",
-                                "clave": "TRACE_CRIMINAL_RECORDS_PASSWORD",
-                            },
-                            "token_path": "token",
-                            "token_header": "X-Registry-Token",
-                            "lifetime_seconds": 900,
-                            "max_uses": 100,
-                        },
+                        "auth": {"type": "none"},
                         "pagination": {
                             "path": "/criminal/records",
                             "page_param": "page",
@@ -90,10 +79,7 @@ def test_connector_is_a_reviewed_proposal_and_enters_the_version_snapshot():
             "guidance": {},
         },
     )
-    assert snapshot["connectors"]["criminal_records"]["auth"]["credentials"] == {
-        "usuario": "TRACE_CRIMINAL_RECORDS_USER",
-        "clave": "TRACE_CRIMINAL_RECORDS_PASSWORD",
-    }
+    assert snapshot["connectors"]["criminal_records"]["auth"] == {"type": "none"}
     assert snapshot["source_schemas"]["criminal_records"] == {
         "required": ["record_id", "full_name", "status"],
         "optional": ["conviction_date", "offense"],

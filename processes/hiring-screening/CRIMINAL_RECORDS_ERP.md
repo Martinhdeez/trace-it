@@ -12,18 +12,6 @@ python3 processes/hiring-screening/criminal_records_erp.py
 
 The default address is `http://127.0.0.1:8010`. Use `--port` to choose another port.
 
-## Login
-
-`POST /criminal/login` as an URL-encoded form:
-
-```text
-usuario=people
-clave=SCREENING2009
-```
-
-The XML response contains `token`, `caduca_en_segundos` and `usos_maximos`. Send the token
-as `X-Registry-Token` on record requests.
-
 ## Records
 
 `GET /criminal/records?page=1` returns ISO-8859-1 XML with:
@@ -35,8 +23,7 @@ as `X-Registry-Token` on record requests.
 
 `GET /criminal/status` is unauthenticated and reports `records` and `system`.
 
-The simulator returns every valid request consistently. Tokens allow 100 record requests;
-after that, the service returns `SES-401` and a client can log in again.
+The simulator has no authentication and returns every valid request consistently.
 
 All data is fictional. One exact name, `Ana Molina`, also appears in the hiring CV fixture.
 That overlap is intentional. A name alone is not a safe real-world identity key, so the

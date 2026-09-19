@@ -99,6 +99,14 @@ async def test_download_maps_converts_and_sorts() -> None:
     assert c.stats.status["entries"] == "45"
 
 
+async def test_source_without_authentication_never_calls_login() -> None:
+    fake = FakeERP()
+    rows, connector = await download(fake, auth={"type": "none"})
+    assert len(rows) == 45
+    assert fake.logins == 0
+    assert connector.stats.logins == 0
+
+
 @pytest.mark.parametrize(
     ("kind", "raw", "value"),
     [

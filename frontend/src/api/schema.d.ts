@@ -3704,7 +3704,8 @@ export interface components {
             type: "http";
             base_url: components["schemas"]["EnvValue"];
             format: components["schemas"]["FormatConfig"];
-            auth: components["schemas"]["AuthConfig"];
+            /** Auth */
+            auth: components["schemas"]["AuthConfig"] | components["schemas"]["NoAuthConfig"];
             pagination: components["schemas"]["PaginationConfig"];
             /** Key */
             key: string;
@@ -4160,6 +4161,14 @@ export interface components {
              * @default []
              */
             attachments: components["schemas"]["AttachmentOut"][];
+        };
+        /** NoAuthConfig */
+        NoAuthConfig: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "none";
         };
         /** NormIn */
         NormIn: {

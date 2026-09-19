@@ -10,8 +10,9 @@ Process discovery can already map uploaded tables and configured ERP snapshots, 
 process cannot retain a new live connection. Connector lookup still depends on a repository
 pack. That makes an engineer part of every otherwise conversational process setup.
 
-The existing HTTP connector already supports the legacy format needed here: XML, form-token
-authentication, numbered pages, field mapping, retries and complete snapshot validation.
+The existing HTTP connector already supports the legacy format needed here: XML, optional
+form-token authentication, numbered pages, field mapping, retries and complete snapshot
+validation.
 
 ## Decision
 

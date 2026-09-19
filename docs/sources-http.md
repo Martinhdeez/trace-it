@@ -125,7 +125,8 @@ A new snapshot changes nothing already decided. To apply it to past decisions:
 ## Not generic yet
 
 Each item below needs new code behind the same configuration once a second API needs it:
-- auth other than form login returning a token in the body (OAuth, API keys, basic auth);
+- auth other than no authentication or form login returning a token in the body (OAuth,
+  API keys, basic auth);
 - cursor or offset pagination, or a stop condition other than a reported page count;
 - JSON or CSV bodies;
 - concurrent page downloads (sequential is fast enough at 10 req/s);

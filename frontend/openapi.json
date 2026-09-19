@@ -12422,7 +12422,15 @@
             "$ref": "#/components/schemas/FormatConfig"
           },
           "auth": {
-            "$ref": "#/components/schemas/AuthConfig"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthConfig"
+              },
+              {
+                "$ref": "#/components/schemas/NoAuthConfig"
+              }
+            ],
+            "title": "Auth"
           },
           "pagination": {
             "$ref": "#/components/schemas/PaginationConfig"
@@ -13604,6 +13612,21 @@
           "created_at"
         ],
         "title": "MessageOut"
+      },
+      "NoAuthConfig": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "none",
+            "title": "Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "NoAuthConfig"
       },
       "NormIn": {
         "properties": {
