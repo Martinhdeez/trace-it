@@ -16,6 +16,8 @@ class Decision(Base):
     __tablename__ = "decisions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int | None] = mapped_column(ForeignKey("process_versions.id"))
+    execution_id: Mapped[int | None] = mapped_column(ForeignKey("executions.id"))
     instance_id: Mapped[int] = mapped_column(ForeignKey("instances.id"), index=True)
     decision: Mapped[str]
     results: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)  # per rule: RuleResult

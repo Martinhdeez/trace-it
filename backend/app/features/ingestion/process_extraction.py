@@ -13,7 +13,7 @@ from sqlalchemy import or_, select
 from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
 from app.core.events import Event
-from app.features.processes.model import Symbol
+from app.features.processes.service import get as get_process
 from app.features.sources.model import Source
 from app.features.sources.service import current_loads
 
@@ -28,7 +28,7 @@ from .schemas import ExtractionResult
 
 
 async def payment_state(session, process_id):
-    definitions = list(await session.scalars(select(Symbol).where(Symbol.process_id == process_id)))
+    definitions = (await get_process(session, process_id)).symbols
     names = {definition.name for definition in definitions}
     adapter = "invoice-payment" if names >= REQUIRED_PAYMENT_SYMBOLS else "generic"
     schema = [
@@ -174,6 +174,12 @@ async def read_document(session, process_id, service, item, options):
 
 
 async def reextract_document(session, instance_id, user_id, service, options):
+    from app.features.versions.service import lock
+
+    existing = await session.get(Instance, instance_id)
+    if existing is None:
+        raise NotFoundError(f"Instance {instance_id} does not exist")
+    await lock(session, existing.process_id)
     # The decision run takes the same row lock before reading symbols. Neither
     # operation can change the evidence after the other has decided the instance.
     instance = await session.scalar(

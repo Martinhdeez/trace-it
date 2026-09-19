@@ -120,11 +120,17 @@ async def prepare(api, monkeypatch, proposal_id, headers, replies=None):
 
 
 async def approve(api, proposal_id, validation_id, headers):
-    return await api.post(
+    result = await api.post(
         f"/norm-proposals/{proposal_id}/approve",
         headers=headers,
         json={"validation_id": validation_id, "reason": "Reviewed examples and impact."},
     )
+    if result.status_code == 201:
+        key = result.json()["snapshot"]["version_id"]
+        version = (await api.get(f"/process-versions/{key}")).json()
+        assert version["author"] == result.json()["author"]
+        assert version["parent_id"] is not None
+    return result
 
 
 async def test_deterministic_norm_prepares_then_publishes_exact_code(monkeypatch):

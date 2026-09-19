@@ -126,6 +126,12 @@ async def _load(session: AsyncSession, data: Definition, base: Path | None) -> L
     if process is None:
         process = Process(name=data.name, use_case_id=use_case.id)
         session.add(process)
+    from app.features.versions import configuration as version_config
+    from app.features.versions import service as versions
+    from app.features.versions.model import ProcessDraft
+
+    await session.flush()
+    await versions.lock(session, process.id)
     process.use_case_id = use_case.id
     process.decision_review = data.decision_review.model_dump() if data.decision_review else None
     await session.flush()
@@ -143,6 +149,29 @@ async def _load(session: AsyncSession, data: Definition, base: Path | None) -> L
     users = [u for u in data.users if u.email not in emails]
     session.add_all(User(**u.model_dump()) for u in users)
 
+    await session.flush()
+    candidate = await version_config.workspace(session, process.id)
+    candidate["process"]["decision_types"] = [t.model_dump() for t in data.decision_types]
+    candidate["process"]["symbols"] = [s.model_dump() for s in data.symbols]
+    selected = await session.scalars(
+        select(Rule)
+        .where(Rule.process_id == process.id, Rule.text.in_([r.text for r in data.rules]))
+        .order_by(Rule.id)
+    )
+    candidate["rules"] = [version_config.artifact(r) for r in selected]
+    existing = await session.get(ProcessDraft, process.id, populate_existing=True)
+    published = await versions.active(session, process.id, required=False)
+    if published:
+        process.use_case_id = published.snapshot["process"]["use_case_id"]
+        candidate["guidance"] = published.snapshot["guidance"]
+    if existing and existing.snapshot != candidate:
+        raise ConflictError(
+            "A different process draft already exists; edit or discard it before loading a pack"
+        )
+    if not existing and (
+        not published or published.content_hash != version_config.digest(candidate)
+    ):
+        await versions.stage(session, process.id, candidate, "pack")
     await session.commit()
     return LoadResult(
         process=await get(session, process.id),

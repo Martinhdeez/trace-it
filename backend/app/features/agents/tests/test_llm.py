@@ -133,7 +133,7 @@ async def test_when_every_model_fails_the_run_fails_closed(
     assert [f["model"] for f in span["failed_attempts"]] == ["primary", "backup"]
 
 
-async def test_a_rule_whose_models_all_fail_is_blocked_with_the_error(
+async def test_a_rule_whose_models_all_fail_stays_a_draft_with_the_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Through the API: the use case's chain is used and a compilation it cannot serve
@@ -158,6 +158,17 @@ async def test_a_rule_whose_models_all_fail_is_blocked_with_the_error(
                 await use_cases.configure(
                     session, process["use_case_id"], role, chain_settings, "test", None
                 )
+        from app.features.versions import service as versions
+        from app.features.versions.schemas import DraftIn
+
+        async with session_factory() as session:
+            draft = await versions.get_draft(session, process["id"])
+            await versions.edit(
+                session,
+                process["id"],
+                DraftIn(expected_revision=draft.revision, refresh_agents=True),
+                "test",
+            )
         r = await api.post(
             f"/processes/{process['id']}/rules",
             json={"text": "amount > 1000", "type": "prohibition", "decision": "ESCALATE"},
@@ -165,7 +176,7 @@ async def test_a_rule_whose_models_all_fail_is_blocked_with_the_error(
         assert r.status_code == 201, r.text
         rule = (await api.get(f"/rules/{r.json()['id']}")).json()
 
-    assert rule["status"] == "blocked"
+    assert rule["status"] == "draft"
     assert rule["report"]["valid"] is False
     assert "every model failed: primary: " in rule["report"]["error"]
     assert "; backup: " in rule["report"]["error"]

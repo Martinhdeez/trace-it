@@ -23,3 +23,5 @@ Start with the [root README](../README.md) for what the system does, then:
 
 Superseded plans and analyses are archived under [`.artifacts/`](../.artifacts/). They are
 history, not guidance.
+
+[Process versions and replay](process-versions.md): draft, validate, approve, publish and reproduce a decision.

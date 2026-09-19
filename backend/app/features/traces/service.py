@@ -93,6 +93,7 @@ PLANES: dict[str, Plane] = {
     "run_tests": _AGENTS,
     "impact_check": _AGENTS,
     "activate_rule": _AGENTS,
+    "publish_process_version": _AGENTS,
     "retire_rule": _AGENTS,
     "llm_run": _AGENTS,
     "demo_llm_down": _AGENTS,

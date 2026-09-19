@@ -1,3 +1,8 @@
+> Process configuration now requires explicit manager publication. See
+> [process versions and replay](process-versions.md). After setup, use
+> `make activate MANAGER_ID=<id>` before running the demo. Compiling rules prepares them;
+> it does not activate them.
+
 # trace-it: team guide
 
 How we work in this repo: branches, backend layout, running it. What the system is and why: the root `README.md` and `docs/adr/`.
