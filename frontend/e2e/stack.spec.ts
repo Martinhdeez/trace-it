@@ -163,6 +163,21 @@ test('HTTP flow persists PDF evidence, decisions, human resolution and export', 
   await dialog.getByRole('button', { name: 'Rotate page', exact: true }).click()
   await expect.poll(async () => (await box.boundingBox())!.height).toBeCloseTo(original!.width * 1.25, 0)
   await dialog.getByRole('button', { name: 'Reset view' }).click()
+  // Trackpad pinch / ctrl+wheel zooms the sheet and its evidence together.
+  const paper = dialog.getByRole('img', { name: `${filename}, page 1` })
+  const bounds = await paper.boundingBox()
+  await paper.dispatchEvent('wheel', {
+    deltaY: -40, ctrlKey: true,
+    clientX: bounds!.x + bounds!.width / 2,
+    clientY: bounds!.y + Math.min(200, bounds!.height / 2),
+  })
+  await expect.poll(async () => (await box.boundingBox())!.width)
+    .toBeCloseTo(original!.width * Math.exp(0.2), 0)
+  const zoomed = await paper.boundingBox()
+  const fractionY = Math.min(200, bounds!.height / 2) / bounds!.height
+  expect(zoomed!.y + fractionY * zoomed!.height)
+    .toBeCloseTo(bounds!.y + fractionY * bounds!.height, 0)
+  await dialog.getByRole('button', { name: 'Reset view' }).click()
   await dialog.getByRole('button', { name: 'Info', exact: true }).click()
   await expect(dialog.getByRole('complementary', { name: 'Document information' })).toBeVisible()
   await dialog.getByRole('button', { name: 'Info', exact: true }).click()

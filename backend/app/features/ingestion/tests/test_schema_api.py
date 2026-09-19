@@ -22,6 +22,7 @@ from tests.support import rows
 from tests.support.models import per_role
 
 from .conftest import VALID, pdf_bytes
+from .test_native_layout import table_pdf
 from .test_payment_api import payment_api as payment_api
 from .test_process_api import process_api as process_api
 
@@ -55,6 +56,43 @@ async def publish_draft(client, process_id, examples=None):
     )
     assert published.status_code == 201, published.text
     return published.json()
+
+
+async def test_table_field_survives_upload_storage_and_pdf_location(process_api):
+    client, _, service = process_api
+    loaded = await client.post(
+        "/processes/definition",
+        json={
+            "name": "Table certificate " + uuid.uuid4().hex,
+            "decision_types": [
+                {"name": "ACCEPT", "priority": 0, "is_default": True},
+                {"name": "REVIEW", "priority": 1, "requires_human": True},
+            ],
+            "symbols": [{"name": "holder", "type": "text", "required": True}],
+        },
+    )
+    assert loaded.status_code == 200, loaded.text
+    process_id = loaded.json()["process"]["id"]
+    async with session_factory() as session:
+        user = await session.get(User, int(client.headers["X-User-Id"]))
+        user.role = "manager"
+        await session.commit()
+    await publish_draft(client, process_id)
+    content = table_pdf([["Holder:", "Ana Ruiz"], ["Expiry:", "21/04/2027"]], rotation=90)
+    uploaded = await client.post(
+        f"/processes/{process_id}/files", files={"file": ("table.pdf", content)}
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    result = uploaded.json()
+    assert result["symbols"]["holder"]["value"] == "Ana Ruiz"
+    endpoint = f"/instances/{result['instance_id']}/document"
+    service.store.result = lambda _: pytest.fail("Evidence must come from PostgreSQL")
+    stored = (await client.get(endpoint)).json()
+    assert any(line.get("table") for line in stored["data"]["lines"])
+    located = (await client.get(endpoint + "/locations")).json()
+    assert located["fields"]["holder"][0]["precision"] == "text"
+    assert located["fields"]["holder"][0]["raw"] == "Ana Ruiz"
+    assert (await client.get(endpoint)).json() == stored
 
 
 async def test_new_definition_fields_are_used_without_restarting_and_history_is_preserved(
