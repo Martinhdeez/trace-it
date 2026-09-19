@@ -260,6 +260,41 @@ async def test_stale_revision_rejection_and_chat_invalidate_preview(api, monkeyp
     assert draft["reviews"] == {} and draft["preview"] is None
 
 
+async def test_manager_answer_resolves_question_but_does_not_approve_draft(api, monkeypatch):
+    proposed = plan()
+    proposed["questions"] = ["Should amounts above 100 escalate?"]
+    proposed["rules"] = []
+    proposed["examples"] = []
+    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [proposed]}))
+    draft = (await api.post("/process-drafts", json={"name": proposed["name"]})).json()
+    draft = await post(api, draft, "messages", message="Discover the amount policy.")
+    draft = await accept(api, draft)
+    response = await api.post(
+        f"/process-drafts/{draft['id']}/prepare", json={"revision": draft["revision"]}
+    )
+    assert response.status_code == 409 and "questions" in response.text
+
+    revised = plan(proposed["name"])
+    reference = f"chat:{len(draft['messages']) + 1}"
+    revised["rules"][0]["evidence"] = [
+        {"reference": reference, "explanation": "Manager confirmed escalation above 100"}
+    ]
+    seen = {}
+    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [revised]}, seen))
+    draft = await post(api, draft, "messages", message="Yes, escalate amounts above 100.")
+    context = user_json(seen["discovery"][0])
+    assert context["current_plan"]["questions"] == proposed["questions"]
+    assert context["messages"][-1]["text"] == "Yes, escalate amounts above 100."
+    assert draft["plan"]["questions"] == []
+    assert draft["plan"]["rules"][0]["evidence"][0]["reference"] == reference
+    assert draft["reviews"] == {} and draft["preview"] is None
+    assert draft["published_process_id"] is None
+    response = await api.post(
+        f"/process-drafts/{draft['id']}/prepare", json={"revision": draft["revision"]}
+    )
+    assert response.status_code == 409 and "accept" in response.text
+
+
 async def test_fixed_examples_reject_wrong_interpretation(api, monkeypatch):
     proposal = plan()
     proposal["examples"][0]["decision"] = "REVIEW"  # differs from the generated tests

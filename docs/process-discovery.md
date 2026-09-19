@@ -36,6 +36,9 @@ can read further workbook ranges and search downloaded ERP records. It proposes 
 mappings; ordinary code extracts all mapped rows. Source authority, informal notes,
 evaluation dates and conflicting policies belong in the clarification conversation.
 User instructions can override a document, with the conflict retained for review.
+For a new draft with unresolved policy or authority questions, discovery proposes sources
+and asks the manager first. Rules and examples can remain empty until those answers arrive.
+Answering a question revises the proposal; it does not approve it or publish live rules.
 
 ## Review and test
 
