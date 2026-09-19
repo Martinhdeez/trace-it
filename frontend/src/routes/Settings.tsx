@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, mode } from '../api/client'
 import { keys } from '../api/queries'
-import { Button, Input, Segmented } from '../components/shell/Controls'
+import { Input, Segmented } from '../components/shell/Controls'
 import { Empty, ErrorNotice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
 import { Topbar } from '../components/shell/Topbar'
@@ -11,7 +11,7 @@ import { useSession } from '../state/session'
 import { useTheme, type Theme } from '../state/theme'
 
 export function Settings() {
-  const { user, signIn, signOut } = useSession()
+  const { user, signIn } = useSession()
   const queryClient = useQueryClient()
 
   const users = useQuery({ queryKey: keys.users, queryFn: () => api.listUsers() })
@@ -40,13 +40,6 @@ export function Settings() {
 
           <NestedCard
             label="usuario"
-            action={
-              user ? (
-                <Button tone="ghost" onClick={signOut}>
-                  Salir
-                </Button>
-              ) : null
-            }
           >
             <div className="space-y-2 px-3.5 py-3">
               <p className="text-[12px] text-muted">
