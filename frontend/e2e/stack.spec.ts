@@ -45,26 +45,36 @@ async function processFixture(request: APIRequestContext) {
   return { name, id: (await response.json()).process.id as number }
 }
 
-test('gateway protects both the console and API', async ({ baseURL, request }) => {
-  // newContext inherits Playwright's configured defaults; override the CI credentials.
-  const anonymous = await requests.newContext({ baseURL, httpCredentials: { username: '', password: '' } })
-  try {
-    expect((await anonymous.get('')).status()).toBe(401)
-    expect((await anonymous.get('api/users')).status()).toBe(401)
-    expect((await anonymous.get('api/ready')).status()).toBe(401)
-  } finally { await anonymous.dispose() }
-  expect((await request.get('api/ready')).status()).toBe(200)
+test('console and business API open without credentials', async ({ request, page }) => {
+  for (const path of ['', 'processes/1/panel', 'api/users', 'api/ready']) {
+    const response = await request.get(path)
+    expect(response.status(), path).toBe(200)
+    expect(response.headers()['www-authenticate'], path).toBeUndefined()
+  }
   expect((await request.get('assets/missing.js')).status()).toBe(404)
+
+  const failures: string[] = []
+  page.on('response', response => {
+    if (response.url().includes('/nexia/trace-it/') && response.status() >= 400) {
+      failures.push(`${response.status()} ${response.url()}`)
+    }
+  })
+  const login = page.waitForResponse(response => response.url().endsWith('/api/login'))
+  await page.goto('processes/1/panel')
+  expect((await login).status()).toBe(200)
+  await expect(page.getByRole('link', { name: /Martín\s*Responsable/ })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('link', { name: /Martín\s*Responsable/ })).toBeVisible()
+  expect(failures).toEqual([])
 })
 
 test('Bearer API, public documentation and database boundaries through the real gateway', async ({ baseURL, request }) => {
   const api = await requests.newContext({
     baseURL,
-    httpCredentials: { username: '', password: '' },
     extraHTTPHeaders: { Authorization: 'Bearer ci-only-api-token' },
   })
   try {
-    expect((await api.get('')).status()).toBe(401)
+    expect((await api.get('')).status()).toBe(200)
     expect((await api.get('api/processes')).status()).toBe(200)
     const identity = await api.get('api/me', { headers: { 'X-User-Id': '999999' } })
     expect((await identity.json()).email).toBe('trace-it-api@localhost')
@@ -75,7 +85,7 @@ test('Bearer API, public documentation and database boundaries through the real 
     }
     for (const path of ['api/processes', 'api/db/tables', 'api/ready']) {
       expect((await api.get(path, { headers: { Authorization: 'Bearer wrong' } })).status()).toBe(401)
-      expect((await api.get(path, { headers: { Authorization: '' } })).status()).toBe(401)
+      expect((await api.get(path, { headers: { Authorization: '' } })).status()).toBe(path === 'api/db/tables' ? 401 : 200)
     }
     for (const name of ['pg_authid', 'alembic_version', 'other_app', 'public.users']) {
       expect((await api.get(`api/db/tables/${name}/rows`)).status()).toBe(404)
