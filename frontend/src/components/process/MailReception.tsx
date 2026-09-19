@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight, FileText, Mail, RotateCcw } from 'lucide-react'
 import { mailApi, mailKeys, type MailAttachment, type MailMessage } from '../../api/mail'
@@ -13,8 +13,10 @@ import { MailBadge, MailConnection } from './MailStatus'
 export function MailReception({ processId }: { processId: number }) {
   const [pages, setPages] = useState<(number | undefined)[]>([undefined])
   const [filter, setFilter] = useState('all')
-  const before = pages.at(-1)
-  const query = useQuery({ queryKey: mailKeys.overview(processId, before), queryFn: () => mailApi.overview(processId, before), refetchInterval: 5_000 })
+  const [search, setSearch] = useSearchParams()
+  const focus = Number(search.get('message')) || undefined
+  const before = focus ? undefined : pages.at(-1)
+  const query = useQuery({ queryKey: mailKeys.overview(processId, before, focus), queryFn: () => mailApi.overview(processId, before, focus), refetchInterval: 5_000 })
   const messages = query.data?.messages ?? []
   const matches = messages.filter(m => filter === 'all' || (filter === 'review' ? m.attachments.some(p => p.requires_review || p.error === 'manual_pending_conflict') : filter === 'failed' ? m.state === 'failed' || m.attachments.some(p => p.state === 'failed') : !['completed', 'partial', 'ignored', 'failed'].includes(m.state)))
   return <div className="space-y-6">
@@ -28,6 +30,7 @@ export function MailReception({ processId }: { processId: number }) {
       <div className="mt-4"><MailConnection account={query.data?.account} /></div>
     </section>
     <MailActivityPanel processId={processId} />
+    {focus && <Button onClick={() => { setSearch({}); setPages([undefined]); setFilter('all') }}>Ver todos los correos</Button>}
     <section aria-label="Correos recibidos">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-medium">Correos recibidos</h2>
@@ -132,7 +135,7 @@ function MailActivityPanel({ processId }: { processId: number }) {
     {query.isError && <ErrorNotice error={query.error} />}
     {query.isPending && <p className="mt-3 text-sm" role="status">Cargando actividad…</p>}
     {query.data && <div className="mt-4 space-y-3"><Button disabled={!query.data.unread || read.isPending} onClick={() => read.mutate()}>Marcar como leído</Button>
-      <ul className="space-y-3">{query.data.items.filter(isNotifiable).map(e => <li key={e.id} className="text-sm"><Link to={`${paths.reception(processId)}#mail-${e.message_id}`} className="underline">{notificationText(e)}</Link><p className="mt-1 text-xs text-muted">{String(e.data.subject || 'Sin asunto')} · {mailDate(e.created_at)}{e.id > query.data.through_id ? ' · Sin leer' : ''}</p></li>)}</ul>
+      <ul className="space-y-3">{query.data.items.filter(isNotifiable).map(e => <li key={e.id} className="text-sm"><Link to={`${paths.reception(processId)}?message=${e.message_id}#mail-${e.message_id}`} className="underline">{notificationText(e)}</Link><p className="mt-1 text-xs text-muted">{String(e.data.subject || 'Sin asunto')} · {mailDate(e.created_at)}{e.id > query.data.through_id ? ' · Sin leer' : ''}</p></li>)}</ul>
       {!query.data.items.length && <p className="text-sm text-muted">Las próximas novedades aparecerán aquí.</p>}
       {query.data.has_more && <p className="text-xs text-muted">Mostrando la actividad más reciente. Cada correo conserva su historial completo.</p>}
     </div>}

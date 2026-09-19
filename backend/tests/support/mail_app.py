@@ -18,6 +18,8 @@ from app.features.ingestion.config import Settings
 from app.features.ingestion.service import ExtractionService
 from app.features.ingestion.tests.conftest import NoOCR, NoVLM, pdf_bytes
 from app.features.mail_ingestion.config import MailSettings
+from app.features.mail_ingestion.documents import RejectedDocument
+from app.features.mail_ingestion.imap import Mailbox
 from app.features.mail_ingestion.model import MailAccount
 from app.features.mail_ingestion.tests.test_pipeline import seed_process
 from app.features.mail_ingestion.worker import Worker
@@ -32,6 +34,13 @@ if not is_test_db(make_url(backend_settings.database_url).database):
 
 original_lifespan = app.router.lifespan_context
 fixture = {}
+
+
+class RetryMailbox(Mailbox):
+    def download(self, uid, part):
+        if part["original_name"] == "retry.pdf" and fixture.pop("fail_once", False):
+            raise RejectedDocument("invalid_pdf")
+        return super().download(uid, part)
 
 
 @asynccontextmanager
@@ -91,7 +100,7 @@ async def lifespan(application):
             timeout=60,
             trust_env=False,
         ) as api:
-            worker = Worker(cfg, api)
+            worker = Worker(cfg, api, mailbox_factory=RetryMailbox)
             fixture.update(
                 mailbox=mailbox,
                 worker=worker,
@@ -151,6 +160,19 @@ async def deliver():
             subject="Synthetic automatic invoice batch",
         ),
         seen=True,
+    )
+    fixture["before"] = dict(box.messages), dict(box.flags)
+    return {"delivered": True}
+
+
+@app.post("/_mail-test/deliver-retry")
+async def deliver_retry():
+    box = fixture["mailbox"]
+    fixture["fail_once"] = True
+    box.deliver(
+        synthetic_mail(
+            [("retry.pdf", pdf_bytes("Holder: retry"), "pdf")], subject="Retry one attachment"
+        )
     )
     fixture["before"] = dict(box.messages), dict(box.flags)
     return {"delivered": True}

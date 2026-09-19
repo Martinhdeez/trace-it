@@ -152,6 +152,7 @@ async def import_pdf(
     async for chunk in request.stream():
         if len(content) + len(chunk) > limit:
             row.state, row.error = "failed", "size_limit"
+            activity.record(session, account, message, "attachment_failed", row, error=row.error)
             await session.commit()
             return AttachmentOut.model_validate(row)
         content.extend(chunk)
@@ -225,6 +226,7 @@ async def overview(
     user: CurrentUser,
     limit: int = Query(default=50, ge=1, le=200),
     before_id: int | None = Query(default=None, ge=1),
+    message_id: int | None = Query(default=None, ge=1),
 ) -> MailOverview:
     await process_service.require_process(session, process_id)
     account = await session.scalar(select(MailAccount).where(MailAccount.process_id == process_id))
@@ -235,6 +237,7 @@ async def overview(
             select(MailMessage)
             .where(MailMessage.account_id == account.id)
             .where(MailMessage.id < before_id if before_id else True)
+            .where(MailMessage.id == message_id if message_id else True)
             .order_by(MailMessage.id.desc())
             .limit(limit + 1)
         )

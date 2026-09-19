@@ -11,7 +11,7 @@ import { ErrorNotice } from '../shell/Notice'
 export function MailBadge({ label, tone = 'neutral' }: { label: string; tone?: MailTone }) {
   return <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium',
     tone === 'success' ? 'bg-pagar-soft text-pagar' : tone === 'review' ? 'bg-escalar-soft text-escalar' : tone === 'error' ? 'bg-nopagar-soft text-nopagar' : 'bg-well text-muted')}>
-    <span aria-hidden="true">{tone === 'success' ? '✓' : tone === 'error' ? '!' : tone === 'review' ? '◇' : '·'}</span>{label}
+    <span aria-hidden="true">{tone === 'success' ? '✓' : tone === 'error' ? '!' : tone === 'review' ? '◇' : '·'}</span><span>{label}</span>
   </span>
 }
 export function MailConnection({ account }: { account: MailAccount | null | undefined }) {

@@ -134,12 +134,20 @@ async def message_out(session, message):
             part.decision = decision.decision if decision else None
             if decision:
                 part.reason = decision.reason
-                human = await decisions.historical_human_types(
-                    session, account.process_id, [decision]
+                # Keep the original mail outcome, but only invite review if the current
+                # decision still requires it (a person may already have resolved the case).
+                latest = await session.scalar(
+                    select(Decision)
+                    .where(Decision.instance_id == part.instance_id)
+                    .order_by(Decision.id.desc())
+                    .limit(1)
                 )
-                reviews = await decisions.decision_reviewer.for_decisions(session, [decision])
-                part.requires_review = decision.decision in human[decision.id] or bool(
-                    reviews.get(decision.id) and reviews[decision.id].requires_human
+                human = await decisions.historical_human_types(
+                    session, account.process_id, [latest]
+                )
+                reviews = await decisions.decision_reviewer.for_decisions(session, [latest])
+                part.requires_review = latest.decision in human[latest.id] or bool(
+                    reviews.get(latest.id) and reviews[latest.id].requires_human
                 )
     return result
 
@@ -176,7 +184,9 @@ async def claim(session, account, ready_only=False):
     if message.attempts >= MAX_ATTEMPTS:
         message.state, message.error = "failed", "attempts_exhausted"
         await fail_unimported(session, message, "attempts_exhausted")
-        activity.record(session, account, message, "failed", error=message.error, state=message.state)
+        activity.record(
+            session, account, message, "failed", error=message.error, state=message.state
+        )
         await session.commit()
         return None
     message.attempts += 1
@@ -235,6 +245,10 @@ async def manifest(session, account, message, body):
         state=message.state,
         error=message.error,
     )
+    if message.state == "failed":
+        activity.record(
+            session, account, message, "failed", state=message.state, error=message.error
+        )
     await session.commit()
     return await message_out(session, message)
 

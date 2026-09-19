@@ -10,14 +10,14 @@ export type MailActivity = components['schemas']['ActivityOut']
 export type MailActivityFeed = components['schemas']['MailActivityFeed']
 export type MailHistory = components['schemas']['MailHistory']
 export const mailKeys = {
-  overview: (id: number, before?: number) => ['mail-overview', id, before] as const,
+  overview: (id: number, before?: number, message?: number) => ['mail-overview', id, before, message] as const,
   activity: (id: number, userId?: number) => ['mail-activity', id, userId] as const,
   history: (id: number, messageId: number) => ['mail-history', id, messageId] as const,
 }
 export const mailApi = {
   gathering: (id: number) => get<GatheringSettings>(`/processes/${id}/gathering`),
   saveGathering: (id: number, value: GatheringSettings) => put<GatheringSettings>(`/processes/${id}/gathering`, value),
-  overview: (id: number, before?: number) => get<MailOverview>(`/processes/${id}/mail-ingestion${before ? `?before_id=${before}` : ''}`),
+  overview: (id: number, before?: number, message?: number) => get<MailOverview>(`/processes/${id}/mail-ingestion${message ? `?message_id=${message}` : before ? `?before_id=${before}` : ''}`),
   activity: (id: number, after?: number) => get<MailActivityFeed>(`/processes/${id}/mail-ingestion/activity${after != null ? `?after_id=${after}` : ''}`),
   read: (id: number, through: number) => post<MailActivityFeed>(`/processes/${id}/mail-ingestion/activity/read`, { through_id: through }),
   history: (id: number, messageId: number) => get<MailHistory>(`/processes/${id}/mail-ingestion/messages/${messageId}/history`),

@@ -34,6 +34,8 @@ function ProcessMailNotifications({ processId, userId }: { processId: number; us
     fetching.current = true
     void (async () => {
       const newest = new Map<number, MailActivity>()
+      const start = cursor.current
+      try {
       // Catch up in bounded pages without losing transitions between polls.
       for (let page = 0; page < 10; page++) {
         const feed = await mailApi.activity(processId, cursor.current ?? 0)
@@ -43,6 +45,7 @@ function ProcessMailNotifications({ processId, userId }: { processId: number; us
         }
         if (!feed.has_more) break
       }
+      } catch { cursor.current = start; return }
       if (newest.size) {
         const all = [...newest.values()].sort((a, b) => b.id - a.id)
         setNotices(all.slice(0, 3)); setMore(Math.max(0, all.length - 3))
@@ -60,7 +63,7 @@ function ProcessMailNotifications({ processId, userId }: { processId: number; us
     <div aria-live="polite" aria-atomic="false" className="pointer-events-none fixed bottom-16 right-4 z-50 w-[min(360px,calc(100vw-32px))] space-y-2">
       {notices.map(event => <div key={event.message_id} role="status" className="pointer-events-auto rounded-2xl border border-hairline bg-shell p-4 shadow-lg">
         <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><p className="text-sm font-medium">{notificationText(event)}</p><p className="mt-1 truncate text-xs text-muted">{String(event.data.subject || 'Sin asunto')}</p></div><button aria-label="Cerrar aviso de correo" onClick={() => setNotices(n => n.filter(e => e.message_id !== event.message_id))}><X size={16} /></button></div>
-        <Link className="mt-3 inline-block text-sm underline" to={`${paths.reception(processId)}#mail-${event.message_id}`} onClick={() => setNotices(n => n.filter(e => e.message_id !== event.message_id))}>Ver correo</Link>
+        <Link className="mt-3 inline-block text-sm underline" to={`${paths.reception(processId)}?message=${event.message_id}#mail-${event.message_id}`} onClick={() => setNotices(n => n.filter(e => e.message_id !== event.message_id))}>Ver correo</Link>
       </div>)}
       {notices.length > 0 && more > 0 && <p className="rounded-lg bg-shell p-2 text-xs">{more} correos más en la actividad de recepción.</p>}
     </div>

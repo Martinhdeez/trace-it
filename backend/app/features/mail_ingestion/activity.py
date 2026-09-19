@@ -1,6 +1,6 @@
 """Durable mail stages, per-user notification receipts and guarded manual retries."""
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.common.exceptions import ConflictError, NotFoundError
@@ -10,7 +10,6 @@ from app.features.versions.service import lock
 from .model import MailAccount, MailActivity, MailActivityRead, MailAttachment, MailMessage
 from .schemas import ActivityOut, MailActivityFeed
 
-NOTIFIABLE = ("received", "completed", "failed", "retry_requested")
 RETRYABLE = ("invalid_pdf", "infrastructure_error", "operator_retry_failed")
 
 
@@ -114,7 +113,16 @@ async def feed(session, process_id, user_id, after_id=None, limit=100):
     unread = await session.scalar(
         select(func.count())
         .select_from(MailActivity)
-        .where(scope, MailActivity.id > through, MailActivity.kind.in_(NOTIFIABLE))
+        .where(
+            scope,
+            MailActivity.id > through,
+            or_(
+                MailActivity.kind.in_(("completed", "failed", "retry_requested")),
+                and_(
+                    MailActivity.kind == "received", MailActivity.data["pdf_count"].as_integer() > 0
+                ),
+            ),
+        )
     )
     return MailActivityFeed(
         items=[ActivityOut.model_validate(r) for r in rows[:limit]],

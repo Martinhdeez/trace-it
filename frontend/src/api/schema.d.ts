@@ -6882,6 +6882,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 before_id?: number | null;
+                message_id?: number | null;
             };
             header?: {
                 "x-user-id"?: number | null;
