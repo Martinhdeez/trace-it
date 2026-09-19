@@ -79,10 +79,12 @@ def recorded_call(
     fallback=False,
 ):
     reader = reader or (
-        "vlm"
+        "schema"
+        if operation == "schema_selection"
+        else "vlm"
         if provider == "helmcode" and operation == "image_transcription"
         else "jev"
-        if provider == "helmcode" and operation in ("text_selection", "schema_selection")
+        if provider == "helmcode" and operation == "text_selection"
         else {"gemini": "vlm", "vision": "vlm", "jev": "jev"}.get(provider)
     )
     if reader:
@@ -113,11 +115,10 @@ def recorded_call(
             trace.status = "error"
             trace.set(error="Provider call unavailable", error_type=type(exc).__name__)
     if failure is not None:
-        if trace.data.get("outcome") == "blocked_uncertain":
-            raise failure
         unavailable = ProviderUnavailable(f"{provider} call unavailable")
         unavailable.http_status_code = trace.data.get("http_status_code")
         unavailable.retry_after_s = trace.data.get("retry_after_s")
+        unavailable.journal_blocked = trace.data.get("outcome") == "blocked_uncertain"
         raise unavailable from None
     return result
 

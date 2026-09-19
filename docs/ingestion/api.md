@@ -9,7 +9,11 @@ Ingestion uses the existing `X-User-Id` header obtained through `POST /login`.
 
 ## Extraction
 
-`POST /v1/extractions`: multipart `file`, optional `ocr=true`, `vlm`, `jev` and
+`GET /v1/ocr/config` returns the default mode and configured provider/model chains
+without credentials. See [execution modes and provider billing](providers-and-modes.md).
+
+`POST /v1/extractions`: multipart `file`, optional `mode` (`local`, `api`, `hybrid`),
+`ocr=true`, `vlm`, `jev` and
 repeated `verify_fields` (`supplier_tax_id`, `payment_iban`, `purchase_order_ref`).
 The last option requests a bounded blind rereading; it never accepts expected values.
 No business fields are required as input.
@@ -56,8 +60,11 @@ The 201 response includes `instance_id`, `process_id`, `name`, `file_hash`,
 Original bytes/text are stored in PostgreSQL. New instances are `PENDING`. Processes
 declaring the invoice-payment symbols (`issuer_nif`, `iban`, `purchase_order`, `date`,
 `base`, `vat_rate`, `vat_amount`, `total`) automatically receive document-derived symbols
-in the current dev format: `{name: {value, origin}}`. Other processes keep `symbols=null`;
-their business vocabulary is not guessed. Missing readings never create a REVIEW state.
+in the current dev format: `{name: {value, origin}}`. Other processes extract their
+current declared fields through the schema adapter; invoice processes can add
+fields while preserving the default invoice parser. Missing readings never create
+a REVIEW state. Field/rule definitions update the extraction contract on the next
+request; environment settings require a restart. See [process fields](../../processes/README.md).
 Re-uploading the same process,
 filename and content preserves the instance and any existing downstream decisions.
 Pending duplicates check extraction, source and symbol-schema freshness before reusing

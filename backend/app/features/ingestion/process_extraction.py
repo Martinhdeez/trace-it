@@ -117,7 +117,7 @@ def reused_result(result, started):
     reused = result.model_copy(deep=True)
     reused.cache_hit = True
     reused.metrics["request_ms"] = round((time.perf_counter() - started) * 1000, 2)
-    for reader in ("ocr", "vlm", "jev"):
+    for reader in ("ocr", "vlm", "jev", "schema"):
         reused.metrics[f"{reader}_calls_this_request"] = 0
         reused.metrics[f"{reader}_cache_hits_this_request"] = 0
     return reused

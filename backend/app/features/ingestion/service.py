@@ -396,11 +396,16 @@ class ExtractionService:
                     ocr_calls_this_request=0,
                     vlm_calls_this_request=0,
                     jev_calls_this_request=0,
+                    schema_calls_this_request=0,
+                    ocr_cache_hits_this_request=0,
+                    vlm_cache_hits_this_request=0,
+                    jev_cache_hits_this_request=0,
+                    schema_cache_hits_this_request=0,
                 )
                 self.store.save(result)
                 span.set(cache_hit=True, cached_from_extraction_id=previous_id)
                 return result
-            with self.slots:
+            with self.slots, reader_usage() as usage:
                 readings, data, warnings, pages, metrics = extract_schema_pdf(
                     (self.objects / item["sha256"]).read_bytes(),
                     options,
@@ -458,9 +463,19 @@ class ExtractionService:
                 metrics.update(
                     extraction_ms=elapsed,
                     request_ms=elapsed,
-                    ocr_calls_this_request=metrics["ocr_calls"],
-                    vlm_calls_this_request=metrics["vlm_calls"],
+                    ocr_calls_this_request=metrics["ocr_calls"] - usage.get("ocr_cache_hits", 0),
+                    vlm_calls_this_request=(
+                        usage.get("vlm_requests", 0)
+                        if isinstance(self.vlm, VisionFallback)
+                        else metrics["vlm_calls"]
+                    ),
                     jev_calls_this_request=0,
+                    schema_calls=usage.get("schema_journal_calls", 0),
+                    schema_calls_this_request=usage.get("schema_requests", 0),
+                    **{
+                        name + "_cache_hits_this_request": usage.get(name + "_cache_hits", 0)
+                        for name in ("ocr", "vlm", "jev", "schema")
+                    },
                 )
                 result = ExtractionResult(
                     **item,

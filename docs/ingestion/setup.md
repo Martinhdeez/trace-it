@@ -49,7 +49,9 @@ The corpus should contain 500 PDFs under
 
 ## 2. Download both local OCR readers
 
-Run this from the repository root, before starting the API:
+Local and hybrid modes use these weights. API-only mode can skip this section;
+see [execution modes](providers-and-modes.md). Run this from the repository root
+before starting a server that uses local OCR:
 
 ```text
 uv run --project backend --locked python -m app.features.ingestion.tools.download_models --profile v5-latin --output .models
@@ -119,13 +121,16 @@ TRACEPAY_JEV_MODEL=jev-1.13.0
 TRACEPAY_WORKERS=2
 TRACEPAY_OCR_THREADS=4
 TRACEPAY_OCR_CUDA=0
+TRACEPAY_OCR_MODE=hybrid
+# Optional visual/text fallback when an earlier provider is unavailable:
+HELMCODE_API_KEY=your_helmcode_key
 ```
 
 | Credential | Used for | Needed to reproduce the OCR committee? |
 |---|---|---|
 | `GEMINI_API_KEY` | Image transcription and focused visual rechecks. Create a key through [Google AI Studio](https://ai.google.dev/gemini-api/docs/api-key). | Yes, for the Gemini path |
 | `TYPESAFE_API_KEY` | Jev's text-only selection among reader candidates, via `https://api.typesafe.ai/v1/systemone`. Obtain API access from [TypeSafe](https://typesafe.ai/). | Yes, for the Jev stage |
-| `HELMCODE_API_KEY` | Norm normalization, rule compilation and escalation assistant with the current invoice use-case configuration | No; needed when invoking those agents |
+| `HELMCODE_API_KEY` | Optional OCR fallback (Qwen/Gemma), plus separately configured norm/rule/assistant agents | No; the original committee works without it |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY` | Alternative rule-agent providers, if selected in the agent configuration | No |
 | `FAL_KEY` | Historical `compare_fal_ocr` experiments | No; not used by the production committee |
 | `LOGFIRE_TOKEN` | Optional external observability | No |
@@ -147,7 +152,10 @@ An alternative image service can be configured with `TRACEPAY_VLM_URL`,
 base, typically ending in `/v1`; the adapter appends `/chat/completions` and sends
 an image. A complete URL/model pair takes precedence over Gemini; leave all three
 unset to reproduce the Gemini run. Partial generic settings permit configured
-Gemini. A failure of a fully configured generic server does not retry through Gemini.
+Gemini. The default visual chain tries configured compatible, Gemini and Helmcode
+readers in that order; failure can move to the next configured reader. To preserve
+a single-provider experiment, explicitly restrict `TRACEPAY_VISION_PROVIDERS`.
+See [provider order, local/API modes and billing](providers-and-modes.md).
 
 Keys stay in the ignored `.env`. Changing `.env` requires recreating the Docker
 backend (`docker compose up -d --force-recreate backend`) or restarting a local
