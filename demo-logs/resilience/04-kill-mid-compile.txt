@@ -1,0 +1,14 @@
+## 2026-09-19T10:08:28Z kill -9 the API while a rule compiles (real LLMs, Helmcode)
+$ POST /processes/1/rules  {text: 'An invoice whose total is above 50000 euros is escalated to a person.', decision: ESCALAR}
+  -> {'id': 17, 'status': 'compiling'}
+  rule 17 status after 5 s: compiling
+$ kill -9 27694 at 10:08:33
+  rule 17 status with the API dead: compiling
+  compile_rule spans for it so far: 0
+$ restart the API (lifespan -> rules.resume_compilations)
+  rule 17 left compiling after 6 s: status draft, report.valid true, error -
+  tests: 10, activation: {"why": "Manager publication required", "auto": false}
+  compile_rule span: ok compiling -> draft author auto 5525 ms
+  llm_run spans of that trace (role, model that answered, failed_attempts):
+    tester|deepseek/deepseek-v4.1-flash|[]|2551|1163
+    compiler|deepseek/deepseek-v4.1-flash|[]|5289|639

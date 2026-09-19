@@ -1,0 +1,33 @@
+## 2026-09-19T10:03:47Z kill -9 the API while it ingests the 500 PDFs, restart, upload again
+## DB trace_resilience (fresh, migrated, invoice pack published by Martín), API :8031, own ERP :8039
+$ uv run tools/demo_run.py --api-url http://127.0.0.1:8031 --process 1 --local-only   (in the background)
+$ kill -9 25018   (API killed at 10:03:55, uploads in flight)
+demo_run after the kill (last lines):
+  upload 67/500: 2026-04-06_P007.pdf (PENDING)
+  upload 68/500: 2026-04-07_P005.pdf (PENDING)
+  Demo failed: Server disconnected without sending a response.
+instances: 68, files: 69, distinct names: 68          (files = 68 PDFs + the workbook)
+last instance committed before the kill: 2026-04-07_P005.pdf
+(the 69th upload was in flight: its transaction never committed, so no half instance exists)
+
+$ restart the API
+API up: {"status":"ok"}
+
+$ POST /processes/1/files  2026-04-07_P005.pdf   (the same PDF again, twice)
+   {'instance_id': 68, 'name': '2026-04-07_P005.pdf', 'created': False, 'status': 'PENDING'} sha256 a4abed3aee76
+   {'instance_id': 68, 'name': '2026-04-07_P005.pdf', 'created': False, 'status': 'PENDING'} sha256 a4abed3aee76
+instances named 2026-04-07_P005.pdf: 1
+
+$ uv run tools/demo_run.py ... (again, to the end)
+  workbook: FINAL_v7_DEFINITIVO_ahorasi.xlsx
+  erp sync: 516 rows
+  run: {'decided': 500, 'by_decision': {'PAGAR': 436, 'ESCALAR': 28, 'NO_PAGAR': 36}}
+  export: 500 invoices (whole process)
+
+instances: 500, distinct (name, sha256): 500, files: 501   (500 PDFs + the workbook)
+upload_document spans: created=true 500, created=false 2 (the two re-uploads, audited; instance untouched)
+$ select data->>'file', data->>'created', status from events where step='upload_document' and data->>'file'='2026-04-07_P005.pdf'
+  2026-04-07_P005.pdf|true|ok
+  2026-04-07_P005.pdf|false|ok
+  2026-04-07_P005.pdf|false|ok
+unique index: CREATE UNIQUE INDEX uq_instances_process_id_name_file_hash ON public.instances USING btree (process_id, name, file_hash)

@@ -128,7 +128,8 @@ The parent identifies the page and, for a crop, the field and reader.
 `GET /traces?process_id=7&name=provider_call` lists these operations. A complete
 journal replay has `journal_hit=true`, `outcome=replay` and
 `network_attempted=false`; an uncertain prior delivery has
-`outcome=blocked_uncertain` and is not automatically resubmitted. Errors retain
+`outcome=blocked_uncertain` and is not automatically resubmitted. A definite HTTP
+refusal (4xx, 503) is journaled `refused` and the next call sends it again. Errors retain
 their exception class and a safe description without provider bodies or secrets.
 `GET /traces/{trace_id}` reconstructs the hierarchy.
 
