@@ -72,6 +72,11 @@ export const es = {
     source_sync: 'Cambio en la fuente',
     rule_change: 'Cambio de reglas',
   },
+  extractionMode: {
+    local: 'Local',
+    api: 'API',
+    hybrid: 'Híbrido',
+  },
   roles: {
     manager: 'Responsable',
     operator: 'Operador',

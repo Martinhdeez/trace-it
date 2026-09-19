@@ -1,8 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { api, mode } from '../api/client'
 import { keys } from '../api/queries'
-import { Input, Segmented } from '../components/shell/Controls'
-import { Empty, ErrorNotice } from '../components/shell/Notice'
+import { Segmented, Select } from '../components/shell/Controls'
+import { UseCaseModels } from '../components/process/UseCaseModels'
+import { ErrorNotice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
 import { Topbar } from '../components/shell/Topbar'
 import { NestedCard, PageIntro } from '../components/shell/Well'
@@ -12,18 +14,14 @@ import { useTheme, type Theme } from '../state/theme'
 
 export function Settings() {
   const { user, signIn } = useSession()
-  const queryClient = useQueryClient()
 
   const users = useQuery({ queryKey: keys.users, queryFn: () => api.listUsers() })
-  const llm = useQuery({ queryKey: keys.llm, queryFn: () => api.listLlmConfig() })
+  const useCases = useQuery({ queryKey: keys.useCases, queryFn: () => api.listUseCases() })
+  const [picked, setPicked] = useState<number | null>(null)
+  const useCaseId = picked ?? useCases.data?.[0]?.id
 
   const switchUser = useMutation({ mutationFn: (email: string) => signIn(email) })
 
-  const change = useMutation({
-    mutationFn: ({ role, model }: { role: string; model: string }) =>
-      api.setLlmConfig(role, model),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.llm }),
-  })
 
   return (
     <>
@@ -78,32 +76,26 @@ export function Settings() {
             </div>
           </NestedCard>
 
-          <NestedCard label="modelo por papel">
+          <NestedCard label="modelos del caso de uso (compartidos)">
             <div className="space-y-2 px-3.5 py-3">
               <p className="text-[12px] text-muted">
                 Configuración activa por caso de uso y papel. Cada cambio crea una versión nueva:
                 compilador, tester ciego, normalizador y asistente pueden usar modelos distintos.
               </p>
-              {llm.isError ? <ErrorNotice error={llm.error} /> : null}
-              {llm.data?.length === 0 ? <Empty>Sin papeles configurados.</Empty> : null}
-              {(llm.data ?? []).map((config) => (
-                <div key={config.papel} className="flex items-center gap-2">
-                  <span className="w-32 shrink-0 font-mono text-[12px] text-muted">
-                    {config.papel}
-                  </span>
-                  <Input
-                    defaultValue={config.modelo}
-                    className="font-mono"
-                    onBlur={(event) => {
-                      const model = event.target.value.trim()
-                      if (model && model !== config.modelo) {
-                        change.mutate({ role: config.papel, model })
-                      }
-                    }}
-                  />
-                </div>
-              ))}
-              {change.isError ? <ErrorNotice error={change.error} /> : null}
+              {useCases.isError ? <ErrorNotice error={useCases.error} /> : null}
+              {(useCases.data?.length ?? 0) > 1 ? (
+                <Select
+                  value={useCaseId}
+                  onChange={(event) => setPicked(Number(event.target.value))}
+                >
+                  {useCases.data?.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
+              {useCaseId != null ? <UseCaseModels useCaseId={useCaseId} /> : null}
             </div>
           </NestedCard>
 

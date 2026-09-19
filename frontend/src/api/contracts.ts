@@ -39,6 +39,9 @@ export type RuleIn = Schemas['RuleIn']
 export type RuleDetailOut = Schemas['RuleDetail']
 export type RunOut = Schemas['RunOut']
 export type AlertOut = Schemas['AlertOut']
+export type UseCaseOut = Schemas['UseCaseOut']
+export type UseCaseDetail = Schemas['UseCaseDetail']
+export type AgentConfigOut = Schemas['AgentConfigOut']
 export type AlertStatus = 'open' | 'acknowledged' | 'resolved'
 export type RunDetail = Schemas['RunDetail']
 export type InstanceTrace = Schemas['InstanceTrace']
@@ -114,6 +117,8 @@ export type Process = {
   id: number
   nombre: string
   descripcion: string
+  /** The use case whose agents (and models) this process shares with others. */
+  use_case_id?: number
 }
 
 export type ProcessDetail = Process & {
@@ -309,11 +314,6 @@ export type Finding = {
   creado: string
 }
 
-export type LlmConfig = {
-  papel: string
-  modelo: string
-}
-
 export interface ApiClient {
   health(): Promise<boolean>
 
@@ -385,6 +385,9 @@ export interface ApiClient {
   uploadWorkbook(processId: number, file: File, cutOffDate: string): Promise<WorkbookUpload>
   syncSource(processId: number, name: string): Promise<SyncResult>
 
-  listLlmConfig(): Promise<LlmConfig[]>
-  setLlmConfig(role: string, model: string): Promise<LlmConfig>
+  listUseCases(): Promise<UseCaseOut[]>
+  /** One use case with its agents and the model each one runs. */
+  getUseCase(id: number): Promise<UseCaseDetail>
+  /** A new version of that agent's config: the same settings with another model. */
+  setAgentModel(useCaseId: number, agent: AgentConfigOut, model: string): Promise<AgentConfigOut>
 }
