@@ -193,3 +193,42 @@ async def test_sync_endpoint_unknown_process() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api:
         r = await api.post("/processes/999999999/sources/erp/sync")
     assert r.status_code == 404
+
+
+async def test_any_process_of_the_use_case_syncs_with_its_connector(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, erp: str
+) -> None:
+    """The connector belongs to the use case: a second process of it (e.g. created from a
+    norm) syncs with the pack's `sources.json` although no pack carries its name."""
+    suffix = uuid.uuid4().hex[:8]
+    async with session_factory() as session:
+        pack_process = await rows.process(session, f"Invoice payment {suffix}")
+        other = Process(
+            name=f"Invoice payment {suffix} - live norm", use_case_id=pack_process.use_case_id
+        )
+        session.add(other)
+        await session.commit()
+        name, other_id = pack_process.name, other.id
+    (tmp_path / "pack.json").write_text(json.dumps({"name": name, "use_case": name}))
+    (tmp_path / "pack").mkdir()
+    shutil.copy(SOURCES_JSON, tmp_path / "pack/sources.json")
+    monkeypatch.setattr(settings, "processes_dir", tmp_path)
+    monkeypatch.setenv("TRACE_ERP_URL", erp)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api:
+        r = await api.post(f"/processes/{other_id}/sources/erp/sync")
+        assert r.status_code == 200, r.text
+        assert r.json()["rows"] == 516
+        r = await api.get(f"/processes/{other_id}/sources/erp/diff")
+        assert r.status_code == 200, r.text
+
+
+async def test_a_use_case_without_connectors_is_a_clear_404(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    process_id = await new_process()
+    monkeypatch.setattr(settings, "processes_dir", tmp_path)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api:
+        r = await api.post(f"/processes/{process_id}/sources/erp/sync")
+    assert r.status_code == 404
+    assert "is for the use case 'erp-sync-" in r.json()["message"]

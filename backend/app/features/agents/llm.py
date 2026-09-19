@@ -17,9 +17,10 @@ from typing import Any
 
 from pydantic import BaseModel
 from pydantic_ai import Agent, AgentRunError, capture_run_messages
-from pydantic_ai.exceptions import FallbackExceptionGroup
+from pydantic_ai.exceptions import FallbackExceptionGroup, ModelAPIError
 from pydantic_ai.messages import ModelMessage, RetryPromptPart
 from pydantic_ai.models import Model
+from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
@@ -100,6 +101,21 @@ def resolve(model: Model | str) -> Model | str:
     return model
 
 
+def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackModel:
+    """The role's model, then its `fallback_models` in order (ADR 0019). Only a provider
+    failure (`ModelAPIError`: 4xx/5xx, 429 after the SDK's retries, timeout, connection)
+    moves on to the next model; each one is appended to `failed` for the trace."""
+
+    def on_failure(error: Exception) -> bool:
+        if not isinstance(error, ModelAPIError):
+            return False
+        failed.append({"model": error.model_name, "error": f"{type(error).__name__}: {error}"})
+        return True
+
+    models = [setup.settings.model or model_for(role), *setup.settings.fallback_models]
+    return FallbackModel(*map(resolve, models), fallback_on=on_failure)
+
+
 def _retry_prompts(messages: list[ModelMessage]) -> list[str]:
     """What the output validators sent back to the model to fix, in order."""
     return [p.model_response() for m in messages for p in m.parts if isinstance(p, RetryPromptPart)]
@@ -127,13 +143,18 @@ async def run(
     setup = setup or Setup()
     if setup.settings.instructions:
         instructions += "\n\n## Guidance for this use case\n" + setup.settings.instructions
-    model = resolve(setup.settings.model or model_for(role))
+    failed: list[dict[str, str]] = []
+    model = chain(setup, role, failed)
+    model_settings = dict(setup.settings.model_settings)
+    if setup.settings.timeout_seconds:
+        model_settings["timeout"] = setup.settings.timeout_seconds
     prompt_hash = hashlib.sha256(instructions.encode()).hexdigest()[:12]
     with events.span(
         "llm_run",
         role=role,
         agent=agent.name or "",
-        model=getattr(model, "model_name", model),  # the answering model replaces it
+        model=model.models[0].model_name,  # the answering model replaces it
+        chain=[m.model_name for m in model.models],
         config_id=setup.config_id,
         prompt_hash=prompt_hash,
         # Exactly what the model saw (ADR 0018): instructions with the use case's guidance and
@@ -149,10 +170,13 @@ async def run(
                     model=model,
                     deps=deps,
                     instructions=instructions,
-                    model_settings=setup.settings.model_settings or None,
+                    model_settings=model_settings or None,
                 )
             except (AgentRunError, FallbackExceptionGroup, TimeoutError) as error:
-                span.set(retry_prompts=_retry_prompts(messages))
+                span.set(retry_prompts=_retry_prompts(messages), failed_attempts=failed)
+                if isinstance(error, FallbackExceptionGroup):
+                    tried = "; ".join(f"{f['model']}: {f['error']}" for f in failed)
+                    raise AgentError(f"{role}: every model failed: {tried}") from error
                 raise AgentError(f"{role}: {type(error).__name__}: {error}") from error
         usage = result.usage
         retry_prompts = _retry_prompts(messages)
@@ -160,11 +184,12 @@ async def run(
         span.set(
             output=output.model_dump(mode="json") if isinstance(output, BaseModel) else output,
             retry_prompts=retry_prompts,
+            failed_attempts=failed,  # provider failures before the model that answered
         )
         retries = len(retry_prompts)
         trace = Trace(
             role=role,
-            model=result.response.model_name or str(model),
+            model=result.response.model_name or model.models[0].model_name,
             requests=usage.requests,
             retries=retries,
             input_tokens=usage.input_tokens,

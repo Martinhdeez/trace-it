@@ -50,8 +50,8 @@ in PostgreSQL.
 - A single entry point (`agents/llm.run`) runs an agent for a role and returns the output
   with a trace (role, model that answered, requests, retries, tokens, cost, latency) that
   the caller records as an event. Every PydanticAI failure becomes one `AgentError` (502).
-- Not used yet: `FallbackModel` chains, `UsageLimits`, graphs or deferred tools. Flow, state
-  and approval are ours.
+- Not used yet: `UsageLimits`, graphs or deferred tools. Flow, state and approval are
+  ours. `FallbackModel` chains are used since ADR 0019.
 
 ## Consequences
 - `features/llm`, the `llm_config` table and `/llm/config` are gone; a model change is an

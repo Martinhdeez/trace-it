@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: setup compile activate demo erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm check down reset-db
+.PHONY: setup compile activate demo erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 
@@ -69,6 +69,10 @@ eval-compiler:  # opt-in, calls real LLMs (keys in .env); writes backend/evals/r
 
 eval-norm:  # opt-in, real LLMs: the client's norm -> rules -> code -> batch 1 vs golden
 	cd backend && uv run python -u -m evals.eval_norm
+
+demo-llm-down:  # real LLMs: the primary model's provider is unreachable, a fallback answers (ADR 0019)
+	cd backend && OPENAI_BASE_URL=http://127.0.0.1:9/v1 OPENAI_API_KEY=unreachable PYDANTIC_AI_NO_BANNER=1 \
+		uv run --env-file ../.env python ../tools/demo_llm_down.py
 
 check:
 	cd backend && uv run ruff check . && uv run ruff format --check .
