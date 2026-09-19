@@ -112,10 +112,36 @@ Without Docker for the backend (faster loop): `docker compose up db -d`, then in
 | `TRACE_COMPILER_MODEL`, `TRACE_TESTER_MODEL`, `TRACE_ASSISTANT_MODEL` | One model per agent role, `provider:model` (any PydanticAI provider, or `helmcode:<model>` with `HELMCODE_API_KEY`). Defaults in `app/core/config.py`; tester and compiler should differ (ADR 0004) |
 | `TRACE_AUTO_ACTIVATE_MAX_CHANGE` | Share of past decisions a compiled rule may change and still activate by itself (default 0.05) |
 | `TRACE_DATABASE_URL` | Set by Docker; the Makefile overrides it for tests |
+| `LOGFIRE_TOKEN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | Live monitoring (see Traces and observability). Unset: spans stay in `events` only |
+
+## Traces and observability
+
+Every step is a span in the `events` table (ADR 0018): the audit, joinable with decisions and
+rules. In code: `with events.span("my_step", rule_id=rule.id, count=3) as s: ...; s.set(x=1)`;
+children nest by themselves across `await`, `gather` and threads.
+
+| Endpoint | What it gives |
+|---|---|
+| `GET /traces?process_id=&name=&status=&limit=` | Recent spans, newest first (`name` is the step, `status` `ok`/`error`) |
+| `GET /traces/{trace_id}` | One trace as a tree (`children`) |
+| `GET /instances/{id}/trace` | An invoice's journey: file, reading spans, symbols with origin, decisions with each rule's answer (rule text, norm rule), resolutions, exports, `exported_decision` |
+| `GET /rules/{id}/trace` | How a rule was produced (norm sentence, normalizer run, each compilation: tester, coder attempts, test runs, reviews, impact check, activation) and its runtime in process runs (fired, errors, p50/p95) |
+| `GET /processes/{id}/metrics?since=` | Runs, instances/s, p50/p95 per step type, LLM calls/retries/errors/tokens by model and role, decisions by outcome, `RULE_ERROR`/`RULE_NEEDS_DATA`/`RULE_CONFLICT` counts, escalated and pending |
+
+Each `llm_run` span holds the exact instructions, user message, output and retry prompts.
+Cost is tokens (`input_tokens`, `output_tokens`).
+
+The same spans go to OpenTelemetry through the Logfire SDK, but only when configured:
+- **Logfire cloud** (free tier): create a project, put its write token in `.env` as
+  `LOGFIRE_TOKEN`, restart the API.
+- **Local Phoenix**: `docker compose --profile observability up -d`, then
+  `OTEL_EXPORTER_OTLP_ENDPOINT=http://phoenix:6006` in `.env` (backend in Docker) or
+  `http://localhost:6006` (backend on the host). UI at http://localhost:6006, project
+  `default`. Only traces are exported to it.
 
 ## Database and migrations
 
-The migration history starts at `alembic/versions/0001_initial_schema.py` (squashed); a database older than it needs `make reset-db && make setup`. `0004_norm_rules.py` adds `norm_rules` and `rules.norm_rule_id`; `0005_events_process_id.py` adds `events.process_id`, backfilled from each event's instance. `0002_use_cases.py` moves each process's description into a use case of its own, so `alembic upgrade head` is enough from 0001.
+The migration history starts at `alembic/versions/0001_initial_schema.py` (squashed); a database older than it needs `make reset-db && make setup`. `0004_norm_rules.py` adds `norm_rules` and `rules.norm_rule_id`; `0005_events_process_id.py` adds `events.process_id`, backfilled from each event's instance; `0006_event_spans.py` turns events into spans (ADR 0018). `0002_use_cases.py` moves each process's description into a use case of its own, so `alembic upgrade head` is enough from 0001.
 
 To change a table: edit the feature's `model.py` (a new table must be imported in `app/models.py`), then in `backend/`: `uv run alembic revision --autogenerate -m "add x to rules"`. Read the generated file before committing. Two branches generating migrations at once leave two heads: `uv run alembic merge heads` and tell the group.
 

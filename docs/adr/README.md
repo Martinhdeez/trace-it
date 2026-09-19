@@ -25,6 +25,7 @@ wins over any other document. Superseded plans live in `.artifacts/archive/`.
 | [0015](0015-immutable-process-versions.md) | Snapshot the whole process as an immutable version on every activation | proposed | Decision types, symbols, description and active rules; decisions reference their version; loader writes drafts |
 | [0016](0016-every-instance-gets-a-decision.md) | Decide every instance: a rule that cannot be evaluated escalates the case | accepted | No REVIEW state; failure or tie decides the process's `requires_human` type with the reason; export is the engine's decision; code A alone at runtime |
 | [0017](0017-autonomous-norm-normalizer.md) | Turn the client's norm into rules with an autonomous normalizer | accepted | Each norm sentence is a norm rule the client owns; the normalizer splits it into atomic checks (ordinary rules) with the norm's own tie-breaker; no human review; batch-1 golden eval as the external check |
+| [0018](0018-observability-own-audit-spans-plus-opentelemetry.md) | Trace every step as spans in our own database, and mirror them to OpenTelemetry | accepted | `events` holds hierarchical spans (the audit, with prompts, tokens and durations); the same spans go to Logfire or a local Phoenix by env; trace, journey, rule and metrics endpoints |
 
 ## Glossary
 - **Rule finding:** the result of one rule on one instance (`fires`, `reason`).
