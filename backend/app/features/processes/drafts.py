@@ -17,6 +17,7 @@ from app.features.processes import execution as execution_choices
 from app.features.processes import service
 from app.features.processes.draft_schemas import (
     AcceptanceExample,
+    ConnectorProposal,
     DiscoveryDraftOut,
     DraftPlan,
     DraftStart,
@@ -35,7 +36,12 @@ from app.features.processes.model import (
 from app.features.rules.model import NormRule, Rule
 from app.features.sources import discovery as evidence_assets
 from app.features.sources import service as sources
-from app.features.sources.http_connector import HttpConnector, SourcesFile, SyncError
+from app.features.sources.http_connector import (
+    HttpConnector,
+    HttpSourceConfig,
+    SourcesFile,
+    SyncError,
+)
 from app.features.sources.model import Source
 from app.features.use_cases import service as use_cases
 from app.features.use_cases.model import AgentConfig, UseCase
@@ -66,16 +72,25 @@ async def read(session, draft_id, revision=None, *, lock=False):
 
 
 async def connectors(session, draft):
-    if draft.use_case_id is None:
-        return {}
-    use_case = await session.get(UseCase, draft.use_case_id)
-    try:
-        path = sources.pack_sources_file(sources.find_pack(use_case.name))
-    except NotFoundError:
-        return {}
-    if not path.exists():
-        return {}
-    return SourcesFile.model_validate_json(path.read_text()).sources
+    configured = {}
+    if draft.process_id:
+        version = await versions.active(session, draft.process_id, required=False)
+        configured.update(
+            {
+                name: HttpSourceConfig.model_validate(row)
+                for name, row in (version.snapshot.get("connectors", {}) if version else {}).items()
+            }
+        )
+    if draft.use_case_id is not None:
+        use_case = await session.get(UseCase, draft.use_case_id)
+        try:
+            path = sources.pack_sources_file(sources.find_pack(use_case.name))
+        except NotFoundError:
+            path = None
+        if path and path.exists():
+            packaged = SourcesFile.model_validate_json(path.read_text()).sources
+            configured = {**packaged, **configured}
+    return configured
 
 
 async def output(session, draft_id):
@@ -189,6 +204,24 @@ async def start(session, body: DraftStart, user):
                             explanation="Current process source",
                         )
                     ],
+                )
+            )
+        for name, connector in base.get("connectors", {}).items():
+            schema = base.get("source_schemas", {}).get(name, {})
+            plan.connectors.append(
+                ConnectorProposal(
+                    name=name,
+                    explanation="Existing published connector",
+                    evidence=[
+                        ProposalEvidence(
+                            reference=f"version:{current.active_version_id}",
+                            explanation="Published connector",
+                        )
+                    ],
+                    config=connector,
+                    required=schema.get("required", list(connector.get("fields", {}))),
+                    optional=schema.get("optional", []),
+                    sync_before_run=schema.get("sync_before_run", True),
                 )
             )
     if body.use_case_id and await session.get(UseCase, body.use_case_id) is None:
@@ -311,10 +344,15 @@ async def upload(session, draft_id, revision, name, content, user):
 async def sync(session, draft_id, revision, name, user):
     manager(user)
     draft, data = await read(session, draft_id, revision)
+    plan = DraftPlan.model_validate(data["plan"])
+    proposed = next((row for row in plan.connectors if row.name == name), None)
+    if proposed and data["reviews"].get(f"connector:{name}") != "accepted":
+        raise ConflictError("Review and accept the connector before it contacts the source")
     configs = await connectors(session, draft)
-    if name not in configs:
+    config_row = proposed.config if proposed else configs.get(name)
+    if config_row is None:
         raise NotFoundError("This source is not a configured connector for the draft")
-    connector = HttpConnector(configs[name])
+    connector = HttpConnector(config_row)
     with events.span("discover_source", draft_id=draft_id, source=name, author=user.name) as span:
         try:
             rows = await connector.download()

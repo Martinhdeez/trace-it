@@ -19,6 +19,7 @@ from app.features.versions import service as versions
 def proposals(plan: DraftPlan) -> list[str]:
     return [
         "setup",
+        *[f"connector:{c.name}" for c in plan.connectors],
         *[f"source:{s.name}" for s in plan.sources],
         *[f"rule:{r.name}" for r in plan.rules],
         *[f"guidance:{g.name}" for g in plan.guidance],
@@ -136,6 +137,17 @@ def candidate(plan: DraftPlan, compilations: list[dict], base: dict) -> dict:
     )
     snapshot["guidance"] = {g.name: g.text for g in plan.guidance}
     snapshot["acceptance_examples"] = [e.model_dump() for e in plan.examples]
+    snapshot["connectors"] = {
+        connector.name: connector.config.model_dump(mode="json") for connector in plan.connectors
+    }
+    snapshot["source_schemas"] = {
+        connector.name: {
+            "required": connector.required,
+            "optional": connector.optional,
+            "sync_before_run": connector.sync_before_run,
+        }
+        for connector in plan.connectors
+    }
     return snapshot
 
 
