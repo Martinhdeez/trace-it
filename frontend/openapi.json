@@ -5377,7 +5377,7 @@
         "tags": [
           "ingestion"
         ],
-        "summary": "Store a PDF and its reading evidence as an instance of a process",
+        "summary": "Store a PDF, JPG, PNG or HTML document with its reading evidence",
         "operationId": "uploadProcessDocument",
         "security": [
           {
@@ -5790,7 +5790,7 @@
         "tags": [
           "ingestion"
         ],
-        "summary": "The file the instance was made from, byte for byte (usually a PDF)",
+        "summary": "The file the instance was made from, byte for byte (PDF, JPG, PNG or HTML)",
         "operationId": "getInstanceFile",
         "security": [
           {
@@ -5812,7 +5812,10 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/pdf": {}
+              "application/pdf": {},
+              "image/jpeg": {},
+              "image/png": {},
+              "text/html": {}
             }
           },
           "422": {
@@ -9709,7 +9712,7 @@
             "type": "string",
             "contentMediaType": "application/octet-stream",
             "title": "File",
-            "description": "Original PDF or XLSX; business fields are read from its contents."
+            "description": "PDF, JPG, PNG, HTML or XLSX; fields are read from the contents."
           },
           "ocr": {
             "type": "boolean",
@@ -9792,7 +9795,7 @@
             },
             "type": "array",
             "title": "Files",
-            "description": "Original PDF or XLSX; business fields are read from its contents."
+            "description": "PDF, JPG, PNG, HTML or XLSX; fields are read from the contents."
           },
           "ocr": {
             "type": "boolean",

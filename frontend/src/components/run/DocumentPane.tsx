@@ -112,7 +112,7 @@ export function DocumentPane({
             <Plus size={15} strokeWidth={1.5} />
           </IconBtn>
           <IconBtn
-            label="Descargar PDF"
+            label="Descargar original"
             onClick={() => name && instanceId && downloadFile(api.fileUrl(instanceId), name)}
           >
             <Download size={15} strokeWidth={1.5} />
