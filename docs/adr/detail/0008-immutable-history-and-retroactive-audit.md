@@ -54,20 +54,26 @@ second; the table `findings` stores audit findings.
   earlier version and is itself recorded. Processes do not share rules or history. ADR 0015
   extends this to a snapshot of the whole process version.
 
+**Update (2026-09-19).** The replay now runs when a draft process version is validated
+(`POST /processes/{id}/draft/validate`) and compares with the last engine decision (R01). A
+person's resolution is reported in `resolved_by_person` and never blocks; only engine decisions
+awaiting review count as conflicts. Findings are recorded on publication. Versions are listed at
+`GET /processes/{id}/versions`, and each decision stores its `version_id` (ADR 0015, 0031).
+
 ## Consequences
 - The audit is fast, free and deterministic, but only as good as the stored symbols: a new
   rule that needs a symbol never extracted requires extracting it from the stored text
-  first (P10, open).
-- Full linear versioning (list of versions, activate an older one) is iteration 2 (F9).
-  Today rules have states draft/active/retired, a hash of text + code, and every
+  first (P10; ADR 0030 now reports that partial history).
+- Full linear versioning (list of versions, activate an older one) was iteration 2 (F9; done by ADR 0015 and 0031).
+  Rules have states compiling/draft/active/blocked/retired, a hash of text + code, and every
   decision stores the rule-set hash, enough to map old decisions to versions later.
 - History grows without bound; acceptable at hackathon scale.
 
 ## Evidence
 - `ingestion/model.py`: `File` keyed by hash ("a modified file is a new file").
 - `decisions/model.py`: `Decision` append-only, `Finding` (table `findings`) stores audit findings and never changes the past.
-- `decisions/audit.py` (`check`, `record_findings`) and
-  `rules/service._apply` (conflicts refuse the change); 5 tests in
+- `decisions/audit.py` (`check`), `versions/service.inspect` (validation) and
+  `versions/service.publish_snapshot` (records findings); 13 tests in
   `decisions/tests/test_audit.py`.
 - `decisions/service.resolve`: a person's decision is a new row, never an edit.
 - `decisions/service.reprocess`; `decisions/tests/test_reprocess.py`.

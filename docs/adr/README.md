@@ -1,7 +1,7 @@
 # Architecture decisions
 
 Five key decisions explain trace-it; each answers one criterion of the jury's rubric. Read
-them in one page: [key-decisions.md](../key-decisions.md) (about 3 minutes). Every other ADR
+them in one page: [key-decisions.md](../key-decisions.md) (about 5 minutes). Every other ADR
 supports one of them and lives in [`detail/`](detail/).
 
 ```mermaid
@@ -41,16 +41,16 @@ flowchart LR
   style RUN fill:#ffffff,stroke:#cbd5e1
 ```
 
-| | Decision | Rubric | One line |
+| | Decision | Rubric | Claim |
 |---|---|---|---|
-| ![A](https://img.shields.io/badge/-A-2563eb?style=for-the-badge) | [The LLM writes code; it never decides](A-llm-writes-code-never-decides.md) | Product and architecture (35) | Agents compile the norm to tested code; a deterministic engine decides at 0 tokens per invoice |
-| ![B](https://img.shields.io/badge/-B-d97706?style=for-the-badge) | [When in doubt, ESCALAR](B-when-in-doubt-escalate.md) | Validation and quality | One decision per file: non-compliance is `NO_PAGAR`, anything undetermined is `ESCALAR` with its reason |
-| ![C](https://img.shields.io/badge/-C-7c3aed?style=for-the-badge) | [Full traceability in three planes](C-traceability-in-three-planes.md) | Traceability (20) | Our own spans in Postgres are the audit, mirrored to OpenTelemetry: ingestion, agents, execution |
-| ![D](https://img.shields.io/badge/-D-059669?style=for-the-badge) | [Cost per norm, not per invoice; scale by measured limits](D-cost-per-norm-scale-by-measure.md) | Scale and cost (25) | Tokens are spent when the norm changes; one small server; each scaling step has a measured trigger |
-| ![E](https://img.shields.io/badge/-E-db2777?style=for-the-badge) | [Change without code, recover without loss](E-change-without-code-recover-without-loss.md) | Resilience (10) and bonus (10) | A norm is configuration published as an atomic version; history is append-only; failures fall back |
+| ![A](https://img.shields.io/badge/-A-2563eb?style=for-the-badge) | [The LLM writes code; it never decides](A-llm-writes-code-never-decides.md) | Product, architecture and ADRs (35) | Agents compile the norm to tested code once; the engine decides 500 invoices in 0.44 s with 0 tokens; golden 471/471 |
+| ![B](https://img.shields.io/badge/-B-d97706?style=for-the-badge) | [When in doubt, ESCALAR](B-when-in-doubt-escalate.md) | Quality of execution (10) | One decision per file: 443 `PAGAR` / 36 `NO_PAGAR` / 21 `ESCALAR`, each escalation with its reason code |
+| ![C](https://img.shields.io/badge/-C-7c3aed?style=for-the-badge) | [Full traceability in three planes](C-traceability-in-three-planes.md) | Traceability and observability (20) | Our own spans in Postgres are the audit; three dashboards show errors, retries, pending work and cost per plane |
+| ![D](https://img.shields.io/badge/-D-059669?style=for-the-badge) | [Cost per norm, not per invoice; scale by measured limits](D-cost-per-norm-scale-by-measure.md) | Scale and cost (25) | Tokens are spent per norm and per first scan read, never per decision; each scaling step has a measured trigger |
+| ![E](https://img.shields.io/badge/-E-db2777?style=for-the-badge) | [Change without code, recover without loss](E-change-without-code-recover-without-loss.md) | Resilience (10) and bonus (10) | Atomic versions the manager publishes, append-only history, fallback chains, stale-decision alerts |
 
 <details>
-<summary>Supporting ADRs (31)</summary>
+<summary>Supporting ADRs (34)</summary>
 
 ADR 0001 is the founding decision and wins over any other document. Superseded plans live
 in `.artifacts/archive/`.
@@ -60,7 +60,7 @@ in `.artifacts/archive/`.
 | [0001](detail/0001-configurable-decision-process.md) | Build a configurable decision process with reviewed learning | accepted | A |
 | [0002](detail/0002-deterministic-engine-llm-never-decides.md) | Decide with a deterministic engine; the LLM never decides at runtime | accepted | A |
 | [0003](detail/0003-rules-compiled-to-python-by-agents.md) | Compile each rule's text to free Python code with agents | accepted | A |
-| [0004](detail/0004-blind-tester-and-autonomous-coder.md) | Verify generated rule code against a blind tester | accepted | A |
+| [0004](detail/0004-blind-tester-and-autonomous-coder.md) | Verify generated rule code against a blind tester | accepted; activation superseded by 0031 | A |
 | [0005](detail/0005-in-house-sandbox-for-rule-code.md) | Run rule code in an in-house sandbox | accepted | A |
 | [0006](detail/0006-pydanticai-agent-framework.md) | Build every agent on PydanticAI | accepted | A |
 | [0007](detail/0007-declarative-process-packs.md) | Keep all domain knowledge in declarative process packs | accepted | E |
@@ -70,24 +70,27 @@ in `.artifacts/archive/`.
 | [0011](detail/0011-configuration-layers.md) | Separate bootstrap files, versioned runtime configuration and secrets | accepted | E |
 | [0012](detail/0012-stack-and-feature-based-structure.md) | Use FastAPI, PostgreSQL and a feature-based layout | accepted | D |
 | [0013](detail/0013-fault-tolerant-erp-client.md) | Read the ERP only through a fault-tolerant client | accepted | E |
-| [0014](detail/0014-rules-only-decision-step.md) | Combine rule findings by decision-type priority only | superseded by 0021 | A |
-| [0015](detail/0015-immutable-process-versions.md) | Snapshot the whole process as an immutable version | accepted | E |
+| [0014](detail/0014-rules-only-decision-step.md) | Combine rule findings by decision-type priority only | accepted; amended by 0021 | A |
+| [0015](detail/0015-immutable-process-versions.md) | Snapshot the whole process as an immutable version | accepted; amended by 0031 | E |
 | [0016](detail/0016-every-instance-gets-a-decision.md) | Decide every instance: a rule that cannot be evaluated escalates | accepted | B |
 | [0017](detail/0017-autonomous-norm-normalizer.md) | Turn the client's norm into rules with an autonomous normalizer | accepted | A |
 | [0018](detail/0018-observability-own-audit-spans-plus-opentelemetry.md) | Trace every step as spans in our database, mirrored to OpenTelemetry | accepted | C |
 | [0019](detail/0019-llm-fallback-chain.md) | Move to the next model of a per-role chain when a provider fails | accepted | E |
-| [0020](detail/0020-deployment-and-scaling-plan.md) | Deploy as one small server with a remote LLM; scale by measured triggers | proposed | D |
+| [0020](detail/0020-deployment-and-scaling-plan.md) | Deploy as one small server with a remote LLM; scale by measured triggers | accepted | D |
 | [0021](detail/0021-optional-decision-review.md) | Review engine decisions with optional advice and human approval | accepted | B |
 | [0022](detail/0022-ocr-evidence-and-provider-tracing.md) | Preserve OCR evidence and trace each provider operation | accepted | C |
-| [0022](detail/0022-publish-approved-process-versions.md) | Require manager publication of complete process versions | accepted | E |
 | [0023](detail/0023-fal-visual-fallback-evaluation.md) | Evaluate fal.ai visual readers before a production fallback | proposed | E |
 | [0024](detail/0024-discover-processes-through-documents-and-conversation.md) | Build process drafts through documents and conversation | accepted | E |
 | [0025](detail/0025-scan-decision-policy.md) | Decide scans only on confirmed data | accepted | B |
 | [0026](detail/0026-stale-decision-alerts.md) | Flag stale decisions to the manager; never rewrite them | accepted | E |
-| [0027](detail/0027-ocr-execution-modes-and-provider-fallback.md) | Configure local/API/hybrid OCR and bounded provider fallback | accepted | E |
+| [0027](detail/0027-ocr-execution-modes-and-provider-fallback.md) | Configure local/API/hybrid OCR and bounded provider fallback | accepted | D, E |
 | [0028](detail/0028-live-sources-sync-before-run.md) | Sync live sources before every run; fail closed when one is down | accepted | B, E |
-| [0029](detail/0029-bind-dynamic-extraction-to-published-execution.md) | Bind dynamic extraction to published execution and evidence | accepted | B, E |
-| [0030](detail/0030-report-partial-history-for-new-symbols.md) | Report incomplete historical coverage for newly required symbols | accepted | B, E |
+| [0029](detail/0029-bind-dynamic-extraction-to-published-execution.md) | Bind dynamic extraction to published execution and evidence | accepted | B |
+| [0030](detail/0030-report-partial-history-for-new-symbols.md) | Report incomplete historical coverage for newly required symbols | accepted | B |
+| [0031](detail/0031-publish-approved-process-versions.md) | Require manager publication of complete process versions (was a second 0022) | accepted | E |
+| [0032](detail/0032-single-manager-without-login.md) | Run the console as the pack's manager, with no login screen | accepted | E |
+| [0033](detail/0033-one-proposals-contract.md) | Send every agent proposal to the manager through one contract | accepted | E |
+| [0034](detail/0034-per-plane-dashboards.md) | Show one dashboard per monitoring plane, never a mixed total | accepted | C, D |
 
 ### Glossary
 - **Rule finding:** the result of one rule on one instance (`fires`, `reason`).

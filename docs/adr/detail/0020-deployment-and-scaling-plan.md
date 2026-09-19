@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Deploy as one small server with a remote LLM, and scale by measured triggers
@@ -10,7 +10,7 @@ costs and how it grows. What is already true:
 - Deciding runs no LLM and costs 0 tokens (ADR 0002); tokens are spent only when a norm
   changes (~150k per norm, ~12.4k per rule) or a person asks the assistant (~3.7k).
 - Measured on 2026-09-19 (`docs/scale-and-cost.md`, `demo-logs/scale/`): 500 invoices decide in
-  0.8 s, but the sandbox runner builds `others` for every instance of every rule, so the engine
+  0.8 s (sequential, before #144), but the sandbox runner builds `others` for every instance of every rule, so the engine
   is quadratic in the process's population: the duplicate-order rule takes 9.4 s of its 10 s
   limit at 8,000 invoices, and at 50,000 all 16 rules time out and every invoice escalates.
 - OCR is the ingestion bottleneck (1.2 s median per scan, 25 ms per text PDF) and peaks at
@@ -52,12 +52,20 @@ costs and how it grows. What is already true:
   ≥ 5 s or any timeout); H3 compile moved to a queue and one worker (before a second API
   replica); H4 API replicas; H5 OCR workers; H6 engine in a worker; H7 monthly partitions of
   `events`; H8 read replica; H9 PDFs to object storage; H10 a second LLM key or provider.
+  **Update (2026-09-19):** H2 is partly done. #144 runs each rule's sandbox in a pool of
+  `TRACE_DECISION_WORKERS` threads (default 4; `decisions/engine.py`, `decide`,
+  `rule_workers`); chunking instances per subprocess is not built. H1 and H3-H10 are not
+  built.
+- **Deployed (2026-09-19)** with `deploy/compose.yml`: backend limited to 1 CPU and 2 GB,
+  `TRACEPAY_WORKERS=1`, `TRACEPAY_OCR_THREADS=1`, `TRACE_COMPILE_CONCURRENCY=1`; Postgres
+  0.5 CPU and 512 MB. `TRACE_DECISION_WORKERS` is not set there, so it defaults to 4.
+  Recommendation: `TRACE_DECISION_WORKERS=1` suits a 1-vCPU box.
 - **Fail closed on a failed compile:** a norm check that ends `draft` with a compile error is
   enforced like a `blocked` rule (every instance escalates with the error) until it compiles,
   as ADR 0016 requires of a rule that cannot be evaluated. Done (2026-09-19): a rule whose
   compilation on save errors ends `blocked` with `report.error`, and the engine escalates
   every instance with `RULE_COMPILE_FAILED <id>: <error>` (`rules/service.py`
-  `_block_failed`, `decisions/engine.py`). **Superseded by ADR 0022 (atomic publication):**
+  `_block_failed`, since removed; `decisions/engine.py`). **Superseded by ADR 0031 (atomic publication):**
   the failed rule stays a `draft` that cannot be published; the published version keeps deciding.
 - **Cost is tracked in three parts** (`C_tokens + C_infra + C_people`) with the formulas of
   section 6; tokens and span counts come from our own metrics.
@@ -65,10 +73,13 @@ costs and how it grows. What is already true:
 ## Consequences
 - Until H1 ships, a process holds about 8,000 invoices before its duplicate rule times out; a
   timeout escalates, never pays, but floods the manager's queue. Archiving old batches into a
-  separate process is the stop-gap.
+  separate process is the stop-gap. The ceiling still holds after #144: each rule keeps its
+  10 s timeout, and running rules in parallel does not shorten any one rule.
 - Until H3 ships, the API cannot run as several replicas.
 - With the fail-closed change, a provider outage during a norm change escalates invoices the
   new check covers instead of deciding them under the old norm: louder, but correct.
+  **Superseded by ADR 0031:** the new check stays a draft, and the published version keeps
+  deciding until the check compiles and a manager publishes it.
 - The deployment prices are references read on one date; they change (Hetzner raised prices
   twice in 2026).
 - The people who resolve escalations dominate the monthly cost at 10,000 invoices; the
@@ -78,13 +89,16 @@ costs and how it grows. What is already true:
 - `demo-logs/scale/02-capacity-500-5k-8k.txt`, `03-capacity-50k.txt` (`tools/bench_scale.py
   capacity`): 500 / 5k / 8k / 50k at 0.79 / 13.1 / 29.5 / 163.9 s; R16 9.38 s at 8k; 16
   timeouts and 47,100 `RULE_ERROR` at 50k; simulated fix 31.2 s at 50k.
+- Re-measured 2026-09-19 after #144 (Apple M4 Pro, 14 CPUs): 500 invoices, 12 frozen rules,
+  0.42-0.49 s (median 0.44 s) with 4 workers (`tools/bench_scale.py engine`), 0.84 s
+  sequential (`capacity`).
 - `04-api-run.txt`: real `POST /processes/1/run` of 4,500 over 5,000 in 13.5 s, API RSS 348 MB.
 - `05-storage-*.txt`: ≈ 25 kB per invoice through the upload API, 4.5 kB per further decision.
 - `06-ingest.txt`: 500 PDFs in 74.4 s, scan median 1,216 ms, 2.64 GB peak RSS.
 - `08-ollama-compile.txt`: `llama3.1:8b` 384 / 38.5 tokens/s, R02 and R16 compiles failed.
 - Code: `agents/sandbox.py` (`_RUNNER` builds `others`), `rules/service.py`
-  (`compile_in_background` left `draft` until the fail-closed fix), `rules/model.py`
-  (`ENFORCED`).
+  (`compile_in_background` left `draft` until the fail-closed fix, and again since ADR
+  0031), `rules/model.py` (`ENFORCED`), `decisions/engine.py` (`decide`, rule pool).
 - Helmcode limits: helmcode.com/docs/rate-limits (100 rpm, 5-10 concurrent per model, 429 with
   `Retry-After`), read 2026-09-19.
 

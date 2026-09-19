@@ -53,8 +53,8 @@ decisions are never silently rewritten.
   queries, and `events` stays a trace, not a work queue.
 - **No duplicates.** Unique on (`decision_id`, `after`): the same decision flagged towards
   the same outcome again, by the same trigger or a later one, adds nothing.
-- **API.** `GET /processes/{id}/alerts?status=`, `POST /alerts/{id}/ack` (`X-User-Id`,
-  optional note). The manager acts with `POST /instances/{id}/resolve` or `reprocess`.
+- **API.** `GET /processes/{id}/alerts?status=`, `POST /alerts/{id}/ack` (manager only,
+  identified by `X-User-Id`; optional note). The manager acts with `POST /instances/{id}/resolve` or `reprocess`.
   Execution metrics carry `open_alerts`. Spans `detect_stale_decisions` (trigger,
   instances, would_change, alerts_created, duration) and `ack_alert`, execution plane.
 
@@ -84,5 +84,5 @@ decisions are never silently rewritten.
 - Code: `backend/app/features/alerts/`, `backend/alembic/versions/0013_alerts.py`.
 
 ## Related
-ADR 0008 (reprocess, findings), 0015 and 0022 (process versions), 0016 (every instance
+ADR 0008 (reprocess, findings), 0015 and 0031 (process versions), 0016 (every instance
 gets a decision), 0018 (spans and planes).

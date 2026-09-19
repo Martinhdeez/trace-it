@@ -53,19 +53,26 @@ in PostgreSQL.
 - Not used yet: `UsageLimits`, graphs or deferred tools. Flow, state and approval are
   ours. `FallbackModel` chains are used since ADR 0019.
 
+**Update (2026-09-19).** More agents use the same entry point: `decision_reviewer`, `learner`,
+`normalizer` and `discovery`, with `TRACE_DECISION_REVIEWER_MODEL`, `TRACE_LEARNER_MODEL`,
+`TRACE_NORMALIZER_MODEL`, `TRACE_DISCOVERY_MODEL` and `TRACE_FALLBACK_MODELS`. `UsageLimits` caps
+requests when a role sets `request_limit`. Each use case versions its agent configuration
+(`use-case.json`, `/use-cases/{id}/agents/{role}/versions`, ADR 0011); the environment gives
+only the defaults.
+
 ## Consequences
 - `features/llm`, the `llm_config` table and `/llm/config` are gone; a model change is an
   environment variable and a restart. Versioned agent configuration stays proposed
-  (ADR 0011).
+  (ADR 0011). (Superseded: see the update above.)
 - When the model fails or gives nothing valid within the retries, the agent fails closed:
   the rule stays a draft, the assistant answers 502, no decision changes.
 - Tests never need a key: `tests/support/models.py` scripts a `FunctionModel` per role.
 
 ## Evidence
-- `agents/llm.py`, `agents/compiler.py`, `agents/assistant.py`; 3 compiler tests and 5
+- `agents/llm.py`, `agents/compiler.py`, `agents/assistant.py`; 14 compiler tests and 6
   assistant tests on scripted models (`agents/tests/`), including one self-repair round and
   the 502 after the retries run out.
-- Real-model runs are opt-in: `make eval-compiler` compiles the 16 invoice rules and
+- Real-model runs are opt-in: `make eval-compiler` compiles the 17 invoice rules and
   compares them with the hand-written code (`backend/evals/`). Not run yet without keys.
 
 ## Related

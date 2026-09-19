@@ -4,8 +4,10 @@ status: accepted
 
 # Verify generated rule code against a blind tester, and activate it by impact
 
-Automatic adoption is superseded by [ADR 0022](0022-publish-approved-process-versions.md).
-Compilation and normalization remain in use.
+Points 4, 6 and 7 (blocked on NeedsData, automatic activation, blocked on a failed compile) are
+superseded by [ADR 0031](0031-publish-approved-process-versions.md): every compilation ends in a
+`draft`, and the manager publishes whole process versions. Compilation and normalization remain
+in use.
 
 ## Context
 Rule code is written by an LLM (ADR 0003). A single model can misread the rule, write a
@@ -51,7 +53,7 @@ implementation only served as a test oracle, at the price of a second full compi
 3. **Disputes**: the coder may object to a failing test, quoting the rule text. The
    tester re-reads the text (never the code) and keeps or corrects the expected result
    (up to 2 review rounds). Every review is kept in the report.
-4. **Missing data**: either agent may answer `NeedsData` (which symbol or source is
+4. **Missing data** (superseded by ADR 0031): either agent may answer `NeedsData` (which symbol or source is
    missing) instead of inventing a field. No code is stored and the rule becomes
    `blocked`: it is enforced by escalating every instance of the process with
    `RULE_NEEDS_DATA` (ADR 0016), without the impact gate (failing closed needs no
@@ -61,7 +63,7 @@ implementation only served as a test oracle, at the price of a second full compi
 5. **Missing values**: a `None` the rule text and description do not cover makes the
    code raise, and the engine escalates the instance with `RULE_ERROR` (ADR 0016). The
    code never guesses, and a failure never pays.
-6. **Activation**: a rule whose tests pass activates by itself when the impact check
+6. **Activation** (superseded by ADR 0031): a rule whose tests pass activates by itself when the impact check
    (ADR 0008) finds no decision taken by a person that would change, and changes at most
    `TRACE_AUTO_ACTIVATE_MAX_CHANGE` (5%) of the decisions already taken. Otherwise it
    stays a draft with the reason in `report.activation`, for a person to decide.
@@ -83,7 +85,7 @@ implementation only served as a test oracle, at the price of a second full compi
    as it was, and hand-written rules never compile. App startup re-queues
    any rule a restart left in `compiling` (best effort: with the database down the API
    still starts, and they wait for the next start or a recompile). The manager never presses "compile".
-   **Superseded by ADR 0022 (atomic publication):** a failed compile now leaves a `draft`
+   **Superseded by ADR 0031 (atomic publication):** a failed compile now leaves a `draft`
    that fails validation, so it cannot be published and the published version keeps deciding.
 8. Models are `provider:model` strings; any PydanticAI provider works, and
    `helmcode:<model>` uses Helmcode's OpenAI-compatible API. The tester should be a
@@ -91,13 +93,15 @@ implementation only served as a test oracle, at the price of a second full compi
 
 ## Consequences
 - Cost per rule: 1 tester run + 1 to 4 coder runs + 0 to 2 reviews; never per instance.
-- A person is involved only by exception: no agreement, needs data, or high impact.
+- A person is involved only by exception: no agreement, needs data, or high impact
+  (superseded by ADR 0031: the manager publishes every version).
 - A rule that needs data costs a queue of escalations until someone adds the symbol or
   source: loud on purpose, since the alternative is paying invoices the rule would stop.
 - A `blocked` rule that recompiles goes through the impact gate, but the decisions it
   escalated itself (`RULE_NEEDS_DATA <id>` or `RULE_COMPILE_FAILED <id>`) do not count
   towards the share: undoing them
-  is the point of the recompile. Contradicting a person still blocks it.
+  is the point of the recompile. Contradicting a person still blocks it. (Superseded by
+  ADR 0031.)
 - The invoice pack runs its tester on `helmcode:deepseek-v4-flash`, the coder's family,
   against point 8: `helmcode:qwen3.6` took about 30 s per rule, deepseek about 3 s. We
   accept a higher chance of a shared misreading for a compile that fits a demo; the
@@ -112,24 +116,26 @@ implementation only served as a test oracle, at the price of a second full compi
 ## Evidence
 - `agents/compiler.py`: `tester`, `coder` and `reviewer` Agents; `compile_text` (the
   loop, without the database); `run_tests`.
-- `rules/service.py`: `_auto_activation` (impact gate) and the `blocked` branch in
-  `_compile`; `compile_in_background`, `resume_compilations` (called from `main.lifespan`).
-- 10 unit tests in `agents/tests/test_compiler.py` with scripted models: green on the
+- `rules/service.py`: `_compile_traced` (every compilation ends in a `draft`),
+  `compile_in_background`, `resume_compilations` (called from `main.lifespan`).
+- 14 tests in `agents/tests/test_compiler.py` with scripted models: green on the
   first attempt (and the tester never sees code); the coder iterates on failing tests; a
   disputed test corrected by the tester; no agreement leaves the rule invalid; NeedsData
   from either agent; unknown symbols rejected; one-sided suites rejected; sandbox repair;
-  still broken after the repairs returns 502.
-- 2 more in `test_compiler.py`: the coder reading an unknown symbol and source is sent
+  still broken after the repairs returns 502; examples come only from other rules; the use
+  case's limits are honoured.
+- Also in `test_compiler.py`: the coder reading an unknown symbol and source is sent
   back and then passes; computed keys and any parameter names are allowed.
-- API tests in `decisions/tests/test_audit.py`: a rule that changes nothing activates
-  itself; one that changes 2 of 3 decisions waits for a person; a saved rule compiles in
-  the background and activates; NeedsData blocks the rule, the next invoice escalates with
-  `RULE_NEEDS_DATA`, and a recompile activates it unless a person decided one of the
-  invoices it escalated; startup resumes a rule left
-  `compiling`; every model down blocks the saved rule, the next invoice escalates with
-  `RULE_COMPILE_FAILED` and a recompile activates it. `processes/tests/test_api.py` and
-  `agents/tests/test_llm.py`: LLM down leaves the rule `blocked` with `report.error`.
-- `make eval-compiler` runs the loop with real models on the 16 invoice rules and scores
+- API tests in `decisions/tests/test_audit.py`:
+  `test_a_valid_rule_that_changes_nothing_still_needs_approval`,
+  `test_a_rule_that_changes_too_much_waits_for_a_person`,
+  `test_a_saved_rule_compiles_and_waits_for_approval`,
+  `test_a_rule_that_needs_data_stays_out_of_execution`,
+  `test_failed_draft_compilation_does_not_change_published_execution`,
+  `test_startup_resumes_rules_left_compiling`. `processes/tests/test_api.py` and
+  `agents/tests/test_llm.py` (`test_a_rule_whose_models_all_fail_stays_a_draft_with_the_error`):
+  LLM down leaves the rule a `draft` with `report.error`.
+- `make eval-compiler` runs the loop with real models on the 17 invoice rules and scores
   the code against the hand-written reference on the 471 golden instances, and the
   reference against the tester's tests.
 
