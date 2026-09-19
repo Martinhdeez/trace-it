@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -111,6 +112,10 @@ class LlmStats(BaseModel):
     retries: int
     input_tokens: int
     output_tokens: int
+    cached_tokens: int = 0  # input tokens served from the provider's prompt cache
+    requests: int = 0  # model requests, retries and fallbacks included
+    fallbacks: int = 0  # calls answered by a later model of the chain (ADR 0019)
+    truncations: int = 0  # calls where a model hit its output-token limit
 
 
 class ProcessMetrics(BaseModel):
@@ -126,3 +131,127 @@ class ProcessMetrics(BaseModel):
     failures: dict[str, int] = Field(examples=[{"MISSING_DATA": 29, "RULE_ERROR": 0}])
     escalated: int  # instances whose latest decision waits for a person
     pending: int  # instances not decided yet
+
+
+class Plane(StrEnum):
+    """What a span belongs to: reading documents and sources, agents writing rule code, or
+    running that code and the people who act on its decisions (`service.PLANES`)."""
+
+    ingestion = "ingestion"
+    agents = "agents"
+    execution = "execution"
+
+
+class PlaneMetrics(BaseModel):
+    plane: Plane
+    process_id: int | None  # None: every process
+    since: datetime | None
+    spans: int
+    errors: int
+    steps: list[StepStats]  # the plane's step types only
+
+
+class IngestionMetrics(PlaneMetrics):
+    files: int  # documents read into instances (`ingest_document`, `extract_document`)
+    files_per_second: float | None  # from the first reading's start to the last one's end
+    pages: int  # read by the native text layer
+    ocr_calls: int
+    vision_calls: int
+    judge_calls: int
+    focused_reads: int
+    cache_hits: int  # extractions answered from the extraction cache
+    # Declared symbols a reading left null: extraction abstained instead of guessing.
+    abstentions: int
+    abstentions_by_field: dict[str, int] = Field(examples=[{"iban": 12, "date": 3}])
+
+
+class TokenStats(BaseModel):
+    """LLM calls grouped by one key: a model, a role, a rule, a norm rule or a use case."""
+
+    key: str | None
+    calls: int
+    errors: int
+    retries: int
+    requests: int
+    fallbacks: int
+    truncations: int
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int
+
+
+class TokenBucket(BaseModel):
+    hour: datetime
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int
+
+
+class CompileStats(BaseModel):
+    compilations: int  # `compile_rule` spans
+    valid: int  # ended with code that passed its tests
+    success_rate: float | None
+    attempts: int  # `coder_attempt` spans
+    attempts_per_compilation: float | None
+    max_attempts: int  # the most coder attempts one compilation took
+
+
+class NormStats(BaseModel):
+    """One norm submitted: what its agents spent, and when its rules went live."""
+
+    trace_id: str
+    started_at: datetime
+    author: str | None
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    rules_activated: int
+    seconds_to_active: float | None  # norm submitted -> its last rule activated
+
+
+class AgentsMetrics(PlaneMetrics):
+    llm: list[LlmStats]  # by model and role
+    by_model: list[TokenStats]
+    by_role: list[TokenStats]
+    by_rule: list[TokenStats]
+    by_norm_rule: list[TokenStats]
+    by_use_case: list[TokenStats]
+    per_hour: list[TokenBucket]
+    compile: CompileStats
+    norms: list[NormStats]  # newest first
+
+
+class RuleRunStats(BaseModel):
+    rule_id: int | None
+    evaluations: int  # `evaluate_rule` spans: one per rule per run
+    instances: int
+    fired: int
+    errors: int
+    p50_ms: float | None
+    p95_ms: float | None
+
+
+class ExecutionMetrics(PlaneMetrics):
+    runs: int
+    instances_decided: int
+    instances_per_second: float | None
+    rules: list[RuleRunStats]
+    decisions_by_outcome: dict[str, int]
+    failures: dict[str, int]  # escalations by cause (MISSING_DATA, RULE_ERROR...)
+    escalated: int  # the human queue now
+    pending: int  # instances not decided yet
+    resolutions: int  # decisions people took
+    resolutions_by_author: dict[str, int]
+    resolution_p50_s: float | None  # engine decision -> the person's decision after it
+    resolution_p95_s: float | None
+
+
+class PlaneHealth(BaseModel):
+    plane: Plane
+    status: str = Field(examples=["ok", "degraded", "down"])
+    spans: int
+    errors: int
+    error_rate: float | None
+    p95_ms: float | None
+    reason: str | None  # why it is not ok

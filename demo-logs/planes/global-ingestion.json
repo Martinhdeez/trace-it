@@ -1,0 +1,93 @@
+{
+    "plane": "ingestion",
+    "process_id": null,
+    "since": null,
+    "spans": 61,
+    "errors": 2,
+    "steps": [
+        {
+            "step": "extraction",
+            "count": 12,
+            "errors": 0,
+            "p50_ms": 5.0,
+            "p95_ms": 171.34999999999988
+        },
+        {
+            "step": "ingest_document",
+            "count": 11,
+            "errors": 0,
+            "p50_ms": 4.0,
+            "p95_ms": 150.9999999999999
+        },
+        {
+            "step": "load_workbook",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": null,
+            "p95_ms": null
+        },
+        {
+            "step": "native_text",
+            "count": 11,
+            "errors": 0,
+            "p50_ms": 2.0,
+            "p95_ms": 2.999999999999999
+        },
+        {
+            "step": "ocr",
+            "count": 2,
+            "errors": 2,
+            "p50_ms": 144.5,
+            "p95_ms": 229.54999999999998
+        },
+        {
+            "step": "store_file",
+            "count": 11,
+            "errors": 0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0
+        },
+        {
+            "step": "sync_source",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 5446.0,
+            "p95_ms": 5446.0
+        },
+        {
+            "step": "upload_document",
+            "count": 11,
+            "errors": 0,
+            "p50_ms": 18.0,
+            "p95_ms": 164.9999999999999
+        },
+        {
+            "step": "upload_workbook",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 220.0,
+            "p95_ms": 220.0
+        }
+    ],
+    "files": 11,
+    "files_per_second": 17.98,
+    "pages": 11,
+    "ocr_calls": 2,
+    "vision_calls": 0,
+    "judge_calls": 0,
+    "focused_reads": 0,
+    "cache_hits": 0,
+    "abstentions": 20,
+    "abstentions_by_field": {
+        "base": 1,
+        "date": 1,
+        "iban": 1,
+        "invoice_number": 1,
+        "issuer_name": 11,
+        "issuer_nif": 1,
+        "purchase_order": 1,
+        "total": 1,
+        "vat_amount": 1,
+        "vat_rate": 1
+    }
+}

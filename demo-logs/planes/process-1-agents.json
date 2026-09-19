@@ -1,0 +1,267 @@
+{
+    "plane": "agents",
+    "process_id": 1,
+    "since": null,
+    "spans": 28,
+    "errors": 0,
+    "steps": [
+        {
+            "step": "activate_rule",
+            "count": 17,
+            "errors": 0,
+            "p50_ms": 3.0,
+            "p95_ms": 6.199999999999996
+        },
+        {
+            "step": "coder_attempt",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 4086.0,
+            "p95_ms": 4086.0
+        },
+        {
+            "step": "compile_rule",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 8618.0,
+            "p95_ms": 8618.0
+        },
+        {
+            "step": "compile_rules",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 8620.0,
+            "p95_ms": 8620.0
+        },
+        {
+            "step": "impact_check",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 19.0,
+            "p95_ms": 19.0
+        },
+        {
+            "step": "llm_run",
+            "count": 3,
+            "errors": 0,
+            "p50_ms": 4058.0,
+            "p95_ms": 4440.5
+        },
+        {
+            "step": "load_definition",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 31.0,
+            "p95_ms": 31.0
+        },
+        {
+            "step": "norm",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 4188.0,
+            "p95_ms": 4188.0
+        },
+        {
+            "step": "normalize_norm",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 4159.0,
+            "p95_ms": 4159.0
+        },
+        {
+            "step": "run_tests",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 25.0,
+            "p95_ms": 25.0
+        }
+    ],
+    "llm": [
+        {
+            "model": "deepseek/deepseek-v4.1-flash",
+            "role": "compiler",
+            "calls": 1,
+            "errors": 0,
+            "retries": 0,
+            "input_tokens": 5229,
+            "output_tokens": 656,
+            "cached_tokens": 0,
+            "requests": 1,
+            "fallbacks": 0,
+            "truncations": 0
+        },
+        {
+            "model": "deepseek/deepseek-v4.1-flash",
+            "role": "normalizer",
+            "calls": 1,
+            "errors": 0,
+            "retries": 0,
+            "input_tokens": 4267,
+            "output_tokens": 637,
+            "cached_tokens": 0,
+            "requests": 1,
+            "fallbacks": 0,
+            "truncations": 0
+        },
+        {
+            "model": "deepseek/deepseek-v4.1-flash",
+            "role": "tester",
+            "calls": 1,
+            "errors": 0,
+            "retries": 0,
+            "input_tokens": 2570,
+            "output_tokens": 1129,
+            "cached_tokens": 0,
+            "requests": 1,
+            "fallbacks": 0,
+            "truncations": 0
+        }
+    ],
+    "by_model": [
+        {
+            "key": "deepseek/deepseek-v4.1-flash",
+            "calls": 3,
+            "errors": 0,
+            "retries": 0,
+            "requests": 3,
+            "fallbacks": 0,
+            "truncations": 0,
+            "input_tokens": 12066,
+            "output_tokens": 2422,
+            "cached_tokens": 0
+        }
+    ],
+    "by_role": [
+        {
+            "key": "compiler",
+            "calls": 1,
+            "errors": 0,
+            "retries": 0,
+            "requests": 1,
+            "fallbacks": 0,
+            "truncations": 0,
+            "input_tokens": 5229,
+            "output_tokens": 656,
+            "cached_tokens": 0
+        },
+        {
+            "key": "normalizer",
+            "calls": 1,
+            "errors": 0,
+            "retries": 0,
+            "requests": 1,
+            "fallbacks": 0,
+            "truncations": 0,
+            "input_tokens": 4267,
+            "output_tokens": 637,
+            "cached_tokens": 0
+        },
+        {
+            "key": "tester",
+            "calls": 1,
+            "errors": 0,
+            "retries": 0,
+            "requests": 1,
+            "fallbacks": 0,
+            "truncations": 0,
+            "input_tokens": 2570,
+            "output_tokens": 1129,
+            "cached_tokens": 0
+        }
+    ],
+    "by_rule": [
+        {
+            "key": "17",
+            "calls": 2,
+            "errors": 0,
+            "retries": 0,
+            "requests": 2,
+            "fallbacks": 0,
+            "truncations": 0,
+            "input_tokens": 7799,
+            "output_tokens": 1785,
+            "cached_tokens": 0
+        },
+        {
+            "key": null,
+            "calls": 1,
+            "errors": 0,
+            "retries": 0,
+            "requests": 1,
+            "fallbacks": 0,
+            "truncations": 0,
+            "input_tokens": 4267,
+            "output_tokens": 637,
+            "cached_tokens": 0
+        }
+    ],
+    "by_norm_rule": [
+        {
+            "key": "1",
+            "calls": 2,
+            "errors": 0,
+            "retries": 0,
+            "requests": 2,
+            "fallbacks": 0,
+            "truncations": 0,
+            "input_tokens": 7799,
+            "output_tokens": 1785,
+            "cached_tokens": 0
+        },
+        {
+            "key": null,
+            "calls": 1,
+            "errors": 0,
+            "retries": 0,
+            "requests": 1,
+            "fallbacks": 0,
+            "truncations": 0,
+            "input_tokens": 4267,
+            "output_tokens": 637,
+            "cached_tokens": 0
+        }
+    ],
+    "by_use_case": [
+        {
+            "key": "1",
+            "calls": 3,
+            "errors": 0,
+            "retries": 0,
+            "requests": 3,
+            "fallbacks": 0,
+            "truncations": 0,
+            "input_tokens": 12066,
+            "output_tokens": 2422,
+            "cached_tokens": 0
+        }
+    ],
+    "per_hour": [
+        {
+            "hour": "2026-09-19T08:00:00Z",
+            "calls": 3,
+            "input_tokens": 12066,
+            "output_tokens": 2422,
+            "cached_tokens": 0
+        }
+    ],
+    "compile": {
+        "compilations": 1,
+        "valid": 1,
+        "success_rate": 1.0,
+        "attempts": 1,
+        "attempts_per_compilation": 1.0,
+        "max_attempts": 1
+    },
+    "norms": [
+        {
+            "trace_id": "01a0b8c9eb532bf6cb8520a5319ee0ba",
+            "started_at": "2026-09-19T08:30:35.862562Z",
+            "author": "Mart\u00edn",
+            "calls": 3,
+            "input_tokens": 12066,
+            "output_tokens": 2422,
+            "rules_activated": 1,
+            "seconds_to_active": 12.8
+        }
+    ]
+}

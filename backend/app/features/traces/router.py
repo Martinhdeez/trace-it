@@ -1,11 +1,17 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Query
+from fastapi.responses import StreamingResponse
 
 from app.core.database import Session
 from app.features.traces import service
 from app.features.traces.schemas import (
+    AgentsMetrics,
+    ExecutionMetrics,
+    IngestionMetrics,
     InstanceTrace,
+    Plane,
+    PlaneHealth,
     ProcessMetrics,
     RuleTrace,
     SpanNode,
@@ -75,3 +81,74 @@ async def get_process_metrics(
     process_id: int, session: Session, since: datetime | None = None
 ) -> ProcessMetrics:
     return await service.metrics(session, process_id, since)
+
+
+PLANES_DOC = (
+    "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span "
+    "name to one): `ingestion` (upload, store, extraction, native text, OCR, vision, "
+    "workbook, source sync: files/s, pages, calls, cache hits, abstentions), `agents` "
+    "(normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, "
+    "impact, activation: tokens by model, role, rule, norm rule, use case and hour, "
+    "fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, "
+    "decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the "
+    "human queue, time to resolution). Each has `steps` with count, errors, p50/p95. Cost "
+    "is counted in tokens. `since` keeps what happened from that moment on."
+)
+PlaneOut = IngestionMetrics | AgentsMetrics | ExecutionMetrics
+
+
+@router.get(
+    "/processes/{process_id}/metrics/{plane}",
+    operation_id="getProcessPlaneMetrics",
+    summary="One monitoring plane of a process: ingestion, agents or execution",
+    description=PLANES_DOC,
+)
+async def get_process_plane_metrics(
+    process_id: int, plane: Plane, session: Session, since: datetime | None = None
+) -> PlaneOut:
+    return await service.plane_metrics(session, plane, process_id, since)
+
+
+@router.get(
+    "/metrics/{plane}",
+    operation_id="getPlaneMetrics",
+    summary="One monitoring plane across every process",
+    description=PLANES_DOC,
+)
+async def get_plane_metrics(
+    plane: Plane, session: Session, since: datetime | None = None
+) -> PlaneOut:
+    return await service.plane_metrics(session, plane, None, since)
+
+
+@router.get(
+    "/health/planes",
+    operation_id="getPlanesHealth",
+    summary="Each plane now: ok, degraded or down",
+    description="Over the last `TRACE_HEALTH_WINDOW_MINUTES`: `down` from "
+    "`TRACE_HEALTH_DOWN_ERROR_RATE` of spans in error, `degraded` from "
+    "`TRACE_HEALTH_DEGRADED_ERROR_RATE` or when the plane's p95 span duration passes "
+    "`TRACE_HEALTH_P95_MS[plane]`. No spans in the window is `ok`.",
+)
+async def get_planes_health(session: Session) -> list[PlaneHealth]:
+    return await service.health(session)
+
+
+@router.get(
+    "/events/stream",
+    operation_id="streamEvents",
+    summary="Every new span, live (server-sent events)",
+    description="`text/event-stream`: one event per span as it is written, `event` is its "
+    "plane, `id` its `events.id`, `data` a span as in `GET /traces`. `: ping` when nothing "
+    "new came in the last second. Filter by `plane` and `process_id`; `after` replays from "
+    "that id (default: only new spans).",
+    response_class=StreamingResponse,
+)
+async def stream_events(
+    plane: Plane | None = None, process_id: int | None = None, after: int | None = None
+) -> StreamingResponse:
+    return StreamingResponse(
+        service.stream(plane, process_id, after),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
