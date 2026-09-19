@@ -8,18 +8,26 @@ A pack with `<pack>/use-case.json` loads its use case first: the domain descript
 how its agents work (models, guidance, limits, examples).
 
 `sources sync <pack.json>` downloads an HTTP source (the ERP) into a new snapshot.
+
+`export <pack.json> --files <dir> --output <file>` writes the outcomes of the instances named
+like the PDFs of a folder (one delivery batch) and checks the file; `check-outcomes <file>
+--files <dir>` only checks it (`docs/runbook-batch2.md`).
 """
 
 import argparse
 import asyncio
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 from pydantic import ValidationError
 from sqlalchemy import select
 
+from app.common.exceptions import ConflictError
 from app.core.database import engine, session_factory
+from app.features.decisions import outcomes_file
+from app.features.decisions import service as decisions
 from app.features.processes.definition import Definition, load_pack
 from app.features.processes.model import Process
 from app.features.rules import service as rules
@@ -72,10 +80,7 @@ async def load(file: Path, compile_: bool, activate: bool) -> None:
 
 async def sync_source(file: Path, name: str) -> None:
     async with session_factory() as session:
-        process_name = json.loads(file.read_text(encoding="utf-8"))["name"]
-        process = await session.scalar(select(Process).where(Process.name == process_name))
-        if process is None:
-            sys.exit(f"Process {process_name!r} is not loaded: run `python -m app.cli load {file}`")
+        process = await process_of(session, file)
         config = sources.load_config(sources.pack_sources_file(file), name)
         try:
             result = await sources.sync(session, process.id, name, config)
@@ -100,6 +105,42 @@ async def sync_source(file: Path, name: str) -> None:
     await engine.dispose()
 
 
+async def process_of(session, file: Path) -> Process:
+    process_name = json.loads(file.read_text(encoding="utf-8"))["name"]
+    process = await session.scalar(select(Process).where(Process.name == process_name))
+    if process is None:
+        sys.exit(f"Process {process_name!r} is not loaded: run `python -m app.cli load {file}`")
+    return process
+
+
+def check_outcomes(output: Path, files: Path) -> None:
+    text = output.read_text(encoding="utf-8")
+    batch = outcomes_file.batch_files(files)
+    found = outcomes_file.problems(text, batch)
+    print(f"{output}: {len(text.splitlines())} lines for {len(batch)} PDFs in {files}")
+    if found:
+        sys.exit("NOT deliverable:\n  " + "\n  ".join(found[:50]))
+    results = Counter(json.loads(line)["result"] for line in text.splitlines())
+    print(f"OK: one line per file, valid results {dict(sorted(results.items()))}")
+
+
+async def export(file: Path, files: Path, output: Path) -> None:
+    async with session_factory() as session:
+        process = await process_of(session, file)
+        try:
+            body, duplicates = await decisions.export(
+                session, process.id, outcomes_file.batch_files(files)
+            )
+        except ConflictError as e:
+            sys.exit(f"export refused: {e.message}")
+    await engine.dispose()
+    if duplicates:
+        print(f"WARNING: names shared by several instances, latest exported: {duplicates}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(body + "\n" if body else "", encoding="utf-8")
+    check_outcomes(output, files)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -114,11 +155,22 @@ def main() -> None:
     action = actions.add_parser("sync", help="Download an HTTP source into a new snapshot")
     action.add_argument("file", type=Path, help="The process pack, e.g. processes/x.json")
     action.add_argument("--source", default="erp")
+    command = commands.add_parser("export", help="Outcomes of one batch (a folder of PDFs)")
+    command.add_argument("file", type=Path, help="The process pack, e.g. processes/x.json")
+    command.add_argument("--files", type=Path, required=True, help="Folder with the batch's PDFs")
+    command.add_argument("--output", type=Path, required=True)
+    command = commands.add_parser("check-outcomes", help="Check an outcomes JSONL for a batch")
+    command.add_argument("output", type=Path)
+    command.add_argument("--files", type=Path, required=True, help="Folder with the batch's PDFs")
     args = parser.parse_args()
     if args.command == "load":
         asyncio.run(load(args.file, args.compile, args.activate))
-    else:
+    elif args.command == "sources":
         asyncio.run(sync_source(args.file, args.source))
+    elif args.command == "export":
+        asyncio.run(export(args.file, args.files, args.output))
+    else:
+        check_outcomes(args.output, args.files)
 
 
 if __name__ == "__main__":
