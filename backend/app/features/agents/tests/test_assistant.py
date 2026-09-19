@@ -120,7 +120,7 @@ async def case(request):
             ]
         )
         await s.commit()
-        yield {"escalated": escalated.id, "pending": pending.id}
+        yield {"escalated": escalated.id, "pending": pending.id, "old": old.id}
     await engine.dispose()  # connections are bound to this test's event loop
 
 
@@ -188,8 +188,8 @@ async def test_invalid_decision_retries_once(case, monkeypatch) -> None:
     assert "REJECT" in retry and run.data["output"]["decision"] == "NO_PAGAR"
 
 
-async def test_three_invalid_decisions_give_502(case, monkeypatch) -> None:
-    script(monkeypatch, [{**SUGGESTION, "decision": "REJECT"}] * 3)
+async def test_four_invalid_decisions_give_502(case, monkeypatch) -> None:
+    script(monkeypatch, [{**SUGGESTION, "decision": "REJECT"}] * 4)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         r = await api.get(f"/instances/{case['escalated']}/suggestion")
     assert r.status_code == 502, r.text
@@ -253,3 +253,92 @@ async def test_no_rule_is_a_valid_answer(case, monkeypatch) -> None:
     assert suggestion.decision == "NO_PAGAR"  # still a final decision
     first, second = retry_prompts(calls[-1])
     assert "proposed_rule must be null" in first and "or no_rule_reason" in second
+
+
+async def escalate_as(case, reason: str, fired_reason: str | None = None) -> None:
+    """The escalated case's engine decision, now with `reason` (and its fired rule's)."""
+    async with session_factory() as s:
+        decision = await s.scalar(select(Decision).where(Decision.instance_id == case["escalated"]))
+        decision.reason = reason
+        if fired_reason:
+            decision.results = [{**decision.results[0], "reason": fired_reason}]
+        await s.commit()
+
+
+KEEP = {"decision": "ESCALAR", "consequence": "Mantener escalado y pedir el importe al proveedor."}
+
+
+async def test_an_engine_escalation_keeps_a_person_deciding(case, monkeypatch) -> None:
+    """MISSING_DATA and the other engine codes: no rule decides them. The advice must offer
+    to keep the case escalated and say a person decides."""
+    await escalate_as(case, "MISSING_DATA: amount")
+    kept = {**NO_RULE, "decision": "ESCALAR", "options": [*NO_RULE["options"], KEEP]}
+    calls = script(monkeypatch, [NO_RULE, {**kept, "no_rule_reason": None}, kept])
+    async with session_factory() as s:
+        suggestion = await assistant.suggest(s, case["escalated"])
+    assert suggestion.decision == "ESCALAR" and suggestion.no_rule_reason
+    assert user_json(calls[0])["escalation"]["engine_code"] == "MISSING_DATA"
+    first, second = retry_prompts(calls[-1])
+    assert "for: NO_PAGAR, PAGAR, ESCALAR (ESCALAR: 'mantener escalado / pedir el dato'" in first
+    assert "MISSING_DATA is an engine escalation, not a rule" in second
+
+
+async def test_jargon_and_closing_without_a_person_are_sent_back(case, monkeypatch) -> None:
+    closes = {**SUGGESTION, "reasoning": "Se paga y el caso se cierra sin intervención humana."}
+    coded = {**SUGGESTION, "why": ["El `amount` de symbol:amount supera la regla R01."]}
+    calls = script(monkeypatch, [closes, coded, SUGGESTION])
+    async with session_factory() as s:
+        suggestion = await assistant.suggest(s, case["escalated"])
+    assert suggestion == assistant.Suggestion(**SUGGESTION)
+    first, second = retry_prompts(calls[-1])
+    assert "reasoning says the case closes without a person" in first
+    assert "why[0] uses ['R01', '`', 'symbol:']" in second
+
+
+async def test_both_invoices_of_one_order_are_advised_consistently(case, monkeypatch) -> None:
+    """A fired rule that names another case (a duplicate order): the advice says which one
+    is paid, or that a person must compare them. NO_PAGAR on both means never paid."""
+    async with session_factory() as s:
+        (await s.get(Instance, case["old"])).name = "factura_41082.pdf"
+        await s.commit()
+    await escalate_as(case, "x", "Same purchase order as: factura_41082.pdf")
+    paired = {
+        **SUGGESTION,
+        "reasoning": "Se paga la primera recibida, esta; factura_41082.pdf es el duplicado.",
+    }
+    calls = script(monkeypatch, [SUGGESTION, paired])
+    async with session_factory() as s:
+        suggestion = await assistant.suggest(s, case["escalated"])
+    assert suggestion.reasoning == paired["reasoning"]
+    [related] = user_json(calls[0])["escalation"]["related_cases"]
+    assert (related["name"], related["decision"], related["received"]) == (
+        "factura_41082.pdf",
+        "NO_PAGAR",
+        "after",
+    )
+    [retry] = retry_prompts(calls[-1])
+    assert "involves other cases (factura_41082.pdf)" in retry
+
+
+async def test_the_decision_assistant_runs_without_reasoning_under_a_tight_cap(monkeypatch):
+    """Latency: the decision assistant shares the `assistant` role's settings with the
+    reviewer agent (reasoning off, max_tokens capped); the model receives both."""
+    from pydantic_ai.messages import ModelResponse, ToolCallPart
+    from pydantic_ai.models.function import FunctionModel
+
+    from tests.support.pack import use_case
+
+    received = []
+
+    def answer(messages, info):
+        received.append(info.model_settings)
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, SUGGESTION)])
+
+    monkeypatch.setattr(llm, "resolve", lambda name, *_: FunctionModel(answer, model_name=name))
+    types = ["ESCALAR", "NO_PAGAR", "PAGAR"]
+    deps = assistant.Deps(types, ["NO_PAGAR", "PAGAR"], {"symbol:amount", "file"})
+    setup = llm.Setup(use_case().agents["assistant"])
+    await llm.run(assistant.assistant, "assistant", "{}", instructions="", setup=setup, deps=deps)
+    [model_settings] = received
+    assert model_settings["openai_reasoning_effort"] == "none"
+    assert model_settings["max_tokens"] <= 1500

@@ -11,6 +11,7 @@ export const paths = {
   history: (id: number | string) => `/processes/${id}?vista=historial`,
   /** The console: panel, definition, runs, review and settings, one tab each. */
   panel: (id: number | string) => `/processes/${id}/panel`,
+  processChat: (id: number | string) => `/processes/${id}/chat`,
   definition: (id: number | string) => `/processes/${id}/definition`,
   definitionContext: (id: number | string) => `/processes/${id}/definition/contexto`,
   definitionInputs: (id: number | string) => `/processes/${id}/definition/inputs`,

@@ -1,10 +1,14 @@
-# Runbook: batch 2, ERP update and norm v4 (Saturday 18:00)
+# Historical rehearsal: batch 2, ERP update and a hypothetical norm v4
 
 For the actual 40-PDF corpus at challenge commit `f831e34`, the reader fixes,
 explicit currency review policy and cumulative-reference tooling are documented in
 [Batch 2 compatibility](batch2-compatibility.md). This historical runbook still names
 the frozen v3 process; that immutable snapshot does not acquire the adapted pack's
 new rules automatically.
+
+The organisers' batch-2 commit did not contain a norm v4. The EUR 10,000 rule below was
+a synthetic rehearsal input written by the team before the real batch arrived. It is not
+challenge policy and is not applied to either delivery JSONL.
 
 What arrives: 40 invoice PDFs, an ERP update (`erp_export_lote2.csv` for
 `alberto_erp.py --lote2`), and "norma v4" in loose natural language, maybe as a new sheet of
