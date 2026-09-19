@@ -61,8 +61,8 @@ def test_one_escalation_rule_over_the_persons_decision_is_learnable():
 
 
 SUGGESTION = {
-    "text": "The iban differs from every iban the suppliers master has for that nif, "
-    "unless the erp order is still PENDIENTE.",
+    "text": "The `iban` differs from every `iban` the `suppliers` master has for that `nif`, "
+    "unless the `erp` order is still PENDIENTE.",
     "type": "prohibition",
     "summary": "Escala un IBAN distinto del maestro salvo si el pedido sigue pendiente",
     "rationale": "La persona pagó porque el pedido seguía pendiente en el ERP.",
@@ -148,8 +148,8 @@ async def test_a_rule_that_names_the_case_is_sent_back(monkeypatch):
 
 NARROWER = {
     **SUGGESTION,
-    "text": "The iban differs from every iban the suppliers master has for that nif, "
-    "unless the erp order is still PENDIENTE and its amount matches total.",
+    "text": "The `iban` differs from every `iban` the `suppliers` master has for that `nif`, "
+    "unless the `erp` order is still PENDIENTE and its `purchase_order` matches.",
 }
 
 
@@ -449,7 +449,7 @@ RULES = {
 }
 HOTEL = {**{"nif": "B96233419", "iban": "ES2100752345670600123456"}, "vat_rate": 10}
 LEARNED = {
-    "text": "The printed vat_rate is other than 21 and other than 10 (the reduced rate "
+    "text": "The printed `vat_rate` is other than 21 and other than 10 (the reduced rate "
     "for hotel and catering services).",
     "type": "prohibition",
     "summary": "Escala un IVA distinto del 21 % y del 10 %",
@@ -535,3 +535,30 @@ async def test_the_e2e_can_seed_a_suggestion_without_a_model(monkeypatch):
     assert (listed["channel"], listed["kind"]) == ("escalation", "rule")
     assert listed["payload"]["replaces"] == iban and listed["payload"]["resolved_as"] == "PAGAR"
     assert seen == {"assistant": []}
+
+
+async def test_a_rule_on_data_no_field_carries_is_sent_back(monkeypatch):
+    """Only data decides: a rule on a field that does not exist (a sector) cannot compile,
+    and a rule whose rationale admits the data does not carry it is no rule."""
+    sector = {**SUGGESTION, "text": "The `iban` differs, unless `supplier_sector` is catering."}
+    admits = {**SUGGESTION, "rationale": "No hay datos del sector, así que uso el pedido."}
+    async with client() as api:
+        _, headers, iid, seen = await resolved(api, monkeypatch, [sector, admits, SUGGESTION])
+        proposal = await suggest(api, iid, headers)
+    assert proposal["payload"]["text"] == SUGGESTION["text"]
+    fields = user_json(seen["assistant"][0])["available_fields"]
+    assert "nif" in fields["symbols"] and "erp" in fields["sources"]
+    first, second = retry_prompts(seen["assistant"][-1])
+    assert "the rule reads ['supplier_sector'], which no rule can read" in first
+    assert "nif" in first  # the fields it may use, listed
+    assert "the data does not carry it" in second
+
+
+async def test_the_managers_text_is_plain_spanish(monkeypatch):
+    coded = {**SUGGESTION, "summary": "Escala R17 salvo erp.status PENDIENTE"}
+    async with client() as api:
+        _, headers, iid, seen = await resolved(api, monkeypatch, [coded, SUGGESTION])
+        proposal = await suggest(api, iid, headers)
+    assert proposal["summary"] == SUGGESTION["summary"]
+    [retry] = retry_prompts(seen["assistant"][-1])
+    assert "summary uses ['R17', 'erp.status']" in retry
