@@ -36,7 +36,9 @@ async def test_the_harness_decides_batch_1_with_the_normalized_checks(monkeypatc
     sentence = {
         "number": 1,
         "text": "Pagar solo si el NIF esta en el maestro",
-        "checks": [{**check, "interpretation": "'Pay only if': not paid when it fails."}],
+        "checks": [
+            {**check, "decision_source": "policy", "interpretation": "'Pay only if': no outcome."}
+        ],
         "policies": ["When in doubt, escalate."],
     }
     scripts = {

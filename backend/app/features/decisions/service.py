@@ -4,7 +4,7 @@ import logging
 from collections import Counter
 from dataclasses import asdict
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError, NotFoundError
@@ -106,6 +106,22 @@ async def active_rules(session: AsyncSession, process_id: int) -> list[Rule]:
     )
 
 
+async def ready_rules(session: AsyncSession, process_id: int) -> list[Rule]:
+    """The enforced rules, refused while a rule is compiling or when none is enforced:
+    every instance would get the default decision with its rules still to come."""
+    compiling = await session.scalar(
+        select(func.count())
+        .select_from(Rule)
+        .where(Rule.process_id == process_id, Rule.status == "compiling")
+    )
+    if compiling:
+        raise ConflictError(f"{compiling} rules are still compiling; run when they finish")
+    rules = await active_rules(session, process_id)
+    if not rules:
+        raise ConflictError("The process has no active rules; activate its rules first")
+    return rules
+
+
 async def decide_all(
     session: AsyncSession, process_id: int, rules: list[Rule], selected: list[Instance]
 ) -> list[Verdict]:
@@ -147,7 +163,7 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
     instance without symbols is not run and stays PENDING until extraction fills them.
     """
     await get_process(session, process_id)
-    rules = await active_rules(session, process_id)
+    rules = await ready_rules(session, process_id)
     pending = [
         i
         for i in await session.scalars(
@@ -209,6 +225,7 @@ async def reprocess(
     answers the same without writing anything.
     """
     await get_process(session, process_id)
+    rules = await ready_rules(session, process_id)
     query = (
         select(Instance)
         .where(Instance.process_id == process_id, Instance.status == "DECIDED")
@@ -219,7 +236,6 @@ async def reprocess(
         query = query.where(Instance.name.in_(names))
     selected = [i for i in await session.scalars(query) if i.symbols is not None]
     latest = await latest_decisions(session, selected)
-    rules = await active_rules(session, process_id)
     verdicts = await decide_all(session, process_id, rules, selected)
 
     unchanged = 0

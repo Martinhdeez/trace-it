@@ -43,10 +43,29 @@ checks, possibly with different decisions.
   interpretation}`, `policies` (statements that are not checkable) and `covered` (ids of
   active rules already implementing it).
 - Autonomy rules, process-agnostic, in the prompt: one condition per check; English text
-  naming exact symbols and columns; the decision is what the norm says or implies ("pay
-  only if" -> do not pay), else the norm's own tie-breaker ("ante duda razonable,
-  escalar"), else the most conservative type that requires a human; never invent data
-  (the compiler answers NeedsData).
+  naming exact symbols and columns; never invent data (the compiler answers NeedsData).
+- **Decision of a failed check** (revised 2026-09-19, product owner: "a rule not complied
+  with rejects; a rule that cannot be applied escalates"). Each check reports
+  `decision_source`: `explicit` when its sentence names the outcome of the failure in
+  words ("no pagar", "rechazar", "escalar"), with those words in `quote`; `policy` when it
+  does not. "Pagar solo si X" states a condition, not an outcome, so it is `policy`. A
+  `policy` check gets the use case's `failed_check_decision` (normalizer `AgentSettings`,
+  ADR 0011) in code, whatever the model wrote; without one, the model falls back to the
+  norm's tie-breaker, then the most conservative type that requires a human. The
+  validator rejects an `explicit` check whose `quote` is not in its sentence, and
+  `normalize` refuses (409) a policy that is not a decision type of the process or is the
+  default (it would pay). The invoice use case sets `NO_PAGAR`. Both fields are kept in
+  the check's `report.norm`.
+- **Cannot apply is not a failure.** A check whose value is missing or unusable, when
+  neither its text nor the description says what to do, is escalated by the platform
+  (`MISSING_DATA`, `RULE_ERROR`, `RULE_NEEDS_DATA`, `RULE_CONFLICT`, ADR 0016), never
+  decided by the policy. The normalizer prompt says so, and the coder prompt makes such
+  code raise instead of returning "does not fire". The invoice description adds that a
+  rule comparing an impossible date does not fire (the validity check already fails), so
+  the three impossible dates are rejected, not escalated.
+- `POST /processes/{id}/run` and `/reprocess` refuse (409) while any rule of the process
+  is `compiling`, or when none is `active` or `blocked`: a run started while the norm's
+  checks compiled decided 500 invoices with no rule, all paid by default.
 - Output validator (`ModelRetry`): decisions exist and are never the default type, check
   texts unique and not already active, `covered` ids exist, no empty sentence.
 - `POST /processes/{id}/norm` (manager) creates the norm rules and their checks (status
@@ -83,6 +102,22 @@ checks, possibly with different decisions.
   the endpoint creates norm rules whose checks all compile and keep `report.norm`;
   compilations bounded by the limit; operator 403),
   `evals/test_norm_eval.py` (the harness with scripted models: 436/471 with one check).
+
+- Policy runs, `make eval-norm`, 2026-09-19, same models, `failed_check_decision` =
+  `NO_PAGAR`, 11 checks, all `policy`, all `NO_PAGAR`, all valid first time:
+  - With the new coder principle and no date convention: 466/471. The future-date check
+    raised on the 3 impossible dates (`RULE_ERROR`), which escalated them; the duplicated
+    order paid (sentence 5 read only as "ERP status PAGADA").
+  - With the date convention: **469/471**, 1.3 min, 26 agent runs, 118k input + 51k
+    output tokens; 433 PAGAR, 38 NO_PAGAR, 0 ESCALAR. Only mismatch: the duplicated order
+    PO-2026-0492 (2 files) is NO_PAGAR (non-compliance with "nunca pagar dos veces") where
+    the golden says ESCALAR (a team decision the policy supersedes).
+- Tests: `agents/tests/test_normalizer.py` (policy applied to an unstated decision, an
+  explicit decision kept, no policy leaves the model's, an unknown or default policy
+  refused, a quote not in its sentence retried, the invoice use case sets `NO_PAGAR` and
+  disables the share limit), `decisions/tests/test_api.py` (run and reprocess refused
+  while compiling or with no enforced rule). The four escalation paths were already covered in
+  `decisions/tests/test_engine.py`.
 
 ## Related
 ADR 0003, 0004, 0006, 0011, 0016.

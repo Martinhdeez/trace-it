@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import update
 
 from app.core.database import session_factory
 from app.features.agents import sandbox
@@ -329,6 +330,31 @@ async def test_a_required_symbol_missing_escalates(fake_sandbox: None) -> None:
         detail = (await api.get(f"/instances/{scan_id}")).json()
         assert detail["decision"] == "ESCALAR"
         assert detail["decisions"][0]["reason"] == "MISSING_DATA: nif"
+
+
+@pytest.mark.parametrize(
+    ("status", "message"),
+    [("compiling", "rules are still compiling"), ("retired", "has no active rules")],
+)
+async def test_a_run_is_refused_until_the_rules_are_ready(
+    fake_sandbox: None, status: str, message: str
+) -> None:
+    """A run while the norm's rules compile, or with none enforced, would pay every
+    instance by default: it is refused and nothing is decided."""
+    async with client() as api:
+        process_id, _ = await create_process(api, "operator")
+        async with session_factory() as session:
+            await session.execute(
+                update(Rule).where(Rule.process_id == process_id).values(status=status)
+            )
+            await session.commit()
+
+        for action in ("run", "reprocess"):
+            r = await api.post(f"/processes/{process_id}/{action}")
+            assert r.status_code == 409, r.text
+            assert message in r.json()["message"]
+        r = await api.get(f"/processes/{process_id}/instances", params={"status": "PENDING"})
+        assert len(r.json()) == len(INVOICES)
 
 
 def test_flat_symbols_are_refused_on_write() -> None:

@@ -6,6 +6,11 @@ checks, in English, each with the decision the norm implies and how it was read;
 is an ordinary `Rule` (one code, one decision) linked to its norm rule. Nobody reviews it:
 the checks are saved like any other rule and compile in the background (ADR 0004), and
 every interpretation is kept in the check's `report["norm"]`.
+
+A check's decision is the one the norm names for that failure (`decision_source:
+"explicit"`, with the words that name it). When the norm does not name it ("pay only if X"
+says nothing about what happens when X fails), the use case's `failed_check_decision`
+decides, in code, whatever the model proposed (`"policy"`).
 """
 
 import json
@@ -18,7 +23,7 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.exceptions import NotFoundError
+from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
 from app.features.agents import compiler, llm
 from app.features.processes.model import DecisionType, Process, Symbol
@@ -35,6 +40,10 @@ class Check(BaseModel):
     text: str  # English, precise, naming symbols and source columns
     type: Literal["requirement", "prohibition"]
     decision: str
+    # explicit: the norm names the outcome of this failure (`quote` holds those words);
+    # policy: it does not, and the use case's `failed_check_decision` decides.
+    decision_source: Literal["explicit", "policy"]
+    quote: str = ""
     interpretation: str  # what was decided and why
 
 
@@ -74,6 +83,7 @@ class Deps:
     decisions: set[str]
     default: str
     rules: dict[int, str]  # existing active rules: id -> text
+    policy: str | None = None  # failed_check_decision: decides every `policy` check
 
 
 normalizer = Agent(
@@ -84,6 +94,15 @@ normalizer = Agent(
 @normalizer.output_validator
 def _consistent(ctx: RunContext[Deps], output: Normalization) -> Normalization:
     problems = []
+    for s in output.norm_rules:
+        for c in s.checks:
+            if c.decision_source == "policy" and ctx.deps.policy:
+                c.decision = ctx.deps.policy
+            elif c.decision_source == "explicit" and not _quoted(c.quote, s.text):
+                problems.append(
+                    f"check {c.text!r} is `explicit` but its `quote` {c.quote!r} is not words "
+                    "of its sentence naming the outcome; quote them, or mark it `policy`"
+                )
     checks = [c for s in output.norm_rules for c in s.checks]
     for c in checks:
         if c.decision not in ctx.deps.decisions:
@@ -108,6 +127,29 @@ def _consistent(ctx: RunContext[Deps], output: Normalization) -> Normalization:
     return output
 
 
+def _quoted(quote: str, sentence: str) -> bool:
+    def words(text: str) -> str:
+        return " ".join(text.casefold().split())
+
+    return bool(quote.strip()) and words(quote) in words(sentence)
+
+
+def check_policy(policy: str | None, types: Sequence[DecisionType]) -> None:
+    """A `failed_check_decision` must be a decision type of the process and never the
+    default: a failed check must not pay."""
+    if policy is None:
+        return
+    found = next((t for t in types if t.name == policy), None)
+    if found is None:
+        known = sorted(t.name for t in types)
+        raise ConflictError(f"failed_check_decision {policy!r} is not a decision type ({known})")
+    if found.is_default:
+        raise ConflictError(
+            f"failed_check_decision {policy!r} is the default decision: a failed check "
+            "would change nothing"
+        )
+
+
 def context(
     norm: str,
     description: str,
@@ -115,6 +157,7 @@ def context(
     symbols: Sequence[Symbol],
     sources: compiler.Sources,
     active: Sequence[Rule],
+    policy: str | None = None,
 ) -> str:
     """What the normalizer sees: the norm and everything a rule may use or already says."""
     lines = [
@@ -140,6 +183,8 @@ def context(
         lines.append("- (none)")
     lines += ["", "Active rules (id: text):"]
     lines += [f"- {r.id}: {r.text}" for r in active] or ["- (none)"]
+    lines += ["", "Decision of a check whose failure the norm does not name (`policy`):"]
+    lines.append(f"- {policy}" if policy else "- (not set: follow the fallbacks)")
     return "\n".join(lines)
 
 
@@ -153,12 +198,15 @@ async def normalize(
     setup: llm.Setup | None = None,
 ) -> tuple[Normalization, llm.Trace]:
     """The normalizer on one norm, without the database."""
+    policy = setup.settings.failed_check_decision if setup else None
+    check_policy(policy, types)
     deps = Deps(
         decisions={t.name for t in types},
         default=next(t.name for t in types if t.is_default),
         rules={r.id: r.text for r in active},
+        policy=policy,
     )
-    prompt = context(norm, description, types, symbols, sources, active)
+    prompt = context(norm, description, types, symbols, sources, active, policy)
     return await llm.run(
         normalizer,
         "normalizer",
@@ -215,6 +263,8 @@ async def normalize_norm(session: AsyncSession, process_id: int, norm: str) -> N
             reading = {
                 "norm_rule": sentence.text,
                 "interpretation": check.interpretation,
+                "decision_source": check.decision_source,
+                "quote": check.quote,
                 "policies": sentence.policies,
                 "covered": sentence.covered,
             }
