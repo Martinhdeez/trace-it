@@ -6,6 +6,7 @@ import App from './App.tsx'
 import { ApiError } from './api/client'
 import { AppStateProvider } from './state/app'
 import { SessionProvider } from './state/session'
+import { ThemeProvider } from './state/theme'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -23,11 +24,13 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <SessionProvider>
-          <AppStateProvider>
-            <App />
-          </AppStateProvider>
-        </SessionProvider>
+        <ThemeProvider>
+          <SessionProvider>
+            <AppStateProvider>
+              <App />
+            </AppStateProvider>
+          </SessionProvider>
+        </ThemeProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

@@ -19,7 +19,7 @@ export function Notice({
         'flex items-start justify-between gap-4 rounded-[14px] px-3.5 py-3 ring-1',
         tone === 'error' && 'bg-nopagar-soft ring-nopagar/15',
         tone === 'warning' && 'bg-escalar-soft ring-escalar/15',
-        tone === 'neutral' && 'bg-well ring-black/[0.04]',
+        tone === 'neutral' && 'bg-well ring-line',
       )}
     >
       <div className="min-w-0">

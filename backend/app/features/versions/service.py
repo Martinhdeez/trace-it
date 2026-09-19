@@ -99,6 +99,8 @@ async def edit(session, process_id: int, body: DraftIn, author: str) -> ProcessD
             if getattr(body, name) is None and name != "decision_review":
                 raise ConflictError(f"{name} cannot be null")
             snapshot["process"][name] = body.model_dump(mode="json")[name]
+    if body.acceptance_examples is not None:
+        snapshot["acceptance_examples"] = body.acceptance_examples
     if body.rule_ids is not None:
         rows = list(
             await session.scalars(
@@ -180,6 +182,101 @@ def check_configuration(snapshot: dict) -> None:
         execution_config.read(snapshot)
 
 
+def _validation_missing_result(result) -> bool:
+    return result.fires is None and result.reason.startswith(
+        f"RULE_ERROR {result.rule_id}: MissingValidationSymbol: "
+    )
+
+
+async def _check_schema_examples(snapshot: dict, newly_required: set[str], tables: dict) -> dict:
+    """Validate proposed outcomes with new required data present and absent."""
+    import asyncio
+
+    from app.features.decisions.engine import decide
+    from app.features.processes.draft_schemas import AcceptanceExample
+
+    try:
+        examples = [
+            AcceptanceExample.model_validate(row) for row in snapshot.get("acceptance_examples", [])
+        ]
+    except ValueError as error:
+        return {"valid": False, "error": f"Invalid acceptance example: {error}"}
+    required = {
+        symbol["name"] for symbol in snapshot["process"]["symbols"] if symbol.get("required", False)
+    }
+
+    def has_value(example, name):
+        value = example.instance.get(name)
+        return value is not None and bool(str(value).strip())
+
+    present = {
+        name
+        for name in newly_required
+        if any(all(has_value(example, field) for field in required) for example in examples)
+    }
+    absent = {
+        name
+        for name in newly_required
+        if any(
+            not has_value(example, name)
+            and all(has_value(example, field) for field in required - {name})
+            for example in examples
+        )
+    }
+    if present != newly_required or absent != newly_required:
+        return {
+            "valid": False,
+            "error": "Supply accepted examples with each new required symbol present and absent",
+            "missing_present": sorted(newly_required - present),
+            "missing_absent": sorted(newly_required - absent),
+        }
+    rules = config.rules(snapshot)
+    outcomes = config.outcomes(snapshot)
+    for example in examples:
+        missing = [
+            name
+            for name in newly_required
+            if (value := example.instance.get(name)) is None or not str(value).strip()
+        ]
+        dataset = [(0, example.instance)]
+        population = [*dataset, *((i + 1, row) for i, row in enumerate(example.others))]
+
+        def run_dataset(code, instances, sources, others, missing=missing):
+            return sandbox.run_dataset(
+                code,
+                instances,
+                sources,
+                others,
+                **({"validation_missing": {0: missing}} if missing else {}),
+            )
+
+        verdict = (
+            await asyncio.to_thread(
+                decide,
+                rules,
+                outcomes,
+                dataset,
+                {**tables, **example.sources},
+                population,
+                run_dataset,
+            )
+        )[0]
+        failures = [
+            result.reason
+            for result in verdict.results
+            if result.fires is None and not _validation_missing_result(result)
+        ]
+        if verdict.decision != example.decision or failures:
+            return {
+                "valid": False,
+                "error": f"Acceptance example {example.name!r} failed",
+                "expected": example.decision,
+                "actual": verdict.decision,
+                "rule_errors": failures,
+            }
+    return {"valid": True, "tested": len(examples)}
+
+
 async def inspect(session, snapshot: dict, inputs: dict, *, tables: dict | None = None) -> dict:
     # Validate artifacts even if the process has no past cases.
     import asyncio
@@ -188,17 +285,85 @@ async def inspect(session, snapshot: dict, inputs: dict, *, tables: dict | None 
         await asyncio.to_thread(check_configuration, snapshot)
     except (ValueError, sandbox.SandboxError) as error:
         return {"valid": False, "error": str(error)}
+    process_id = snapshot["process"]["id"]
+    baseline = await active(session, process_id, required=False)
+    published_names = (
+        {symbol["name"] for symbol in baseline.snapshot["process"]["symbols"]}
+        if baseline
+        else set()
+    )
+    newly_required = {
+        symbol["name"]
+        for symbol in snapshot["process"]["symbols"]
+        if symbol.get("required", False) and symbol["name"] not in published_names
+    }
+
+    def absent(symbols: dict, name: str) -> bool:
+        field = symbols.get(name)
+        value = field.get("value") if isinstance(field, dict) else None
+        return value is None or not str(value).strip()
+
+    validation_missing = {
+        instance["id"]: sorted(name for name in newly_required if absent(instance["symbols"], name))
+        for instance in inputs["instances"]
+        if instance["symbols"] is not None
+    }
+    validation_missing = {key: names for key, names in validation_missing.items() if names}
     selected = [i for i in inputs["instances"] if i["decision"] and i["symbols"] is not None]
     verdicts = await execution.evaluate(
-        session, snapshot, inputs, [i["id"] for i in selected], tables=tables
+        session,
+        snapshot,
+        inputs,
+        [i["id"] for i in selected],
+        tables=tables,
+        validation_missing=validation_missing,
     )
-    changes, conflicts, errors = [], [], []
+    changes, conflicts, errors, not_evaluable = [], [], [], []
     unchanged = 0
     for instance in selected:
         previous = instance["decision"]
         verdict = verdicts[instance["id"]]
-        if any(r.fires is None for r in verdict.results):
-            errors.append({"instance_id": instance["id"], "reason": verdict.reason})
+        missing = validation_missing.get(instance["id"], [])
+        unavailable = []
+        real_failures = []
+        for result in verdict.results:
+            marker = f"RULE_ERROR {result.rule_id}: MissingValidationSymbol: "
+            if _validation_missing_result(result):
+                unavailable.append(
+                    {"rule_id": result.rule_id, "symbol": result.reason[len(marker) :]}
+                )
+            elif result.fires is None:
+                real_failures.append(result.reason)
+        old_required = {
+            symbol["name"]
+            for symbol in snapshot["process"]["symbols"]
+            if symbol.get("required", False)
+            and symbol["name"] in published_names
+            and absent(instance["symbols"], symbol["name"])
+        }
+        if missing or unavailable:
+            not_evaluable.append(
+                {
+                    "instance_id": instance["id"],
+                    "name": instance["name"],
+                    "missing_symbols": sorted(set(missing) | {r["symbol"] for r in unavailable}),
+                    "evaluated_rules": [r.rule_id for r in verdict.results if r.fires is not None],
+                    "unavailable_rules": unavailable,
+                }
+            )
+        if real_failures or old_required:
+            details = [
+                *real_failures,
+                *(
+                    ["MISSING_EXISTING_REQUIRED: " + ", ".join(sorted(old_required))]
+                    if old_required
+                    else []
+                ),
+            ]
+            errors.append({"instance_id": instance["id"], "reason": " | ".join(details)})
+            continue
+        if missing or unavailable:
+            continue
         if previous["decision"] == verdict.decision:
             unchanged += 1
             continue
@@ -213,12 +378,30 @@ async def inspect(session, snapshot: dict, inputs: dict, *, tables: dict | None 
         (
             conflicts if previous["author"] != "engine" or previous["pending_review"] else changes
         ).append(change)
+    if baseline and newly_required:
+        if tables is None:
+            from app.features.sources.model import Source
+
+            rows = await session.scalars(select(Source).where(Source.id.in_(inputs["source_ids"])))
+            tables = {row.name: row.rows for row in rows}
+        examples = await _check_schema_examples(snapshot, newly_required, tables)
+    else:
+        examples = {"valid": True, "tested": 0}
     return {
-        "valid": not conflicts and not errors,
+        "valid": not conflicts and not errors and examples["valid"],
         "unchanged": unchanged,
         "changes": changes,
         "conflicts": conflicts,
         "errors": errors,
+        "example_validation": examples,
+        "not_evaluable": not_evaluable,
+        "coverage": {
+            "total": len(selected),
+            "evaluated": len(selected) - len(not_evaluable),
+            "not_evaluable": len(not_evaluable),
+            "partial": sum(bool(row["evaluated_rules"]) for row in not_evaluable),
+            "none": sum(not row["evaluated_rules"] for row in not_evaluable),
+        },
     }
 
 

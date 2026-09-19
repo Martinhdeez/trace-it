@@ -44,10 +44,34 @@ export type ExecutionResponse = {
   version_id: number | null
   presets: Record<Preset, { settings?: ExecutionSettings; error?: string }>
 }
+export type HistoricalCoverage = {
+  evaluated: number
+  not_evaluable: number
+  partial: number
+  none: number
+  total?: number
+}
+export type HistoricalCaseWithoutCoverage = {
+  instance_id: number
+  name: string
+  missing_symbols: string[]
+  evaluated_rules: number[]
+  unavailable_rules: { rule_id: number; symbol: string }[]
+}
+export type ValidationReport = {
+  valid: boolean
+  hash: string
+  coverage?: HistoricalCoverage
+  not_evaluable?: HistoricalCaseWithoutCoverage[]
+  conflicts?: { instance_id: number; reason?: string }[]
+  errors?: { instance_id: number; reason?: string }[]
+  error?: string
+  [key: string]: unknown
+}
 export type Draft = {
   revision: number
   snapshot: Record<string, unknown>
-  validation: { valid: boolean; hash: string; [key: string]: unknown } | null
+  validation: ValidationReport | null
 }
 export const executionApi = {
   get: (id: number) => get<ExecutionResponse>(`/processes/${id}/execution`),

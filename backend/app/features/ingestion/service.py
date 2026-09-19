@@ -85,6 +85,7 @@ class ExtractionService:
                 service.ocr = LocalOCR(service.settings)
             service.vlm = VisionFallback(service.settings)
             service.judge = TextJudge(service.settings)
+            service.field_reader = SchemaFieldReader(service.settings)
             service.execution_hash = key
             self.configured_services[key] = service
             # Eviction never invalidates a reader already held by an in-flight operation.
@@ -261,7 +262,19 @@ class ExtractionService:
                 if judge
                 else None,
             )
+            if self.execution_hash is not None:
+                config["execution_hash"] = self.execution_hash
         return fingerprint(config)
+
+    def _schema_mapper_signature(self, options):
+        if (
+            options.mode == "local"
+            or options.vlm is False
+            or not getattr(self.field_reader, "configured", False)
+            or not hasattr(self.field_reader, "signature")
+        ):
+            return None
+        return self.field_reader.signature()
 
     def extract(self, item, options: ExtractOptions):
         options = options.normalized(self.settings)
@@ -387,6 +400,7 @@ class ExtractionService:
             "plan": plan.field_fingerprint,
             "fields": [field.model_dump(mode="json") for field in fields],
             "filename": item["file_id"],
+            "schema_mapper": self._schema_mapper_signature(options),
             "base": {
                 "fields": {name: field.model_dump() for name, field in base.fields.items()},
                 "lines": base.data.get("lines", []),
@@ -403,6 +417,7 @@ class ExtractionService:
                 adapter="schema",
                 extraction_id=item["id"],
                 plan_hash=plan.fingerprint,
+                execution_hash=self.execution_hash,
                 fields=[field.name for field in fields],
             ) as span,
             self.locks[int(key[:8], 16) % len(self.locks)],
@@ -415,6 +430,11 @@ class ExtractionService:
                 result.cache_hit = True
                 result.data["provenance"]["cached_from_extraction_id"] = previous_id
                 result.data["provenance"]["plan_hash"] = plan.fingerprint
+                result.data["provenance"].update(
+                    execution_hash=self.execution_hash,
+                    cache_key=key,
+                    schema_mapper=config["schema_mapper"],
+                )
                 result.data["extraction_plan"] = {
                     **plan.model_dump(mode="json"),
                     "fingerprint": plan.fingerprint,
@@ -479,6 +499,9 @@ class ExtractionService:
                         name: reading.model_dump() for name, reading in readings.items()
                     },
                     "provenance": {
+                        "cache_key": key,
+                        "execution_hash": self.execution_hash,
+                        "schema_mapper": config["schema_mapper"],
                         "pipeline_version": plan.version,
                         "options": options.model_dump(),
                         "visual_model": (

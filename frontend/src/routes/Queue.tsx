@@ -70,7 +70,7 @@ export function Queue() {
         {escalated.isError ? <ErrorNotice error={escalated.error} /> : null}
 
         <div className="grid gap-3 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <ul className="max-h-[560px] overflow-y-auto rounded-[16px] bg-white p-1 ring-1 ring-black/[0.06]">
+          <ul className="max-h-[560px] overflow-y-auto rounded-[16px] bg-surface p-1 ring-1 ring-line">
             {items.length === 0 ? (
               <li>
                 <Empty>
@@ -173,7 +173,7 @@ function Resolve({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-[16px] bg-white px-4 py-3.5 ring-1 ring-black/[0.06]">
+      <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
         <div className="flex items-baseline justify-between gap-3">
           <p className="font-mono text-[13px]">{name}</p>
           <Link
@@ -192,7 +192,7 @@ function Resolve({
 
       <Suggested suggestion={suggestion.data} loading={suggestion.isPending} />
 
-      <div className="rounded-[16px] bg-white px-4 py-3.5 ring-1 ring-black/[0.06]">
+      <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
         <p className="text-[13px] font-medium">Tu decisión</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="Decisión">
@@ -305,7 +305,7 @@ function Suggested({
   loading: boolean
 }) {
   return (
-    <div className="rounded-[16px] bg-white px-4 py-3.5 ring-1 ring-black/[0.06]">
+    <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
       <p className="flex items-center gap-1.5 text-[13px] font-medium">
         <Sparkles size={13} strokeWidth={1.75} className="text-faint" />
         El asistente propone
@@ -318,7 +318,7 @@ function Suggested({
             <StatusBadge value={suggestion.decision} className="mt-0.5 shrink-0" />
             <span className="text-muted">{suggestion.razonamiento}</span>
           </p>
-          <p className="mt-2 rounded-[10px] bg-canvas px-3 py-2 text-[13px] ring-1 ring-black/[0.05]">
+          <p className="mt-2 rounded-[10px] bg-canvas px-3 py-2 text-[13px] ring-1 ring-line">
             {suggestion.regla_propuesta}
           </p>
         </>

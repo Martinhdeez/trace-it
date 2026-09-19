@@ -31,7 +31,7 @@ export function PrimaryAction({
     <Link
       to={to}
       className={cn(
-        'inline-flex items-center gap-2 rounded-full bg-ink px-5 py-2.5 text-[14px] font-medium text-white hover:bg-ink/90',
+        'inline-flex items-center gap-2 rounded-full bg-ink px-5 py-2.5 text-[14px] font-medium text-on-ink hover:bg-ink/90',
         className,
       )}
     >

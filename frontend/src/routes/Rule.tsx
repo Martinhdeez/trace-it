@@ -219,7 +219,7 @@ function Compiling() {
       El tester ciego escribe los casos sin ver el código. El compilador escribe y corrige la
       función hasta pasarlos; si discuten un caso, el tester lo revisa sin adoptar la respuesta del
       compilador.
-      <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-black/[0.06]">
+      <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-rule">
         <div
           className="h-full rounded-full bg-ink/70 transition-[width] duration-1000 ease-linear"
           style={{ width: `${Math.min(95, seconds * 2)}%` }}

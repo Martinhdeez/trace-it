@@ -108,7 +108,7 @@ export function CommandPalette() {
 
   return (
     <Overlay onClose={() => setPaletteOpen(false)}>
-      <div className="overflow-hidden rounded-[16px] bg-white shadow-[0_16px_50px_rgba(19,19,19,0.12)] ring-1 ring-black/[0.06]">
+      <div className="overflow-hidden rounded-[16px] bg-surface shadow-pop ring-1 ring-line">
         <input
           autoFocus
           value={query}

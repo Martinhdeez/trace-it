@@ -68,5 +68,5 @@ export function DataTable<T extends { id: string }>({
 
   if (!framed) return table
 
-  return <div className="overflow-hidden rounded-[16px] ring-1 ring-black/[0.06]">{table}</div>
+  return <div className="overflow-hidden rounded-[16px] ring-1 ring-line">{table}</div>
 }

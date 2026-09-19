@@ -281,7 +281,7 @@ function Alerts({
   if (items.length === 0) return null
 
   return (
-    <section className="mb-6 overflow-hidden rounded-[16px] bg-white ring-1 ring-black/[0.06]">
+    <section className="mb-6 overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
       <div className="flex items-center gap-2 px-4 py-2.5">
         <AlertTriangle size={14} strokeWidth={1.6} className="text-escalar" />
         <p className="font-mono text-[11px] tracking-[0.12em] text-faint">ATENCIÓN</p>
@@ -325,7 +325,7 @@ function Metrics({
   ]
 
   return (
-    <section className="mb-6 grid overflow-hidden rounded-[16px] bg-white ring-1 ring-black/[0.06] sm:grid-cols-5">
+    <section className="mb-6 grid overflow-hidden rounded-[16px] bg-surface ring-1 ring-line sm:grid-cols-5">
       {cells.map((cell) => (
         <div
           key={cell.label}
@@ -362,7 +362,7 @@ function Runs({
           Historial
         </Link>
       </div>
-      <div className="overflow-hidden rounded-[16px] bg-white ring-1 ring-black/[0.06]">
+      <div className="overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
         {runs.length === 0 ? (
           <p className="px-4 py-5 text-[13px] text-muted">
             {documentCount
@@ -436,7 +436,7 @@ function Pipeline({
       <p className="mb-3 font-mono text-[11px] tracking-[0.12em] text-faint">
         ESTADO DEL PROCESO
       </p>
-      <div className="grid overflow-hidden rounded-[16px] bg-white ring-1 ring-black/[0.06] sm:grid-cols-5">
+      <div className="grid overflow-hidden rounded-[16px] bg-surface ring-1 ring-line sm:grid-cols-5">
         {stages.map((stage, index) => (
           <div
             key={stage.label}
@@ -471,7 +471,7 @@ function Split({ counts, instances }: { counts: Counts | undefined; instances: I
   }, [counts])
 
   return (
-    <section className="mt-8 overflow-hidden rounded-[16px] bg-white ring-1 ring-black/[0.06]">
+    <section className="mt-8 overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
       <div className="flex items-start justify-between gap-4 px-5 py-4">
         <div>
           <h2 className="text-[18px] font-medium tracking-[-0.03em]">Salida de decisiones</h2>
@@ -486,8 +486,8 @@ function Split({ counts, instances }: { counts: Counts | undefined; instances: I
           Aún no hay documentos. Ejecutar y suelta el lote.
         </p>
       ) : (
-        <div className="grid gap-px bg-black/[0.05] md:grid-cols-[minmax(0,1fr)_1.4fr]">
-          <div className="bg-white px-5 py-4">
+        <div className="grid gap-px bg-rule md:grid-cols-[minmax(0,1fr)_1.4fr]">
+          <div className="bg-surface px-5 py-4">
             <div className="space-y-4">
               {cells.map((cell) => (
                 <div key={cell.label} className="flex items-center gap-3">
@@ -513,7 +513,7 @@ function Split({ counts, instances }: { counts: Counts | undefined; instances: I
               ))}
             </div>
           </div>
-          <div className="flex min-h-[150px] items-center bg-white px-5 py-5">
+          <div className="flex min-h-[150px] items-center bg-surface px-5 py-5">
             <div className="flex w-full flex-wrap content-center gap-1">
               {instances.map((item) => (
                 <span

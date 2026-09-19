@@ -224,7 +224,15 @@ async def preview(
         source.name: source.rows for source in await sources.current_loads(session, process_id)
     }
     if process_id and impact["valid"] and review_changed(base, proposed, source_changed):
-        review = await review_preview(session, process_id, base, proposed, inputs, tables)
+        review = await review_preview(
+            session,
+            process_id,
+            base,
+            proposed,
+            inputs,
+            tables,
+            excluded_ids={row["instance_id"] for row in impact["not_evaluable"]},
+        )
     return {
         "valid": all(r["report"].get("valid") for r in compilations)
         and all(e["passed"] for e in results)
@@ -250,19 +258,29 @@ def review_changed(before: dict, after: dict, source_changed: bool = False) -> b
     )
 
 
-async def review_preview(session, process_id, before, after, inputs, tables):
+async def review_preview(session, process_id, before, after, inputs, tables, *, excluded_ids=None):
     from copy import deepcopy
     from dataclasses import asdict
 
     from app.features.learning import evidence, validation
 
     captured = await evidence.capture(session, process_id)
-    sampled = evidence.cases(captured, 10)
+    eligible = {
+        **captured,
+        "instances": [
+            case for case in captured["instances"] if case["id"] not in (excluded_ids or set())
+        ],
+    }
+    sampled = evidence.cases(eligible, 10)
     if not sampled:
-        return {"valid": True, "previews": [], "basis": "No historical cases available"}
+        return {
+            "valid": True,
+            "previews": [],
+            "basis": "No historical cases with complete proposed symbols available",
+        }
     snapshots = []
     for configuration, source_tables in ((before, None), (after, tables)):
-        snapshot = deepcopy(captured)
+        snapshot = deepcopy(eligible)
         snapshot["execution"] = deepcopy(configuration.get("execution", {}))
         for key in ("process", "rules", "guidance", "agents"):
             snapshot[key] = deepcopy(configuration[key])
@@ -302,6 +320,7 @@ async def review_preview(session, process_id, before, after, inputs, tables):
         preview["final_decision"] = originals[preview["instance_id"]]["decisions"][-1]
     result["basis"] = (
         "Published and proposed configurations evaluated on captured current evidence; "
-        "paired reviewer recommendations can vary and do not change past decisions"
+        "cases without newly required symbols were excluded; paired reviewer "
+        "recommendations can vary and do not change past decisions"
     )
     return result

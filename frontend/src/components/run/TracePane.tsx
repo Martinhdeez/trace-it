@@ -48,7 +48,7 @@ export function TracePane({
     <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-6 pb-4">
       <DocumentHeader instance={instance} />
 
-      <div className="mx-auto w-full max-w-[820px] rounded-[16px] bg-white px-6 py-6 ring-1 ring-black/[0.06]">
+      <div className="mx-auto w-full max-w-[820px] rounded-[16px] bg-surface px-6 py-6 ring-1 ring-line">
         <div className="flex items-start gap-4">
           <span
             className={cn(
@@ -79,7 +79,7 @@ export function TracePane({
         </div>
 
         {latest ? (
-          <div className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-[10px] bg-black/[0.06] ring-1 ring-black/[0.04]">
+          <div className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-[10px] bg-rule ring-1 ring-line">
             <DecisionStat label="Reglas evaluadas" value={latest.resultados.length} />
             <DecisionStat label="Activadas" value={fired} />
             <DecisionStat label="Errores" value={errors} />
@@ -207,7 +207,7 @@ function DocumentHeader({ instance }: { instance: InstanceDetail }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-ink px-3 text-[12px] font-medium text-white hover:bg-ink/90"
+        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-ink px-3 text-[12px] font-medium text-on-ink hover:bg-ink/90"
       >
         <FileSearch size={13} strokeWidth={1.7} />
         Abrir documento
@@ -219,7 +219,7 @@ function DocumentHeader({ instance }: { instance: InstanceDetail }) {
 
 function DecisionStat({ label: text, value }: { label: string; value: number }) {
   return (
-    <div className="bg-white px-3 py-2.5">
+    <div className="bg-surface px-3 py-2.5">
       <p className="font-mono text-[17px] tracking-[-0.04em] tabular-nums">{value}</p>
       <p className="mt-0.5 text-[10px] text-muted">{text}</p>
     </div>
@@ -237,7 +237,7 @@ function Block({
 }) {
   const [open, setOpen] = useState(Boolean(openByDefault))
   return (
-    <div className="mt-2 overflow-hidden rounded-[16px] ring-1 ring-black/[0.06]">
+    <div className="mt-2 overflow-hidden rounded-[16px] ring-1 ring-line">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}

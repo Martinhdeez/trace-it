@@ -3,6 +3,8 @@
 import asyncio
 import uuid
 
+from sqlalchemy import select
+
 from app.core.database import session_factory
 from app.features.decisions.tests.test_api import client, stored
 from app.features.ingestion.extraction_plan import load_extraction_plan
@@ -181,6 +183,158 @@ async def test_extraction_plan_uses_published_symbols_and_preserves_hints():
             assert published["snapshot"]["process"]["symbols"][0]["extraction"]["labels"] == [
                 "Purchase order"
             ]
+
+
+async def test_new_required_symbol_reports_historical_coverage_without_waiving_rule_errors():
+    async with client() as api:
+        pid, headers, old_rule_id, _ = await seed(api)
+        await publish(api, pid, headers)
+        assert (await api.post(f"/processes/{pid}/run")).status_code == 200
+        code = (
+            "def evaluate(instance, sources, others):\n"
+            "    return {'fires': instance['exposure_hours'] > 8, 'reason': 'EXPOSURE'}\n"
+        )
+        async with session_factory() as session:
+            added = Rule(
+                process_id=pid,
+                text="Review long exposure",
+                type="prohibition",
+                decision="CHECK",
+                code=code,
+                hash=rule_hash("Review long exposure", code),
+                tests=[],
+                report={"valid": True},
+                status="draft",
+            )
+            session.add(added)
+            await session.commit()
+            new_rule_id = added.id
+        revised = await api.put(
+            f"/processes/{pid}/draft",
+            headers=headers,
+            json={
+                "symbols": [
+                    {"name": "order", "type": "text"},
+                    {"name": "exposure_hours", "type": "number", "required": True},
+                ],
+                "rule_ids": [old_rule_id, new_rule_id],
+            },
+        )
+        assert revised.status_code == 200, revised.text
+        without_examples = await validate(api, pid, headers)
+        assert not without_examples["validation"]["valid"]
+        assert without_examples["validation"]["coverage"]["not_evaluable"] == 2
+        examples = await api.put(
+            f"/processes/{pid}/draft",
+            headers=headers,
+            json={
+                "expected_revision": without_examples["revision"],
+                "acceptance_examples": [
+                    {
+                        "name": "present",
+                        "instance": {"order": "A", "exposure_hours": 1},
+                        "sources": {"paid": []},
+                        "decision": "PAY",
+                        "explanation": "Short exposure",
+                    },
+                    {
+                        "name": "absent",
+                        "instance": {"order": "A"},
+                        "sources": {"paid": []},
+                        "decision": "CHECK",
+                        "explanation": "Missing required exposure",
+                    },
+                ],
+            },
+        )
+        assert examples.status_code == 200, examples.text
+        reviewed = await validate(api, pid, headers)
+        report = reviewed["validation"]
+        assert report["valid"] and not report["errors"] and not report["conflicts"]
+        assert report["coverage"] == {
+            "total": 2,
+            "evaluated": 0,
+            "not_evaluable": 2,
+            "partial": 2,
+            "none": 0,
+        }
+        assert len(report["not_evaluable"]) == 2
+        assert all(row["evaluated_rules"] == [old_rule_id] for row in report["not_evaluable"])
+        assert all(
+            row["unavailable_rules"] == [{"rule_id": new_rule_id, "symbol": "exposure_hours"}]
+            for row in report["not_evaluable"]
+        )
+        assert all(row["missing_symbols"] == ["exposure_hours"] for row in report["not_evaluable"])
+
+        # The same incomplete cases cannot hide an unrelated error in an existing rule.
+        failing = (
+            "def evaluate(instance, sources, others):\n"
+            "    result = 1 / 0\n"
+            "    return {'fires': instance['exposure_hours'] > result, 'reason': 'BROKEN'}\n"
+        )
+        async with session_factory() as session:
+            rule = await session.get(Rule, new_rule_id)
+            rule.code = failing
+            rule.hash = rule_hash(rule.text, failing)
+            await session.commit()
+        # Refresh the staged rule artifact to the deliberately broken implementation.
+        refreshed = await api.put(
+            f"/processes/{pid}/draft",
+            headers=headers,
+            json={
+                "expected_revision": reviewed["revision"],
+                "rule_ids": [old_rule_id, new_rule_id],
+            },
+        )
+        assert refreshed.status_code == 200, refreshed.text
+        blocked = await validate(api, pid, headers)
+        assert not blocked["validation"]["valid"]
+        assert len(blocked["validation"]["errors"]) == 2
+        assert all("ZeroDivisionError" in row["reason"] for row in blocked["validation"]["errors"])
+
+
+async def test_existing_required_data_and_undeclared_rule_access_remain_blocking():
+    async with client() as api:
+        pid, headers, rule_id, _ = await seed(api)
+        await publish(api, pid, headers)
+        assert (await api.post(f"/processes/{pid}/run")).status_code == 200
+        async with session_factory() as session:
+            case = await session.scalar(
+                select(Instance).where(Instance.process_id == pid).order_by(Instance.id)
+            )
+            case.symbols = stored({})
+            await session.commit()
+        required = await api.put(
+            f"/processes/{pid}/draft",
+            headers=headers,
+            json={"symbols": [{"name": "order", "type": "text", "required": True}]},
+        )
+        assert required.status_code == 200, required.text
+        reviewed = await validate(api, pid, headers)
+        assert not reviewed["validation"]["valid"]
+        assert any(
+            "MISSING_EXISTING_REQUIRED: order" in row["reason"]
+            for row in reviewed["validation"]["errors"]
+        )
+
+        code = (
+            "def evaluate(instance, sources, others):\n"
+            "    return {'fires': bool(instance['undeclared']), 'reason': 'UNKNOWN'}\n"
+        )
+        async with session_factory() as session:
+            rule = await session.get(Rule, rule_id)
+            rule.code = code
+            rule.hash = rule_hash(rule.text, code)
+            await session.commit()
+        revised = await api.put(
+            f"/processes/{pid}/draft",
+            headers=headers,
+            json={"expected_revision": reviewed["revision"], "rule_ids": [rule_id]},
+        )
+        assert revised.status_code == 200, revised.text
+        blocked = await validate(api, pid, headers)
+        assert not blocked["validation"]["valid"]
+        assert "unknown symbols" in blocked["validation"]["error"]
 
 
 async def test_stale_evidence_and_revision_refuse_publication():

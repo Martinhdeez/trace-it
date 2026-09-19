@@ -6,8 +6,8 @@ import { cn } from '../../lib/cn'
 type Tone = 'primary' | 'soft' | 'ghost' | 'danger'
 
 const TONES: Record<Tone, string> = {
-  primary: 'bg-ink text-white hover:bg-ink/90 disabled:bg-ink/40',
-  soft: 'bg-canvas text-ink ring-1 ring-black/[0.06] hover:bg-well',
+  primary: 'bg-ink text-on-ink hover:bg-ink/90 disabled:bg-ink/40',
+  soft: 'bg-canvas text-ink ring-1 ring-line hover:bg-well',
   ghost: 'text-muted hover:text-ink',
   danger: 'bg-nopagar-soft text-nopagar ring-1 ring-nopagar/20 hover:bg-nopagar-soft/70',
 }
@@ -32,7 +32,7 @@ export function Button({
 }
 
 const FIELD =
-  'w-full rounded-[10px] bg-canvas px-3 py-2 text-[13px] text-ink outline-none ring-1 ring-black/[0.06] placeholder:text-faint disabled:opacity-60'
+  'w-full rounded-[10px] bg-canvas px-3 py-2 text-[13px] text-ink outline-none ring-1 ring-line placeholder:text-faint disabled:opacity-60'
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(FIELD, className)} />
@@ -66,14 +66,24 @@ export function Field({
   )
 }
 
-export function Segmented<T extends string>({
-  options,
+export const SEGMENT_ITEM =
+  'relative z-10 rounded-full px-3 py-1 text-[12px] transition-colors duration-200 motion-reduce:transition-none'
+
+export function CountChip({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-well px-1.5 font-mono text-[10px] tabular-nums text-ink ring-1 ring-line">
+      {children}
+    </span>
+  )
+}
+
+/** Sliding pill. Review tabs stay on one page; definition must too or thumb snaps. */
+export function SegmentedRail({
   value,
-  onChange,
+  children,
 }: {
-  options: readonly { value: T; label: string; count?: number }[]
-  value: T
-  onChange: (value: T) => void
+  value: string
+  children: ReactNode
 }) {
   const rail = useRef<HTMLDivElement>(null)
   const [thumb, setThumb] = useState({ x: 0, w: 0 })
@@ -94,7 +104,7 @@ export function Segmented<T extends string>({
     const observer = new ResizeObserver(measure)
     observer.observe(root)
     return () => observer.disconnect()
-  }, [value, options])
+  }, [value])
 
   useEffect(() => {
     if (thumb.w > 0) setReady(true)
@@ -103,11 +113,11 @@ export function Segmented<T extends string>({
   return (
     <div
       ref={rail}
-      className="relative inline-flex items-center gap-0.5 rounded-full bg-canvas p-0.5 ring-1 ring-black/[0.06]"
+      className="relative inline-flex min-w-0 items-center gap-0.5 rounded-full bg-canvas p-0.5 ring-1 ring-line"
     >
       <span
         aria-hidden
-        className="pointer-events-none absolute top-0.5 left-0 h-[calc(100%-4px)] shrink-0 rounded-full bg-white shadow-[0_1px_2px_rgba(19,19,19,0.06)] motion-reduce:!transition-none"
+        className="pointer-events-none absolute top-0.5 left-0 h-[calc(100%-4px)] shrink-0 rounded-full bg-surface shadow-lift motion-reduce:!transition-none"
         style={{
           width: thumb.w,
           minWidth: thumb.w,
@@ -117,6 +127,22 @@ export function Segmented<T extends string>({
             : 'none',
         }}
       />
+      {children}
+    </div>
+  )
+}
+
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { value: T; label: string; count?: number }[]
+  value: T
+  onChange: (value: T) => void
+}) {
+  return (
+    <SegmentedRail value={value}>
       {options.map((option) => {
         const active = option.value === value
         return (
@@ -125,18 +151,17 @@ export function Segmented<T extends string>({
             type="button"
             data-active={active || undefined}
             onClick={() => onChange(option.value)}
-            className={cn(
-              'relative z-10 rounded-full px-3 py-1 text-[12px] transition-colors duration-200 motion-reduce:transition-none',
-              active ? 'text-ink' : 'text-muted hover:text-ink',
-            )}
+            className={cn(SEGMENT_ITEM, active ? 'text-ink' : 'text-muted hover:text-ink')}
           >
             {option.label}
             {option.count != null ? (
-              <span className="ml-1.5 font-mono text-[11px] text-faint">{option.count}</span>
+              <span className="ml-1.5">
+                <CountChip>{option.count}</CountChip>
+              </span>
             ) : null}
           </button>
         )
       })}
-    </div>
+    </SegmentedRail>
   )
 }

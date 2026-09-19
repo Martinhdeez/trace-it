@@ -12,7 +12,11 @@ def extract_schema_pdf(content, options, settings, ocr, vlm, field_reader, field
         pages = native_pages(content, settings)
         span.set(pages=len(pages))
     lines = (
-        [TextLine.model_validate(line) for line in base.data.get("lines", [])]
+        [
+            TextLine.model_validate(line)
+            for line in base.data.get("lines", [])
+            if options.secondary_ocr or not line["id"].startswith("secondary:")
+        ]
         if base is not None
         else [line for page in pages for line in page["lines"]]
     )
@@ -53,7 +57,9 @@ def extract_schema_pdf(content, options, settings, ocr, vlm, field_reader, field
         }
         if needs_ocr and options.ocr:
             for reader, method in (("primary", "recognize"), ("secondary", "verify")):
-                if not hasattr(ocr, method):
+                if (reader == "secondary" and not options.secondary_ocr) or not hasattr(
+                    ocr, method
+                ):
                     continue
                 # An invoice extension can reuse the observations from its initial reading.
                 if any(line.page == number and line.id.startswith(reader + ":") for line in lines):

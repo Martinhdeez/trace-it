@@ -60,7 +60,7 @@ export function DocumentPane({
         )}
         <div
           className={cn(
-            'flex items-center gap-1 rounded-full bg-canvas px-1 py-1 ring-1 ring-black/[0.06]',
+            'flex items-center gap-1 rounded-full bg-canvas px-1 py-1 ring-1 ring-line',
             embedded && 'ml-auto',
           )}
         >
@@ -115,7 +115,7 @@ export function DocumentPane({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="NIF, IBAN, pedido…"
-            className="w-full rounded-full bg-canvas px-3 py-1.5 text-[13px] outline-none ring-1 ring-black/[0.06] placeholder:text-faint"
+            className="w-full rounded-full bg-canvas px-3 py-1.5 text-[13px] outline-none ring-1 ring-line placeholder:text-faint"
           />
         </div>
       ) : null}
@@ -123,7 +123,7 @@ export function DocumentPane({
       <div
         className={cn(
           'relative min-h-0 flex-1 overflow-auto bg-canvas',
-          embedded ? '' : 'rounded-[16px] ring-1 ring-black/[0.06]',
+          embedded ? '' : 'rounded-[16px] ring-1 ring-line',
         )}
         onWheel={(event) => {
           if (!event.ctrlKey && !event.metaKey) return
@@ -193,7 +193,7 @@ function EvidencePaper({
   query: string
 }) {
   return (
-    <article className="rounded-[12px] bg-paper px-9 py-8 text-ink shadow-[0_8px_30px_rgba(19,19,19,0.06)] ring-1 ring-black/[0.06]">
+    <article className="rounded-[12px] bg-paper px-9 py-8 text-ink shadow-float ring-1 ring-line">
       <div className="flex items-start justify-between gap-5 border-b border-hairline pb-5">
         <div>
           <p className="text-[11px] uppercase tracking-[0.08em] text-muted">Documento leído</p>
@@ -233,7 +233,7 @@ function EvidencePaper({
 function InvoicePaper({ doc, query }: { doc: InvoiceDocument; query: string }) {
   const H = (text: string) => highlight(text, query)
   return (
-    <article className="rounded-[12px] bg-paper px-9 py-8 text-ink shadow-[0_8px_30px_rgba(19,19,19,0.06)] ring-1 ring-black/[0.06]">
+    <article className="rounded-[12px] bg-paper px-9 py-8 text-ink shadow-float ring-1 ring-line">
       <header className="flex items-start justify-between gap-6">
         <div>
           <h1 className="text-[22px] font-medium tracking-[-0.035em]">{H(doc.supplierName)}</h1>
@@ -371,8 +371,8 @@ function IconBtn({
       title={label}
       aria-pressed={pressed}
       onClick={onClick}
-      className={`grid h-7 w-7 place-items-center rounded-full hover:bg-white hover:text-ink ${
-        pressed ? 'bg-white text-ink shadow-[0_1px_2px_rgba(19,19,19,0.06)]' : ''
+      className={`grid h-7 w-7 place-items-center rounded-full hover:bg-surface hover:text-ink ${
+        pressed ? 'bg-surface text-ink shadow-lift' : ''
       }`}
     >
       {children}

@@ -280,10 +280,62 @@ class SchemaFieldReader:
         """Use visual provider precedence but the Helmcode text model for mapping."""
         return list(
             dict.fromkeys(
-                (provider, self.settings.helmcode_text_model if provider == "helmcode" else model)
+                (
+                    provider,
+                    self.settings.helmcode_text_model
+                    if provider == "helmcode" and "helmcode" in self.settings.text_providers
+                    else model,
+                )
                 for provider, model in self.settings.visual_chain()
             )
         )
+
+    def signature(self) -> dict:
+        """Effective, credential-free schema mapping configuration for result caches."""
+        return {
+            "chain": [
+                {
+                    "provider": provider,
+                    "model": model,
+                    "endpoint": self._endpoint(provider, model),
+                    "generation": (
+                        {
+                            "temperature": 0,
+                            "maxOutputTokens": self._max_tokens(),
+                            "responseMimeType": "application/json",
+                        }
+                        if provider == "gemini"
+                        else {
+                            "temperature": 0,
+                            "max_tokens": self._max_tokens(),
+                            **(
+                                {
+                                    "reasoning_effort": "none",
+                                    "response_format": {"type": "json_object"},
+                                }
+                                if provider == "helmcode"
+                                else {}
+                            ),
+                        }
+                    ),
+                }
+                for provider, model in self._chain()
+            ],
+            "prompt": PROMPT,
+            "timeout_seconds": self.settings.vlm_timeout,
+            "max_tokens": self._max_tokens(),
+        }
+
+    def _max_tokens(self) -> int:
+        return min(1500, self.settings.vision_max_tokens)
+
+    def _endpoint(self, provider: str, model: str) -> str:
+        if provider == "gemini":
+            return (
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            )
+        base = self.settings.vlm_url if provider == "compatible" else self.settings.helmcode_url
+        return base.rstrip("/") + "/chat/completions"
 
     def read(
         self, lines: list[TextLine], fields: list[ExtractionField]
@@ -374,32 +426,28 @@ class SchemaFieldReader:
     def _select_provider(
         self, provider, model, task, questions, transcript, validate, *, fallback=False
     ):
+        endpoint = self._endpoint(provider, model)
+        max_tokens = self._max_tokens()
         if provider == "gemini":
             if not re.fullmatch(r"gemini-[a-zA-Z0-9._-]+", model):
                 raise ValueError("Invalid Gemini model")
-            endpoint = (
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-            )
             headers = {"x-goog-api-key": self.settings.gemini_api_key}
             body = {
                 "contents": [{"role": "user", "parts": [{"text": PROMPT + "\n" + task}]}],
                 "generationConfig": {
                     "temperature": 0,
-                    "maxOutputTokens": 1500,
+                    "maxOutputTokens": max_tokens,
                     "responseMimeType": "application/json",
                 },
             }
         else:
-            endpoint = (
-                self.settings.vlm_url if provider == "compatible" else self.settings.helmcode_url
-            ).rstrip("/") + "/chat/completions"
             token = (
                 self.settings.vlm_api_key
                 if provider == "compatible"
                 else self.settings.helmcode_api_key
             )
             headers = {"Authorization": "Bearer " + token} if token else {}
-            generation = {"temperature": 0, "max_tokens": 1500}
+            generation = {"temperature": 0, "max_tokens": max_tokens}
             if provider == "helmcode":
                 generation.update(reasoning_effort="none", response_format={"type": "json_object"})
             body = {
