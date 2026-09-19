@@ -1,5 +1,6 @@
 import type {
   ApiClient,
+  DocumentUpload,
   DraftIn,
   ExecutionMetrics,
   ExecutionOut,
@@ -7,10 +8,14 @@ import type {
   ProcessMetrics,
   ProcessSummary,
   PublishIn,
+  RunSummary,
+  SourceDetail,
+  SourceOut,
+  SyncResult,
+  WorkbookUpload,
   VersionDraft,
   VersionOut,
   DocumentEvidence,
-  IngestedFile,
   Instance,
   InstanceState,
   NormResult,
@@ -332,12 +337,7 @@ export const liveClient: ApiClient = {
   getExecution: (processId) => get<ExecutionOut>(`/processes/${processId}/execution`),
   saveDraft: (processId, body: DraftIn) => put<VersionDraft>(`/processes/${processId}/draft`, body),
 
-  run: async (processId) => {
-    const raw = await post<{ decided: number; by_decision: Record<string, number> }>(
-      `/processes/${processId}/run`,
-    )
-    return { decididas: raw.decided, por_decision: raw.by_decision }
-  },
+  run: (processId) => post<RunSummary>(`/processes/${processId}/run`),
   listInstances: async (processId, state?: InstanceState) => {
     // Current backend has no REVIEW state: unread documents remain PENDING.
     if (state === 'REVISION') return []
@@ -457,88 +457,37 @@ export const liveClient: ApiClient = {
   },
   exportOutcomes: (processId) => getText(`/processes/${processId}/export`),
 
-  listFiles: async (processId) => {
-    const items = await liveClient.listInstances(processId)
-    return items.map((item) => ({
-      hash: '',
-      nombre: item.nombre,
-      bytes: 0,
-      tiene_texto: true,
-      ingerido: '',
-    }))
-  },
-  uploadFiles: async (processId, files) => {
-    const results: IngestedFile[] = []
+  uploadFiles: async (processId, files, onProgress) => {
+    const results: DocumentUpload[] = []
     for (const file of files) {
       const form = new FormData()
       form.append('file', file)
-      const raw = await upload<{
-        name: string
-        file_hash: string
-        extraction?: { text?: string }
-        symbols?: Record<string, { value?: unknown } | null>
-      }>(`/processes/${processId}/files`, form)
-      const filled = raw.symbols
-        ? Object.entries(raw.symbols).some(
-            ([key, item]) =>
-              key !== 'file_id' &&
-              key !== 'free_text' &&
-              item != null &&
-              item.value != null &&
-              item.value !== '',
-          )
-        : Boolean(raw.extraction?.text)
-      results.push({
-        hash: raw.file_hash,
-        nombre: raw.name,
-        bytes: file.size,
-        tiene_texto: filled,
-        ingerido: new Date().toISOString(),
+      let result = await upload<DocumentUpload>(`/processes/${processId}/files`, form)
+      // The same file again: a PENDING instance keeps the symbols it had, so read it again.
+      if (!result.created && result.status === 'PENDING') {
+        result = await post<DocumentUpload>(`/instances/${result.instance_id}/extract`, {})
+      }
+      results.push(result)
+      onProgress?.({
+        done: results.length,
+        total: files.length,
+        name: result.name,
+        status: result.status,
       })
     }
     return results
   },
-  listSources: async (processId) => {
-    const items = await get<
-      { name: string; origin: string; rows: number; loaded_at: string }[]
-    >(`/processes/${processId}/sources`)
-    return items.map((item) => ({
-      nombre: item.name,
-      origen: item.origin,
-      filas: item.rows,
-      cargada: item.loaded_at,
-    }))
-  },
-  uploadWorkbook: async (processId, file, cutOffDate = '2026-09-18') => {
+  listSources: (processId) => get<SourceOut[]>(`/processes/${processId}/sources`),
+  getSource: (processId, name) =>
+    get<SourceDetail>(`/processes/${processId}/sources/${encodeURIComponent(name)}`),
+  uploadWorkbook: (processId, file, cutOffDate) => {
     const form = new FormData()
     form.append('file', file)
     form.append('cut_off_date', cutOffDate)
-    const raw = await upload<{
-      sources: { name: string; rows: number }[]
-      file_hash: string
-    }>(`/processes/${processId}/sources/workbook`, form)
-    return raw.sources.map((item) => ({
-      nombre: item.name,
-      origen: file.name,
-      filas: item.rows,
-      cargada: new Date().toISOString(),
-    }))
+    return upload<WorkbookUpload>(`/processes/${processId}/sources/workbook`, form)
   },
-  uploadSource: async (processId, name, file) => {
-    const loads = await liveClient.uploadWorkbook(processId, file)
-    return loads.find((item) => item.nombre === name) ?? loads[0]
-  },
-  syncErp: async (processId) => {
-    const raw = await post<{ origin: string; rows: number }>(
-      `/processes/${processId}/sources/erp/sync`,
-    )
-    return {
-      nombre: 'erp',
-      origen: raw.origin,
-      filas: raw.rows,
-      cargada: new Date().toISOString(),
-    }
-  },
+  syncSource: (processId, name) =>
+    post<SyncResult>(`/processes/${processId}/sources/${encodeURIComponent(name)}/sync`),
 
   listLlmConfig: async () => {
     const cases = await get<RawUseCase[]>('/use-cases')

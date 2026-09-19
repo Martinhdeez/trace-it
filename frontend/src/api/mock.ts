@@ -11,7 +11,6 @@ import type {
   DefinitionLoad,
   Finding,
   Impact,
-  IngestedFile,
   Instance,
   InstanceDetail,
   InstanceState,
@@ -26,7 +25,6 @@ import type {
   RuleInput,
   RuleOutcome,
   RuleState,
-  SourceLoad,
   Suggestion,
   SymbolValue,
   TraceEvent,
@@ -276,35 +274,6 @@ function eventsOf(item: Row): TraceEvent[] {
 }
 
 const findings: Finding[] = []
-const files: IngestedFile[] = classifiedInvoices.slice(0, 40).map((invoice) => ({
-  hash: hash(invoice.fileId),
-  nombre: invoice.fileId,
-  bytes: invoice.sizeKb * 1024,
-  tiene_texto: !imageOnly.has(invoice.fileId),
-  ingerido: NOW,
-}))
-
-const sources: SourceLoad[] = [
-  {
-    nombre: 'proveedores',
-    origen: 'FINAL_v7_DEFINITIVO_ahorasi.xlsx · Proveedores',
-    filas: 11,
-    cargada: '2026-09-18T10:41:00',
-  },
-  {
-    nombre: 'pedidos',
-    origen: 'FINAL_v7_DEFINITIVO_ahorasi.xlsx · Pedidos_2026',
-    filas: 516,
-    cargada: '2026-09-18T10:41:00',
-  },
-  {
-    nombre: 'erp',
-    origen: 'http://127.0.0.1:8009 · foto local',
-    filas: 516,
-    cargada: '2026-09-18T11:02:00',
-  },
-]
-
 const llmConfig: LlmConfig[] = LLM_ROLES.map((role, index) => ({
   papel: role,
   modelo: index % 2 === 0 ? 'anthropic/claude-opus-5' : 'openai/gpt-5',
@@ -653,28 +622,7 @@ export const mockClient: ApiClient = {
   getExecution: noMock,
   saveDraft: noMock,
 
-  run: async (processId) => {
-    const batch = ofProcess(processId)
-    for (const item of batch) {
-      if (item.instance.estado !== 'PENDIENTE') continue
-      item.instance.estado = 'DECIDIDA'
-      item.instance.decision = 'PAGAR'
-      item.reason = ''
-    }
-    const por_decision: Record<string, number> = {}
-    for (const item of batch) {
-      if (!item.instance.decision) continue
-      por_decision[item.instance.decision] = (por_decision[item.instance.decision] ?? 0) + 1
-    }
-    return wait(
-      {
-        decididas: batch.filter((item) => item.instance.estado === 'DECIDIDA').length,
-        por_decision,
-      },
-      900,
-    )
-  },
-
+  run: noMock,
   listInstances: (processId, state?: InstanceState) =>
     wait(
       ofProcess(processId)
@@ -786,69 +734,11 @@ export const mockClient: ApiClient = {
     return wait(lines.join('\n'), 400)
   },
 
-  listFiles: (processId) => wait(processId === 1 ? files : []),
-
-  uploadFiles: async (processId, incoming) => {
-    const added = incoming.map((file) => ({
-      hash: hash(file.name + file.size),
-      nombre: file.name,
-      bytes: file.size,
-      tiene_texto: !file.name.startsWith('scan'),
-      ingerido: new Date().toISOString(),
-    }))
-    if (processId === 1) {
-      files.unshift(...added)
-      let nextId = instances.reduce((max, item) => Math.max(max, item.instance.id), 0) + 1
-      for (const file of incoming) {
-        instances.push({
-          instance: {
-            id: nextId++,
-            nombre: file.name,
-            estado: 'PENDIENTE',
-            decision: null,
-          },
-          reason: '',
-          latencyMs: 0,
-          decisions: [],
-        })
-      }
-    }
-    return wait(added, 600)
-  },
-
-  listSources: (processId) => wait(processId === 1 ? [...sources] : []),
-
-  uploadWorkbook: async (processId, file) => {
-    const loads: SourceLoad[] = [
-      { nombre: 'suppliers', origen: file.name, filas: 12, cargada: new Date().toISOString() },
-      { nombre: 'orders', origen: file.name, filas: 516, cargada: new Date().toISOString() },
-      { nombre: 'parameters', origen: file.name, filas: 1, cargada: new Date().toISOString() },
-    ]
-    if (processId === 1) {
-      for (const load of loads) {
-        const index = sources.findIndex((item) => item.nombre === load.nombre)
-        if (index >= 0) sources[index] = load
-        else sources.push(load)
-      }
-    }
-    return wait(loads, 400)
-  },
-
-  uploadSource: async (processId, name, file) => {
-    const loads = await mockClient.uploadWorkbook(processId, file)
-    return loads.find((item) => item.nombre === name) ?? loads[0]
-  },
-
-  syncErp: async () => {
-    const load: SourceLoad = {
-      nombre: 'erp',
-      origen: 'http://127.0.0.1:8009 · foto local',
-      filas: 516,
-      cargada: new Date().toISOString(),
-    }
-    sources[sources.findIndex((item) => item.nombre === 'erp')] = load
-    return wait(load, 1200)
-  },
+  uploadFiles: noMock,
+  listSources: noMock,
+  getSource: noMock,
+  uploadWorkbook: noMock,
+  syncSource: noMock,
 
   listLlmConfig: () => wait([...llmConfig]),
 

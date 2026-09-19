@@ -25,6 +25,16 @@ export type ExecutionSettings = Schemas['ExecutionSettings']
 export type AgentSettings = Schemas['AgentSettings']
 export type ExtractionSettings = Schemas['ExtractionSettings']
 export type DecisionReview = Schemas['DecisionReviewConfig']
+export type RunSummary = Schemas['RunSummary']
+export type DocumentUpload = Schemas['DocumentUpload']
+export type WorkbookUpload = Schemas['WorkbookUpload']
+export type SourceOut = Schemas['SourceOut']
+export type SourceDetail = Schemas['SourceDetail']
+export type SyncResult = Schemas['SyncResult']
+
+/** Reported after each file of a batch has been uploaded (and re-extracted when it was stale). */
+export type UploadProgress = { done: number; total: number; name: string; status: string }
+
 export type Preset = Exclude<ExecutionSettings['preset'], 'custom'>
 
 /** The backend leaves `validation` as free JSON; these are the fields the console reads. */
@@ -296,19 +306,6 @@ export type Resolution = {
   motivo: string
 }
 
-export type RunSummary = {
-  decididas: number
-  por_decision: Record<string, number>
-}
-
-export type IngestedFile = {
-  hash: string
-  nombre: string
-  bytes: number
-  tiene_texto: boolean
-  ingerido: string
-}
-
 export type DocumentEvidence = {
   id: string
   file_id: string
@@ -328,13 +325,6 @@ export type DocumentEvidence = {
   metrics: Record<string, unknown>
   cache_hit: boolean
   pipeline_version: string
-}
-
-export type SourceLoad = {
-  nombre: string
-  origen: string
-  filas: number
-  cargada: string
 }
 
 export type LlmConfig = {
@@ -390,13 +380,17 @@ export interface ApiClient {
   listFindings(processId: number): Promise<Finding[]>
   exportOutcomes(processId: number): Promise<string>
 
-  listFiles(processId: number): Promise<IngestedFile[]>
-  uploadFiles(processId: number, files: File[]): Promise<IngestedFile[]>
-  listSources(processId: number): Promise<SourceLoad[]>
-  /** Excel of suppliers / orders / parameters. Same call as the live demo. */
-  uploadWorkbook(processId: number, file: File, cutOffDate?: string): Promise<SourceLoad[]>
-  uploadSource(processId: number, name: string, file: File): Promise<SourceLoad>
-  syncErp(processId: number): Promise<SourceLoad>
+  uploadFiles(
+    processId: number,
+    files: File[],
+    onProgress?: (progress: UploadProgress) => void,
+  ): Promise<DocumentUpload[]>
+  listSources(processId: number): Promise<SourceOut[]>
+  /** One source with its rows. `parameters` holds the cut-off date. 404 until loaded. */
+  getSource(processId: number, name: string): Promise<SourceDetail>
+  /** Excel of suppliers / orders / parameters. The cut-off date is required, there is no default. */
+  uploadWorkbook(processId: number, file: File, cutOffDate: string): Promise<WorkbookUpload>
+  syncSource(processId: number, name: string): Promise<SyncResult>
 
   listLlmConfig(): Promise<LlmConfig[]>
   setLlmConfig(role: string, model: string): Promise<LlmConfig>
