@@ -21,3 +21,4 @@ backups/
 deploy/models/
 playwright-report/
 test-results/
+.erp.log
