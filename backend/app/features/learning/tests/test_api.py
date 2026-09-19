@@ -186,6 +186,26 @@ async def test_human_conflict_prevents_adoption(monkeypatch):
         assert (await approve(api, prop, result["id"], headers)).status_code == 409
 
 
+async def test_a_resolved_escalation_the_norm_leaves_alone_is_no_conflict(monkeypatch):
+    """R01 in learning: compared with the engine's ESCALAR, the norm changes nothing on the
+    case a person paid, so it contradicts nobody and the norm can be adopted."""
+    async with client() as api:
+        pid, headers, ref = await seed(api)
+        cases = (await api.get(f"/processes/{pid}/instances")).json()
+        escalated = next(c for c in cases if c["decision"] == "ESCALAR")
+        response = await api.post(
+            f"/instances/{escalated['id']}/resolve",
+            headers=headers,
+            json={"decision": "PAGAR", "reason": "IBAN confirmed by phone"},
+        )
+        assert response.status_code == 200
+        prop = await propose(api, monkeypatch, pid, headers, ref)
+        result = await prepare(api, monkeypatch, prop, headers)
+    assert result["report"]["valid"], result["report"]
+    assert result["report"]["impact"]["conflicts"] == []
+    assert escalated["id"] not in [c["instance_id"] for c in result["report"]["impact"]["changes"]]
+
+
 @pytest.mark.parametrize("change", ["source", "human"])
 async def test_stale_preview_cannot_be_approved(monkeypatch, change):
     async with client() as api:

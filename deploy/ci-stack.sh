@@ -18,6 +18,9 @@ case "${1:-}" in
     printf 'ci:%s\n' "$(openssl passwd -apr1 ci-only-password)" > "$TRACE_AUTH_FILE"
     "${compose[@]}" up -d --wait --wait-timeout 120 db
     "${compose[@]}" run --rm --no-deps backend alembic upgrade head
+    # Verify this exact image carries the standalone command and safe disabled default.
+    "${compose[@]}" run --rm --no-deps backend python -m app.features.mail_ingestion.worker check
+    "${compose[@]}" run --rm --no-deps -e MAIL_INGESTION_ENABLED=false backend python -m app.features.mail_ingestion.worker run
     "${compose[@]}" run --rm --no-deps backend python -m app.cli load /processes/invoice-payment.json
     "${compose[@]}" up -d --wait --wait-timeout 180
     ;;
@@ -31,6 +34,7 @@ case "${1:-}" in
       createdb -U trace trace_backup_ci
       pg_restore --exit-on-error -U trace -d trace_backup_ci /tmp/trace-ci.dump
       test "$(psql -At -U trace -d trace_backup_ci -c "SELECT id FROM ci_backup_probe")" = 42
+      test "$(psql -At -U trace -d trace_backup_ci -c "SELECT count(*) FROM mail_accounts")" = 0
       psql -v ON_ERROR_STOP=1 -U trace -d trace -c "DROP TABLE ci_backup_probe"
       dropdb -U trace trace_backup_ci
       rm /tmp/trace-ci.dump

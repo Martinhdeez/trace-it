@@ -51,6 +51,8 @@ def test_assistant_spans_are_agents_not_execution() -> None:
     """LLM suggestions take seconds; in execution they would drag its p95 (and health)."""
     assert service.PLANES["suggest_escalation"] == Plane.agents
     assert service.PLANES["propose_decision"] == Plane.agents
+    assert service.PLANES["suggest_rule"] == Plane.agents
+    assert service.PLANES["expire_proposal"] == Plane.agents
 
 
 class Answer(BaseModel):

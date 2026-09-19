@@ -22,13 +22,18 @@ curl --fail-with-body "$TRACE_API_BASE/me" \
   -H "Authorization: Bearer $TRACE_API_TOKEN"
 ```
 
-The same Bearer token works on EVERY business endpoint in the OpenAPI contract, including
+The same administrative Bearer token works on the business endpoints in the OpenAPI contract, including
 uploads, process creation, rule compilation, publishing, running decisions, source sync,
 learning, proposals, configuration, traces, metrics and exports. It acts as the dedicated
 **Trace-it API** manager (`trace-it-api@localhost`). No login or `X-User-Id` is needed;
 `X-User-Id` cannot override a Bearer caller's identity. This is a shared administrative
 credential, not a separate identity for each person. Application permissions, validation,
 revision checks and workflow prerequisites still apply.
+
+Mail ingestion is an exception: `/mail-ingestion/{process_id}` requires its own mailbox
+service token, limited to a single assigned process. Never configure the worker with the
+administrative token. See [mail-ingestion.md](mail-ingestion.md) for gathering settings,
+read-only IMAP, recovery and disabled installation.
 
 Existing browser access continues to use HTTP Basic at the proxy, with `X-User-Id` for
 application actions. The database administration API ALWAYS requires Bearer, even for a
@@ -217,6 +222,19 @@ all request/response schemas and examples and is updated together with the deplo
 
 - `GET /health` — Health
 - `GET /ready` — Ready
+- `GET /processes/{process_id}/gathering` — Read the process gathering email
+- `PUT /processes/{process_id}/gathering` — Assign the supported gathering email exclusively
+- `GET /processes/{process_id}/mail-ingestion` — Mail provenance and processing status
+- `GET /mail-ingestion/{process_id}` — Scoped worker state and protocol version
+- `POST /mail-ingestion/{process_id}/initialize` — Persist the first-activation UID boundary
+- `POST /mail-ingestion/{process_id}/discover` — Persist discovered work and cursor atomically
+- `POST /mail-ingestion/{process_id}/poll-failure` — Record bounded polling failure/backoff
+- `POST /mail-ingestion/{process_id}/claim` — Reserve recoverable work
+- `PUT /mail-ingestion/{process_id}/messages/{message_id}/manifest` — Save bounded MIME metadata
+- `PUT /mail-ingestion/{process_id}/messages/{message_id}/attachments/{attachment_id}` — Import a validated PDF
+- `POST /mail-ingestion/{process_id}/messages/{message_id}/attachments/{attachment_id}/failure` — Record attachment rejection
+- `POST /mail-ingestion/{process_id}/messages/{message_id}/finish` — Evaluate only owned imports
+- `POST /mail-ingestion/{process_id}/messages/{message_id}/failure` — Record retryable or terminal failure
 - `GET /db/tables` — Tables
 - `GET /db/tables/{table_name}/schema` — Schema
 - `GET /db/tables/{table_name}/rows` — Rows

@@ -107,6 +107,15 @@ test-e2e: test-db  # golden outcomes of batch 1 + API flow (needs the challenge 
 	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
 	$(PYTEST) -m "e2e and not llm"
 
+# Synthetic IMAP, worker, API, PostgreSQL and console on an isolated test database.
+MAIL_TEST_DB_URL ?= postgresql+psycopg://trace:trace@localhost:$${DB_PORT:-5432}/trace_mail_browser_test
+.PHONY: e2e-mail
+e2e-mail:
+	cd backend && TRACE_DATABASE_URL=$(MAIL_TEST_DB_URL) uv run python -m tests.support.prepare_db
+	cd backend && TRACE_DATABASE_URL=$(MAIL_TEST_DB_URL) uv run alembic upgrade head
+	cd tests/integration && npm ci && npx playwright install chromium
+	cd tests/integration && MAIL_TEST_DATABASE_URL=$(MAIL_TEST_DB_URL) npx playwright test --config mail.config.ts
+
 eval-compiler:  # opt-in, calls real LLMs (keys in .env); writes backend/evals/reports/
 	cd backend && uv run python -m evals.eval_compiler
 

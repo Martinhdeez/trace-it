@@ -52,6 +52,8 @@ export function TracePane({
       ? t(`instanceStatus.${instance.status}`)
       : current.replaceAll('_', ' ')
   const latest = instance.decisions.at(-1)
+  const mailOrigin = instance.events.find(event => event.data?.automation === 'mail_ingestion')
+    ?.data?.mail_origin as Record<string, unknown> | undefined
   // The trace carries each result with its rule's text.
   const results = trace?.decisions.at(-1)?.rule_results ?? []
   const symbols = bySignificance(
@@ -70,6 +72,11 @@ export function TracePane({
   return (
     <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-6 pb-4">
       <DocumentHeader instance={instance} onOpen={() => setDocument({ instanceId: instance.id })} />
+      {mailOrigin && <details className="mb-4 rounded-lg border border-hairline p-3 text-sm">
+        <summary>Recibido por correo · {String(mailOrigin.original_name ?? instance.name)}</summary>
+        <p className="mt-2 break-all">{String(mailOrigin.sender ?? '')} · {String(mailOrigin.subject ?? '')}</p>
+        <p className="mt-1 break-all text-xs text-muted">{String(mailOrigin.account)} · {String(mailOrigin.folder)} · UID {String(mailOrigin.uid)} · Parte {String(mailOrigin.part)}</p>
+      </details>}
       {document?.instanceId === instance.id ? (
         <DocumentPopup instance={instance} trace={trace} initialSymbol={document.symbol} onClose={() => setDocument(null)} />
       ) : null}

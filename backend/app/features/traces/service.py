@@ -83,6 +83,8 @@ PLANES: dict[str, Plane] = {
     "provider_call": _INGESTION,
     "focused_read": _INGESTION,
     "ingest_document": _INGESTION,
+    "configure_mail_gathering": _INGESTION,
+    "mail_operator": _INGESTION,
     "reextract_document": _INGESTION,
     "extract_document": _INGESTION,
     "upload_workbook": _INGESTION,
@@ -119,6 +121,8 @@ PLANES: dict[str, Plane] = {
     "reject_proposal": _AGENTS,
     "suggest_escalation": _AGENTS,  # the assistant's LLM suggestions, not the engine's run
     "propose_decision": _AGENTS,
+    "suggest_rule": _AGENTS,  # an amendment of the escalating rule, after a resolution
+    "expire_proposal": _AGENTS,  # open proposals closed unsettled: `superseded` + cause
     # Running compiled code over instances, and the people acting on its decisions.
     "run_process": _EXECUTION,
     "evaluate_rule": _EXECUTION,

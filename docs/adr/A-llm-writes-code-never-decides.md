@@ -21,6 +21,8 @@ until those tests pass. The manager publishes the resulting rules as a process v
 pure engine runs every published rule on every invoice, in a sandbox. The rule returns
 `{"fires", "reason"}`; the decision type comes from the approved rule, never from the code.
 
+**Update 2026-09-19 (ADR 0035).** The reviewer agent also writes rule text: after a manager resolves an escalated case, it proposes the escalating rule with an exception. The manager accepts it; it is compiled, validated and published like any rule. No LLM enters the decision.
+
 ## Alternatives considered
 
 | Option | Why we rejected it |
