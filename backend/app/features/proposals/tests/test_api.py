@@ -123,7 +123,7 @@ async def test_only_a_manager_settles(monkeypatch):
         pid, headers, iid, _ = await escalated(api, monkeypatch, [PROPOSAL])
         proposal = await propose(api, iid, headers)
         r = await api.post(
-            "/users", json={"name": "Op", "email": f"op-{iid}@x.com", "role": "user"}
+            "/users", json={"name": "Op", "email": f"op-{iid}@x.com", "role": "operator"}
         )
         other = {"X-User-Id": str(r.json()["id"])}
         denied = await api.post(f"/proposals/{proposal['id']}/accept", headers=other)
