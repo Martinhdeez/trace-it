@@ -1,6 +1,6 @@
 """The reviewable contract between discovery, the manager and compilation."""
 
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -22,7 +22,11 @@ class SourceProposal(BaseModel):
     sheet: str = ""
     first_row: int = Field(default=2, ge=1)
     last_row: int = Field(default=2, ge=1)
-    columns: dict[str, str] = {}  # output field -> Excel column letter
+    columns: dict[str, Annotated[str, Field(pattern=r"^[A-Z]{1,3}$")]] = Field(
+        default_factory=dict,
+        description='Output field name to Excel column letter, e.g. {"supplier_id": "A"}, '
+        'never {"A": "supplier_id"}.',
+    )
     snapshot: str = ""
     rows: list[dict[str, Any]] = []  # constants only, approved as part of this proposal
 

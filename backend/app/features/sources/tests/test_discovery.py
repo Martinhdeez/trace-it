@@ -38,6 +38,16 @@ def test_formula_is_not_silently_a_source_of_truth():
         discovery.materialize(plan, data)
 
 
+def test_reversed_model_column_mapping_is_rejected():
+    from pydantic import ValidationError
+
+    plan, _ = mapping_data()
+    proposed = plan.model_dump()
+    proposed["sources"][0]["columns"] = {"A": "supplier_id", "B": "maximum"}
+    with pytest.raises(ValidationError, match="string_pattern_mismatch"):
+        DraftPlan.model_validate(proposed)
+
+
 def test_nonexistent_sheet_and_empty_table_are_rejected():
     plan, data = mapping_data()
     plan.sources[0].sheet = "Missing"
