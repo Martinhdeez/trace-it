@@ -53,6 +53,8 @@ def passes():
 
 def evaluate(instance, sources, others):
     """The invoice asks for what was ordered."""
+    if str(instance.get("currency") or "").strip().upper() not in ("", "EUR"):
+        return passes()  # R18 requires an explicit policy; never compare unlike currencies.
     order = key(instance.get("purchase_order"))
     if not order or empty(instance.get("total")):
         return passes()

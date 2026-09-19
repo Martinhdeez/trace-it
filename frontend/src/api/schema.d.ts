@@ -5324,6 +5324,14 @@ export interface components {
             rows: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Operation
+             * @default replace
+             * @enum {string}
+             */
+            operation: "replace" | "append" | "upsert" | "delete";
+            /** Key */
+            key?: string[];
         };
         /**
          * SourceRead

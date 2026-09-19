@@ -20,8 +20,9 @@ PAYMENT_FIELDS = {
     "vat_rate": "vat_rate",
     "vat_amount": "vat_amount",
     "total": "gross_amount",
+    "currency": "currency",
 }
-REQUIRED_PAYMENT_SYMBOLS = frozenset(PAYMENT_FIELDS) - {"invoice_number"}
+REQUIRED_PAYMENT_SYMBOLS = frozenset(PAYMENT_FIELDS) - {"invoice_number", "currency"}
 
 
 def payment_symbols(result: ExtractionResult, names: set[str]) -> dict:
@@ -47,10 +48,19 @@ def payment_symbols(result: ExtractionResult, names: set[str]) -> dict:
 def origin(result: ExtractionResult, name: str) -> str:
     """No page with native text: every value was read by OCR or vision, and one its readers
     did not confirm says so (ADR 0025)."""
-    if result.metrics.get("native_pages") != 0:
-        return f"document:{result.id}"
     reading = result.fields.get(PAYMENT_FIELDS.get(name, ""))
     check = reading.verification if reading else "verified"
+    if result.metrics.get("native_pages") != 0:
+        # A clearly printed impossible date is business evidence, not an OCR guess.
+        invalid_native_date = (
+            name == "date"
+            and reading
+            and check == "invalid"
+            and any(c.evidence.method == "native" for c in reading.candidates)
+        )
+        if reading and check not in {"verified", "missing"} and not invalid_native_date:
+            return f"unverified:{result.id}:{check}"
+        return f"document:{result.id}"
     return f"scan:{result.id}" + ("" if check == "verified" else f":{check}")
 
 

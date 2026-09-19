@@ -85,9 +85,14 @@ not restart services, edit Caddy or change the active ERP. Future script/protoco
 or Compose changes need another reviewed root installation; application images
 cannot rewrite the root-owned deployment controls.
 
-The older `prepare.py` / `install.sh` bundle is historical first-install tooling
-for the workbook/provider bootstrap. It is not the release/CD path and must not
-be used to update an existing ledger.
+The `prepare.py` / `install.sh` bundle remains first-install tooling for the
+workbook/provider bootstrap. Its explicit `compose.update.yml` overlay and
+`TRACE_ERP_UPDATE` CSV option remain available for manual installations; see
+[Batch 2 compatibility](../../docs/batch2-compatibility.md) for the cumulative
+reference workbook and input review. Versioned CD images reject external CSV
+overrides: their ordered updates must be declared in `release.json`, so the
+running ledger matches its release evidence. Do not run the bootstrap installer
+to update an existing production ledger.
 
 ## Evidence, impact and reprocessing
 

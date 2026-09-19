@@ -28,7 +28,7 @@ from app.features.ingestion.schemas import ExtractionResult, ExtractOptions, Fie
 from app.features.ingestion.store import Store
 from app.features.sources.excel import extract_workbook
 
-PIPELINE_VERSION = "invoice-v2.2.0+xlsx-v1.3"
+PIPELINE_VERSION = "invoice-v2.3.0+xlsx-v1.3"
 logger = logging.getLogger(__name__)
 
 
@@ -162,6 +162,8 @@ class ExtractionService:
             "features/ingestion/config.py",
         ]
         invoice = [
+            "pdf/international.py",
+            "pdf/visual_risk.py",
             "pdf/extractor.py",
             "pdf/native.py",
             "pdf/layout.py",

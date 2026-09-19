@@ -16547,6 +16547,24 @@
             "type": "array",
             "title": "Rows",
             "default": []
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "replace",
+              "append",
+              "upsert",
+              "delete"
+            ],
+            "title": "Operation",
+            "default": "replace"
+          },
+          "key": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Key"
           }
         },
         "type": "object",

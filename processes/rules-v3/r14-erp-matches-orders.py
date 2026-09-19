@@ -57,24 +57,22 @@ def evaluate(instance, sources, others):
     if not order:
         return passes()
     its = None
-    entry = None
     for row in rows(sources, "orders"):
         if key(row.get("purchase_order")) == order:
             its = row
-    for row in rows(sources, "erp"):
-        if key(row.get("purchase_order")) == order:
-            entry = row
-    if its is None or entry is None:
+    entries = [r for r in rows(sources, "erp") if key(r.get("purchase_order")) == order]
+    if its is None or not entries:
         return passes()
-    differ = []
-    if not empty(its.get("total_amount")) and not empty(entry.get("amount")):
-        if not matches(entry.get("amount"), its.get("total_amount")):
-            differ.append("amount")
-    if text(entry.get("supplier_id")) != text(its.get("supplier_id")):
-        differ.append("supplier_id")
-    if not empty(its.get("nif")) and not empty(entry.get("nif")):
-        if key(entry.get("nif")) != key(its.get("nif")):
-            differ.append("nif")
+    differ = set()
+    for entry in entries:
+        if not empty(its.get("total_amount")) and not empty(entry.get("amount")):
+            if not matches(entry.get("amount"), its.get("total_amount")):
+                differ.add("amount")
+        if text(entry.get("supplier_id")) != text(its.get("supplier_id")):
+            differ.add("supplier_id")
+        if not empty(its.get("nif")) and not empty(entry.get("nif")):
+            if key(entry.get("nif")) != key(its.get("nif")):
+                differ.add("nif")
     if differ:
-        return fires("ERP and orders differ in: " + ", ".join(differ))
+        return fires("ERP and orders differ in: " + ", ".join(sorted(differ)))
     return passes()
