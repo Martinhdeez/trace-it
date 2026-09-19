@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { AgentSettings, ExecutionSettings, ExtractionSettings } from '../../api/execution'
+import type { AgentSettings, ExecutionSettings, ExtractionSettings } from '../../api/contracts'
 import { Field, Input, Textarea } from '../shell/Controls'
 
 function JsonField({ value, label, onChange, onValidity }: {
@@ -50,7 +50,7 @@ export function ExecutionEditor({ value, onChange, onValidity }: {
     {Object.entries(value.agents).map(([role, config]) => <details key={role} className="rounded-lg bg-canvas p-3">
       <summary className="cursor-pointer text-sm">{role.replaceAll('_', ' ')} <span className="ml-2 font-mono text-xs text-muted">{config.model}</span></summary>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <Field label="Model"><Input value={config.model} onChange={e => agent(role, { model: e.target.value })} /></Field>
+        <Field label="Model"><Input value={config.model ?? ''} onChange={e => agent(role, { model: e.target.value })} /></Field>
         <Field label="Fallback models, comma separated"><Input defaultValue={config.fallback_models.join(', ')} onChange={e => agent(role, { fallback_models: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></Field>
         {(['timeout_seconds', 'retries', 'request_limit'] as const).map(key => <Field key={key} label={key.replaceAll('_', ' ')} hint="Blank uses the agent default.">
           <Input type="number" min={key === 'retries' ? 0 : 1} value={config[key] ?? ''} onChange={e => agent(role, { [key]: e.target.value === '' ? null : Number(e.target.value) })} />

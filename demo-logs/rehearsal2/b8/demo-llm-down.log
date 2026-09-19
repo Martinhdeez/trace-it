@@ -1,0 +1,16 @@
+cd backend && OPENAI_BASE_URL=http://127.0.0.1:9/v1 OPENAI_API_KEY=unreachable PYDANTIC_AI_NO_BANNER=1 \
+		uv run --env-file ../.env python ../tools/demo_llm_down.py
+primary openai:deepseek-v4-flash at http://127.0.0.1:9/v1 (unreachable)
+fallbacks ['helmcode:glm5.3', 'helmcode:qwen3.6']
+
+llm_run span (trace ef1994edaee7e5d35bfc3a34ec0e90af):
+  chain: ["deepseek-v4-flash", "glm5.3", "qwen3.6"]
+  failed_attempts: [{"model": "deepseek-v4-flash", "error": "ModelAPIError: Connection error."}]
+  model: "glm5.3"
+  requests: 1
+  retries: 0
+  output_tokens: 3382
+  -> prohibition ESCALAR: The invoice's printed total (`total`) is above 50000.00 EUR: cents(total) > 5000000 (strictly greater; exactly 50000.00 EUR does not fire).
+real 80.54
+user 1.02
+sys 0.22

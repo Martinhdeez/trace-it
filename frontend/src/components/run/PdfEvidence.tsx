@@ -49,7 +49,7 @@ export function PdfEvidence({
     ? locations.data?.symbol_fields[initialSymbol] ?? initialSymbol
     : null)
   const readings = selectedField ? (locations.data?.fields[selectedField] ?? []) : []
-  const field = selectedField ? evidence.fields[selectedField] : undefined
+  const field = selectedField ? evidence.fields?.[selectedField] : undefined
   const candidate =
     candidateOverride ??
     Math.max(
@@ -184,7 +184,7 @@ export function PdfEvidence({
               </button>
             </p>
           )}
-          {Object.entries(evidence.fields)
+          {Object.entries(evidence.fields ?? {})
             .filter(([name, field]) =>
               `${name} ${field.value ?? field.proposed_value ?? ''}`
                 .toLowerCase()

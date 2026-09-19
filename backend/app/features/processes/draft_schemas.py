@@ -1,5 +1,6 @@
 """The reviewable contract between discovery, the manager and compilation."""
 
+from datetime import datetime
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
@@ -9,7 +10,7 @@ from app.features.processes.execution import ExecutionSettings
 from app.features.processes.schemas import DecisionReviewConfig, DecisionTypeIO, SymbolIO
 
 
-class Evidence(BaseModel):
+class ProposalEvidence(BaseModel):
     reference: str  # workbook hash:sheet!cell, snapshot:name, chat:message number
     explanation: str
 
@@ -17,7 +18,7 @@ class Evidence(BaseModel):
 class SourceProposal(BaseModel):
     name: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
     explanation: str
-    evidence: list[Evidence] = Field(min_length=1)
+    evidence: list[ProposalEvidence] = Field(min_length=1)
     kind: Literal["workbook", "snapshot", "constant"]
     document: str = ""  # workbook content hash
     sheet: str = ""
@@ -37,13 +38,13 @@ class RuleProposal(BaseModel):
     text: str = Field(min_length=1)
     type: Literal["requirement", "prohibition"]
     decision: str
-    evidence: list[Evidence] = Field(min_length=1)
+    evidence: list[ProposalEvidence] = Field(min_length=1)
 
 
 class GuidanceProposal(BaseModel):
     name: str = Field(min_length=1)
     text: str = Field(min_length=1)
-    evidence: list[Evidence] = Field(min_length=1)
+    evidence: list[ProposalEvidence] = Field(min_length=1)
 
 
 class AcceptanceExample(BaseModel):
@@ -81,7 +82,7 @@ class DraftPlan(BaseModel):
             name=self.name,
             description=self.description,
             decision_types=self.decision_types,
-            symbols=self.symbols,
+            symbols=[s.model_dump() for s in self.symbols],  # checked as input here
             decision_review=self.decision_review,
             rules=[r.model_dump(exclude={"name", "evidence"}) for r in self.rules],
         )
@@ -113,7 +114,7 @@ class ReviewIn(RevisionIn):
     explanation: str = Field(default="", max_length=4000)
 
 
-class DraftOut(BaseModel):
+class DiscoveryDraftOut(BaseModel):
     execution: ExecutionSettings | None = None
     # The audit trail of the last agent run on this draft: `GET /traces/{trace_id}` returns
     # its tree, every model call with the instructions it saw and the output it gave.
@@ -136,3 +137,23 @@ class Discussion(BaseModel):
     message: str = Field(min_length=1)
     evidence: list[str] = []
     questions: list[str] = []
+
+
+class DiscoverySessionSummary(BaseModel):
+    id: int
+    name: str
+    revision: int
+    process_id: int | None
+    published_process_id: int | None
+
+
+class DiscoveryRevisionOut(BaseModel):
+    revision: int
+    author_id: int
+    created_at: datetime
+    plan: dict[str, Any]
+    reviews: dict[str, Any]
+    messages: list[dict[str, Any]]
+    preview: dict[str, Any] | None
+    published_rule_ids: list[int]
+    retired_rule_ids: list[int]

@@ -1,0 +1,43 @@
+
+== 1 troubleshooting: discard the old pack draft of process 1 [15:10:23]
+GET draft 200 {'revision': 1}
+DELETE 204 None
+-- 0.1 s
+
+== 1 make load-frozen MANAGER_ID=1 [15:10:23]
+Use case 1: agents ['assistant', 'compiler', 'discovery', 'normalizer', 'tester'] configured
+Process 'Invoice payment' (id 1): 3 decision types, 12 symbols, 2 new rules, 0 new users [exit 0]
+Use case 1: agents ['assistant', 'compiler', 'discovery', 'normalizer', 'tester'] configured
+Process 'Invoice payment - frozen 2026-09-19' (id 2): 3 decision types, 12 symbols, 0 new rules, 0 new users
+{
+  },
+  ],
+  },
+}
+Published process version 2 [exit 0]
+-- 4.2 s
+
+== 1d compiler token limit (P=2) [15:10:33]
+activate 7 200 active
+draft 1 compiler 16000
+-- 0.1 s
+
+== 6 norm v4 (one sentence) [15:10:36]
+An invoice whose total is above 10,000 EUR is reviewed by a person before it is paid.
+201 [(33, 'ESCALAR', "The invoice's total is not above 10,000 EUR, i.e. cents(total) <= 1000000 (total compared in whole cents with Decimal(st")]
+-- 10.2 s
+
+== 6b wait for compiling [15:10:46]
+33 draft ESCALAR True The invoice's total is not above 10,000 EUR, i.e. cents(total) <= 1000000 (total compared 
+-- 20.0 s
+
+== 6c stage each valid check [15:11:06]
+activate 33 200 draft
+-- 0.0 s
+
+== 6e validate and publish [15:11:08]
+200 13 rules {'valid': True, 'unchanged': 454, 'changes': 38, 'conflicts': 0, 'errors': 0, 'already_escalated': 8}
+errors: [] error: None
+already_escalated: [(314, 'copia_2026_0518.pdf', 'MISSING_DATA: issuer_nif, iban'), (473, 'fax_2026_0411.pdf', 'MISSING_DATA: issuer_nif, iban, purchase_order'), (478, 'scan_004.pdf', 'MISSING_DATA: purchase_order'), (484, 'scan_010.pdf', 'MISSING_DATA: iban'), (485, 'scan_011.pdf', 'MISSING_DATA: issuer_nif, iban'), (491, 'scan_017.pdf', 'MISSING_DATA: issuer_nif, iban'), (493, 'scan_021.pdf', 'MISSING_DATA: issuer_nif'), (495, 'scan_023.pdf', 'MISSING_DATA: issuer_nif, iban')]
+publish 201 {'id': 3, 'number': 3, 'reason': 'Norm v4'}
+-- 2.1 s

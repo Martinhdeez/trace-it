@@ -1,0 +1,71 @@
+test -n "scan_002.pdf"
+python3 tools/trace_decision.py "scan_002.pdf" 
+== scan_002.pdf  (instance 476, process 1 'Invoice payment')
+state: DECIDED   exported result: ESCALAR
+file: sha256 912c8408714d, 57181 bytes, read 2026-09-19T12:42:08.331726Z
+
+-- Decisions (oldest first; history is append-only)
+#476 2026-09-19T12:43:29  ESCALAR  by engine
+   reason: MISSING_DATA: issuer_nif, iban
+   process version: v1 (published by Martín: Explicit CLI --activate approval; content 2a2924ceadbe)   rules hash: 82acbdbd32fa
+   FIRED rule 1 (code 144f2c803bef): Missing: issuer_nif, iban
+      text: The symbols `issuer_nif`, `iban`, `purchase_order`, `date`, `base`, `vat_rate`, `vat_amount` and `total` are a
+
+-- Evidence: symbols and their origin
+   base            1292.88                                  scan:9943d4215aef4f1297c9721ae3d0b502:unverified
+   date            2026-07-23                               scan:9943d4215aef4f1297c9721ae3d0b502
+   file_id         scan_002.pdf                             scan:9943d4215aef4f1297c9721ae3d0b502
+   free_text       [Page 1; reader=primary; document con... scan:9943d4215aef4f1297c9721ae3d0b502
+   iban            None                                     scan:9943d4215aef4f1297c9721ae3d0b502:unverified
+   invoice_number  2026/50749                               scan:9943d4215aef4f1297c9721ae3d0b502
+   issuer_name     None                                     scan:9943d4215aef4f1297c9721ae3d0b502
+   issuer_nif      None                                     scan:9943d4215aef4f1297c9721ae3d0b502:ambiguous
+   purchase_order  PO-2026-0478                             scan:9943d4215aef4f1297c9721ae3d0b502
+   total           1564.38                                  scan:9943d4215aef4f1297c9721ae3d0b502:ambiguous
+   vat_amount      271.50                                   scan:9943d4215aef4f1297c9721ae3d0b502:unverified
+   vat_rate        21                                       scan:9943d4215aef4f1297c9721ae3d0b502:unverified
+   scan (no text layer, ADR 0025); not confirmed by its readers: ['base', 'iban', 'total', 'vat_rate', 'issuer_nif', 'vat_amount']
+
+-- Latency per step (spans of this instance, ADR 0018)
+   upload_document          ok    2442 ms
+     store_file             ok    0 ms
+     extraction             ok    2416 ms
+       native_text          ok    1 ms
+       ocr                  ok    235 ms  (page 1, reader primary)
+       ocr                  ok    611 ms  (page 1, reader secondary)
+       vision               error 541 ms
+         provider_call      error 540 ms
+       focused_read         ok    22 ms
+       focused_read         ok    40 ms
+       focused_read         error 0 ms
+       focused_read         ok    36 ms
+       focused_read         error 0 ms
+       focused_read         ok    0 ms
+       focused_read         ok    0 ms
+       focused_read         error 0 ms
+       focused_read         ok    0 ms
+       text_judge           ok    893 ms
+         provider_call      ok    893 ms
+     ingest_document        ok    2415 ms
+   run_process              ok    6867 ms  (batch: 500 instances, 17 rules)
+     sync_source            ok    5419 ms
+     decision               ok    -  -> ESCALAR
+   export_outcomes          ok    29 ms
+
+-- Errors and retries
+   ERROR vision: ProviderUnavailable: No configured image reader succeeded
+   ERROR provider_call: Provider call unavailable
+   ERROR focused_read: ProviderUnavailable: No configured image reader succeeded
+   ERROR focused_read: ProviderUnavailable: No configured image reader succeeded
+   ERROR focused_read: ProviderUnavailable: No configured image reader succeeded
+   extraction 9943d4215aef: 8 OCR, 4 vision, 1 judge calls; warnings 12 ['FIELD_AMBIGUOUS', 'FIELD_UNVERIFIED', 'FOCUSED_READER_ERROR', 'FOCUSED_UNRESOLVED', 'OCR_SEPARATOR_PROPOSAL', 'VLM_ERROR']
+   rules [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]: no LLM compilation (hand-written or loaded from a pack)
+   rule runtime errors across their runs: 0
+   erp sync 2026-09-19T12:43:23 (ok): 31 requests, 3 retries, 0 timeouts, 5419 ms
+
+-- Pending work
+   ESCALATED, waiting for a person: MISSING_DATA: issuer_nif, iban
+   resolve: POST /instances/476/resolve (manager)
+   no stale-decision alert on this instance (ADR 0026)
+   process: 28 escalated, 0 pending, 0 open alerts; decisions {'ESCALAR': 28, 'PAGAR': 436, 'NO_PAGAR': 36}
+   planes now: ingestion ok, agents ok, execution ok

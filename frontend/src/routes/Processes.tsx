@@ -40,9 +40,9 @@ export function Processes() {
               {processes.data.map((process) => (
                 <li key={process.id}>
                   <Link to={paths.process(process.id)} className="block px-3.5 py-3 hover:bg-canvas">
-                    <p className="text-[15px] font-medium">{process.nombre}</p>
+                    <p className="text-[15px] font-medium">{process.name}</p>
                     <p className="mt-0.5 line-clamp-2 text-[12.5px] text-muted">
-                      {process.descripcion}
+                      {process.description}
                     </p>
                   </Link>
                 </li>

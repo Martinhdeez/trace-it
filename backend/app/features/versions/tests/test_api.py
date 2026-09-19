@@ -14,6 +14,7 @@ from app.features.rules.model import Rule
 from app.features.rules.service import rule_hash
 from app.features.sources.model import Source
 from app.features.versions import configuration
+from tests.support.users import anonymous
 
 CODE = """def evaluate(instance, sources, others):
     duplicate = any(o.get("order") == instance.get("order") for o in others)
@@ -337,6 +338,52 @@ async def test_existing_required_data_and_undeclared_rule_access_remain_blocking
         assert "unknown symbols" in blocked["validation"]["error"]
 
 
+async def test_cases_already_escalated_for_missing_required_data_do_not_block():
+    async with client() as api:
+        pid, headers, _, _ = await seed(api)
+        cases = {}
+        async with session_factory() as session:
+            for case in await session.scalars(select(Instance).where(Instance.process_id == pid)):
+                cases[case.name] = case.id
+                if case.name == "b":
+                    case.symbols = stored({})
+            await session.commit()
+        draft = (await api.get(f"/processes/{pid}/draft", headers=headers)).json()
+        required = await api.put(
+            f"/processes/{pid}/draft",
+            headers=headers,
+            json={
+                "expected_revision": draft["revision"],
+                "symbols": [{"name": "order", "type": "text", "required": True}],
+            },
+        )
+        assert required.status_code == 200, required.text
+        await publish(api, pid, headers)
+        assert (await api.post(f"/processes/{pid}/run")).status_code == 200
+        [queued] = (await api.get(f"/processes/{pid}/queue")).json()
+        assert queued["reason"] == "MISSING_DATA: order"
+
+        # Friday's scans: escalated for the field they lack, so the policy already applied.
+        await api.put(f"/processes/{pid}/draft", headers=headers, json={"description": "v2"})
+        report = (await validate(api, pid, headers))["validation"]
+        assert report["valid"] and not report["errors"], report
+        assert report["already_escalated"] == [
+            {"instance_id": cases["b"], "name": "b", "reason": "MISSING_DATA: order"}
+        ]
+        await publish(api, pid, headers)
+
+        # A case decided PAY that lacks the field is still an error.
+        async with session_factory() as session:
+            (await session.get(Instance, cases["a"])).symbols = stored({})
+            await session.commit()
+        await api.put(f"/processes/{pid}/draft", headers=headers, json={"description": "v3"})
+        blocked = (await validate(api, pid, headers))["validation"]
+        assert not blocked["valid"]
+        assert blocked["errors"] == [
+            {"instance_id": cases["a"], "reason": "MISSING_EXISTING_REQUIRED: order"}
+        ]
+
+
 async def test_stale_evidence_and_revision_refuse_publication():
     async with client() as api:
         pid, headers, _, _ = await seed(api)
@@ -391,7 +438,7 @@ async def test_historical_queue_resolution_and_pack_reload():
 async def test_invalid_rules_and_manager_gate():
     async with client() as api:
         pid, headers, rid, _ = await seed(api)
-        assert (await api.post(f"/processes/{pid}/draft/validate")).status_code == 422
+        assert (await anonymous("POST", f"/processes/{pid}/draft/validate")).status_code == 401
         async with session_factory() as session:
             rule = await session.get(Rule, rid)
             rule.report = {"valid": False}

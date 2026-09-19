@@ -19,6 +19,11 @@ class ConflictError(TraceError):
     code = "conflict"
 
 
+class UnauthenticatedError(TraceError):
+    status_code = 401
+    code = "unauthenticated"
+
+
 class PermissionDeniedError(TraceError):
     status_code = 403
     code = "permission_denied"

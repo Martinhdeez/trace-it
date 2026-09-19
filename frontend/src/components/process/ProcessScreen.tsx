@@ -5,8 +5,8 @@ import { api } from '../../api/client'
 import { keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
 import { PROCESS_TABS, processTabFromPath } from '../../lib/processTabs'
-import { countsOf, waitingOnPerson } from '../../lib/process'
 import { CountChip } from '../shell/Controls'
+import { ErrorNotice } from '../shell/Notice'
 import { Topbar, type Crumb } from '../shell/Topbar'
 
 export function ProcessScreen({
@@ -37,35 +37,41 @@ export function ProcessTabs({ processId }: { processId: number }) {
     queryKey: keys.process(processId),
     queryFn: () => api.getProcess(processId),
   })
-  const counts = useQuery({
-    queryKey: keys.instances(processId),
-    queryFn: () => api.listInstances(processId),
-    select: countsOf,
+  const summary = useQuery({
+    queryKey: keys.summary(processId),
+    queryFn: () => api.summary(processId),
   })
-  const waiting = waitingOnPerson(process.data, counts.data)
+  const waiting = summary.data?.queue ?? 0
+  const error = process.error ?? summary.error
 
   return (
     <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-hairline px-8">
-      {PROCESS_TABS.map((tab) => {
-        const active = current === tab.id
-        const count = tab.id === 'review' ? waiting : undefined
-        return (
-          <Link
-            key={tab.id}
-            to={tab.path(processId)}
-            aria-current={active ? 'page' : undefined}
-            className={cn(
-              'relative -mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-[13px] tracking-[-0.01em]',
-              active
-                ? 'border-ink text-ink'
-                : 'border-transparent text-muted hover:text-ink',
-            )}
-          >
-            {tab.label}
-            {count ? <CountChip>{count}</CountChip> : null}
-          </Link>
-        )
-      })}
+      {error ? (
+        <ErrorNotice error={error} />
+      ) : (
+        <>
+          {PROCESS_TABS.map((tab) => {
+            const active = current === tab.id
+            const count = tab.id === 'review' ? waiting : undefined
+            return (
+              <Link
+                key={tab.id}
+                to={tab.path(processId)}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'relative -mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-[13px] tracking-[-0.01em]',
+                  active
+                    ? 'border-ink text-ink'
+                    : 'border-transparent text-muted hover:text-ink',
+                )}
+              >
+                {tab.label}
+                {count ? <CountChip>{count}</CountChip> : null}
+              </Link>
+            )
+          })}
+        </>
+      )}
     </nav>
   )
 }

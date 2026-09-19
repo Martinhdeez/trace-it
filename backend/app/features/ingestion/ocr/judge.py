@@ -8,7 +8,7 @@ import httpx
 from app.common import prompts
 
 from .errors import ProviderUnavailable, note_provider_failure, provider_on_cooldown
-from .journal import record_response, recorded_call
+from .journal import record_response, recorded_call, retry_after
 
 PROMPTS = Path(__file__).parents[1] / "prompts"
 URL = "https://api.typesafe.ai/v1/systemone"
@@ -138,7 +138,7 @@ class TextJudge:
                     headers={"Authorization": "Bearer " + self.settings.jev_api_key},
                     json=payload,
                 )
-            record_response("jev", response.status_code)
+            record_response("jev", response.status_code, retry_after_s=retry_after(response))
             if not response.is_success:
                 raise RuntimeError(f"Jev returned HTTP {response.status_code}")
             data = response.json()
@@ -229,7 +229,7 @@ class TextJudge:
                     headers={"Authorization": "Bearer " + self.settings.helmcode_api_key},
                     json=body,
                 )
-            record_response("helmcode", response.status_code)
+            record_response("helmcode", response.status_code, retry_after_s=retry_after(response))
             if not response.is_success:
                 raise ProviderUnavailable(f"Helmcode returned HTTP {response.status_code}")
             data = response.json()
@@ -289,7 +289,7 @@ class TextJudge:
             ) as client:
                 mark_network_attempt()
                 response = client.post(endpoint, headers=headers, json=body)
-            record_response("jev", response.status_code)
+            record_response("jev", response.status_code, retry_after_s=retry_after(response))
             response.raise_for_status()
             result = response.json()
             record_response("jev", response.status_code, result)

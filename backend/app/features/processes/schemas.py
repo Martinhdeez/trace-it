@@ -15,11 +15,19 @@ class SymbolExtraction(BaseModel):
 
 
 class SymbolIO(BaseModel):
+    """A symbol as stored. Output keeps `type` free text, so an older row still reads."""
+
     name: str
-    type: str = Field(examples=["text", "number", "date"])
+    type: str = Field(examples=["text", "number", "date", "boolean"])
     description: str = ""
     required: bool = False  # missing, None or blank -> the instance escalates (ADR 0016)
     extraction: SymbolExtraction | None = None
+
+
+class SymbolIn(SymbolIO):
+    """A symbol as written: `type` is one of a fixed list."""
+
+    type: Literal["text", "number", "date", "boolean"]
 
 
 class DecisionTypeIO(BaseModel):
@@ -45,7 +53,7 @@ class ProcessIn(BaseModel):
     execution: ExecutionSettings | None = None
     description: str | None = None
     decision_types: list[DecisionTypeIO]
-    symbols: list[SymbolIO] = []
+    symbols: list[SymbolIn] = []
     decision_review: DecisionReviewConfig | None = None
 
 

@@ -18,6 +18,7 @@ from app.features.use_cases import service as use_cases
 from app.features.use_cases.schemas import AgentSettings
 from app.main import app
 from tests.support.models import down, instructions, per_role, scripted
+from tests.support.users import manager
 
 
 class Answer(BaseModel):
@@ -134,6 +135,21 @@ async def test_when_every_model_fails_the_run_fails_closed(
     assert [f["model"] for f in span["failed_attempts"]] == ["primary", "backup"]
 
 
+@pytest.mark.parametrize("model", ["helmcode:any", "openai:gpt-4o", "anthropic:claude-x"])
+async def test_a_provider_with_no_key_is_an_llm_error(
+    model: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for key in ("HELMCODE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
+        monkeypatch.setenv(key, "")
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    setup = llm.Setup(AgentSettings(model=model, fallback_models=[model]))
+
+    with pytest.raises(llm.AgentError, match="model not configured") as error:
+        await llm.run(agent, "compiler", "hi", instructions="PLATFORM", setup=setup)
+
+    assert error.value.status_code == 502 and error.value.code == "llm_error"
+
+
 async def test_a_rule_whose_models_all_fail_stays_a_draft_with_the_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -150,6 +166,7 @@ async def test_a_rule_whose_models_all_fail_stays_a_draft_with_the_error(
         "symbols": [{"name": "amount", "type": "number"}],
     }
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api:
+        await manager(api)
         r = await api.post("/processes/definition", json=definition)
         assert r.status_code == 200, r.text
         process = r.json()["process"]

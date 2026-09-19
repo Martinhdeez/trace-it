@@ -24,7 +24,7 @@ from app.features.sources.tests.conftest import start_erp
 from app.features.use_cases import service as use_cases
 from app.main import app
 from tests.golden import golden
-from tests.support import challenge, pack
+from tests.support import challenge, pack, users
 
 pytestmark = [
     pytest.mark.e2e,
@@ -124,11 +124,7 @@ async def decide_resolve_and_export() -> None:
     process_id = await load(defn, symbols)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api:
-        r = await api.post(
-            "/users",
-            json={"name": "Manager", "email": f"manager-{suffix}@e2e.test", "role": "manager"},
-        )
-        manager = {"X-User-Id": str(r.json()["id"])}
+        manager = await users.manager(api)  # the console's only user (Q5)
         rules = (await api.get(f"/processes/{process_id}/rules")).json()
         assert len(rules) == 17
         for rule in rules:
@@ -148,6 +144,14 @@ async def decide_resolve_and_export() -> None:
             if s["name"] == "erp"
         )
         assert (erp["status"], erp["rows"]) == ("ok", 516) and erp["origin"].startswith("erp:")
+
+        # The run is in the history, and it opens read-only with what it decided (Q1).
+        [run] = (await api.get(f"/processes/{process_id}/runs")).json()
+        assert (run["kind"], run["author"], run["decided"]) == ("run", "Manager", len(files))
+        assert run["by_decision"] == dict(Counter(expected.values()))
+        assert run["escalated"] == list(expected.values()).count("ESCALAR")
+        detail = (await api.get(f"/runs/{run['id']}")).json()
+        assert {d["name"]: d["decision"] for d in detail["decisions"]} == expected
 
         instances = {
             i["name"]: i for i in (await api.get(f"/processes/{process_id}/instances")).json()

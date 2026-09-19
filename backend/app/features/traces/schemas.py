@@ -102,6 +102,7 @@ class StepStats(BaseModel):
     errors: int
     p50_ms: float | None
     p95_ms: float | None
+    traces: str | None = None  # `GET /traces?...`: the spans behind this row
 
 
 class LlmStats(BaseModel):
@@ -116,6 +117,9 @@ class LlmStats(BaseModel):
     requests: int = 0  # model requests, retries and fallbacks included
     fallbacks: int = 0  # calls answered by a later model of the chain (ADR 0019)
     truncations: int = 0  # calls where a model hit its output-token limit
+    known_cost_usd: float = 0  # runs whose model has a price (`cost_status` known/included)
+    unpriced_requests: int = 0  # model requests of runs with no price: never read as 0 USD
+    traces: str | None = None  # `GET /traces?...`: the spans behind this row
 
 
 class ProviderStats(BaseModel):
@@ -142,6 +146,7 @@ class ProviderStats(BaseModel):
     priced_requests: int = 0
     included_requests: int = 0
     unpriced_requests: int = 0
+    traces: str | None = None  # `GET /traces?...`: the spans behind this row
 
 
 class ProcessMetrics(BaseModel):
@@ -179,6 +184,8 @@ class PlaneMetrics(BaseModel):
 
 
 class IngestionMetrics(PlaneMetrics):
+    """Tokens and USD cost per provider in `providers`; no LLM run of the agents counts."""
+
     files: int  # documents read into instances (`ingest_document`, `extract_document`)
     files_per_second: float | None  # from the first reading's start to the last one's end
     pages: int  # read by the native text layer
@@ -206,6 +213,9 @@ class TokenStats(BaseModel):
     input_tokens: int
     output_tokens: int
     cached_tokens: int
+    known_cost_usd: float  # runs whose model has a price (`cost_status` known/included)
+    unpriced_requests: int  # model requests of runs with no price: never read as 0 USD
+    traces: str | None = None  # `GET /traces?...`: the spans behind this row
 
 
 class TokenBucket(BaseModel):
@@ -214,6 +224,7 @@ class TokenBucket(BaseModel):
     input_tokens: int
     output_tokens: int
     cached_tokens: int
+    traces: str | None = None  # `GET /traces?...`: the spans behind this row
 
 
 class CompileStats(BaseModel):
@@ -236,9 +247,11 @@ class NormStats(BaseModel):
     output_tokens: int
     rules_activated: int
     seconds_to_active: float | None  # norm submitted -> its last rule activated
+    traces: str  # `GET /traces/{trace_id}`: the norm's whole tree
 
 
 class AgentsMetrics(PlaneMetrics):
+    total: TokenStats  # every LLM run of the plane (`key` None)
     llm: list[LlmStats]  # by model and role
     by_model: list[TokenStats]
     by_role: list[TokenStats]
@@ -258,9 +271,12 @@ class RuleRunStats(BaseModel):
     errors: int
     p50_ms: float | None
     p95_ms: float | None
+    traces: str | None = None  # `GET /traces?...`: the spans behind this row
 
 
 class ExecutionMetrics(PlaneMetrics):
+    """The engine never calls a model (ADR 0002): this plane spends 0 tokens by design."""
+
     runs: int
     instances_decided: int
     instances_per_second: float | None

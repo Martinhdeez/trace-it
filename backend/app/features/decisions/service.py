@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
 from app.core.events import Event
-from app.features.agents import decision_reviewer, sandbox
+from app.features.agents import compiler, decision_reviewer, sandbox
+from app.features.decisions import runs
 from app.features.decisions.engine import Outcomes, RunDataset, Verdict, decide
 from app.features.decisions.model import ENGINE, Decision, DecisionReview, Finding
 from app.features.decisions.schemas import (
@@ -31,6 +32,8 @@ from app.features.decisions.schemas import (
 from app.features.ingestion.model import Instance
 from app.features.ingestion.symbols import flatten_symbols, scan
 from app.features.processes.service import get as get_process
+from app.features.proposals.model import ManagerProposal
+from app.features.proposals.service import settle
 from app.features.rules.model import Rule
 from app.features.sources import service as sources
 from app.features.sources.model import Source
@@ -185,7 +188,7 @@ def _out(
     )
 
 
-async def run(session: AsyncSession, process_id: int) -> RunSummary:
+async def run(session: AsyncSession, process_id: int, author: str | None = None) -> RunSummary:
     """Decide every PENDING instance that already has its symbols.
 
     Runs against the rules active now and the latest load of each source. A rule never
@@ -212,14 +215,16 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
             )
             if i.symbols is not None
         ]
-        source_loads, inputs = await _inputs(session, process_id, down)
+        source_loads, inputs, down = await _inputs(session, process_id, down, version.snapshot)
         captured = Execution(process_id=process_id, version_id=version.id, inputs=inputs)
         session.add(captured)
         await session.flush()
+        span.set(execution_id=captured.id, author=author)
         evaluated = await execution.evaluate(
             session, version.snapshot, inputs, [i.id for i in pending]
         )
         verdicts = [evaluated[i.id] for i in pending]
+        stats = runs.outcomes(verdicts, version.snapshot)  # before commit expires version
 
         count: Counter[str] = Counter()
         for instance, verdict in zip(pending, verdicts, strict=True):
@@ -251,23 +256,33 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
             by_decision=count,
             down_sources=down,
             **_causes(verdicts),
+            **stats,
         )
     return RunSummary(decided=sum(count.values()), by_decision=dict(count), down_sources=down)
 
 
 async def _inputs(
-    session: AsyncSession, process_id: int, down: dict[str, str]
-) -> tuple[list[Source], dict]:
+    session: AsyncSession, process_id: int, down: dict[str, str], snapshot: dict
+) -> tuple[list[Source], dict, dict[str, str]]:
     """The current loads and captured execution inputs, without the loads of `down`
-    sources: a rule never reads an older snapshot of a source that failed to sync. The
+    sources: a rule never reads an older snapshot of a source that failed to sync. A source
+    a published rule reads by name that has no load at all in the process (no `Source`
+    row: a workbook, cut-off or ERP never loaded) is down too, "never loaded": missing
+    reference data is unknown, not an empty table. A load with no rows stays a load. The
     down sources are part of the inputs, so a replay decides the same (ADR 0028)."""
-    loads = [s for s in await sources.current_loads(session, process_id) if s.name not in down]
+    current = await sources.current_loads(session, process_id)
+    loaded = {s.name for s in current}
+    # ponytail: a rule reading `*` (any source) is not matched; list its names if one appears.
+    read = {n for r in version_config.rules(snapshot) for n in compiler.source_reads(r.code)}
+    never = {n: "never loaded" for n in sorted(read - loaded - {compiler.ANY_SOURCE})}
+    down = {**never, **down}  # a failed sync's error says more
+    loads = [s for s in current if s.name not in down]
     inputs = await execution.capture(session, process_id)
     if down:
         kept = {s.id for s in loads}
         inputs["source_ids"] = [i for i in inputs["source_ids"] if i in kept]
         inputs["down"] = down
-    return loads, inputs
+    return loads, inputs, down
 
 
 def _append(
@@ -309,7 +324,11 @@ def _append(
 
 
 async def reprocess(
-    session: AsyncSession, process_id: int, names: list[str] | None, dry_run: bool = False
+    session: AsyncSession,
+    process_id: int,
+    names: list[str] | None,
+    dry_run: bool = False,
+    author: str | None = None,
 ) -> ReprocessSummary:
     """Decide the decided instances again with the rules active now and the latest sources.
 
@@ -339,15 +358,17 @@ async def reprocess(
         selected = [i for i in await session.scalars(query) if i.symbols is not None]
         latest = await latest_decisions(session, selected)
         reviews = await decision_reviewer.for_decisions(session, list(latest.values()))
-        source_loads, inputs = await _inputs(session, process_id, down)
+        source_loads, inputs, down = await _inputs(session, process_id, down, version.snapshot)
         captured = Execution(process_id=process_id, version_id=version.id, inputs=inputs)
         if not dry_run:
             session.add(captured)
             await session.flush()
+            span.set(execution_id=captured.id, author=author)
         evaluated = await execution.evaluate(
             session, version.snapshot, inputs, [i.id for i in selected]
         )
         verdicts = [evaluated[i.id] for i in selected]
+        stats = runs.outcomes(verdicts, version.snapshot)  # before commit expires version
 
         unchanged = 0
         changed: list[ChangeOut] = []
@@ -401,6 +422,7 @@ async def reprocess(
             conflicts=len(conflicts),
             down_sources=down,
             **_causes(verdicts),
+            **stats,
         )
     return ReprocessSummary(
         unchanged=unchanged, changes=changed, conflicts=conflicts, down_sources=down
@@ -585,20 +607,31 @@ async def resolve(
         raise ConflictError(f"{data.decision!r} is not a decision type of this process")
 
     previous = (await latest_decisions(session, [instance])).get(instance.id)
-    session.add(
-        Decision(
-            instance_id=instance.id,
-            decision=data.decision,
-            results=[],  # a person decides on the evidence, not by running the rules
-            rules_hash=previous.rules_hash if previous else "",
-            version_id=previous.version_id
-            if previous
-            else (await versions.active(session, instance.process_id)).id,
-            execution_id=previous.execution_id if previous else None,
-            author=user.name,
-            reason=data.reason,
-        )
+    proposal = None
+    if data.proposal_id is not None:
+        proposal = await session.get(ManagerProposal, data.proposal_id, with_for_update=True)
+        if proposal is None or proposal.instance_id != instance.id or proposal.status != "open":
+            raise ConflictError(f"Proposal {data.proposal_id} is not open for this instance")
+        if previous is None or previous.id != proposal.payload["decision_id"]:
+            raise ConflictError("The case changed since the proposal; ask for a new one")
+    row = Decision(
+        instance_id=instance.id,
+        decision=data.decision,
+        results=[],  # a person decides on the evidence, not by running the rules
+        rules_hash=previous.rules_hash if previous else "",
+        version_id=previous.version_id
+        if previous
+        else (await versions.active(session, instance.process_id)).id,
+        execution_id=previous.execution_id if previous else None,
+        author=user.name,
+        reason=data.reason,
     )
+    session.add(row)
+    if proposal:
+        await session.flush()
+        accepted = data.decision == proposal.payload["proposed"]
+        outcome = {"decision_id": row.id, "decision": data.decision}
+        settle(proposal, "accepted" if accepted else "rejected", user.name, outcome)
     instance.status = "DECIDED"
     events.record(
         session,
@@ -611,6 +644,7 @@ async def resolve(
             "reason": data.reason,
             "before": previous.decision if previous else None,
             "previous_author": previous.author if previous else None,
+            **({"proposal_id": proposal.id} if proposal else {}),
         },
     )
     await session.commit()

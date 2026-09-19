@@ -9,7 +9,7 @@ import httpx
 from app.common import prompts
 
 from .errors import ProviderUnavailable
-from .journal import record_response
+from .journal import record_response, retry_after
 
 PROMPTS = Path(__file__).parents[1] / "prompts"
 PROMPT = prompts.read(PROMPTS, "transcribe-invoice")
@@ -59,11 +59,9 @@ def generate(
         headers={"x-goog-api-key": key},
         json=body,
     )
-    record_response("gemini", response.status_code)
+    record_response("gemini", response.status_code, retry_after_s=retry_after(response))
     if not response.is_success:
-        raise ProviderUnavailable(
-            f"Gemini returned HTTP {response.status_code}; no automatic retry"
-        )
+        raise ProviderUnavailable(f"Gemini returned HTTP {response.status_code}")
     result = response.json()
     record_response("gemini", response.status_code, result)
     if not isinstance(result, dict):

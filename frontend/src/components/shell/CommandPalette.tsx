@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import { keys } from '../../api/queries'
+import { t } from '../../i18n'
 import { useAppState } from '../../state/app'
+import { ErrorNotice } from './Notice'
 import { Overlay } from './Overlay'
 import { paths, processFromPath } from '../../lib/paths'
 
@@ -27,10 +29,12 @@ export function CommandPalette() {
     queryFn: () => api.listProcesses(),
     enabled: paletteOpen,
   })
+  // Instances only enter the list once you type: there are 500 of them, so the server searches.
+  const term = useDeferredValue(query.trim())
   const instances = useQuery({
-    queryKey: keys.instances(processId ?? 0),
-    queryFn: () => api.listInstances(processId!),
-    enabled: paletteOpen && Boolean(processId),
+    queryKey: keys.instances(processId ?? 0, { q: term }),
+    queryFn: () => api.listInstances(processId!, { q: term }),
+    enabled: paletteOpen && Boolean(processId) && term.length > 0,
   })
 
   const hits = useMemo(() => {
@@ -40,7 +44,7 @@ export function CommandPalette() {
       { id: 'settings', label: 'Ajustes del espacio', hint: 'usuario y modelos', to: paths.settings },
       ...(processes.data ?? []).map((process) => ({
         id: `p-${process.id}`,
-        label: process.nombre,
+        label: process.name,
         hint: 'proceso',
         to: paths.process(process.id),
       })),
@@ -62,18 +66,14 @@ export function CommandPalette() {
     const q = query.trim().toLowerCase()
     if (!q) return list.slice(0, 12)
 
-    // Instances only enter the list once you type: there are 500 of them.
     const documents = !processId
       ? []
-      : (instances.data ?? [])
-          .filter((item) => item.nombre.toLowerCase().includes(q))
-          .slice(0, 8)
-          .map((item) => ({
-            id: `i-${item.id}`,
-            label: item.nombre,
-            hint: item.decision ?? item.estado,
-            to: paths.instance(processId, item.id),
-          }))
+      : (instances.data ?? []).slice(0, 8).map((item) => ({
+          id: `i-${item.id}`,
+          label: item.name,
+          hint: item.decision ?? t(`instanceStatus.${item.status}`),
+          to: paths.instance(processId, item.id),
+        }))
 
     return [
       ...list.filter(
@@ -128,6 +128,11 @@ export function CommandPalette() {
           className="w-full border-b border-hairline bg-transparent px-4 py-3 text-[15px] outline-none placeholder:text-faint"
         />
         <ul className="max-h-80 overflow-y-auto py-1">
+          {processes.isError || instances.isError ? (
+            <li className="px-4 py-3">
+              <ErrorNotice error={processes.error ?? instances.error} />
+            </li>
+          ) : null}
           {hits.length === 0 ? (
             <li className="px-4 py-3 text-[13px] text-muted">Nada con ese nombre.</li>
           ) : (

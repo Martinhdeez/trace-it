@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSession } from '../state/session'
 import {
   AlertTriangle,
   BookOpenText,
@@ -9,8 +10,10 @@ import {
   FileText,
   Play,
 } from 'lucide-react'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import { keys } from '../api/queries'
+import { MetricCells, PlaneDashboards } from '../components/process/PlaneDashboards'
+import { PublishDraft } from '../components/process/PublishDraft'
 import { ProcessExecutionSettings } from '../components/process/ExecutionSettings'
 import { ExportButton } from '../components/process/ExportButton'
 import {
@@ -22,49 +25,84 @@ import { ProcessScreen } from '../components/process/ProcessScreen'
 import { BatchRunPanel } from '../components/run/BatchRunPanel'
 import { Button } from '../components/shell/Controls'
 import { Overlay } from '../components/shell/Overlay'
-import { ErrorNotice } from '../components/shell/Notice'
+import { ErrorNotice, Notice } from '../components/shell/Notice'
+import { NestedCard } from '../components/shell/Well'
 import { cn } from '../lib/cn'
-import { paths } from '../lib/paths'
-import type { Instance, NormRule, Rule } from '../api/contracts'
-import { countsOf, waitingOnPerson, type Counts } from '../lib/process'
+import { ALERTS_TAB, paths } from '../lib/paths'
+import type { RunOut, UploadProgress, ExecutionMetrics, NormRule, ProcessDetail, ProcessMetrics, ProcessSummary, Rule } from '../api/contracts'
+import { t } from '../i18n'
+import { formatEuro, formatMs, formatRunDate } from '../lib/format'
+import { decisionTone, type DecisionTone } from '../lib/process'
 
 type QueuedFile = FilePreview & { file: File }
-
-type SessionRun = {
-  finishedAt: Date
-  decided: number
-  split: string
-}
 
 export function Process() {
   const processId = Number(useParams().processId)
   const queryClient = useQueryClient()
+  const { isManager } = useSession()
   const [runPanelOpen, setRunPanelOpen] = useState(false)
   const [queue, setQueue] = useState<QueuedFile[]>([])
-  const [runs, setRuns] = useState<SessionRun[]>([])
+  const [progress, setProgress] = useState<UploadProgress | null>(null)
+  const [published, setPublished] = useState<number | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const publishOpen = searchParams.get('publicar') === '1'
 
   const process = useQuery({
     queryKey: keys.process(processId),
     queryFn: () => api.getProcess(processId),
   })
-  const counts = useQuery({
-    queryKey: keys.instances(processId),
-    queryFn: () => api.listInstances(processId),
-    select: countsOf,
+  const summary = useQuery({
+    queryKey: keys.summary(processId),
+    queryFn: () => api.summary(processId),
   })
-  const instances = useQuery({
-    queryKey: keys.instances(processId),
-    queryFn: () => api.listInstances(processId),
+  const plane = useQuery({
+    queryKey: keys.planeMetrics(processId, 'execution'),
+    queryFn: () => api.planeMetrics(processId, 'execution'),
+  })
+  const providers = useQuery({
+    queryKey: keys.processMetrics(processId),
+    queryFn: () => api.processMetrics(processId),
+  })
+  // `revision` is the draft's, or null when there is none; only then is there a draft to read.
+  const execution = useQuery({
+    queryKey: keys.execution(processId),
+    queryFn: () => api.getExecution(processId),
+    enabled: isManager,
+  })
+  const hasDraft = execution.data?.revision != null
+  const draft = useQuery({
+    queryKey: keys.draft(processId),
+    queryFn: () => api.getDraft(processId),
+    enabled: hasDraft,
+  })
+  const versions = useQuery({
+    queryKey: keys.versions(processId),
+    queryFn: () => api.listVersions(processId),
   })
   const rules = useQuery({
     queryKey: keys.rules(processId),
     queryFn: () => api.listRules(processId),
     refetchInterval: (query) =>
-      query.state.data?.some((rule) => rule.estado === 'compilando') ? 2_000 : false,
+      query.state.data?.some((rule) => rule.status === 'compiling') ? 2_000 : false,
   })
   const norm = useQuery({
     queryKey: keys.norm(processId),
     queryFn: () => api.listNormRules(processId),
+  })
+  const runs = useQuery({
+    queryKey: keys.runs(processId),
+    queryFn: () => api.listRuns(processId),
+  })
+  // A sync or a publication opens alerts in the background, so look again every 10 s.
+  const alerts = useQuery({
+    queryKey: keys.alerts(processId, 'open'),
+    queryFn: () => api.listAlerts(processId, 'open'),
+    refetchInterval: 10_000,
+  })
+  const proposals = useQuery({
+    queryKey: keys.proposals(processId, 'open'),
+    queryFn: () => api.listProposals(processId, 'open'),
+    enabled: isManager,
   })
   const findings = useQuery({
     queryKey: keys.findings(processId),
@@ -73,29 +111,26 @@ export function Process() {
 
   const run = useMutation({
     mutationFn: () => api.run(processId),
-    onSuccess: (data) => {
-      const split = Object.entries(data.por_decision)
-        .map(([name, value]) => `${value} ${name.replaceAll('_', ' ')}`)
-        .join(', ')
-      setRuns((current) => [
-        { finishedAt: new Date(), decided: data.decididas, split },
-        ...current,
-      ])
-      void queryClient.invalidateQueries()
-    },
+    // Everything counts instances, and the new run joins the history.
+    onSuccess: () => void queryClient.invalidateQueries(),
   })
 
   const upload = useMutation({
-    mutationFn: (incoming: File[]) => api.uploadFiles(processId, incoming),
+    mutationFn: (incoming: File[]) => {
+      setProgress(null)
+      return api.uploadFiles(processId, incoming, setProgress)
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: keys.instances(processId) })
-      void queryClient.invalidateQueries({ queryKey: keys.files(processId) })
+      void queryClient.invalidateQueries({ queryKey: keys.summary(processId) })
     },
   })
 
-  const active = rules.data?.filter((rule) => rule.estado === 'activa').length ?? 0
-  const compiling = rules.data?.filter((rule) => rule.estado === 'compilando').length ?? 0
-  const waiting = waitingOnPerson(process.data, counts.data)
+  const active = rules.data?.filter((rule) => rule.status === 'active').length ?? 0
+  const compiling = rules.data?.filter((rule) => rule.status === 'compiling').length ?? 0
+  const waiting = summary.data?.queue ?? 0
+  const currentVersion = Math.max(0, ...(versions.data ?? []).map((version) => version.number))
+  const nextVersion = currentVersion + 1
   const busy = run.isPending || upload.isPending
   const startBlocked =
     compiling > 0
@@ -103,7 +138,6 @@ export function Process() {
       : active === 0
         ? 'Hace falta al menos una regla activa'
         : undefined
-  const latestRun = runs[0]
 
   const addToQueue = (incoming: File[]) => {
     setQueue((current) => [...current, ...incoming.map(toPreview)])
@@ -171,7 +205,7 @@ export function Process() {
   return (
     <ProcessScreen
       processId={processId}
-      crumbs={[{ label: 'Procesos', to: paths.processes }, { label: process.data?.nombre ?? '…' }]}
+      crumbs={[{ label: 'Procesos', to: paths.processes }, { label: process.data?.name ?? '…' }]}
       actions={
         <>
           <Button
@@ -196,7 +230,9 @@ export function Process() {
             finished={run.isSuccess}
             rulesCount={active}
             startBlocked={startBlocked}
-            error={upload.error ?? run.error}
+            error={runFailure(upload.error ?? run.error)}
+            progress={progress}
+            result={run.data}
             onFiles={addToQueue}
             onRemove={removeFromQueue}
             onStart={() => void startRun()}
@@ -205,14 +241,46 @@ export function Process() {
         </Overlay>
       ) : null}
 
+      {publishOpen && hasDraft && draft.data ? (
+        <Overlay onClose={() => setSearchParams({}, { replace: true })} size="lg">
+          <NestedCard
+            label={`Publicar v${nextVersion}`}
+            action={
+              <Button tone="ghost" onClick={() => setSearchParams({}, { replace: true })}>
+                Cerrar
+              </Button>
+            }
+          >
+            <div className="space-y-3 p-4">
+              <PublishDraft
+                key={draft.data.revision}
+                processId={processId}
+                draft={draft.data}
+                onPublished={(version) => {
+                  setPublished(version.number)
+                  setSearchParams({}, { replace: true })
+                }}
+              />
+            </div>
+          </NestedCard>
+        </Overlay>
+      ) : null}
+
       <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
+        {published != null ? (
+          <div className="mb-6">
+            <Notice tone="neutral" title={`Versión v${published} publicada`} />
+          </div>
+        ) : null}
         <header className="mb-6">
-          <p className="text-[13px] text-muted">Panel</p>
+          <p className="text-[13px] text-muted">
+            {currentVersion ? `Panel · v${currentVersion} publicada` : 'Panel · sin versión publicada'}
+          </p>
           <h1 className="mt-1 text-[32px] font-medium leading-[1.1] tracking-[-0.045em]">
-            {process.data?.nombre ?? '…'}
+            {process.data?.name ?? '…'}
           </h1>
           <p className="mt-2 max-w-2xl text-[14.5px] leading-6 text-muted">
-            {process.data?.descripcion}
+            {process.data?.description}
           </p>
         </header>
 
@@ -221,29 +289,42 @@ export function Process() {
           waiting={waiting}
           compiling={compiling}
           findings={findings.data?.length ?? 0}
+          draftVersion={hasDraft && draft.data ? nextVersion : undefined}
+          alerts={alerts.data?.length ?? 0}
+          proposals={proposals.data?.length ?? 0}
         />
 
-        <Metrics
-          counts={counts.data}
-          waiting={waiting}
-          latestRun={latestRun}
-        />
+        <Metrics summary={summary.data} plane={plane.data} providers={providers.data} />
 
         <Pipeline
-          total={counts.data?.total ?? 0}
+          total={summary.data?.instances ?? 0}
           norm={norm.data ?? []}
           rules={rules.data ?? []}
-          decided={counts.data?.decided ?? 0}
-          pending={(counts.data?.pending ?? 0) + (counts.data?.review ?? 0)}
+          decided={summary.data?.by_status.DECIDED ?? 0}
+          pending={summary.data?.by_status.PENDING ?? 0}
         />
 
-        <Runs processId={processId} runs={runs} documentCount={counts.data?.total ?? 0} />
+        <Runs
+          processId={processId}
+          runs={runs.data ?? []}
+          error={runs.error}
+          documentCount={summary.data?.instances ?? 0}
+        />
 
-        <Split counts={counts.data} instances={instances.data ?? []} />
+        <Split summary={summary.data} process={process.data} />
+        <PlaneDashboards processId={processId} decisionTypes={process.data?.decision_types} />
         <ProcessExecutionSettings processId={processId} />
       </div>
     </ProcessScreen>
   )
+}
+
+/** The backend refuses a run with nothing published; say what to do about it. */
+function runFailure(error: unknown): unknown {
+  if (error instanceof ApiError && error.status === 409 && /publish an approved/i.test(error.message)) {
+    return new ApiError(error.status, error.code, 'Publica una versión antes de ejecutar')
+  }
+  return error
 }
 
 function Alerts({
@@ -251,11 +332,17 @@ function Alerts({
   waiting,
   compiling,
   findings,
+  draftVersion,
+  alerts,
+  proposals,
 }: {
   processId: number
   waiting: number
   compiling: number
   findings: number
+  draftVersion: number | undefined
+  alerts: number
+  proposals: number
 }) {
   const items = [
     waiting > 0
@@ -268,6 +355,24 @@ function Alerts({
       ? {
           to: paths.definition(processId),
           text: `${compiling} regla${compiling === 1 ? '' : 's'} compilando. El motor no arranca hasta que terminen.`,
+        }
+      : null,
+    proposals > 0
+      ? {
+          to: paths.definition(processId),
+          text: `${proposals} propuesta${proposals === 1 ? ' espera' : 's esperan'} tu decisión`,
+        }
+      : null,
+    alerts > 0
+      ? {
+          to: `${paths.review(processId)}?tipo=${ALERTS_TAB}`,
+          text: `${alerts} decisi${alerts === 1 ? 'ón podría' : 'ones podrían'} cambiar`,
+        }
+      : null,
+    draftVersion != null
+      ? {
+          to: `${paths.process(processId)}?publicar=1`,
+          text: `Borrador sin publicar · Publicar v${draftVersion}`,
         }
       : null,
     findings > 0
@@ -300,53 +405,52 @@ function Alerts({
 }
 
 function Metrics({
-  counts,
-  waiting,
-  latestRun,
+  summary,
+  plane,
+  providers,
 }: {
-  counts: Counts | undefined
-  waiting: number
-  latestRun: SessionRun | undefined
+  summary: ProcessSummary | undefined
+  plane: ExecutionMetrics | undefined
+  providers: ProcessMetrics | undefined
 }) {
+  const latency = plane?.steps.find((step) => step.step === 'run_process')?.p50_ms
+  const cost = providers?.providers.reduce((sum, item) => sum + item.known_cost_usd, 0)
   const cells = [
-    { label: 'Documentos', value: String(counts?.total ?? 0), note: 'en el proceso' },
-    { label: 'Decididos', value: String(counts?.decided ?? 0), note: 'cierre del motor' },
-    { label: 'En revisión', value: String(waiting), note: 'cola humana' },
+    { label: 'Documentos', value: String(summary?.instances ?? '—'), note: 'en el proceso' },
+    { label: 'Decididos', value: String(summary?.by_status.DECIDED ?? '—'), note: 'cierre del motor' },
+    { label: 'En revisión', value: String(summary?.queue ?? '—'), note: 'cola humana' },
     {
       label: 'Latencia',
-      value: '—',
-      note: latestRun ? 'sale con el historial de ejecuciones' : 'aún no hay series',
+      value: latency != null ? formatMs(latency) : '—',
+      note: latency != null ? 'mediana por ejecución' : 'aún no hay ejecuciones',
     },
     {
       label: 'Coste',
-      value: '—',
-      note: 'OCR y LLM por ejecución, cuando el API lo publique',
+      value: cost != null ? formatEuro(cost) : '—',
+      note: 'coste conocido de proveedores (USD)',
     },
   ]
 
-  return (
-    <section className="mb-6 grid overflow-hidden rounded-[16px] bg-surface ring-1 ring-line sm:grid-cols-5">
-      {cells.map((cell) => (
-        <div
-          key={cell.label}
-          className="border-b border-hairline px-3.5 py-3 last:border-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
-        >
-          <p className="text-[11px] text-muted">{cell.label}</p>
-          <p className="mt-2 font-mono text-[22px] tracking-[-0.04em] tabular-nums">{cell.value}</p>
-          <p className="mt-0.5 font-mono text-[10px] text-faint">{cell.note}</p>
-        </div>
-      ))}
-    </section>
-  )
+  return <MetricCells cells={cells} />
+}
+
+/** ESCALAR first: it is what a rerun after learning should shrink. */
+function runSplit(run: RunOut): string {
+  return Object.entries(run.by_decision)
+    .sort(([a], [b]) => (a === 'ESCALAR' ? -1 : b === 'ESCALAR' ? 1 : a.localeCompare(b)))
+    .map(([name, value]) => `${value} ${name.replaceAll('_', ' ')}`)
+    .join(', ')
 }
 
 function Runs({
   processId,
   runs,
+  error,
   documentCount,
 }: {
   processId: number
-  runs: SessionRun[]
+  runs: RunOut[]
+  error: unknown
   documentCount: number
 }) {
   return (
@@ -355,7 +459,7 @@ function Runs({
         <div>
           <h2 className="text-[18px] font-medium tracking-[-0.03em]">Ejecuciones</h2>
           <p className="mt-1 text-[12.5px] text-muted">
-            Las de esta sesión. El historial durable llega cuando el backend publique runs.
+            Cada ejecución, con la versión que decidió. Abre una para ver sus casos.
           </p>
         </div>
         <Link to={paths.instances(processId)} className="text-[12px] text-muted hover:text-ink">
@@ -363,33 +467,33 @@ function Runs({
         </Link>
       </div>
       <div className="overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
-        {runs.length === 0 ? (
+        {error ? (
+          <ErrorNotice error={error} />
+        ) : runs.length === 0 ? (
           <p className="px-4 py-5 text-[13px] text-muted">
             {documentCount
               ? `${documentCount} documentos en el proceso. Ejecutar abre la cola del lote.`
-              : 'Aún no has ejecutado este proceso en esta sesión.'}
+              : 'Aún no se ha ejecutado este proceso.'}
           </p>
         ) : (
           <ul className="divide-y divide-hairline">
-            {runs.map((item, index) => (
-              <li key={`${item.finishedAt.toISOString()}-${index}`}>
+            {runs.map((item) => (
+              <li key={item.id}>
                 <Link
-                  to={paths.instances(processId)}
+                  to={paths.instances(processId, item.id)}
                   className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-canvas"
                 >
                   <div className="min-w-0">
                     <p className="text-[13px] text-ink">
-                      {item.decided} decisiones
+                      {item.decided} decisiones · v{item.version_number}
                     </p>
                     <p className="truncate text-[12px] text-muted">
-                      {item.split || 'Sin salidas'}
+                      {runSplit(item) || 'Sin salidas'}
+                      {item.author ? ` · ${item.author}` : ''}
                     </p>
                   </div>
                   <span className="shrink-0 font-mono text-[11px] text-faint">
-                    {item.finishedAt.toLocaleTimeString('es-ES', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {formatRunDate(item.started_at)}
                   </span>
                 </Link>
               </li>
@@ -414,9 +518,9 @@ function Pipeline({
   decided: number
   pending: number
 }) {
-  const checks = norm.reduce((sum, item) => sum + item.reglas.length, 0)
-  const compiling = rules.filter((rule) => rule.estado === 'compilando').length
-  const active = rules.filter((rule) => rule.estado === 'activa').length
+  const checks = norm.reduce((sum, item) => sum + item.rules.length, 0)
+  const compiling = rules.filter((rule) => rule.status === 'compiling').length
+  const active = rules.filter((rule) => rule.status === 'active').length
 
   const stages = [
     { icon: FileText, label: 'Documentos', value: total, note: 'instancias' },
@@ -459,16 +563,30 @@ function Pipeline({
   )
 }
 
-function Split({ counts, instances }: { counts: Counts | undefined; instances: Instance[] }) {
+const TONE_DOT: Record<DecisionTone | 'pending', string> = {
+  positive: 'bg-pagar',
+  negative: 'bg-nopagar',
+  attention: 'bg-escalar',
+  pending: 'bg-faint/50',
+}
+
+function Split({
+  summary,
+  process,
+}: {
+  summary: ProcessSummary | undefined
+  process: ProcessDetail | undefined
+}) {
   const cells = useMemo(() => {
-    if (!counts) return []
-    const outcomes = Object.entries(counts.byOutcome).sort(([a], [b]) => a.localeCompare(b))
-    const blocking = [
-      { label: 'REVISION', value: counts.review },
-      { label: 'PENDIENTE', value: counts.pending },
-    ].filter((cell) => cell.value > 0)
-    return [...outcomes.map(([label, value]) => ({ label, value })), ...blocking]
-  }, [counts])
+    if (!summary) return []
+    const outcomes = Object.entries(summary.by_decision)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([label, value]) => ({ label, value, tone: decisionTone(process, label) }))
+    const pending = summary.by_status.PENDING ?? 0
+    return pending > 0
+      ? [...outcomes, { label: t('instanceStatus.PENDING'), value: pending, tone: 'pending' as const }]
+      : outcomes
+  }, [summary, process])
 
   return (
     <section className="mt-8 overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
@@ -479,7 +597,7 @@ function Split({ counts, instances }: { counts: Counts | undefined; instances: I
             Distribución actual del lote. Cada marca representa un documento.
           </p>
         </div>
-        <span className="font-mono text-[12px] text-muted">{counts?.total ?? 0} total</span>
+        <span className="font-mono text-[12px] text-muted">{summary?.instances ?? 0} total</span>
       </div>
       {cells.length === 0 ? (
         <p className="px-5 pb-5 text-[13px] text-muted">
@@ -491,18 +609,7 @@ function Split({ counts, instances }: { counts: Counts | undefined; instances: I
             <div className="space-y-4">
               {cells.map((cell) => (
                 <div key={cell.label} className="flex items-center gap-3">
-                  <span
-                    className={cn(
-                      'h-2.5 w-2.5 shrink-0 rounded-[3px]',
-                      cell.label === 'PAGAR' || cell.label === 'APROBAR'
-                        ? 'bg-pagar'
-                        : cell.label === 'NO_PAGAR' || cell.label === 'RECHAZAR'
-                          ? 'bg-nopagar'
-                          : cell.label === 'PENDIENTE'
-                            ? 'bg-faint/50'
-                            : 'bg-escalar',
-                    )}
-                  />
+                  <span className={cn('h-2.5 w-2.5 shrink-0 rounded-[3px]', TONE_DOT[cell.tone])} />
                   <span className="min-w-0 flex-1 text-[12.5px] text-muted">
                     {cell.label.replaceAll('_', ' ')}
                   </span>
@@ -515,22 +622,18 @@ function Split({ counts, instances }: { counts: Counts | undefined; instances: I
           </div>
           <div className="flex min-h-[150px] items-center bg-surface px-5 py-5">
             <div className="flex w-full flex-wrap content-center gap-1">
-              {instances.map((item) => (
-                <span
-                  key={item.id}
-                  title={`${item.nombre}: ${item.decision ?? item.estado}`}
-                  className={cn(
-                    'h-3 w-3 rounded-[3px] transition-transform hover:scale-125',
-                    item.decision === 'PAGAR' || item.decision === 'APROBAR'
-                      ? 'bg-pagar'
-                      : item.decision === 'NO_PAGAR' || item.decision === 'RECHAZAR'
-                        ? 'bg-nopagar'
-                        : item.decision
-                          ? 'bg-escalar'
-                          : 'bg-faint/40',
-                  )}
-                />
-              ))}
+              {cells.flatMap((cell) =>
+                Array.from({ length: cell.value }, (_, index) => (
+                  <span
+                    key={`${cell.label}-${index}`}
+                    title={cell.label}
+                    className={cn(
+                      'h-3 w-3 rounded-[3px] transition-transform hover:scale-125',
+                      TONE_DOT[cell.tone],
+                    )}
+                  />
+                )),
+              )}
             </div>
           </div>
         </div>

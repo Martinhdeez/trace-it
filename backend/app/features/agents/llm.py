@@ -15,9 +15,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from openai import OpenAIError
 from pydantic import BaseModel
 from pydantic_ai import Agent, AgentRunError, capture_run_messages
-from pydantic_ai.exceptions import FallbackExceptionGroup, ModelAPIError
+from pydantic_ai.exceptions import FallbackExceptionGroup, ModelAPIError, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, RetryPromptPart
 from pydantic_ai.models import Model
 from pydantic_ai.models.fallback import FallbackModel
@@ -29,6 +30,7 @@ from app.common import prompts
 from app.common.exceptions import TraceError
 from app.core import events
 from app.core.config import settings
+from app.features.ingestion.ocr.pricing import cost_snapshot
 from app.features.use_cases.schemas import AgentSettings
 
 PROMPTS = Path(__file__).parent / "prompts"
@@ -118,6 +120,28 @@ def resolve(model: Model | str, local_endpoint: str | None = None) -> Model | st
     return model
 
 
+def _models(setup: Setup, role: str) -> list[Model | str]:
+    own = setup.settings
+    fallbacks = own.fallback_models or ([] if own.model else settings.fallback_models)
+    return [own.model or model_for(role), *fallbacks]
+
+
+def _price(setup: Setup, role: str, failed: list, usage: Any) -> dict[str, Any]:
+    """The cost of a run, priced like the ingestion providers (`ocr/pricing.py`) for the
+    model of the chain that answered (each entry of `failed` moved one model on): its
+    `cost_status` is `known`/`included` with `cost_usd`, or `unknown`. Helmcode stays
+    unpriced until `TRACEPAY_HELMCODE_BILLING_MODE` says how it bills."""
+    models = _models(setup, role)
+    spec = models[len(failed)] if len(failed) < len(models) else None
+    provider, model = spec.split(":", 1) if isinstance(spec, str) and ":" in spec else (None, None)
+    tokens = {
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cached_tokens": usage.cache_read_tokens,
+    }
+    return {"provider": provider, **cost_snapshot(provider, model, tokens)}
+
+
 def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackModel:
     """The role's model, then its `fallback_models` in order (ADR 0019). A provider failure
     (`ModelAPIError`: 4xx/5xx, 429 after the SDK's retries, timeout, connection) or an
@@ -136,9 +160,7 @@ def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackMode
         failed.append({"model": response.model_name or "", "error": TRUNCATED})
         return True
 
-    own = setup.settings
-    fallbacks = own.fallback_models or ([] if own.model else settings.fallback_models)
-    models = [own.model or model_for(role), *fallbacks]
+    models = _models(setup, role)
     if setup.local_only and any(
         not isinstance(model, str) or not model.startswith("local:") for model in models
     ):
@@ -216,7 +238,10 @@ async def run(
     if setup.settings.instructions:
         instructions += "\n\n## Guidance for this use case\n" + setup.settings.instructions
     failed: list[dict[str, str]] = []
-    model = chain(setup, role, failed)
+    try:
+        model = chain(setup, role, failed)
+    except (OpenAIError, UserError) as error:  # building a provider: no key, unknown model
+        raise AgentError(f"{role}: model not configured: {error}") from error
     model_settings = dict(setup.settings.model_settings)
     if setup.settings.timeout_seconds:
         model_settings["timeout"] = setup.settings.timeout_seconds
@@ -285,5 +310,10 @@ async def run(
             agent=agent.name or "",
             cached_tokens=usage.cache_read_tokens,
         )
-        span.set(**trace.as_data(), cost=trace.cost, latency_ms=trace.latency_ms)
+        span.set(
+            **trace.as_data(),
+            **_price(setup, role, failed, usage),
+            cost=trace.cost,
+            latency_ms=trace.latency_ms,
+        )
     return result.output, trace
