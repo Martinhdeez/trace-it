@@ -1,8 +1,6 @@
 /**
- * Mirrors the backend contract, the `schemas.py` of each backend feature.
- * Payload keys stay exactly as the API sends them, which is Spanish; everything
- * else is English. Endpoints nobody has implemented yet answer 501, and routers
- * that are not mounted answer 404; the client then falls back to the mock.
+ * The backend contract: aliases of the generated `schema.d.ts`, plus the shapes the API
+ * leaves as free JSON. Keys are the API's English; Spanish lives in `i18n/es.ts`.
  */
 
 import type { components } from './schema'
@@ -36,7 +34,6 @@ export type InstanceEvent = Schemas['EventOut']
 export type Suggestion = Schemas['Suggestion']
 export type ResolveIn = Schemas['ResolveIn']
 export type RuleIn = Schemas['RuleIn']
-export type RuleDetailOut = Schemas['RuleDetail']
 export type RunOut = Schemas['RunOut']
 export type AlertOut = Schemas['AlertOut']
 export type UseCaseOut = Schemas['UseCaseOut']
@@ -91,216 +88,41 @@ export type ValidationReport = {
   [key: string]: unknown
 }
 
-export type UserInput = {
-  nombre: string
-  email: string
-  rol: 'responsable' | 'operador'
-}
+export type ProcessOut = Schemas['ProcessOut']
+/** A process as the API returns it: decision types and symbols in the pack's shape. */
+export type ProcessDetail = Schemas['ProcessDetail']
+export type DecisionType = Schemas['DecisionTypeIO']
+export type SymbolIO = Schemas['SymbolIO']
+export type SymbolIn = Schemas['SymbolIn']
+/** The whole process as data, the same shape as the files under `processes/`. */
+export type Definition = Schemas['Definition']
+export type LoadResult = Schemas['LoadResult']
 
-export type ProcessSymbol = {
-  nombre: string
-  tipo: string
-  descripcion: string
-}
+export type RuleStatus = 'compiling' | 'draft' | 'active' | 'blocked' | 'retired'
+export type RuleType = RuleIn['type']
+export type Rule = Schemas['RuleOut']
+export type RuleDetail = Schemas['RuleDetail']
+export type NormRule = Schemas['NormRuleOut']
+export type NormOut = Schemas['NormOut']
+export type CreatedCheck = Schemas['CreatedCheck']
+/** What adding, or removing, a rule would do to the decisions already taken. */
+export type Impact = Schemas['ImpactOut']
+export type ImpactChange = Schemas['ChangeOut']
 
-export type Outcome = {
-  nombre: string
-  /** Highest wins when several rules fire. */
-  prioridad: number
-  /** Exactly one per process: what comes out when no rule fires. */
-  por_defecto: boolean
-  /** Its instances wait for a manager in the queue, and the assistant suggests. */
-  requiere_persona: boolean
-}
-
-export type Process = {
-  id: number
-  nombre: string
-  descripcion: string
-  /** The use case whose agents (and models) this process shares with others. */
-  use_case_id?: number
-}
-
-export type ProcessDetail = Process & {
-  tipos_decision: Outcome[]
-  simbolos: ProcessSymbol[]
-}
-
-export type ProcessInput = {
-  nombre: string
-  descripcion: string
-  tipos_decision: Outcome[]
-  simbolos: ProcessSymbol[]
-}
-
-/**
- * A whole process as data: the same shape as the files under `procesos/`.
- * Loading it twice is safe. Rules whose text already exists are left alone.
- */
-export type ProcessDefinition = ProcessInput & {
-  reglas?: RuleInput[]
-  usuarios?: UserInput[]
-}
-
-export type DefinitionLoad = {
-  proceso: ProcessDetail
-  reglas_nuevas: number
-  usuarios_nuevos: number
-}
-
-export type RuleState = 'compilando' | 'borrador' | 'bloqueada' | 'rechazada' | 'activa' | 'retirada'
-export type RuleKind = 'requisito' | 'prohibicion'
-
-export type RuleInput = {
-  texto: string
-  tipo: RuleKind
-  decision: string
-}
-
-export type Rule = {
-  id: number
-  proceso_id: number
-  texto: string
-  tipo: RuleKind
-  decision: string
-  estado: RuleState
-  hash: string | null
-  informe: RuleReport | null
-  creada: string
-  activada: string | null
-}
-
-export type RuleDetail = Rule & {
-  /** Current compiler: one autonomous coder, checked by a blind tester. */
-  codigo?: string | null
-  tests?: RuleTest[] | null
-  /** Kept for old mock fixtures created before the compiler architecture changed. */
-  codigo_a: string | null
-  codigo_b: string | null
-  tests_a: RuleTest[] | null
-  tests_b: RuleTest[] | null
-}
-
-/** A case an agent wrote from the rule text alone. */
-export type RuleTest = {
-  nombre: string
-  instancia: Record<string, unknown>
-  fuentes: Record<string, unknown[]>
-  otras: Record<string, unknown>[]
-  salta: boolean
-}
-
-/** One case run through both codes. `a` and `b` read like `salta (MOTIVO)` or `no salta`. */
-export type CrossTest = {
-  autor: string
-  nombre: string
-  esperado: boolean
-  a: string
-  b: string
-  pasa: boolean
-}
-
-/**
- * Validation report of a compilation (P9). `valida` is what activation checks:
- * both codes pass every test and agree on every past instance.
- */
+/** The compiler leaves `report` as free JSON; these are the fields the console reads. */
 export type RuleReport = {
-  valida?: boolean
-  tests?: CrossTest[]
-  historico?: { instancias: number; coinciden: number }
-  discrepancias?: string[]
-  intentos?: number
-  revisiones?: unknown[]
-  necesita_datos?: {
-    by?: string
-    missing?: string[]
-    explanation?: string
-  }
+  valid?: boolean
+  tests?: { name: string; expected: boolean; got: string; passed: boolean }[]
+  discrepancies?: string[]
+  attempts?: number
+  reviews?: unknown[]
+  needs_data?: { by?: string; missing?: string[]; explanation?: string }
 }
 
-export type NormCheck = {
-  id: number
-  texto: string
-  decision: string
-  estado: RuleState
-}
-
-export type NormRule = {
-  id: number
-  numero: number
-  texto: string
-  politicas: string[]
-  creada: string
-  reglas: NormCheck[]
-}
-
-export type NormResult = {
-  reglas_norma: NormRule[]
-}
-
-export type AuditChange = {
-  instancia_id: number
-  nombre: string
-  antes: string
-  despues: string
-  autor_anterior: string
-  motivo: string
-}
-
-/**
- * What activating or retiring a rule would do to the decisions already taken
- * (3.6, 3.7). Three groups because they need three different answers.
- */
-export type Impact = {
-  sin_cambio: number
-  /** The engine decided it, and would now decide otherwise. */
-  cambios: AuditChange[]
-  /** A person decided it, and the rules would now contradict them. Blocks the change. */
-  conflictos: AuditChange[]
-}
-
-export type InstanceState = 'PENDIENTE' | 'REVISION' | 'DECIDIDA'
-
-export type Instance = {
-  id: number
-  /** The exact file name, which is the `file_id` of the export. */
-  nombre: string
-  estado: InstanceState
-  /** The latest decision, if any. */
-  decision: string | null
-}
-
-/** One agreed symbol: the value both extractions settled on, and where it came from. */
-export type SymbolValue = {
-  valor: string | number | boolean | null
-  origen?: string
-}
-
-export type RuleOutcome = {
-  regla_id: number
-  hash: string | null
-  /** `null` when the rule could not be evaluated; the engine then asks a person. */
-  salta: boolean | null
-  motivo: string
-}
-
-export type DecisionRecord = {
-  id: number
-  decision: string
-  /** `motor`, or the name of the person who resolved it. */
-  autor: string
-  motivo: string | null
-  resultados: RuleOutcome[]
-  reglas_hash: string
-  creada: string
-}
-
-export type TraceEvent = {
-  paso: string
-  datos: Record<string, unknown> | null
-  latencia_ms: number | null
-  creado: string
-}
+export type DiscoverySession = Schemas['DiscoveryDraftOut']
+export type DiscoverySessionSummary = Schemas['DiscoverySessionSummary']
+/** One entry of `DiscoverySession.messages`. */
+export type DiscoveryMessage = { role: 'user' | 'assistant'; text: string; author?: string }
 
 export type FindingKind = 'pagada_indebidamente' | 'no_pagada_debiendo' | (string & {})
 
@@ -321,22 +143,28 @@ export interface ApiClient {
   me(): Promise<User>
   listUsers(): Promise<User[]>
 
-  listProcesses(): Promise<Process[]>
+  listProcesses(): Promise<ProcessOut[]>
   getProcess(id: number): Promise<ProcessDetail>
-  createProcess(body: ProcessInput): Promise<ProcessDetail>
-  loadDefinition(body: ProcessDefinition): Promise<DefinitionLoad>
-  replaceSymbols(id: number, symbols: ProcessSymbol[]): Promise<ProcessDetail>
+  /** Posts the English pack as it is. 409 when rules carry `code` files or a draft exists. */
+  loadDefinition(body: Definition): Promise<LoadResult>
 
-  listRules(processId: number, state?: RuleState): Promise<Rule[]>
+  listRules(processId: number, status?: RuleStatus): Promise<Rule[]>
   listNormRules(processId: number): Promise<NormRule[]>
-  normalizeNorm(processId: number, text: string): Promise<NormResult>
+  /** Splits a norm into checks, each already created as a draft rule that compiles. */
+  normalizeNorm(processId: number, text: string): Promise<NormOut>
   getRule(id: number): Promise<RuleDetail>
-  createRule(processId: number, body: RuleIn): Promise<RuleDetailOut>
+  createRule(processId: number, body: RuleIn): Promise<RuleDetail>
   compileRule(id: number): Promise<RuleDetail>
-  /** What activating, or retiring, this rule would change. Does not change anything. */
+  /** What adding, or removing, this rule would change. Does not change anything. */
   ruleImpact(id: number): Promise<Impact>
+  /** Stages the rule into the process draft; publishing makes it effective. */
   activateRule(id: number): Promise<RuleDetail>
   retireRule(id: number): Promise<RuleDetail>
+
+  listDiscoverySessions(): Promise<DiscoverySessionSummary[]>
+  startDiscoverySession(processId: number, name: string): Promise<DiscoverySession>
+  messageDiscoverySession(id: number, revision: number, message: string): Promise<DiscoverySession>
+  uploadDraftWorkbook(id: number, revision: number, file: File): Promise<DiscoverySession>
 
   summary(processId: number): Promise<ProcessSummary>
   planeMetrics(processId: number, plane: 'execution'): Promise<ExecutionMetrics>

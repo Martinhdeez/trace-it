@@ -77,6 +77,18 @@ export const es = {
     api: 'API',
     hybrid: 'Híbrido',
   },
+  ruleStatus: {
+    compiling: 'Compilando',
+    draft: 'Borrador',
+    active: 'Activa',
+    blocked: 'Bloqueada',
+    retired: 'Retirada',
+  },
+  symbolType: {
+    text: 'Texto',
+    number: 'Número',
+    date: 'Fecha',
+  },
   roles: {
     manager: 'Responsable',
     operator: 'Operador',
