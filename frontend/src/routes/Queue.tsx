@@ -44,9 +44,9 @@ export function Queue() {
   // so it gets its own tab instead of hiding under the outcome.
   const tabs = useMemo(() => {
     const outcomes = human.map((outcome) => ({
-      value: outcome.nombre,
-      label: outcome.nombre.replaceAll('_', ' '),
-      count: queued.filter((item) => item.decision === outcome.nombre && !item.review_pending)
+      value: outcome.name,
+      label: outcome.name.replaceAll('_', ' '),
+      count: queued.filter((item) => item.decision === outcome.name && !item.review_pending)
         .length,
     }))
     const review = queued.filter((item) => item.review_pending).length
@@ -57,7 +57,7 @@ export function Queue() {
     ]
   }, [human, queued, openAlerts])
 
-  const tab = params.get('tipo') ?? human[0]?.nombre ?? ''
+  const tab = params.get('tipo') ?? human[0]?.name ?? ''
   const items = queued.filter((item) =>
     tab === REVIEW_TAB ? item.review_pending : item.decision === tab && !item.review_pending,
   )
@@ -71,7 +71,7 @@ export function Queue() {
       processId={processId}
       crumbs={[
         { label: 'Procesos', to: paths.processes },
-        { label: process.data?.nombre ?? '…', to: paths.process(processId) },
+        { label: process.data?.name ?? '…', to: paths.process(processId) },
         { label: 'Revisión' },
       ]}
       actions={
@@ -114,9 +114,9 @@ export function Queue() {
                       <span className="min-w-0 flex-1 truncate font-mono text-[12px]">
                         {item.name}
                       </span>
-                      <StatusBadge value={item.before} decisionTypes={process.data?.tipos_decision} />
+                      <StatusBadge value={item.before} decisionTypes={process.data?.decision_types} />
                       →
-                      <StatusBadge value={item.after} decisionTypes={process.data?.tipos_decision} />
+                      <StatusBadge value={item.after} decisionTypes={process.data?.decision_types} />
                     </button>
                   </li>
                 ))
@@ -179,7 +179,7 @@ function Resolve({
   currentDecision: string | null
 }) {
   const queryClient = useQueryClient()
-  const outcomes = process.tipos_decision.map((outcome) => outcome.nombre)
+  const outcomes = process.decision_types.map((outcome) => outcome.name)
   const [decision, setDecision] = useState(currentDecision ?? outcomes[0] ?? '')
   const [note, setNote] = useState('')
   const [ruleText, setRuleText] = useState('')
@@ -250,7 +250,7 @@ function Resolve({
         </div>
         {currentDecision ? (
           <p className="mt-1.5">
-            <StatusBadge value={currentDecision} decisionTypes={process.tipos_decision} />
+            <StatusBadge value={currentDecision} decisionTypes={process.decision_types} />
           </p>
         ) : null}
         <div className="mt-3">

@@ -1,11 +1,11 @@
-import type { InstanceFilters, RuleState } from './contracts'
+import type { InstanceFilters, RuleStatus } from './contracts'
 
 /** One place for the cache keys, so a mutation knows what to invalidate. */
 export const keys = {
   users: ['users'] as const,
   processes: ['processes'] as const,
   process: (id: number) => ['process', id] as const,
-  rules: (processId: number, state?: RuleState) => ['rules', processId, state ?? 'all'] as const,
+  rules: (processId: number, status?: RuleStatus) => ['rules', processId, status ?? 'all'] as const,
   norm: (processId: number) => ['norm', processId] as const,
   rule: (id: number) => ['rule', id] as const,
   instances: (processId: number, filters?: InstanceFilters) =>

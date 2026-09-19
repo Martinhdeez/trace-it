@@ -82,7 +82,7 @@ export function Process() {
     queryKey: keys.rules(processId),
     queryFn: () => api.listRules(processId),
     refetchInterval: (query) =>
-      query.state.data?.some((rule) => rule.estado === 'compilando') ? 2_000 : false,
+      query.state.data?.some((rule) => rule.status === 'compiling') ? 2_000 : false,
   })
   const norm = useQuery({
     queryKey: keys.norm(processId),
@@ -120,8 +120,8 @@ export function Process() {
     },
   })
 
-  const active = rules.data?.filter((rule) => rule.estado === 'activa').length ?? 0
-  const compiling = rules.data?.filter((rule) => rule.estado === 'compilando').length ?? 0
+  const active = rules.data?.filter((rule) => rule.status === 'active').length ?? 0
+  const compiling = rules.data?.filter((rule) => rule.status === 'compiling').length ?? 0
   const waiting = summary.data?.queue ?? 0
   const currentVersion = Math.max(0, ...(versions.data ?? []).map((version) => version.number))
   const nextVersion = currentVersion + 1
@@ -199,7 +199,7 @@ export function Process() {
   return (
     <ProcessScreen
       processId={processId}
-      crumbs={[{ label: 'Procesos', to: paths.processes }, { label: process.data?.nombre ?? '…' }]}
+      crumbs={[{ label: 'Procesos', to: paths.processes }, { label: process.data?.name ?? '…' }]}
       actions={
         <>
           <Button
@@ -271,10 +271,10 @@ export function Process() {
             {currentVersion ? `Panel · v${currentVersion} publicada` : 'Panel · sin versión publicada'}
           </p>
           <h1 className="mt-1 text-[32px] font-medium leading-[1.1] tracking-[-0.045em]">
-            {process.data?.nombre ?? '…'}
+            {process.data?.name ?? '…'}
           </h1>
           <p className="mt-2 max-w-2xl text-[14.5px] leading-6 text-muted">
-            {process.data?.descripcion}
+            {process.data?.description}
           </p>
         </header>
 
@@ -515,9 +515,9 @@ function Pipeline({
   decided: number
   pending: number
 }) {
-  const checks = norm.reduce((sum, item) => sum + item.reglas.length, 0)
-  const compiling = rules.filter((rule) => rule.estado === 'compilando').length
-  const active = rules.filter((rule) => rule.estado === 'activa').length
+  const checks = norm.reduce((sum, item) => sum + item.rules.length, 0)
+  const compiling = rules.filter((rule) => rule.status === 'compiling').length
+  const active = rules.filter((rule) => rule.status === 'active').length
 
   const stages = [
     { icon: FileText, label: 'Documentos', value: total, note: 'instancias' },

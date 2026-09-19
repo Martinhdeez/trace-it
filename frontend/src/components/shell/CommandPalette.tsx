@@ -44,7 +44,7 @@ export function CommandPalette() {
       { id: 'settings', label: 'Ajustes del espacio', hint: 'usuario y modelos', to: paths.settings },
       ...(processes.data ?? []).map((process) => ({
         id: `p-${process.id}`,
-        label: process.nombre,
+        label: process.name,
         hint: 'proceso',
         to: paths.process(process.id),
       })),

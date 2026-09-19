@@ -99,7 +99,7 @@ export function Instances() {
       processId={processId}
       crumbs={[
         { label: 'Procesos', to: paths.processes },
-        { label: process.data?.nombre ?? '…', to: paths.process(processId) },
+        { label: process.data?.name ?? '…', to: paths.process(processId) },
         { label: 'Ejecuciones' },
       ]}
       actions={<ExportButton processId={processId} />}
@@ -128,7 +128,7 @@ export function Instances() {
       <div className="flex min-h-0 flex-1">
         <QueueList
           items={rows}
-          decisionTypes={process.data?.tipos_decision}
+          decisionTypes={process.data?.decision_types}
           total={total}
           selectedId={selectedId}
           onSelect={(item) => select(item.id)}

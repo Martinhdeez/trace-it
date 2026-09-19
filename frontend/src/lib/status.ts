@@ -1,4 +1,4 @@
-import type { Instance, InstanceOut, Outcome, RuleState } from '../api/contracts'
+import type { DecisionType, InstanceOut, RuleStatus } from '../api/contracts'
 
 /**
  * Outcome names are defined per process, so colours are a lookup with a neutral
@@ -20,15 +20,14 @@ const TONES: Record<string, string> = {
   ok: 'bg-pagar-soft text-pagar',
   degraded: 'bg-escalar-soft text-escalar',
   down: 'bg-nopagar-soft text-nopagar',
-  activa: 'bg-pagar-soft text-pagar',
-  compilando: 'bg-ocr-soft text-ocr',
-  bloqueada: 'bg-escalar-soft text-escalar',
-  borrador: 'bg-ocr-soft text-ocr',
-  rechazada: 'bg-nopagar-soft text-nopagar',
-  retirada: 'bg-ocr-soft text-muted',
+  active: 'bg-pagar-soft text-pagar',
+  compiling: 'bg-ocr-soft text-ocr',
+  blocked: 'bg-escalar-soft text-escalar',
+  draft: 'bg-ocr-soft text-ocr',
+  retired: 'bg-ocr-soft text-muted',
 }
 
-export type DecisionMeta = Pick<Outcome, 'nombre' | 'por_defecto' | 'requiere_persona'>
+export type DecisionMeta = Pick<DecisionType, 'name' | 'is_default' | 'requires_human'>
 
 /**
  * A decision type's tone comes from its metadata: the default is positive, one that
@@ -36,8 +35,8 @@ export type DecisionMeta = Pick<Outcome, 'nombre' | 'por_defecto' | 'requiere_pe
  * covers what has no metadata (states, or a caller that has no process at hand).
  */
 export function tone(value: string, decisionTypes?: DecisionMeta[]): string {
-  const type = decisionTypes?.find((item) => item.nombre === value)
-  if (type) return type.por_defecto ? POSITIVE : type.requiere_persona ? ATTENTION : NEGATIVE
+  const type = decisionTypes?.find((item) => item.name === value)
+  if (type) return type.is_default ? POSITIVE : type.requires_human ? ATTENTION : NEGATIVE
   return TONES[value] ?? 'bg-ocr-soft text-ocr'
 }
 
@@ -47,12 +46,6 @@ export function label(instance: Pick<InstanceOut, 'status' | 'decision'>): strin
   return instance.status
 }
 
-/** Same, for the trace view, which still reads the Spanish instance detail. */
-export function detailLabel(instance: Pick<Instance, 'estado' | 'decision'>): string {
-  if (instance.estado === 'DECIDIDA' && instance.decision) return instance.decision
-  return instance.estado
-}
-
 export const INSTANCE_STATES = ['PENDING', 'DECIDED'] as const
 
-export const RULE_STATES: RuleState[] = ['borrador', 'activa', 'rechazada', 'retirada']
+export const RULE_STATES: RuleStatus[] = ['compiling', 'draft', 'active', 'blocked', 'retired']
