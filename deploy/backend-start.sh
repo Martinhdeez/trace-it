@@ -13,7 +13,10 @@ print(next((row["id"] for row in rows if row["name"] == "Hiring screening"), "")
   if [ -n "$process_id" ]; then
     set -- "$@" --process "$process_id"
   fi
-  python /srv/hiring_demo.py "$@"
+  if ! python /srv/hiring_demo.py "$@"; then
+    echo "Hiring bootstrap failed; inspect /tmp/hiring-bootstrap.md" >&2
+    return 1
+  fi
 }
 
 bootstrap_hiring &
