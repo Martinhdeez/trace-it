@@ -1,0 +1,221 @@
+{
+    "plane": "execution",
+    "process_id": 1,
+    "since": null,
+    "spans": 31,
+    "errors": 0,
+    "steps": [
+        {
+            "step": "decision",
+            "count": 11,
+            "errors": 0,
+            "p50_ms": null,
+            "p95_ms": null
+        },
+        {
+            "step": "evaluate_rule",
+            "count": 17,
+            "errors": 0,
+            "p50_ms": 26.0,
+            "p95_ms": 27.0
+        },
+        {
+            "step": "export_outcomes",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 6.0,
+            "p95_ms": 6.0
+        },
+        {
+            "step": "resolution",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": null,
+            "p95_ms": null
+        },
+        {
+            "step": "run_process",
+            "count": 1,
+            "errors": 0,
+            "p50_ms": 485.0,
+            "p95_ms": 485.0
+        }
+    ],
+    "runs": 1,
+    "instances_decided": 11,
+    "instances_per_second": 22.7,
+    "rules": [
+        {
+            "rule_id": 1,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 1,
+            "errors": 0,
+            "p50_ms": 27.0,
+            "p95_ms": 27.0
+        },
+        {
+            "rule_id": 2,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 26.0,
+            "p95_ms": 26.0
+        },
+        {
+            "rule_id": 3,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 27.0,
+            "p95_ms": 27.0
+        },
+        {
+            "rule_id": 4,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 27.0,
+            "p95_ms": 27.0
+        },
+        {
+            "rule_id": 5,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 25.0,
+            "p95_ms": 25.0
+        },
+        {
+            "rule_id": 6,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 25.0,
+            "p95_ms": 25.0
+        },
+        {
+            "rule_id": 7,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 26.0,
+            "p95_ms": 26.0
+        },
+        {
+            "rule_id": 8,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 25.0,
+            "p95_ms": 25.0
+        },
+        {
+            "rule_id": 9,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 25.0,
+            "p95_ms": 25.0
+        },
+        {
+            "rule_id": 10,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 24.0,
+            "p95_ms": 24.0
+        },
+        {
+            "rule_id": 11,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 24.0,
+            "p95_ms": 24.0
+        },
+        {
+            "rule_id": 12,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 24.0,
+            "p95_ms": 24.0
+        },
+        {
+            "rule_id": 13,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 26.0,
+            "p95_ms": 26.0
+        },
+        {
+            "rule_id": 14,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 26.0,
+            "p95_ms": 26.0
+        },
+        {
+            "rule_id": 15,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 27.0,
+            "p95_ms": 27.0
+        },
+        {
+            "rule_id": 16,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 27.0,
+            "p95_ms": 27.0
+        },
+        {
+            "rule_id": 17,
+            "evaluations": 1,
+            "instances": 11,
+            "fired": 0,
+            "errors": 0,
+            "p50_ms": 26.0,
+            "p95_ms": 26.0
+        }
+    ],
+    "decisions_by_outcome": {
+        "ESCALAR": 1,
+        "NO_PAGAR": 1,
+        "PAGAR": 10
+    },
+    "failures": {
+        "MISSING_DATA": 1,
+        "RULE_ERROR": 0,
+        "RULE_NEEDS_DATA": 0,
+        "RULE_CONFLICT": 0
+    },
+    "escalated": 0,
+    "pending": 0,
+    "resolutions": 1,
+    "resolutions_by_author": {
+        "Mart\u00edn": 1
+    },
+    "resolution_p50_s": 0.5,
+    "resolution_p95_s": 0.5
+}
