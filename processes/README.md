@@ -6,7 +6,7 @@ Each JSON file in this folder defines a complete decision process (a process pac
 
 ```bash
 make setup                                                          # loads invoice-payment.json
-make activate                                                       # activates its hand-written rules
+make activate MANAGER_ID=1                                          # publishes its hand-written rules
 cd backend && uv run python -m app.cli load ../processes/travel-expenses.json
 cd backend && uv run python -m app.cli load ../processes/invoice-payment.json --compile  # needs LLM keys
 ```

@@ -10,6 +10,7 @@ the demo does not use them.
 | File | Purpose |
 |---|---|
 | `demo_run.py` | Drive the invoice process through the production HTTP API |
+| `trace_decision.py` | `make trace-decision FILE=<file_id>`: one invoice's state, decisions, evidence, latency, errors, retries and pending work, as text |
 | `workbook.py` | Historical spreadsheet mapping helper for the text-layer baseline |
 | `extractor.py` | Historical PDF text-layer extractor and regex symbols, without OCR |
 
@@ -19,8 +20,9 @@ From the repository root, follow the [OCR setup guide](../docs/ingestion/setup.m
 to download both OCR model profiles into `.models/` and configure `.env`. Then:
 
 ```bash
-make setup             # Docker backend, database, migrations and process pack
-make erp               # leave the challenge ERP running in another terminal
+make setup                  # Docker backend, database, migrations and process pack
+make activate MANAGER_ID=1  # publish the hand-written rules (1: the seeded manager)
+make erp                    # leave the challenge ERP running in another terminal
 make demo              # 500 invoices -> output/outcomes.jsonl and detail.json
 ```
 
@@ -30,7 +32,8 @@ weight/dictionary hashes and requires the configured Gemini/Jev model IDs and ke
 experiments, set `TRACEPAY_OCR_PROFILE=experimental` before starting the backend.
 The current shared corpus export is linked from [the reports index](../backend/reports/README.md).
 
-`make demo` activates the supplied hand-written rules. The API must be reachable
+`make demo` runs the published rules; without `make activate` the run answers 409.
+The API must be reachable
 at the host port configured by `BACKEND_PORT` (8000 by default), and the backend
 must reach the ERP on port 8009. The demo uses the pack's seeded manager account.
 The workbook is uploaded before the PDFs; all PDFs are uploaded before the engine

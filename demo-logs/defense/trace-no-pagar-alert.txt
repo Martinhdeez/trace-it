@@ -1,0 +1,48 @@
+== 2026-03-28_P002.pdf  (instance 64, process 1 'Invoice payment')
+state: DECIDED   exported result: NO_PAGAR
+file: sha256 7618ff3a5a6c, 1997 bytes, read 2026-09-19T10:03:48.627419Z
+
+-- Decisions (oldest first; history is append-only)
+#64 2026-09-19T10:05:12  NO_PAGAR  by engine
+   reason: The ERP says PAGADA
+   process version: v1 (published by Martín: Explicit CLI --activate approval; content 8503b6fc8d22)   rules hash: cf741d48f1e4
+   FIRED rule 15 (code b00cebaed49e): The ERP says PAGADA
+      text: With the `erp` row of that `purchase_order`: `erp.status` is `PAGADA` (in fact: other than `PENDIENTE`).
+
+-- Evidence: symbols and their origin
+   base            2108.79                                  document:ab8d18d0de284a3185c5bf5bf2cd6912
+   date            2026-03-28                               document:ab8d18d0de284a3185c5bf5bf2cd6912
+   file_id         2026-03-28_P002.pdf                      document:ab8d18d0de284a3185c5bf5bf2cd6912
+   free_text       [Page 1; reader=native; document cont... document:ab8d18d0de284a3185c5bf5bf2cd6912
+   iban            ES7621000813610123456789                 document:ab8d18d0de284a3185c5bf5bf2cd6912
+   invoice_number  FA-5499                                  document:ab8d18d0de284a3185c5bf5bf2cd6912
+   issuer_name     None                                     document:ab8d18d0de284a3185c5bf5bf2cd6912
+   issuer_nif      A41220987                                document:ab8d18d0de284a3185c5bf5bf2cd6912
+   purchase_order  PO-2026-0476                             document:ab8d18d0de284a3185c5bf5bf2cd6912
+   total           2551.64                                  document:ab8d18d0de284a3185c5bf5bf2cd6912
+   vat_amount      442.85                                   document:ab8d18d0de284a3185c5bf5bf2cd6912
+   vat_rate        21                                       document:ab8d18d0de284a3185c5bf5bf2cd6912
+
+-- Latency per step (spans of this instance, ADR 0018)
+   upload_document          ok    14 ms
+     store_file             ok    0 ms
+     extraction             ok    5 ms
+       native_text          ok    1 ms
+     ingest_document        ok    4 ms
+   run_process              ok    1237 ms  (batch: 500 instances, 16 rules)
+     decision               ok    -  -> NO_PAGAR
+   export_outcomes          ok    27 ms
+
+-- Errors and retries
+   extraction ab8d18d0de28: 0 OCR, 0 vision, 0 judge calls; warnings 0 
+   rules [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]: no LLM compilation (hand-written or loaded from a pack)
+   rule runtime errors across their runs: 0
+   erp sync 2026-09-19T10:03:41 (ok): 31 requests, 3 retries, 0 timeouts, 5480 ms
+   no error span on this instance
+
+-- Pending work
+   not escalated (latest decision by engine)
+   alert 1 [open] 2026-09-19T10:07:19: decision #64 NO_PAGAR -> PAGAR after source_sync (erp); reason was 'The ERP says PAGADA', would be 'default'
+      row AS-00476: {'status': 'PAGADA -> PENDIENTE'}
+   process: 28 escalated, 0 pending, 1 open alerts; decisions {'ESCALAR': 28, 'PAGAR': 436, 'NO_PAGAR': 36}
+   planes now: ingestion ok, agents ok, execution ok

@@ -1,8 +1,3 @@
-> Process configuration now requires explicit manager publication. See
-> [process versions and replay](process-versions.md). After setup, use
-> `make activate MANAGER_ID=<id>` before running the demo. Compiling rules prepares them;
-> it does not activate them.
-
 # trace-it: team guide
 
 How we work in this repo: branches, backend layout, running it. What the system is and why: the root `README.md` and `docs/adr/`.
@@ -103,26 +98,27 @@ benchmark and golden-reference tools also need `pdftotext` (poppler).
 
 | Command | What it does |
 |---|---|
-| `make setup` | `.env` from the example, Postgres + backend (`docker compose`), migrations, loads `processes/invoice-payment.json`. Repeatable. API at http://localhost:8000/docs (`BACKEND_PORT=8001 make setup` if 8000 is taken) |
-| `make erp` | Starts the challenge ERP from the submodule (port 8009). Keep it running in another terminal |
+| `make setup` | `.env` from the example, Postgres + backend (`docker compose`), migrations, loads `processes/invoice-payment.json`. Repeatable. API at http://localhost:8000/docs. Ports taken: `DB_PORT=5442 BACKEND_PORT=8001 ERP_PORT=8011 make setup` (pass the same variables to the commands below) |
+| `make activate MANAGER_ID=1` | Publishes the pack's validated draft as a process version ([process versions](process-versions.md)): the hand-written `rules-v3/` need no model. Nothing runs before it (409). `1` is the seeded manager on a fresh database (`curl -s localhost:8000/users`) |
+| `make erp` | Starts the challenge ERP from the submodule (port 8009, or `ERP_PORT`). Keep it running in another terminal |
 | `make erp-sync` | Downloads the ERP into a new snapshot (`docs/sources-http.md`) |
 | `make backup` | `pg_dump` of the live database into `backups/` (`DB_CONTAINER`, `DB_NAME`) |
 | `make export-batch FILES=<dir> OUT=<file>` | Outcomes of the instances named like the PDFs of `<dir>` only, then checked: one line per file, valid results (`docs/runbook-batch2.md`) |
 | `make check-outcomes OUT=<file> FILES=<dir>` | Only the check, for a file already written |
-| `make activate` | Activates every draft rule whose code is validated: the hand-written `rules-v3/` need no model |
-| `make compile` | Compiles the draft rules with the two agents (needs LLM keys) |
-| `make demo` | Activates the pack, uploads workbook and 500 PDFs through the production API, syncs the ERP, runs decisions and exports `output/outcomes.jsonl` (`tools/README.md`). Requires the backend and ERP running, plus downloaded OCR weights for scans |
+| `make compile` | Compiles the draft rules with the two agents (needs LLM keys); compiling never publishes, `make activate` does |
+| `make demo` | Uploads workbook and 500 PDFs through the production API, syncs the ERP, runs decisions and exports `output/outcomes.jsonl` (`tools/README.md`). Requires the backend and ERP running, plus downloaded OCR weights for scans |
 | `make demo DEMO_ARGS="--limit 5 --local-only"` | Small API run with local OCR and no Gemini/Jev requests; use a fresh database for comparable results |
+| `make trace-decision FILE=<file_id>` | One invoice through the API, as text: state, decisions (author, reason, process version, rules hash), symbols with origin, latency per step, errors and retries, pending work and alerts. `PROCESS=<id>` picks a process |
 | `make test` | Unit tests (`-m "not e2e and not llm"`) |
 | `make test-e2e` | Golden outcomes of batch 1 and the API flow (needs the challenge submodule) |
-| `make check` | `ruff check`, `ruff format --check`, then `test` and `test-e2e`. Run before every PR |
+| `make check` | `ruff check`, `ruff format --check` (backend and `tools/`), then `test` and `test-e2e`. Run before every PR |
 | `make eval-compiler` | Opt-in, calls real LLMs: compiles the 16 rules and compares with `rules-v3/`; report in `backend/evals/reports/` |
 | `make eval-norm` | Opt-in, calls real LLMs: the client's `Norma_Pagos_v3` -> normalizer -> compiler -> batch 1 vs golden; report in `backend/evals/reports/` |
 | `make demo-llm-down` | Opt-in, calls real LLMs (Helmcode): the normalizer's primary provider is unreachable and a fallback model answers; prints the `llm_run` span (ADR 0019) |
 | `make down` | Stops the containers; data stays |
 | `make reset-db` | Deletes the database volume. Then `make setup` |
 
-Without Docker for the backend (faster loop): `docker compose up db -d`, then in `backend/`: `uv sync`, `uv run alembic upgrade head`, `uv run uvicorn app.main:app --reload`.
+Without Docker for the backend (faster loop): `docker compose up db -d`, then in `backend/`: `uv sync`, `uv run alembic upgrade head`, `uv run uvicorn app.main:app --env-file ../.env --reload` (the settings read `.env` from the working directory, so without `--env-file` the keys in the root `.env` are missed).
 
 ## Environment
 
@@ -131,7 +127,8 @@ Without Docker for the backend (faster loop): `docker compose up db -d`, then in
 | Variable | Purpose |
 |---|---|
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` | LLM providers. Only `make compile`, `make eval-compiler` and the assistant need them |
-| `TRACE_ERP_USER`, `TRACE_ERP_PASSWORD`, `TRACE_ERP_URL` | The ERP connector, named in `processes/invoice-payment/sources.json`. Docker sets the URL to `host.docker.internal:8009` |
+| `TRACE_ERP_USER`, `TRACE_ERP_PASSWORD`, `TRACE_ERP_URL` | The ERP connector, named in `processes/invoice-payment/sources.json`. Docker sets the URL to `host.docker.internal:${ERP_PORT:-8009}` |
+| `TRACE_HEALTH_*` | `GET /health/planes` thresholds: window, error rates, p95 per plane, and `TRACE_HEALTH_MIN_SPANS` (default 5): below it a plane is `ok`, "not enough data" |
 | `TRACE_COMPILER_MODEL`, `TRACE_TESTER_MODEL`, `TRACE_ASSISTANT_MODEL` | One model per agent role, `provider:model` (any PydanticAI provider, or `helmcode:<model>` with `HELMCODE_API_KEY`). Defaults in `app/core/config.py`; tester and compiler should differ (ADR 0004) |
 | `TRACE_AUTO_ACTIVATE_MAX_CHANGE` | Share of past decisions a compiled rule may change and still activate by itself (default 0.05) |
 | `TRACE_DATABASE_URL` | Set by Docker; the Makefile overrides it for tests |
@@ -150,6 +147,11 @@ children nest by themselves across `await`, `gather` and threads.
 | `GET /instances/{id}/trace` | An invoice's journey: file, reading spans, symbols with origin, decisions with each rule's answer (rule text, norm rule), resolutions, exports, `exported_decision` |
 | `GET /rules/{id}/trace` | How a rule was produced (norm sentence, normalizer run, each compilation: tester, coder attempts, test runs, reviews, impact check, activation), its `lifecycle` (saved, compiled, activated, retired, impact previews, with author) and its runtime in process runs (fired, errors, p50/p95) |
 | `GET /processes/{id}/metrics?since=` | Completed runs (refused ones are `run_process` errors), instances/s, p50/p95 per step type, LLM calls/retries/errors/tokens by model and role, decisions by outcome, escalations by cause (`MISSING_DATA`, `RULE_ERROR`, `RULE_NEEDS_DATA`, `RULE_COMPILE_FAILED`, `RULE_CONFLICT`), escalated and pending |
+| `GET /processes/{id}/metrics/{plane}`, `GET /health/planes` | The ingestion, agents and execution planes; each plane `ok`, `degraded` or `down` now (`TRACE_HEALTH_*`) |
+| `GET /processes/{id}/alerts?status=open` | Past decisions newer data or rules would decide otherwise (ADR 0026) |
+
+`make trace-decision FILE=<file_id>` reads these endpoints for one invoice and prints them as
+text; sample outputs in `demo-logs/defense/`.
 
 Who changed what is in the feed: rule saves, compilations, activations and retirements carry
 `author` (a person, `cli` or `auto`) and the status before and after; agent configuration
