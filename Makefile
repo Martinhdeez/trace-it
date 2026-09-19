@@ -37,6 +37,7 @@ activate:  # MANAGER_ID=<id>: explicitly approve the validated pack draft
 FROZEN = ../processes/invoice-payment/frozen/2026-09-19/invoice-payment.json
 load-frozen:
 	test -n "$(MANAGER_ID)"
+	test -f .env || cp .env.example .env
 	cd backend && uv run --env-file ../.env python -m app.cli load ../processes/invoice-payment.json
 	cd backend && uv run --env-file ../.env python -m app.cli load $(FROZEN) --activate --manager-id $(MANAGER_ID)
 
