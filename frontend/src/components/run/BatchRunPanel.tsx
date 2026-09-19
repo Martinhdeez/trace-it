@@ -245,6 +245,9 @@ function Collect({
   )
 }
 
+/** Output lines kept on screen; a 500-file batch writes a thousand. */
+const LOG_LINES = 200
+
 type FileState =
   | { phase: 'queued' }
   | { phase: 'reading' }
@@ -269,6 +272,7 @@ function Progress({
 }) {
   const reduceMotion = useReducedMotion()
   const log = useRef<HTMLOListElement>(null)
+  const files = useRef<HTMLUListElement>(null)
 
   const states = new Map<number, FileState>()
   for (const event of events) {
@@ -282,9 +286,16 @@ function Progress({
   const done = events.filter((event) => event.phase === 'read').length
   const percent = queue.length ? Math.round((done / queue.length) * 100) : 100
 
+  // Big batches: keep the file being read in view, and the newest output line.
   useEffect(() => {
     log.current?.scrollTo({ top: log.current.scrollHeight })
+    const list = files.current
+    const row = list?.querySelector<HTMLElement>('[data-reading]')
+    if (list && row && (row.offsetTop < list.scrollTop || row.offsetTop > list.scrollTop + list.clientHeight - row.offsetHeight)) {
+      list.scrollTop = row.offsetTop - list.clientHeight / 2
+    }
   }, [events.length, running])
+  const shown = events.slice(-LOG_LINES)
 
   return (
     <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -310,12 +321,13 @@ function Progress({
           ) : null}
         </div>
 
-        <ul className="max-h-[300px] space-y-0.5 overflow-y-auto">
+        <ul ref={files} className="relative max-h-[300px] space-y-0.5 overflow-y-auto">
           {queue.map((item, index) => {
             const state = states.get(index) ?? { phase: 'queued' as const }
             return (
               <li
                 key={item.id}
+                data-reading={state.phase === 'reading' ? '' : undefined}
                 className={cn(
                   'flex min-w-0 items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 transition-colors',
                   state.phase === 'reading' && 'bg-canvas',
@@ -354,9 +366,9 @@ function Progress({
           className="max-h-[300px] min-h-0 flex-1 space-y-1 overflow-y-auto px-5 pb-4 font-mono text-[11px] leading-5"
         >
           <AnimatePresence initial={false}>
-            {events.map((event, index) => (
+            {shown.map((event, index) => (
               <motion.li
-                key={index}
+                key={events.length - shown.length + index}
                 initial={reduceMotion ? false : { opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.18, ease }}
