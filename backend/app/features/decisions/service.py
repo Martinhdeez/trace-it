@@ -737,7 +737,11 @@ async def resolve(
 
 
 async def export(
-    session: AsyncSession, process_id: int, names: set[str] | None = None, trace: bool = False
+    session: AsyncSession,
+    process_id: int,
+    names: set[str] | None = None,
+    trace: bool = False,
+    full: bool = False,
 ) -> tuple[str, list[str]]:
     """`outcomes.jsonl` for the challenge: one line per instance name, nothing else.
 
@@ -748,16 +752,17 @@ async def export(
     process's escalation outcome, so an incomplete batch is still deliverable without
     creating a fake engine decision. `names` limits the export to one delivery batch;
     other instances may still be pending. `trace` adds a `trace_url` per line, the console
-    screen that opens that case's trace.
+    screen that opens that case's trace; `full` adds the whole trace of the decision inline,
+    so the file stands on its own.
     """
     with events.span("export_outcomes", process_id=process_id, batch=len(names or ())) as span:
-        body, duplicates = await _export(session, process_id, names, trace)
+        body, duplicates = await _export(session, process_id, names, trace, full)
         span.set(lines=body.count("\n") + 1 if body else 0, duplicates=len(duplicates))
         return body, duplicates
 
 
 async def _export(
-    session: AsyncSession, process_id: int, names: set[str] | None, trace: bool
+    session: AsyncSession, process_id: int, names: set[str] | None, trace: bool, full: bool = False
 ) -> tuple[str, list[str]]:
     await get_process(session, process_id)
     # Two files can share a name: only the most recent instance of each name is exported.
@@ -789,6 +794,21 @@ async def _export(
         instance_id: (decision.decision, decision.reason)
         for instance_id, decision in {**human, **engine}.items()
     }
+    # A full line says who decided the case, so it exports the latest decision: a person's
+    # resolution when it came after the engine's (the delivered file stays engine-first,
+    # ADR 0009).
+    chosen: dict[int, Decision] = {}
+    if full:
+        for instance in instances:
+            automatic, resolution = engine.get(instance.id), human.get(instance.id)
+            latest = (
+                resolution
+                if resolution and (not automatic or resolution.id > automatic.id)
+                else automatic
+            )
+            if latest:
+                chosen[instance.id] = latest
+                exported[instance.id] = (latest.decision, latest.reason)
     reviews = await decision_reviewer.for_decisions(session, list(engine.values()))
     awaiting = []
     for instance in instances:
@@ -816,19 +836,88 @@ async def _export(
         raise ConflictError(f"{len(undecided)} undecided instances: {', '.join(undecided[:5])}")
     # `reason` is the rule's own reason code, as the engine recorded it (ADR 0002): no model
     # is asked for it. The challenge allows trace fields beside the two required ones.
+    extra = await _trace_rows(session, process_id, instances, chosen) if full else {}
     body = "\n".join(
         json.dumps(
-            {
-                "file_id": i.name,
-                "result": exported[i.id][0],
-                "reason": exported[i.id][1] or "NO_FINDING",
-            }
-            | ({"trace_url": outcomes_file.trace_url(process_id, i.id)} if trace else {}),
+            {"file_id": i.name, "result": exported[i.id][0]}
+            | (extra.get(i.id) or {"reason": exported[i.id][1] or "NO_FINDING"})
+            | ({"trace_url": outcomes_file.trace_url(process_id, i.id)} if trace or full else {}),
             ensure_ascii=False,
         )
         for i in instances
     )
     return body, duplicates
+
+
+async def _trace_rows(
+    session: AsyncSession, process_id: int, instances: list[Instance], chosen: dict[int, Decision]
+) -> dict[int, dict]:
+    """The whole trace of every exported line, in four queries for the batch, never one per
+    instance. Every value is already in the database (ADR 0018): nothing is decided again."""
+    numbers = dict(
+        (
+            await session.execute(
+                select(ProcessVersion.id, ProcessVersion.number).where(
+                    ProcessVersion.id.in_({d.version_id for d in chosen.values() if d.version_id})
+                )
+            )
+        ).all()
+    )
+    rule_ids = {r["rule_id"] for d in chosen.values() for r in d.results if r.get("fires")}
+    rules = {
+        row.id: (row.summary or row.text, row.decision)
+        for row in (
+            await session.execute(
+                select(Rule.id, Rule.summary, Rule.text, Rule.decision).where(Rule.id.in_(rule_ids))
+            )
+        ).all()
+    }
+    # The span each decision was taken in: its trace holds the reading, the run and the rules.
+    traces = dict(
+        (
+            await session.execute(
+                select(Event.instance_id, Event.trace_id)
+                .where(
+                    Event.instance_id.in_([i.id for i in instances]),
+                    Event.step.in_(("decision", "resolution")),
+                )
+                .order_by(Event.id)
+            )
+        ).all()
+    )
+    # The last sync of every source of the process: what the rules read, as `GET /traces`.
+    source = Event.data["source"].astext
+    sources_read = [
+        {
+            "source": row.data["source"],
+            "status": row.status,
+            **{k: row.data.get(k) or 0 for k in ("requests", "retries")},
+        }
+        for row in (
+            await session.execute(
+                select(Event.data, Event.status)
+                .where(Event.step == "sync_source", Event.process_id == process_id)
+                .distinct(source)
+                .order_by(source, Event.id.desc())
+            )
+        ).all()
+    ]
+    return {
+        i.id: outcomes_file.trace_fields(
+            author=d.author,
+            reason=d.reason,
+            decided_at=d.created_at.isoformat().replace("+00:00", "Z"),
+            results=d.results,
+            rules_hash=d.rules_hash,
+            process_version=numbers.get(d.version_id),
+            rules=rules,
+            symbols=i.symbols,
+            sources_read=sources_read,
+            trace_id=traces.get(i.id),
+        )
+        for i in instances
+        if (d := chosen.get(i.id))
+    }
 
 
 async def list_findings(session: AsyncSession, process_id: int) -> list[FindingOut]:
