@@ -8,9 +8,11 @@ the checks are saved like any other rule and compile in the background (ADR 0004
 every interpretation is kept in the check's `report["norm"]`.
 
 A check's decision is the one the norm names for that failure (`decision_source:
-"explicit"`, with the words that name it). When the norm does not name it ("pay only if X"
-says nothing about what happens when X fails), the use case's `failed_check_decision`
-decides, in code, whatever the model proposed (`"policy"`).
+"explicit"`, with the words that name it). When the norm does not name it (`"policy"`),
+code decides from the check's `kind`, whatever the model proposed: a `violation` (the
+failure proves the case breaks the norm) gets the use case's `failed_check_decision`; a
+`doubt` (the failure means the system cannot tell the right outcome by itself, e.g. several
+instances claim the same order) gets the escalation type.
 """
 
 import json
@@ -44,6 +46,9 @@ class Check(BaseModel):
     # policy: it does not, and the use case's `failed_check_decision` decides.
     decision_source: Literal["explicit", "policy"]
     quote: str = ""
+    # violation: its failure proves non-compliance; doubt: a person must resolve it.
+    kind: Literal["violation", "doubt"] = "violation"
+    kind_reason: str = ""  # why this kind, in one sentence
     interpretation: str  # what was decided and why
 
 
@@ -83,7 +88,8 @@ class Deps:
     decisions: set[str]
     default: str
     rules: dict[int, str]  # existing active rules: id -> text
-    policy: str | None = None  # failed_check_decision: decides every `policy` check
+    policy: str | None = None  # failed_check_decision: decides every `policy` violation
+    escalate: str | None = None  # the escalation type: decides every `policy` doubt
 
 
 normalizer = Agent(
@@ -96,7 +102,9 @@ def _consistent(ctx: RunContext[Deps], output: Normalization) -> Normalization:
     problems = []
     for s in output.norm_rules:
         for c in s.checks:
-            if c.decision_source == "policy" and ctx.deps.policy:
+            if c.decision_source == "policy" and c.kind == "doubt" and ctx.deps.escalate:
+                c.decision = ctx.deps.escalate
+            elif c.decision_source == "policy" and c.kind == "violation" and ctx.deps.policy:
                 c.decision = ctx.deps.policy
             elif c.decision_source == "explicit" and not _quoted(c.quote, s.text):
                 problems.append(
@@ -150,6 +158,12 @@ def check_policy(policy: str | None, types: Sequence[DecisionType]) -> None:
         )
 
 
+def escalation(types: Sequence[DecisionType]) -> str | None:
+    """The escalation type: the highest-priority type that requires a human."""
+    human = [t for t in types if t.requires_human]
+    return max(human, key=lambda t: t.priority).name if human else None
+
+
 def context(
     norm: str,
     description: str,
@@ -183,8 +197,10 @@ def context(
         lines.append("- (none)")
     lines += ["", "Active rules (id: text):"]
     lines += [f"- {r.id}: {r.text}" for r in active] or ["- (none)"]
-    lines += ["", "Decision of a check whose failure the norm does not name (`policy`):"]
+    lines += ["", "Decision of a `policy` check of kind `violation`:"]
     lines.append(f"- {policy}" if policy else "- (not set: follow the fallbacks)")
+    lines += ["", "Decision of a `policy` check of kind `doubt`:"]
+    lines.append(f"- {escalation(types) or '(no type requires a human: follow the fallbacks)'}")
     return "\n".join(lines)
 
 
@@ -205,6 +221,7 @@ async def normalize(
         default=next(t.name for t in types if t.is_default),
         rules={r.id: r.text for r in active},
         policy=policy,
+        escalate=escalation(types),
     )
     prompt = context(norm, description, types, symbols, sources, active, policy)
     return await llm.run(
@@ -260,6 +277,8 @@ async def normalize_norm(session: AsyncSession, process_id: int, norm: str) -> N
                 "interpretation": check.interpretation,
                 "decision_source": check.decision_source,
                 "quote": check.quote,
+                "kind": check.kind,
+                "kind_reason": check.kind_reason,
                 "policies": sentence.policies,
                 "covered": sentence.covered,
             }

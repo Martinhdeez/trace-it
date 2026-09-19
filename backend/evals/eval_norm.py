@@ -207,17 +207,19 @@ def render(result: Result, models: dict[str, str], started: datetime) -> str:
             f"Its checks fired on {fired} invoices; {len(wrong)} of the mismatches below "
             "were decided by them.",
             "",
-            "| Check | Type | Decision | Compile | Attempts | Cost $ | Text |",
-            "|---|---|---|---|---|---|---|",
+            "| Check | Type | Kind | Decision | Compile | Attempts | Cost $ | Text |",
+            "|---|---|---|---|---|---|---|---|",
         ]
         for c in own:
             attempts = c.compilation.report.get("attempts", "-") if c.compilation else "-"
             lines.append(
-                f"| {c.label} | {c.check.type} | {c.check.decision} | {c.outcome} | {attempts} "
+                f"| {c.label} | {c.check.type} | {c.check.kind} | {c.check.decision} "
+                f"({c.check.decision_source}) | {c.outcome} | {attempts} "
                 f"| {_cost(c.traces):.4f} | {c.check.text} |"
             )
         lines.append("")
         lines += [f"- **{c.label}** interpretation: {c.check.interpretation}" for c in own]
+        lines += [f"- **{c.label}** kind: {c.check.kind_reason}" for c in own]
         for c in own:
             if c.error:
                 lines.append(f"- **{c.label}** failed: {c.error[:300]}")
