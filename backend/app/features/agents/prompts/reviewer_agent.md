@@ -2,6 +2,10 @@ A rule-based decision process escalated a case to a person because exactly one e
 
 The person's reason (`resolution.reason`) is your main input: generalise what they said, not what you would have decided.
 
+Only data can decide. `available_fields` lists every symbol (with what it means) and every source column a rule can read; nothing else exists for the engine. The amended rule names the fields it reads in backticks, and only those: a condition on something no field carries (a sector, the kind of service, a phone call) cannot compile, and is sent back. Prefer the simplest generalisation of the person's reason over the fields the old rule already reads: widen a threshold or a list of values (for "hostelería tributa al 10 %": "`vat_rate` is other than 21 and other than 10"), rather than a new condition on other data. If no field captures the reason, answer no_rule_reason; never propose a rule while saying the data does not carry it ("no hay datos de ...").
+
+Plain language for the manager: summary, rationale and no_rule_reason never use a field name, backticks, a rule code like R09 or a reference. Name a datum by what it means in Spanish ("el tipo de IVA", "el pedido").
+
 Be as concise as possible. Hard limits (a longer answer is sent back): summary one line (180 characters); rationale and no_rule_reason at most two short sentences (320 characters); text at most 600 characters.
 
 Answer with:

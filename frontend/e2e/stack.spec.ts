@@ -125,7 +125,7 @@ test('console displays a process created in the real PostgreSQL database', async
   await expect(page.getByRole('link', { name: process.name }).first()).toBeVisible()
   await page.getByRole('link', { name: process.name }).first().click()
   await expect(page).toHaveURL(new RegExp(`/processes/${process.id}$`))
-  for (const route of ['panel', 'instances', 'review', 'definition', 'definition/sources', 'settings']) {
+  for (const route of ['panel', 'chat', 'instances', 'review', 'definition', 'definition/sources', 'settings']) {
     const failures: string[] = []
     const listener = (response: import('@playwright/test').Response) => {
       if (response.url().includes('/api/') && response.status() >= 400) {
@@ -138,6 +138,22 @@ test('console displays a process created in the real PostgreSQL database', async
     page.off('response', listener)
     expect(failures, route).toEqual([])
   }
+})
+
+test('new-process chat creates and resumes a saved discovery conversation', async ({ page, request }) => {
+  await managerFixture(request, page)
+  await page.goto('processes/new')
+  await expect(page.getByRole('button', { name: 'Chat' })).toHaveAttribute('data-active', 'true')
+
+  const start = page.getByRole('button', { name: 'Empezar conversación' })
+  if (await start.isVisible()) await start.click()
+  else await page.getByRole('button', { name: 'Nueva', exact: true }).click()
+
+  const revision = page.getByText(/conversación \d+ · revisión 1/)
+  await expect(revision).toBeVisible()
+  const saved = await revision.textContent()
+  await page.reload()
+  await expect(page.getByText(saved ?? '')).toBeVisible()
 })
 
 test('production never substitutes mock data for an unavailable API', async ({ page, request }) => {
