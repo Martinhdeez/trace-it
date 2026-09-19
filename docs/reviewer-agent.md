@@ -71,6 +71,137 @@ FE-4 and FE-5 in #162 ([their merge notes](#fe-4fe-5-merge-notes)).
    then without `dry_run`: the sibling escalated invoice gets a new engine row with the new
    decision. The manager's own case is never re-decided. Spans: `reprocess`, `decision`.
 
+## Advice contract (#165)
+
+Both agents that advise on an escalation are short on purpose, propose rules instead of
+asking the manager what they think, and may answer that no rule should learn the case.
+Code: `backend/app/features/agents/assistant.py`; prompts: `prompts/assistant.md`,
+`prompts/reviewer_agent.md`. ADR 0035, update 2026-09-19.
+
+**Length limits.** Characters and list sizes are capped in the output models
+(`Field(max_length)`). Sentences and single lines are checked by the output validators
+(`too_long` → `ModelRetry`). A violation sends the answer back; both agents have 2 retries,
+then 502.
+
+| Field | Limit |
+|---|---|
+| assistant `why` | 1-2 items, each one line, one sentence, ≤ 180 chars |
+| assistant `reasoning`, `no_rule_reason` | ≤ 2 sentences, ≤ 320 chars |
+| assistant `options[].consequence` | one line, one sentence, ≤ 180 chars |
+| assistant `options[].rule`, `proposed_rule` | ≤ 600 chars (the longest rule of the invoice pack is 423) |
+| reviewer `summary` | one line, one sentence, ≤ 180 chars |
+| reviewer `rationale`, `no_rule_reason` | ≤ 2 sentences, ≤ 320 chars |
+| reviewer `text` | ≤ 600 chars |
+| `evidence` (both) | 1-6 references |
+
+**Every option has a concrete rule.** Each assistant option pairs a decision with the
+English `rule` that would justify it. The rule is new, or the escalating rule amended with
+an exception (an escalation rule beats PAGAR and NO_PAGAR by priority), or `"Rule <id>"`
+for an active rule that already gives that decision. Its Spanish `consequence` reads like
+"Sí se podría pagar si se añade la regla: … (casos como este pasarían a PAGAR)" or
+"No se debería pagar por la regla 9: …". Without `no_rule_reason`, a missing option rule,
+`proposed_rule` or `proposed_type` is sent back.
+
+**"No rule, always a person" is a valid answer.**
+- Assistant: `no_rule_reason` (Spanish), with `proposed_rule` and `proposed_type` null.
+  `decision` is still a final type (never `ESCALAR`). The prompt makes a missing or
+  unverified datum always "no rule".
+- Reviewer: `no_rule_reason`, stored as an ordinary open `rule` proposal. It has
+  `payload.text: ""`, `payload.no_rule_reason`, the reason as `rationale`, a `summary`
+  starting "Sin regla:", and `payload.type` taken from the old rule. The manager dismisses
+  it (Rechazar → `rejected`), or writes a rule and accepts it with `text`. Accepting with
+  no text is 409 "Esta sugerencia no trae regla: …". After a rejected "no rule", a second
+  "no rule" is sent back. Span `suggest_rule` records `no_rule`.
+
+**The manager's reason is the main input.** The reviewer generalises `resolution.reason`,
+not what it would have decided. When that reason rests on something outside the data (a
+call, a document) or no condition separates the cases, it answers "no rule".
+
+### Before / after (live, deepseek-v4-flash, 2026-09-19)
+
+Contexts built in the exact shape `_context` / `suggest_rule` produce, from the pack rules,
+the golden symbols and the demo invoices. The full outputs are in PR #165.
+
+**10 % VAT, rule 9 (`hosteleria_A_F26-0726.pdf`).**
+- Before, assistant: 5 `why` paragraphs, a 10-line `reasoning`, and options like "Se aprueba
+  el pago de la factura F26-0726 por 2.480,50 EUR al proveedor B96233419 en la cuenta …; el
+  caso se cierra sin más revisiones." (892 tokens).
+- After, assistant (601 tokens):
+  - why: "Se escaló por la regla R09: el IVA de la factura es del 10 % en vez del 21 % habitual…"
+    and "Los importes cuadran (base 2255,00 + IVA 225,50 = total 2480,50)…".
+  - PAGAR: "Sí se podría pagar si se añade la regla: IVA del 10 % en hostelería no escala (casos
+    como este pasarían a PAGAR)." with a rule amending R09.
+  - NO_PAGAR: "No se debería pagar por la regla 9: el tipo de IVA impreso (10 %) no es el 21 %
+    exigido." with rule `Rule 9`.
+- Reviewer, after "La hostelería tributa al 10 %…":
+  - text: "`vat_rate` is other than 21, unless `vat_rate` is 10 and the order of `purchase_order`
+    exists with `total_amount` matching (±0.01) `total`."
+  - summary: "Se exceptúa del escalado por IVA distinto de 21 % cuando el tipo es 10 % (hostelería)
+    y el pedido cuadra."
+
+**Duplicate order, rule 16 (`factura_41082.pdf` / `2026-0233-A_catering.pdf`, B96233419).**
+- Before, assistant: PAGAR ("es una simple coincidencia de pedido"), with a 12-line
+  reasoning and a 560-character rule.
+- After, assistant: NO_PAGAR with **no rule**. no_rule_reason: "El mismo pedido
+  PO-2026-0492 aparece en otra factura del proceso (2026-0233-A_catering.pdf) y no hay
+  datos de esa instancia en el caso: una persona debe comparar ambas facturas y decidir si
+  el pedido ya está cubierto." The options still pair PAGAR with a candidate amendment,
+  and NO_PAGAR with `Rule 16`.
+- Reviewer, after "Es la primera de las dos…": still a rule, the earliest invoice of the
+  group (before and after). The reason states a data condition.
+- Reviewer, after "He llamado a Catering Hermanos Pico: confirman que la buena es esta y
+  anulan la otra.": **no rule**.
+  - summary: "Sin regla: la duplicidad de purchase_order con importes idénticos sigue yendo
+    a una persona; la anulación de la otra factura no consta en los datos."
+  - no_rule_reason: "La decisión se basa en una llamada al proveedor que confirma cuál
+    factura es válida y anula la otra: esa información no está en ninguna columna ni
+    símbolo. Ninguna condición sobre purchase_order, importes o NIF distingue los
+    duplicados que se pagan de los que se retienen, así que la regla 16 debe seguir
+    escalando."
+
+**MISSING_DATA (`sin_pedido_F26-0999.pdf`).**
+- Before, assistant: NO_PAGAR plus a new rule "If `purchase_order` is empty … must not be
+  paid", which goes against the policy that missing data goes to a person.
+- After, assistant: NO_PAGAR with **no rule**. no_rule_reason: "Falta el purchase_order,
+  un dato obligatorio que ninguna regla puede suplir: una persona debe obtenerlo del
+  proveedor o del expediente antes de decidir."
+- Reviewer: unchanged. The gate answers 409 before any model call.
+
+Known gap: on the VAT case, the assistant's `proposed_rule` once named the file. The
+reviewer's identifier check does not cover the decision assistant yet.
+
+### Frontend integration notes (after Carlos's refactor)
+
+No component changed in #165; `tsc -b` passes on the current `Queue.tsx`.
+
+**Response fields that changed**
+- `Suggestion` (`GET /instances/{id}/suggestion`), and the `payload` of a `kind: decision`
+  proposal:
+  - `options[].rule: string | null`: new.
+  - `proposed_rule`: now nullable. In the payload, `proposed_rule` is `{text, type} | null`.
+  - `proposed_type`: now nullable.
+  - `no_rule_reason: string | null`: new.
+- `payload` of a `kind: rule` proposal (`POST /instances/{id}/rule-proposal`):
+  - `no_rule_reason: string | null`: new, always present.
+  - `text`: may be `""` (a "no rule" answer).
+  - `type`: always set (falls back to the old rule's).
+- `POST /proposals/{id}/accept` on a rule proposal with empty `payload.text` and no `text`:
+  409, Spanish `message`.
+
+**Render**
+- Decision proposal: `why` (≤ 2 lines), then each option's `consequence`, with its `rule`
+  (English, small/monospace) under it. When `no_rule_reason` is set, show it as a line
+  "Sin regla: {no_rule_reason}" and do not prefill any rule textarea from `proposed_rule`
+  (it is null).
+- Rule proposal with a rule: as today (summary, rationale, editable `payload.text`,
+  "Sustituye a la regla N", Aceptar / Rechazar).
+- Rule proposal with `payload.no_rule_reason`: show it as an answer, not a form:
+  - the `summary` ("Sin regla: …") and the reason (`rationale`);
+  - hide "Sustituye a la regla N" and the textarea;
+  - "Entendido" = Rechazar with reason "Sin regla";
+  - an optional "Escribir yo la regla" that opens the textarea, then Aceptar sends `text`.
+  - Until then, the current card already works: empty textarea, Aceptar disabled.
+
 ## Rejected vs ignored
 
 | | Status | `outcome` | Event | Who |

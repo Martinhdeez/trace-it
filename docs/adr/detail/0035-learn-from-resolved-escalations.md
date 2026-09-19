@@ -104,3 +104,20 @@ be decided by the engine. Three facts shape how:
 ## Related
 Key decisions A, B, C, E. ADR 0001 (reviewed learning), 0002, 0008, 0014, 0031 (impact
 before publishing), 0033 (proposal states). `docs/reviewer-agent.md`, `docs/api.md`.
+
+## Update 2026-09-19: concise advice and "no rule" (#165)
+Martín asked for shorter advice that proposes rules instead of asking the manager.
+- Both agents answer within hard limits: character caps in the output models, sentence
+  and single-line limits in the validators (`ModelRetry`), two retries instead of one.
+- Every option of the decision assistant carries the English `rule` that justifies it.
+- "No rule" is a first-class answer (`no_rule_reason`, Spanish) on both agents. The
+  reviewer's is stored as an ordinary open `rule` proposal with an empty `text`, not a
+  409. It keeps the proposal states of ADR 0033, it is traced like any agent answer, and
+  it survives a reload without a new model call. The 409 stays for the pure `learnable`
+  gate (no model called). Accepting it needs the manager's own `text`; otherwise 409.
+- The manager's resolution reason is the reviewer's main input.
+Evidence: `agents/tests/test_assistant.py` (`test_a_long_answer_is_sent_back`,
+`test_every_option_carries_its_rule`, `test_no_rule_is_a_valid_answer`),
+`proposals/tests/test_reviewer_agent.py` (`test_no_rule_is_a_proposal_the_manager_dismisses`,
+`test_a_long_summary_is_sent_back`), live before/after in `docs/reviewer-agent.md`
+("Advice contract").
