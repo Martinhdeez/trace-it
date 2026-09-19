@@ -514,21 +514,60 @@ async def test_publication_waits_for_a_batch_and_rejects_its_stale_preview(monke
             assert {d["version_id"] for d in decisions} == {first["id"]}
 
 
-async def test_human_conflict_blocks_publication_and_operator_cannot_approve():
+async def test_resolved_escalation_does_not_block_publication_and_operator_cannot_approve():
     async with client() as api:
-        pid, headers, _, _ = await seed(api)
+        pid, headers, rid, _ = await seed(api)
         await publish(api, pid, headers)
         await api.post(f"/processes/{pid}/run")
         [case] = (await api.get(f"/processes/{pid}/queue")).json()
-        await api.post(
+        resolved = await api.post(
             f"/instances/{case['id']}/resolve",
             headers=headers,
-            json={"decision": "REJECT", "reason": "Confirmed paid"},
+            json={"decision": "PAY", "reason": "Confirmed not paid"},
         )
-        await api.put(f"/processes/{pid}/draft", headers=headers, json={"rule_ids": []})
+        assert resolved.status_code == 200, resolved.text
+
+        async def stage(code):
+            async with session_factory() as session:
+                rule = Rule(
+                    process_id=pid,
+                    text="Reject paid orders",
+                    type="prohibition",
+                    decision="REJECT",
+                    code=code,
+                    hash=rule_hash("Reject paid orders", code),
+                    tests=[],
+                    report={"valid": True},
+                    status="draft",
+                )
+                session.add(rule)
+                await session.commit()
+                return rule.id
+
+        broken = await stage(
+            "def evaluate(instance, sources, others):\n"
+            "    return {'fires': 1 / 0 > 0, 'reason': 'PAID'}\n"
+        )
+        await api.put(f"/processes/{pid}/draft", headers=headers, json={"rule_ids": [rid, broken]})
+        blocked = await validate(api, pid, headers)
+        assert not blocked["validation"]["valid"] and blocked["validation"]["errors"], blocked
+
+        added = await stage(
+            "def evaluate(instance, sources, others):\n"
+            "    paid = any(r['order'] == instance.get('order') for r in sources.get('paid', []))\n"
+            "    return {'fires': paid, 'reason': 'PAID' if paid else ''}\n"
+        )
+        await api.put(
+            f"/processes/{pid}/draft",
+            headers=headers,
+            json={"expected_revision": blocked["revision"], "rule_ids": [rid, added]},
+        )
         draft = await validate(api, pid, headers)
-        assert not draft["validation"]["valid"]
-        assert draft["validation"]["conflicts"][0]["instance_id"] == case["id"]
+        report = draft["validation"]
+        assert report["valid"] and not report["conflicts"] and not report["errors"], report
+        [info] = report["resolved_by_person"]
+        assert info["instance_id"] == case["id"]
+        assert (info["before"], info["after"], info["resolution"]) == ("CHECK", "REJECT", "PAY")
         user = (
             await api.post(
                 "/users",
@@ -549,6 +588,9 @@ async def test_human_conflict_blocks_publication_and_operator_cannot_approve():
             },
         )
         assert response.status_code == 403
+        await publish(api, pid, headers)
+        latest = (await api.get(f"/instances/{case['id']}")).json()["decisions"][-1]
+        assert (latest["decision"], latest["author"]) == ("PAY", "Manager")
 
 
 async def test_new_duplicate_and_changed_symbols_do_not_change_replay():

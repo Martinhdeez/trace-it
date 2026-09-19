@@ -225,16 +225,16 @@ async def test_existing_process_backtest_keeps_identity_and_history(api, monkeyp
     draft = await post(api, start, "messages", message="Lower the threshold to 40.")
     draft = await post(api, await accept(api, draft), "prepare")
     impact = draft["preview"]["impact"]
-    assert len(impact["conflicts" if human else "changes"]) == 1
-    assert draft["preview"]["valid"] is not human
+    # A person's decision never blocks publication (R01); it is reported, not rewritten.
+    assert len(impact["resolved_by_person" if human else "changes"]) == 1
+    assert not impact["conflicts"] and draft["preview"]["valid"]
     result = await api.post(
         f"/process-drafts/{draft['id']}/publish", json={"revision": draft["revision"]}
     )
-    assert result.status_code == (409 if human else 200), result.text
-    if not human:
-        assert result.json()["published_process_id"] == pid
-        rules = (await api.get(f"/processes/{pid}/rules")).json()
-        assert [r["status"] for r in rules] == ["retired", "active"]
+    assert result.status_code == 200, result.text
+    assert result.json()["published_process_id"] == pid
+    rules = (await api.get(f"/processes/{pid}/rules")).json()
+    assert [r["status"] for r in rules] == ["retired", "active"]
     async with session_factory() as session:
         original = await session.get(Decision, decision_id)
         assert original.decision == "PAY" and original.rules_hash == "original"

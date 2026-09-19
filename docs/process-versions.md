@@ -25,8 +25,11 @@ All draft operations and replay require a manager's `X-User-Id`.
    `refresh_agents` and `restore_version_id`. Omitted fields retain their values;
    `decision_review: null` disables review. `rule_ids` selects the complete candidate set.
 4. `POST /processes/{id}/draft/validate` checks configuration, stored tests and impact on
-   decided cases. It returns the draft with `validation.valid`, changes, human/review
-   conflicts, runtime errors, and a validation hash. It never calls a model or changes cases.
+   decided cases. It compares the candidate with each case's last engine decision and
+   returns the draft with `validation.valid`, changes, review conflicts, runtime errors,
+   and a validation hash. A case a person resolved never blocks: if the engine outcome
+   would change, it is listed in `resolved_by_person` and the person's decision stays.
+   It never calls a model or changes cases.
 5. `POST /processes/{id}/draft/publish` with `revision`, `validation_hash` and a nonblank
    `reason` approves that exact candidate. Changed evidence or configuration requires
    another validation. Publication atomically creates a version, switches the active
@@ -66,7 +69,7 @@ version. A publication does not automatically reprocess old cases or change expo
 Use the existing explicit reprocess operation when that is intended.
 
 Rollback prepares a draft with `restore_version_id`, validates its impact against current
-evidence, and publishes it as a new version. Human conflicts still prevent publication.
+evidence, and publishes it as a new version. Review conflicts still prevent publication.
 
 ## Migration and CLI
 
