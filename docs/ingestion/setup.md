@@ -166,6 +166,26 @@ readers in that order; failure can move to the next configured reader. To preser
 a single-provider experiment, explicitly restrict `TRACEPAY_VISION_PROVIDERS`.
 See [provider order, local/API modes and billing](providers-and-modes.md).
 
+### Helmcode as the primary image reader
+
+Use this when Gemini is out of quota (HTTP 429 on every scan) or when its key is refused:
+
+```bash
+TRACEPAY_OCR_PROFILE=experimental      # the verified profile requires Gemini first
+TRACEPAY_VISION_PROVIDERS=helmcode,gemini
+HELMCODE_API_KEY=...                   # Qwen 3.6 reads the images; Jev stays the text judge
+```
+
+A published process version pins **one** image reader
+(`execution.extraction.vision_model`), and it takes that reader from this order when
+the version is published. The version then carries no deployment fallback.
+With the settings above, the version reads with `helmcode:qwen3.6` and does not use Gemini.
+Set the variables before `make load-frozen` or `load --activate`. A version that was
+already published with `gemini:...` keeps Gemini. To switch it, `GET` the
+`/processes/{P}/draft`, set `execution.extraction.vision_model` to `helmcode:qwen3.6`,
+`PUT` it back, then validate and publish. The experimental profile skips the startup
+check of the local OCR weights, so run `make ocr-check` yourself.
+
 Keys stay in the ignored `.env`. Changing `.env` requires recreating the Docker
 backend (`docker compose up -d --force-recreate backend`) or restarting a local
 server. Avoid printing `docker compose config` or sharing full environments:
