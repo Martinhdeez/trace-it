@@ -52,13 +52,17 @@ def test_configured_services_share_capacity_but_isolate_models_and_caches(settin
     assert first.cache_key(item, ExtractOptions()) != second.cache_key(item, ExtractOptions())
 
 
-def test_configured_schema_mapper_uses_process_endpoint_timeout_and_budget(settings, monkeypatch):
+@pytest.mark.parametrize("force", [False, True])
+def test_configured_schema_mapper_uses_process_endpoint_timeout_and_budget(
+    settings, monkeypatch, force
+):
     global_settings = replace(
         settings,
         vlm_url="https://global-vision.example/v1",
         vlm_model="global-model",
         gemini_api_key="dummy-cloud",
         helmcode_api_key="dummy-cloud",
+        ocr_force_recompute=force,
     )
     base = ExtractionService(global_settings, NoOCR(), NoVLM())
     scoped = base.configured(
@@ -127,10 +131,10 @@ def test_configured_schema_mapper_uses_process_endpoint_timeout_and_budget(setti
     assert "dummy-cloud" not in json.dumps(provenance)
     assert not result.cache_hit
     replay = scoped.extract_schema({**item, "id": "repeat"}, options, plan)
-    assert replay.cache_hit
+    assert replay.cache_hit is not force
     assert replay.data["provenance"]["execution_hash"] == provenance["execution_hash"]
     assert replay.data["provenance"]["cache_key"] == provenance["cache_key"]
-    assert len(calls) == 1
+    assert len(calls) == (2 if force else 1)
 
     fail_local[0] = True
     unavailable = base.ingest(
@@ -141,7 +145,7 @@ def test_configured_schema_mapper_uses_process_endpoint_timeout_and_budget(setti
     )
     failed = scoped.extract_schema(unavailable, options, plan)
     assert any(warning["code"] == "SCHEMA_READER_ERROR" for warning in failed.warnings)
-    assert len(calls) == 2
+    assert len(calls) == (3 if force else 2)
     assert all(request.url.host == "localhost" for request in calls)
 
 
