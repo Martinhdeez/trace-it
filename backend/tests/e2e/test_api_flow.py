@@ -126,7 +126,7 @@ async def decide_resolve_and_export() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api:
         manager = await users.manager(api)  # the console's only user (Q5)
         rules = (await api.get(f"/processes/{process_id}/rules")).json()
-        assert len(rules) == 17
+        assert len(rules) == 18
         for rule in rules:
             r = await api.post(f"/rules/{rule['id']}/activate", headers=manager)
             assert r.status_code == 200, r.text
@@ -170,7 +170,7 @@ async def decide_resolve_and_export() -> None:
         assert (engine["author"], engine["decision"], len(engine["results"])) == (
             "engine",
             "ESCALAR",
-            17,
+            18,
         )
 
         # A person resolves it. The engine's decision stays; the person's is appended.

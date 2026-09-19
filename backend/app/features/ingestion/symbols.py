@@ -36,3 +36,8 @@ def scan(symbols: dict[str, Any] | None) -> list[str] | None:
     if not any(o[0] == "scan" for o in origins.values()):
         return None
     return [name for name, o in origins.items() if o[0] == "scan" and len(o) > 2]
+
+
+def unverified(symbols: dict[str, Any] | None) -> list[str]:
+    """Field-level doubt is independent of the whole-document scan policy."""
+    return [name for name, s in (symbols or {}).items() if s["origin"].startswith("unverified:")]

@@ -127,11 +127,9 @@ async def _detect(session: AsyncSession, process_id: int, trigger: dict, span) -
     if await versions.active(session, process_id, required=False) is None:
         return []
     dry = await decisions.reprocess(session, process_id, None, dry_run=True)
-    default = (await decisions.outcomes(session, process_id)).default
     source_sync = trigger["kind"] == "source_sync"
-    # New data behind a decision to pay usually records that payment (the ERP now says
-    # PAGADA): the decision was right. Held back or escalated ones are what new data unlocks.
-    flips = [c for c in [*dry.changes, *dry.conflicts] if not (source_sync and c.before == default)]
+    # A decision to pay is not evidence of an executed payment. Surface external changes.
+    flips = [*dry.changes, *dry.conflicts]
     instances = {
         i.id: i
         for i in await session.scalars(
