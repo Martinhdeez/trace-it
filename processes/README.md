@@ -20,7 +20,7 @@ Loading is idempotent (`backend/app/features/processes/definition.py`):
 - a rule enters as `draft` only if the process has no rule with the same text; existing rules, active ones included, are never touched. To change a rule, change its text: it enters as a new draft;
 - users are created by `email` if they do not exist.
 
-`--compile` compiles every draft without validated code with the two agents and prints one line per rule; one failure does not stop the others. `--activate` activates every draft whose code is validated.
+`--compile` compiles every draft without validated code with the two agents and prints one line per rule; one failure does not stop the others. A rule that needs data the process lacks becomes `blocked`: enforced, every instance escalates (`docs/team-guide.md`, rule life cycle). `--activate` activates every draft whose code is validated.
 
 ## Format
 

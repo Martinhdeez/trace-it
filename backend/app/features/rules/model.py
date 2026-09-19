@@ -8,7 +8,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base, created_at
 
 RULE_TYPES = ("requirement", "prohibition")
-RULE_STATUSES = ("draft", "active", "retired")
+# compiling: its code is being written in the background. blocked: it needs data the process
+# does not have, so it is enforced by escalating every instance (ADR 0004, 0016).
+RULE_STATUSES = ("compiling", "draft", "active", "blocked", "retired")
+ENFORCED = ("active", "blocked")  # the statuses the engine runs
 
 
 class Rule(Base):

@@ -1,4 +1,6 @@
+import asyncio
 import hashlib
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -6,14 +8,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError, NotFoundError
+from app.core import events
 from app.core.config import settings
+from app.core.database import session_factory
 from app.features.agents import compiler
 from app.features.decisions import audit
 from app.features.processes.model import DecisionType, Process, Symbol
 from app.features.processes.service import get as get_process
-from app.features.rules.model import Rule
+from app.features.rules.model import ENFORCED, Rule
 from app.features.rules.schemas import RuleDetail, RuleIn, RuleOut
 from app.features.use_cases import service as use_cases
+
+logger = logging.getLogger(__name__)
 
 
 def rule_hash(text: str, code: str) -> str:
@@ -50,27 +56,75 @@ async def create(session: AsyncSession, process_id: int, data: RuleIn) -> RuleDe
     await get_process(session, process_id)
     if not await session.get(DecisionType, (process_id, data.decision)):
         raise ConflictError(f"{data.decision!r} is not a decision type of this process")
-    rule = Rule(process_id=process_id, **data.model_dump())
+    rule = Rule(process_id=process_id, status="compiling", **data.model_dump())
     session.add(rule)
     await session.commit()
     return _detail(rule)
 
 
 async def compile_rule(session: AsyncSession, rule_id: int) -> RuleDetail:
+    """Compile (or recompile) a draft or blocked rule and wait for the result."""
     rule = await _rule(session, rule_id)
-    if rule.status != "draft":
-        raise ConflictError(f"Only a draft rule can be compiled (it is {rule.status})")
+    if rule.status not in ("draft", "blocked"):
+        raise ConflictError(f"Only a draft or blocked rule can be compiled (it is {rule.status})")
+    return await _compile(session, rule)
+
+
+async def _compile(session: AsyncSession, rule: Rule) -> RuleDetail:
     symbols = list(
         await session.scalars(select(Symbol).where(Symbol.process_id == rule.process_id))
     )
     result = await compiler.compile_rule(session, rule, symbols)
     rule.code, rule.tests = result.code, result.tests
     rule.hash = rule_hash(rule.text, rule.code) if rule.code else None
+    if "needs_data" in result.report:
+        # Fail closed: a rule the process cannot evaluate escalates every instance, whatever
+        # its impact. It has no verdict on the past, so it records no audit findings.
+        why = "needs data the process does not have: every instance escalates"
+        rule.report = {**result.report, "activation": {"auto": True, "why": why}}
+        rule.status = "blocked"
+        rule.activated_at = datetime.now(UTC)
+        await session.commit()
+        return _detail(rule)
+    rule.status, rule.activated_at = "draft", None  # a blocked rule leaves the process
     rule.report = {**result.report, "activation": await _auto_activation(session, rule, result)}
     await session.commit()
     if rule.report["activation"]["auto"]:
         return await activate(session, rule.id)
     return _detail(rule)
+
+
+async def compile_in_background(rule_id: int) -> None:
+    """Compile a rule saved as `compiling`, with its own session. Whatever happens, the rule
+    leaves `compiling`: a failure leaves a draft with the error in its report."""
+    async with session_factory() as session:
+        try:
+            await _compile(session, await _rule(session, rule_id))
+        except Exception as e:  # noqa: BLE001 - LLM down, malformed answers, anything
+            logger.exception("Compiling rule %s failed", rule_id)
+            await session.rollback()
+            rule = await _rule(session, rule_id)
+            if rule.status != "compiling":  # it got past compiling before failing
+                return
+            error = f"{type(e).__name__}: {e}"
+            rule.status = "draft"
+            rule.report = {"valid": False, "error": error}
+            events.record(session, "compile_rule", data={"rule_id": rule_id, "error": error})
+            await session.commit()
+
+
+_jobs: set[asyncio.Task] = set()  # references, so a running compilation is not collected
+
+
+async def resume_compilations() -> list[asyncio.Task]:
+    """On startup: compile again every rule a restart left in `compiling`."""
+    async with session_factory() as session:
+        ids = await session.scalars(select(Rule.id).where(Rule.status == "compiling"))
+        tasks = [asyncio.create_task(compile_in_background(i)) for i in ids]
+    for task in tasks:
+        _jobs.add(task)
+        task.add_done_callback(_jobs.discard)
+    return tasks
 
 
 async def _auto_activation(
@@ -124,7 +178,7 @@ async def impact(session: AsyncSession, rule_id: int) -> audit.Impact:
     rule = await _rule(session, rule_id)
     proposed = (
         await audit.proposal_without(session, rule)
-        if rule.status == "active"
+        if rule.status in ENFORCED
         else await audit.proposal_with(session, rule)
     )
     return await audit.check(session, rule.process_id, proposed)
@@ -148,8 +202,8 @@ async def retire(session: AsyncSession, rule_id: int) -> RuleDetail:
     """Retiring a rule can change a past decision just as adding one can, so it goes
     through the same check."""
     rule = await _rule(session, rule_id)
-    if rule.status != "active":
-        raise ConflictError(f"Only an active rule can be retired (it is {rule.status})")
+    if rule.status not in ENFORCED:
+        raise ConflictError(f"Only an active or blocked rule can be retired (it is {rule.status})")
     await _apply(session, rule, await audit.proposal_without(session, rule))
     rule.status = "retired"
     await session.commit()

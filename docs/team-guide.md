@@ -31,7 +31,7 @@ backend/
       users/                  # users, roles manager/operator, X-User-Id
       use_cases/              # use cases and the versioned configuration of their agents
       processes/              # process, decision types, symbols; definition.py loads a pack
-      rules/                  # rule life cycle draft -> active -> retired; compile, impact
+      rules/                  # rule life cycle (below); compile, impact
       decisions/              # engine.py (pure), service.py (run, queue, resolve, export), audit.py
       instances/              # files, instances, symbols.py (stored shape <-> rule shape)
       sources/                # sources of truth, snapshots; http_connector.py (the ERP)
@@ -46,6 +46,20 @@ backend/
 Inside a feature: `model.py` (SQLAlchemy tables), `schemas.py` (Pydantic in/out), `service.py` (logic, takes the session), `router.py` (thin: validate, call the service, return), `tests/`. A router runs no SQL. A feature imports another's `model.py` or `service.py`, never its `router.py`. Errors are `TraceError` subclasses (`app/common/exceptions.py`); the API maps them to status codes. Naming and vocabulary: `docs/CONVENTIONS.md`.
 
 Agents (tester, compiler, assistant) run on PydanticAI: ADR 0006 and `features/agents/llm.py`.
+
+## Rule life cycle
+
+A manager saves a rule in plain language (`POST /processes/{id}/rules`); nobody has to press anything else.
+
+| Status | Meaning | Enforced by the engine |
+|---|---|---|
+| `compiling` | Saved; tester and coder are writing its tests and code in the background (1-4 min). A restart re-queues it | no |
+| `active` | Its code passed the tests and changes few past decisions (ADR 0004), or a manager activated it | yes |
+| `blocked` | The agents answered NeedsData: the process lacks a symbol or source it needs. Every instance escalates with `RULE_NEEDS_DATA` (ADR 0016) until the data exists and it is recompiled | yes, as an escalation |
+| `draft` | Compiled but waiting for a person: failing tests, too much impact, or `report.error` (LLM down) | no |
+| `retired` | Taken out of the process by a manager | no |
+
+`POST /rules/{id}/compile` recompiles a `draft` or `blocked` rule and waits for the result; `make compile` does the same for every draft. A `blocked` rule that compiles leaves the process until the impact check (or a manager) lets it back in as `active`.
 
 ## Use cases and agent configuration
 

@@ -7,6 +7,7 @@ the text alone. The loop ends green (valid), or not valid with every open failur
 report. Nothing here decides an instance: the stored code does, deterministically.
 """
 
+import ast
 import asyncio
 import json
 from dataclasses import dataclass
@@ -102,6 +103,12 @@ class TesterDeps:
     min_tests: int
 
 
+@dataclass(frozen=True)
+class CoderDeps:
+    symbols: set[str]  # the only keys the code may read from `instance`
+    sources: set[str]  # the only keys the code may read from `sources`
+
+
 # Instructions are not here: the platform prompts are files (`prompts/`), and each use case
 # adds its own guidance, model and limits (ADR 0011).
 tester = Agent(
@@ -111,7 +118,13 @@ tester = Agent(
     name="tester",
     retries=MAX_REPAIRS,
 )
-coder = Agent(None, output_type=[Proposal, NeedsData], name="compiler", retries=MAX_REPAIRS)
+coder = Agent(
+    None,
+    deps_type=CoderDeps,
+    output_type=[Proposal, NeedsData],
+    name="compiler",
+    retries=MAX_REPAIRS,
+)
 reviewer = Agent(None, output_type=Review, name="reviewer")
 
 
@@ -181,13 +194,52 @@ def _well_formed(ctx: RunContext[TesterDeps], output: TestSuite | NeedsData) -> 
     return output
 
 
+def read_keys(code: str) -> tuple[set[str], set[str]]:
+    """The literal keys `evaluate` reads from its first two parameters, whatever their
+    names: `x["k"]` and `x.get("k")`. A computed key is not a literal and is not listed."""
+    function = next(
+        (
+            n
+            for n in ast.walk(ast.parse(code))
+            if isinstance(n, ast.FunctionDef) and n.name == "evaluate"
+        ),
+        None,
+    )
+    if function is None:
+        return set(), set()
+    params = [a.arg for a in function.args.args[:2]] + [None, None]
+    keys: dict[str, set[str]] = {p: set() for p in params if p}
+    for node in ast.walk(function):
+        if isinstance(node, ast.Subscript):
+            target, key = node.value, node.slice
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if node.func.attr != "get" or not node.args:
+                continue
+            target, key = node.func.value, node.args[0]
+        else:
+            continue
+        literal = isinstance(key, ast.Constant) and isinstance(key.value, str)
+        if isinstance(target, ast.Name) and target.id in keys and literal:
+            keys[target.id].add(key.value)
+    return keys.get(params[0], set()), keys.get(params[1], set())
+
+
 @coder.output_validator
-def _allowed(_ctx: RunContext[None], output: Proposal | NeedsData) -> Any:
-    if isinstance(output, Proposal):
-        try:
-            sandbox.check(output.code)
-        except sandbox.SandboxError as e:
-            raise ModelRetry(f"The code does not pass the sandbox check: {e}") from e
+def _allowed(ctx: RunContext[CoderDeps], output: Proposal | NeedsData) -> Any:
+    if isinstance(output, NeedsData):
+        return output
+    try:
+        sandbox.check(output.code)
+    except sandbox.SandboxError as e:
+        raise ModelRetry(f"The code does not pass the sandbox check: {e}") from e
+    instance, sources = read_keys(output.code)
+    unknown = sorted(instance - ctx.deps.symbols) + sorted(sources - ctx.deps.sources)
+    if unknown:
+        raise ModelRetry(
+            f"The code reads unknown keys {unknown}. Read from the instance only the symbols "
+            f"{sorted(ctx.deps.symbols)} and from the sources only {sorted(ctx.deps.sources)}. "
+            "If the rule needs other data, answer with NeedsData."
+        )
     return output
 
 
@@ -319,13 +371,14 @@ async def compile_text(
     tests = tests_of(suite, min_tests)
     by_name = {t["name"]: t for t in tests}
     coder_instructions = llm.prompt("coder", "shared") + _examples(runs.setup("compiler"), rule)
+    coder_deps = CoderDeps(deps.symbols, set(sources))
 
     reviews: list[dict[str, Any]] = []
     review_rounds = 0
     feedback = ""
     for attempt in range(1, max_attempts + 1):
         prompt = f"{ctx}\n\nTests your code must pass (JSON):\n{_as_json(tests)}{feedback}"
-        proposal = await runs(coder, "compiler", prompt, coder_instructions)
+        proposal = await runs(coder, "compiler", prompt, coder_instructions, deps=coder_deps)
         if isinstance(proposal, NeedsData):
             return _needs_data(proposal, "compiler")
         results = await asyncio.to_thread(run_tests, proposal.code, tests)
