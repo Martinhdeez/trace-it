@@ -38,7 +38,7 @@ class Settings:
         default_factory=lambda: os.getenv("TRACEPAY_OCR_PROFILE", "experimental")
     )
     ocr_min_confidence: float = 0.90
-    ocr_mode: str = field(default_factory=lambda: os.getenv("TRACEPAY_OCR_MODE", "hybrid").lower())
+    ocr_mode: str = field(default_factory=lambda: os.getenv("TRACEPAY_OCR_MODE", "api").lower())
     vlm_url: str | None = field(default_factory=lambda: os.getenv("TRACEPAY_VLM_URL"))
     vlm_model: str | None = field(default_factory=lambda: os.getenv("TRACEPAY_VLM_MODEL"))
     vlm_api_key: str | None = field(

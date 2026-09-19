@@ -194,3 +194,53 @@ References: [Vite public base](https://vite.dev/guide/build#public-base-path),
 [GitHub registry authentication](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry),
 [Caddy handle](https://caddyserver.com/docs/caddyfile/directives/handle),
 [Playwright API tests](https://playwright.dev/docs/api-testing).
+
+
+## Demo reset on each application deployment
+
+This production URL is a disposable demonstration environment. On September 19, 2026,
+the operator requested automatic removal of test data on every application deployment.
+The root-owned `DEMO_RESET_ENABLED` marker opts this installation into that policy;
+other installations retain the original behavior. ERP-only releases do not reset Trace-it.
+
+After stopping frontend, backend and the active mail worker, deployment verifies a database
+dump and ingestion archive, runs migrations, then invokes the installed `reset-demo.py`.
+A reviewed private `/opt/trace-it/demo-seed.json` contains six extracted invoices and six
+CVs, with their original PDF bytes and checksums. Examples are recreated as pending cases
+with new monotonic IDs, without provider calls. Runtime decisions, runs, proposals,
+learning results, alerts, traces, mail receipts and uploaded documents are removed.
+The complete extraction directory is cleared, including SQLite jobs and OCR/provider caches.
+
+Users, process configuration, agent settings, all reference source
+snapshots, original Excel workbooks, external ERP services and OCR models are retained.
+Initial rule baselines are restored in the rule/norm authoring tables and the active runtime
+snapshot. Added/edited rehearsal rules and drafts are removed, and old demo versions are
+replaced with one baseline version. The invoice baseline has the six original `Norma_Pagos_v3` clauses from the official
+`ikurotime/500-sombras-de-alberto` Excel, implemented by the frozen 12 checks. Capture
+verifies the workbook text and compiled-rule hashes; it requires `--norm-workbook`.
+Hiring uses its first approved version (13 rules). Current provider,
+execution and schema settings remain intact. The version-2 private fixture records and checks
+these baselines; it is never recaptured automatically from a modified live process.
+Mailbox identity, token and UID cursor are preserved, so old messages are not replayed.
+A previously active worker is checked and resumed with the new backend image after successful
+health checks; stopped workers stay stopped. Resending a removed PDF in a new email can
+create a fresh case. Duplicate detection still applies within the same deployment, including
+attempts to resend one of the twelve retained sample documents.
+
+Install the reviewed script as `/opt/trace-it/reset-demo.py` (root-owned, mode 0644),
+fixture as `/opt/trace-it/demo-seed.json` (root:10001, mode 0640), and this deployment
+receiver as `/usr/local/sbin/trace-it-deploy`. Enable only after validating the fixture on an
+isolated restored database, by creating `/opt/trace-it/DEMO_RESET_ENABLED`. The fixture is
+installation data, not committed to Git. Remove the marker to disable future resets.
+
+The normal pre-deployment backup contains the removed history and originals. Reset failures
+roll back the SQL transaction and restore quarantined cache files. A leftover
+`.demo-reset-trash` directory means an interrupted reset and requires recovery from the
+recorded backup before another reset. Application rollback never automatically restores the
+old database. Backups remain under `/opt/trace-it/backups`; this reset does not delete them.
+
+Validation: `pytest deploy/test_demo_deploy.py deploy/erp/test_app_rollback.py` exercises
+successful deployment and backup/reset/mail-check failures. `deploy/test_reset_demo.py`
+uses `DEMO_RESET_TEST_DATABASE_URL` (database must be `trace_demo_reset_test`) and
+`DEMO_RESET_TEST_SEED` against an isolated restored copy to verify deletion, repeatability,
+configuration/cursor preservation, rule restoration, foreign-key failure and filesystem rollback.
