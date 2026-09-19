@@ -5,7 +5,6 @@ import { api } from '../../api/client'
 import { keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
 import { PROCESS_TABS, processTabFromPath } from '../../lib/processTabs'
-import { countsOf, waitingOnPerson } from '../../lib/process'
 import { CountChip } from '../shell/Controls'
 import { ErrorNotice } from '../shell/Notice'
 import { Topbar, type Crumb } from '../shell/Topbar'
@@ -38,13 +37,12 @@ export function ProcessTabs({ processId }: { processId: number }) {
     queryKey: keys.process(processId),
     queryFn: () => api.getProcess(processId),
   })
-  const counts = useQuery({
-    queryKey: keys.instances(processId),
-    queryFn: () => api.listInstances(processId),
-    select: countsOf,
+  const summary = useQuery({
+    queryKey: keys.summary(processId),
+    queryFn: () => api.summary(processId),
   })
-  const waiting = waitingOnPerson(process.data, counts.data)
-  const error = process.error ?? counts.error
+  const waiting = summary.data?.queue ?? 0
+  const error = process.error ?? summary.error
 
   return (
     <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-hairline px-8">

@@ -4,7 +4,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown, FileSearch, XCircle } from 'l
 import type { InstanceDetail, Rule, RuleOutcome } from '../../api/contracts'
 import { formatMs } from '../../lib/format'
 import { cn } from '../../lib/cn'
-import { label, tone } from '../../lib/status'
+import { detailLabel, tone } from '../../lib/status'
 import { JsonHighlight } from '../../lib/jsonHighlight'
 import { StatusBadge } from '../shell/StatusBadge'
 import { DocumentPopup } from './DocumentPopup'
@@ -30,7 +30,7 @@ export function TracePane({
     )
   }
 
-  const current = label(instance)
+  const current = detailLabel(instance)
   const latest = instance.decisiones.at(-1)
   const symbols = Object.entries(instance.simbolos ?? {})
   const fired = latest?.resultados.filter((result) => result.salta === true).length ?? 0
