@@ -10,8 +10,9 @@ money.
 **Decision.** The engine gives every file one decision. Non-compliance is `NO_PAGAR`.
 Anything it cannot determine is `ESCALAR` with a reason code: a missing, null or unconfirmed
 field, a scan the rules would reject, a rule error, a tie, or a rule that needs a source
-that is down (`SOURCE_UNAVAILABLE: <source>`) when the rules that did run do not already
-decide the case.
+that is down or was never loaded (`SOURCE_UNAVAILABLE: <source>`) when the rules that did
+run do not already decide the case. Missing reference data is unknown, never an empty table:
+with no workbook loaded, an invoice escalates instead of failing the supplier check.
 
 | Option | Why not / trade-off |
 |---|---|
@@ -40,7 +41,7 @@ flowchart LR
   U -- yes --> E2["ESCALAR<br/>UNVERIFIED_DATA"]
   U -- no --> R{"Every rule<br/>ran?"}
   R -- no --> E3["ESCALAR<br/>RULE_ERROR, RULE_NEEDS_DATA"]
-  R -- yes --> SRC{"A rule needs a<br/>source that is down?"}
+  R -- yes --> SRC{"A rule needs a source<br/>down or never loaded?"}
   SRC -- "yes, and the rules that ran<br/>do not decide" --> E6["ESCALAR<br/>SOURCE_UNAVAILABLE"]
   SRC -- "no, or already decided" --> V{"Which rules fire?"}
   V -- none --> P["PAGAR"]
