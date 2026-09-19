@@ -140,19 +140,35 @@ test('console displays a process created in the real PostgreSQL database', async
   }
 })
 
-test('new-process chat creates and resumes a saved discovery conversation', async ({ page, request }) => {
-  await managerFixture(request, page)
+test('new-process chat starts fresh and resumes only through an explicit draft', async ({ page, request }) => {
+  const headers = await managerFixture(request, page)
+  const existing = await request.post('api/process-drafts', { headers, data: {} })
+  expect(existing.status(), await existing.text()).toBe(201)
+  const existingDraft = await existing.json()
+
   await page.goto('processes/new')
   await expect(page.getByRole('button', { name: 'Chat' })).toHaveAttribute('data-active', 'true')
+  await expect(page.getByRole('button', { name: 'Empezar conversación', exact: true })).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Conversación' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: new RegExp(`Borrador ${existingDraft.id}`) })).toBeVisible()
 
-  // Wait for session loading to reveal either the first conversation or the new-chat action.
-  await page.getByRole('button', { name: /^(Empezar conversación|Nueva)$/ }).click()
+  await page.getByRole('button', { name: 'Empezar conversación', exact: true }).click()
 
-  const revision = page.getByText(/conversación \d+ · revisión 1/)
+  const revision = page.locator('section').first().getByText(/conversación \d+ · revisión 1/)
   await expect(revision).toBeVisible()
   const saved = await revision.textContent()
+  const createdId = saved?.match(/conversación (\d+)/)?.[1]
+  expect(createdId).toBeTruthy()
+  await expect(page).toHaveURL(new RegExp(`/processes/new\\?draft=${createdId}$`))
   await page.reload()
   await expect(page.getByText(saved ?? '')).toBeVisible()
+
+  await page.goto('processes/new')
+  await page.getByRole('link', { name: new RegExp(`Borrador ${existingDraft.id}`) }).click()
+  await expect(page).toHaveURL(new RegExp(`/processes/new\\?draft=${existingDraft.id}$`))
+  await expect(
+    page.locator('section').first().getByText(`conversación ${existingDraft.id} · revisión 1`),
+  ).toBeVisible()
 })
 
 test('production never substitutes mock data for an unavailable API', async ({ page, request }) => {

@@ -6,6 +6,7 @@ export const paths = {
   docs: (slug?: string) => (slug ? `/docs/${slug}` : '/docs'),
   processes: '/processes',
   newProcess: '/processes/new',
+  newProcessDraft: (draftId: number | string) => `/processes/new?draft=${draftId}`,
   /** The manager's inbox: what waits for them, and what was already decided. */
   process: (id: number | string) => `/processes/${id}`,
   history: (id: number | string) => `/processes/${id}?vista=historial`,

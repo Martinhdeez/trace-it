@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowUp,
@@ -159,6 +159,13 @@ function openSessions(
   )
 }
 
+function draftIdFromSearch(params: URLSearchParams): number | null {
+  const value = params.get('draft')
+  if (!value || !/^\d+$/.test(value)) return null
+  const id = Number(value)
+  return Number.isSafeInteger(id) && id > 0 ? id : null
+}
+
 function snapshotNames(session: DiscoverySession): Set<string> {
   return new Set(
     session.snapshots.flatMap((value) => {
@@ -201,7 +208,7 @@ export function ProcessDraftChat({
 }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
   const [draft, setDraft] = useState('')
   const [files, setFiles] = useState<Attachment[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
@@ -215,7 +222,15 @@ export function ProcessDraftChat({
     [processId, sessions.data],
   )
 
-  const activeId = selectedId ?? candidates[0]?.id ?? null
+  const requestedId = draftIdFromSearch(searchParams)
+  const activeId =
+    requestedId != null
+      ? candidates.some((item) => item.id === requestedId)
+        ? requestedId
+        : null
+      : processId != null
+        ? candidates[0]?.id ?? null
+        : null
 
   const session = useQuery({
     queryKey: keys.discoverySession(activeId ?? 0),
@@ -236,9 +251,10 @@ export function ProcessDraftChat({
   })
 
   const cache = (next: DiscoverySession) => {
-    setSelectedId(next.id)
     queryClient.setQueryData(keys.discoverySession(next.id), next)
   }
+
+  const selectDraft = (id: number) => setSearchParams({ draft: String(id) })
 
   const store = async (next: DiscoverySession) => {
     cache(next)
@@ -248,7 +264,10 @@ export function ProcessDraftChat({
 
   const start = useMutation({
     mutationFn: () => api.startDiscoverySession(processId, processName),
-    onSuccess: store,
+    onSuccess: async (next) => {
+      await store(next)
+      selectDraft(next.id)
+    },
   })
 
   const send = useMutation({
@@ -274,6 +293,7 @@ export function ProcessDraftChat({
       files.forEach(revokePreview)
       setFiles([])
       await store(next)
+      selectDraft(next.id)
       if (processId != null) {
         await queryClient.invalidateQueries({ queryKey: keys.proposals(processId, 'open') })
       }
@@ -403,6 +423,32 @@ export function ProcessDraftChat({
           Describe qué debe decidir, adjunta sus fuentes y responde las preguntas. Nada se aplica
           hasta que revises el resultado y pulses Publicar.
         </EmptyState>
+        {processId == null && candidates.length ? (
+          <div className="mx-auto max-w-xl px-2 pb-2">
+            <NestedCard label="borradores guardados">
+              <ul className="divide-y divide-hairline">
+                {candidates.map((item) => (
+                  <li key={item.id}>
+                    <Link
+                      to={paths.newProcessDraft(item.id)}
+                      className="flex items-center justify-between gap-3 px-3.5 py-3 hover:bg-well"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px] text-ink">
+                          {item.name || `Borrador ${item.id}`}
+                        </span>
+                        <span className="mt-0.5 block font-mono text-[10px] text-faint">
+                          conversación {item.id} · revisión {item.revision}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[12px] text-muted">Continuar</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </NestedCard>
+          </div>
+        ) : null}
       </div>
     )
   }
@@ -447,7 +493,7 @@ export function ProcessDraftChat({
               <Select
                 aria-label="Conversación"
                 value={current.id}
-                onChange={(event) => setSelectedId(Number(event.target.value))}
+                onChange={(event) => selectDraft(Number(event.target.value))}
                 className="w-40 py-1"
               >
                 {candidates.map((item) => (
