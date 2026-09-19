@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUp, ChevronDown, Hammer, Paperclip, Plus, Sparkles, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, Hammer, Paperclip, Plus, Sparkles, X } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import { families, keys } from '../api/queries'
 import type {
@@ -165,10 +165,11 @@ export function Definition() {
 
   const all = rules.data ?? []
   const outcomes = process.data?.decision_types.map((outcome) => outcome.name) ?? []
-  const latestVersion = versions.data?.reduce<VersionOut | undefined>(
-    (latest, version) => (!latest || version.number > latest.number ? version : latest),
-    undefined,
-  )
+  const history = [...(versions.data ?? [])].sort((a, b) => b.number - a.number)
+  const latestVersion = history[0]
+  // An older version, read only; null is the one in force with the live panes.
+  const [viewing, setViewing] = useState<number | null>(null)
+  const viewed = history.find((version) => version.id === viewing && version !== latestVersion)
 
   /** Normas: the normalizer. Anywhere else: the process chat, in discuss mode. */
   const send = useMutation({
@@ -331,21 +332,31 @@ export function Definition() {
           <header className="flex shrink-0 items-start justify-between gap-3 border-b border-hairline px-5 py-3">
             <DefinitionSwitch processId={processId} />
             <VersionChip
-              label={latestVersion ? `v${latestVersion.number}` : 'borrador'}
-              hash={latestVersion?.content_hash.slice(0, 8) ?? ''}
-              stamp={latestVersion?.created_at}
+              versions={history}
+              selected={viewed ?? latestVersion}
+              onSelect={(version) => setViewing(version === latestVersion ? null : version.id)}
               findings={findings.data ?? []}
             />
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-            {pane === 'normas' ? (
+            {viewed && latestVersion ? (
+              <VersionView
+                version={viewed}
+                current={latestVersion}
+                rules={all}
+                onBack={() => setViewing(null)}
+              />
+            ) : null}
+            {viewed ? null : pane === 'normas' ? (
               <RulesPane processId={processId} rules={all} outcomes={outcomes} />
             ) : null}
-            {pane === 'contexto' ? <ContextPane processId={processId} process={process.data} /> : null}
-            {pane === 'inputs' ? (
+            {!viewed && pane === 'contexto' ? (
+              <ContextPane processId={processId} process={process.data} />
+            ) : null}
+            {!viewed && pane === 'inputs' ? (
               <InputsPane processId={processId} process={process.data} />
             ) : null}
-            {pane === 'fuentes' ? <TruthSources processId={processId} /> : null}
+            {!viewed && pane === 'fuentes' ? <TruthSources processId={processId} /> : null}
           </div>
         </aside>
       </div>
@@ -866,16 +877,19 @@ function InputsPane({
 }
 
 function VersionChip({
-  label,
-  hash,
-  stamp,
+  versions,
+  selected,
+  onSelect,
   findings,
 }: {
-  label: string
-  hash: string
-  stamp: string | undefined
+  /** Newest first. */
+  versions: VersionOut[]
+  selected: VersionOut | undefined
+  onSelect: (version: VersionOut) => void
   findings: Finding[]
 }) {
+  const label = selected ? `v${selected.number}` : 'borrador'
+  const current = versions[0]
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
 
@@ -914,15 +928,55 @@ function VersionChip({
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 z-20 mt-1 w-56 origin-top-right rounded-[12px] bg-surface p-1 shadow-float ring-1 ring-line"
+          className="absolute right-0 z-20 mt-1 w-72 origin-top-right rounded-[12px] bg-surface p-1 shadow-float ring-1 ring-line"
         >
-          <div className="px-2.5 py-2">
-            <p className="font-mono text-[12px] text-ink">{label} · en vigor</p>
-            <p className="mt-0.5 font-mono text-[10px] text-faint">
-              {hash || 'sin hash'}
-              {stamp ? ` · ${formatRunDate(stamp)}` : ''}
-            </p>
-          </div>
+          <p className="px-2.5 pb-1 pt-2 font-mono text-[10px] tracking-[0.12em] text-faint">
+            VERSIONES · {versions.length}
+          </p>
+          {versions.length ? (
+            <ul className="max-h-64 overflow-y-auto">
+              {versions.map((version) => (
+                <li key={version.id}>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={version === selected}
+                    onClick={() => {
+                      onSelect(version)
+                      setOpen(false)
+                    }}
+                    className={cn(
+                      'flex w-full items-start gap-2 rounded-[8px] px-2.5 py-1.5 text-left hover:bg-canvas',
+                      version === selected && 'bg-canvas',
+                    )}
+                  >
+                    <span className="w-3 shrink-0 pt-0.5">
+                      {version === selected ? <Check size={11} strokeWidth={2} /> : null}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span className="font-mono text-[12px] text-ink">
+                          v{version.number}
+                          {version === current ? (
+                            <span className="ml-1.5 text-pagar">en vigor</span>
+                          ) : null}
+                        </span>
+                        <span className="shrink-0 font-mono text-[10px] text-faint">
+                          {formatRunDate(version.created_at)}
+                        </span>
+                      </span>
+                      <span className="block truncate text-[11px] text-muted" title={version.reason}>
+                        {version.reason || version.author}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-2.5 py-1.5 text-[12px] text-muted">Aún no hay versiones publicadas.</p>
+          )}
+          <div className="my-1 border-t border-hairline" />
           <button
             type="button"
             role="menuitem"
@@ -943,6 +997,91 @@ function VersionChip({
             </ul>
           ) : null}
         </div>
+      ) : null}
+    </div>
+  )
+}
+
+type SnapshotRule = { id?: number; text: string; decision: string; type: string }
+type SnapshotSymbol = { name: string; type: string; description?: string }
+
+/** A published version as it was: what it decided with, never editable from here. */
+function VersionView({
+  version,
+  current,
+  rules,
+  onBack,
+}: {
+  version: VersionOut
+  current: VersionOut
+  rules: Rule[]
+  onBack: () => void
+}) {
+  const process = (version.snapshot.process ?? {}) as {
+    description?: string
+    symbols?: SnapshotSymbol[]
+  }
+  const snapshotRules = (version.snapshot.rules ?? []) as SnapshotRule[]
+  // Summaries live on the rules; a version keeps each rule's id.
+  const live = new Map(rules.map((rule) => [rule.id, rule]))
+
+  return (
+    <div className="space-y-6">
+      <Notice
+        title={`Estás viendo v${version.number}, solo lectura`}
+        action={
+          <button type="button" onClick={onBack} className="text-[12px] text-muted hover:text-ink">
+            Volver a v{current.number}
+          </button>
+        }
+      >
+        {formatRunDate(version.created_at)} · {version.author}
+        {version.reason ? ` · ${version.reason}` : ''}
+      </Notice>
+
+      {process.description ? (
+        <section>
+          <p className="mb-2 font-mono text-[11px] tracking-[0.12em] text-faint">CONTEXTO</p>
+          <ExpandableText text={process.description} className="text-[13px] leading-6 text-ink" />
+        </section>
+      ) : null}
+
+      <section>
+        <p className="mb-2 font-mono text-[11px] tracking-[0.12em] text-faint">
+          NORMA · {snapshotRules.length}
+        </p>
+        <ul className="divide-y divide-hairline">
+          {snapshotRules.map((rule, index) => {
+            const known = rule.id != null ? live.get(rule.id) : undefined
+            return (
+              <li key={rule.id ?? index} className="flex h-9 items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-[13px] text-ink" title={rule.text}>
+                  {ruleLabel({ text: rule.text, summary: known?.summary })}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] text-faint">{rule.decision}</span>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+
+      {process.symbols?.length ? (
+        <section>
+          <p className="mb-2 font-mono text-[11px] tracking-[0.12em] text-faint">
+            ENTRADAS · {process.symbols.length}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {process.symbols.map((symbol) => (
+              <span
+                key={symbol.name}
+                title={symbol.description}
+                className="rounded-full bg-canvas px-2 py-0.5 font-mono text-[11px] text-muted ring-1 ring-line"
+              >
+                {symbol.name}
+              </span>
+            ))}
+          </div>
+        </section>
       ) : null}
     </div>
   )
