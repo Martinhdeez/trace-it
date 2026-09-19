@@ -139,6 +139,9 @@ def extract_schema_pdf(content, options, settings, ocr, vlm, field_reader, field
                     report["method"] += "+vlm"
             except Exception as exc:
                 failure("VLM_ERROR", page["number"], exc)
+            finally:
+                if options.mode == "api":
+                    images.pop(page["number"], None)
 
     if targets and vision_enabled and getattr(field_reader, "configured", False):
         with events.span("schema_fields", fields=[field.name for field in targets]):

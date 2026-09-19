@@ -67,6 +67,8 @@ def create_router(
             raise InvalidDocumentError(str(exc)) from exc
         except (pymupdf.FileDataError, zipfile.BadZipFile, InvalidFileException, ParseError) as exc:
             raise InvalidDocumentError("Corrupt or unsupported document structure") from exc
+        except TraceError:
+            raise
         except Exception as exc:
             logger.exception("Extraction failed")
             raise TraceError("Internal extraction error; inspect server log and retry") from exc

@@ -257,3 +257,23 @@ def test_stale_labels_fail_before_provider_work(tmp_path):
     (tmp_path / "scan.pdf").write_bytes(b"new PDF")
     with pytest.raises(ValueError, match="visual re-review.*scan.pdf"):
         validate_references(tmp_path, [{"file_id": "scan.pdf", "sha256": "old"}])
+
+
+def test_queue_expiration_returns_a_retryable_api_error(settings):
+    from fastapi.testclient import TestClient
+
+    from app.features.ingestion.application import create_app
+
+    settings = replace(settings, ocr_mode="api", extraction_timeout=0.03)
+    service = ExtractionService(settings, NoOCR())
+    service.slots.acquire()
+    try:
+        with TestClient(create_app(settings, service)) as client:
+            response = client.post(
+                "/v1/extractions",
+                files={"file": ("invoice.pdf", pdf_bytes(VALID), "application/pdf")},
+            )
+        assert response.status_code == 503
+        assert response.json()["code"] == "extraction_deadline_exceeded"
+    finally:
+        service.slots.release()

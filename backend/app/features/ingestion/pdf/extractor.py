@@ -148,6 +148,9 @@ def extract_pdf(
                     readers.setdefault("visual", []).extend(generated)
             except Exception as exc:
                 failure("VLM_ERROR", "visual", exc, page["number"])
+            finally:
+                if options.mode == "api":
+                    images.pop(page["number"], None)
         fields, decisions, _ = reconcile(readers, settings.ocr_min_confidence)
 
     judge = judge or TextJudge(settings)

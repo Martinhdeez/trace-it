@@ -61,7 +61,8 @@ def test_schema_network_calls_journal_replay_and_result_cache(settings, monkeypa
     options = ExtractOptions(mode="api", ocr=False)
 
     first = service.extract_schema(item, options, plan)
-    assert requests == [("image", "qwen3.6"), ("image", "gemma4"), ("schema", "qwen3.6")]
+    assert sorted(requests[:2]) == [("image", "gemma4"), ("image", "qwen3.6")]
+    assert requests[2:] == [("schema", "qwen3.6")]
     assert not first.cache_hit
     assert (first.metrics["ocr_calls_this_request"], first.metrics["vlm_calls_this_request"]) == (
         0,

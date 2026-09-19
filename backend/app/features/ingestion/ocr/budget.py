@@ -4,7 +4,7 @@ import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from .errors import ProviderUnavailable
+from .errors import ExtractionDeadlineExceeded
 
 _deadline = ContextVar("extraction_deadline", default=None)
 
@@ -13,7 +13,7 @@ def remaining(limit):
     deadline = _deadline.get()
     seconds = min(limit, deadline - time.monotonic()) if deadline is not None else limit
     if seconds <= 0:
-        raise ProviderUnavailable("Extraction time budget exhausted")
+        raise ExtractionDeadlineExceeded("Extraction time budget exhausted; retry the document")
     return seconds
 
 
@@ -31,7 +31,9 @@ def extraction_budget(seconds):
 @contextmanager
 def acquired(lock, limit=600):
     if not lock.acquire(timeout=remaining(limit)):
-        raise ProviderUnavailable("Extraction queue time budget exhausted")
+        raise ExtractionDeadlineExceeded(
+            "Extraction queue time budget exhausted; retry the document"
+        )
     try:
         yield
     finally:

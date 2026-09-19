@@ -93,7 +93,12 @@ class ExtractionService:
                 service.settings,
                 http=self.judge.http if isinstance(self.judge, TextJudge) else None,
             )
-            service.field_reader = SchemaFieldReader(service.settings)
+            service.field_reader = SchemaFieldReader(
+                service.settings,
+                http=self.field_reader.http
+                if isinstance(self.field_reader, SchemaFieldReader)
+                else None,
+            )
             service.execution_hash = key
             self.configured_services[key] = service
             # Eviction never invalidates a reader already held by an in-flight operation.
@@ -604,8 +609,8 @@ class ExtractionService:
         self.stop.set()
         for thread in self.threads:
             thread.join()
-        for reader in (self.vlm, self.judge):
-            if isinstance(reader, (VisionFallback, TextJudge)):
+        for reader in (self.vlm, self.judge, self.field_reader):
+            if isinstance(reader, (VisionFallback, TextJudge, SchemaFieldReader)):
                 reader.http.close()
 
     def _worker(self):

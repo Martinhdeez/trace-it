@@ -3,9 +3,16 @@
 import threading
 import time
 
+from app.common.exceptions import TraceError
+
 
 class ProviderUnavailable(RuntimeError):
     pass
+
+
+class ExtractionDeadlineExceeded(TraceError, ProviderUnavailable):
+    status_code = 503
+    code = "extraction_deadline_exceeded"
 
 
 _cooldown_until: dict[tuple[str, str, str], float] = {}
