@@ -270,10 +270,10 @@ export function ProcessDraftChat({
       return next
     },
     onSuccess: async (next) => {
-      await store(next)
       setDraft('')
       files.forEach(revokePreview)
       setFiles([])
+      await store(next)
       if (processId != null) {
         await queryClient.invalidateQueries({ queryKey: keys.proposals(processId, 'open') })
       }
