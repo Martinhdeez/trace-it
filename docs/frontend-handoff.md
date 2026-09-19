@@ -27,6 +27,10 @@ Paths: `FE:` is `frontend/src/`. `BE:` is `backend/app/`.
   - A new screen design.
 - If a feature cannot fit an existing component, stop and ask Martín before building anything.
 
+**Traceability is shown by plane.**
+- Metrics, tokens and cost are shown in three separate dashboards: Ingestion (data and OCR), Agents (norm → code) and Execution (published rules on cases). They are never mixed into one total.
+- The spec is [`observability-dashboards.md`](observability-dashboards.md). Build the dashboards with the existing `Metrics`, `DataTable`, `CountChip` and `StatusBadge` components. If a dashboard does not fit them, ask Martín.
+
 **One user: the manager.**
 - The person using the app is a manager, and a manager only handles escalations.
 - Every write needs the manager's id in `X-User-Id`. `http.ts` already adds it to every request once `setUserId` has run, so the only work is to make sure a user is signed in (package 1).
@@ -250,6 +254,16 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 | `POST /processes/{id}/draft/publish` (`publishProcessDraft`) | manager | `PublishIn {revision, validation_hash, reason}` | `VersionOut {id, number, created_at, author, reason}` | 409 stale revision or hash, or a human conflict |
 | `GET /processes/{id}/versions` (`listProcessVersions`) | – | – | `[{id, number, content_hash, author, reason, created_at}]` | 404 |
 | `GET /processes/{id}/execution` (`getExecutionSettings`) | manager | – | `ExecutionOut {settings, revision, version_id, presets, decision_review}` | 403 |
+| `POST /rules/{id}/activate` (`activateRule`) | manager | – | `RuleDetail {id, status}`; the rule is staged in the draft, not yet active | 409 not compiled or discrepancies unresolved, or it contradicts a human decision; 403 |
+
+**From compiled rules to a runnable process.** Rules that come from a norm (`POST /processes/{id}/norm`, package 9) or from `POST /processes/{id}/rules` are compiled, but no run uses them until they are published. Until then `POST /processes/{id}/run` returns 409 "Publish an approved process version before running cases" (no version yet), or runs with the old version's rules. The sequence, all as the manager:
+1. Wait until each rule is compiled: `GET /processes/{id}/rules` shows `status` `draft` (compiled, valid), not `compiling`. A `blocked` rule cannot go on (its `report` says why).
+2. `POST /rules/{id}/activate` for each rule. It adds the rule to the process draft. 409 if the rule is not compiled or has discrepancies.
+3. `POST /processes/{id}/draft/validate`. Read `validation.valid`, `validation.hash` and `revision` from the answer. `valid: false` is a 200 with `validation.errors`, not an error. 404 no draft; 409 "The active version changed; rebase the draft before validation".
+4. `POST /processes/{id}/draft/publish` with `{revision, validation_hash: validation.hash, reason}`. 201 `VersionOut`. 409 "Approve the latest successful validation of this exact draft revision" (stale revision or hash, or an invalid validation), or "Configuration or execution evidence changed; validate again" (a source or setting changed after step 3: validate again).
+5. Now `POST /processes/{id}/run` works.
+
+Every step is manager-only: 401 without `X-User-Id`, 403 for an operator. The publish flow below covers steps 3 and 4. The rule page covers step 2 (package 9).
 
 **Changes:**
 - `live.ts`:
@@ -546,7 +560,7 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 
 | Method, path | Headers | Body | Response fields to use | Errors |
 |---|---|---|---|---|
-| `GET /processes/{id}/runs` (`listRuns`) | – | – | a list, newest first. Each run has its `execution_id`, time, version, `author`, `by_decision`, `escalated`, `escalations` and `rules_hash`. `by_decision` and `escalated` count every instance the run evaluated, so a reprocess can be compared with the run before it | 404 |
+| `GET /processes/{id}/runs` (`listRuns`) | – | – | a list, newest first. Each run has its `id` (the `execution_id` its decisions carry), `started_at`, `version_number`, `author`, `by_decision`, `escalated`, `escalation_reasons` and `rules_hash`. `by_decision` and `escalated` count every instance the run evaluated, so a reprocess can be compared with the run before it | 404 |
 | `GET /runs/{id}` (`getRun`) | – | – | the same run plus the decisions it appended (instance id, name, decision) | 404 |
 
 **Changes:**

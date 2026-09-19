@@ -18,6 +18,13 @@ export const keys = {
   files: (processId: number) => ['files', processId] as const,
   sources: (processId: number) => ['sources', processId] as const,
   llm: ['llm'] as const,
+  summary: (processId: number) => ['summary', processId] as const,
+  planeMetrics: (processId: number, plane: string) => ['metrics', processId, plane] as const,
+  processMetrics: (processId: number) => ['metrics', processId, 'providers'] as const,
+  planesHealth: ['health', 'planes'] as const,
+  draft: (processId: number) => ['draft', processId] as const,
+  versions: (processId: number) => ['versions', processId] as const,
+  execution: (processId: number) => ['execution', processId] as const,
 }
 
 /** After a decision moves, everything that counts instances is stale. */

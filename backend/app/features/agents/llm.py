@@ -15,9 +15,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from openai import OpenAIError
 from pydantic import BaseModel
 from pydantic_ai import Agent, AgentRunError, capture_run_messages
-from pydantic_ai.exceptions import FallbackExceptionGroup, ModelAPIError
+from pydantic_ai.exceptions import FallbackExceptionGroup, ModelAPIError, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, RetryPromptPart
 from pydantic_ai.models import Model
 from pydantic_ai.models.fallback import FallbackModel
@@ -213,7 +214,10 @@ async def run(
     if setup.settings.instructions:
         instructions += "\n\n## Guidance for this use case\n" + setup.settings.instructions
     failed: list[dict[str, str]] = []
-    model = chain(setup, role, failed)
+    try:
+        model = chain(setup, role, failed)
+    except (OpenAIError, UserError) as error:  # building a provider: no key, unknown model
+        raise AgentError(f"{role}: model not configured: {error}") from error
     model_settings = dict(setup.settings.model_settings)
     if setup.settings.timeout_seconds:
         model_settings["timeout"] = setup.settings.timeout_seconds

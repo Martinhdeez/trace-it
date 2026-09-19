@@ -8,10 +8,12 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 from pydantic_ai import Agent
+from sqlalchemy import select
 
 from app.core import events
 from app.core.config import settings
 from app.core.database import session_factory
+from app.core.events import Event
 from app.features.agents import llm
 from app.features.decisions.tests.test_api import FAKE_SANDBOX, client, create_process
 from app.features.traces import service
@@ -309,3 +311,30 @@ async def test_agent_cost_and_drill_down(monkeypatch: pytest.MonkeyPatch) -> Non
         assert [(s["step"], s["data"]["model"]) for s in spans] == [("llm_run", model)]
     [span] = drill["vendor/priced-x-2"]
     assert span["data"]["provider"] == "helmcode" and span["data"]["cost_status"] == "known"
+
+
+async def test_the_stream_resumes_after_last_event_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A reconnecting `EventSource` sends `Last-Event-ID: n` and gets the spans from `n+1`;
+    an explicit `after` wins over the header."""
+    async with client() as api:
+        process_id, _ = await create_process(api, "manager")
+    with events.span("run_process", process_id=process_id) as first:
+        pass
+    with events.span("run_process", process_id=process_id) as second:
+        pass
+    async with session_factory() as session:
+        first_id = await session.scalar(select(Event.id).where(Event.span_id == first.span_id))
+    real_stream = service.stream
+
+    async def one_event(plane, process_id, after):  # type: ignore[no-untyped-def]
+        stream = real_stream(plane, process_id, after)
+        yield await anext(stream)  # the stream never ends by itself
+        await stream.aclose()
+
+    monkeypatch.setattr(service, "stream", one_event)
+    path = f"/events/stream?plane=execution&process_id={process_id}"
+    async with client() as api:
+        resumed = await api.get(path, headers={"Last-Event-ID": str(first_id)})
+        explicit = await api.get(f"{path}&after=0", headers={"Last-Event-ID": str(first_id)})
+    assert f'"span_id":"{second.span_id}"' in resumed.text
+    assert f'"span_id":"{first.span_id}"' in explicit.text

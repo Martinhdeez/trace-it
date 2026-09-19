@@ -42,6 +42,18 @@ function NavItem({
   )
 }
 
+const HEALTH_ORDER = ['ok', 'degraded', 'down']
+
+/** The most severe status among the planes, or nothing until they are loaded. */
+function worstHealth(planes: { status: string }[] | undefined): string | undefined {
+  if (!planes?.length) return undefined
+  return planes
+    .map((plane) => plane.status)
+    .reduce((worst, status) =>
+      HEALTH_ORDER.indexOf(status) > HEALTH_ORDER.indexOf(worst) ? status : worst,
+    )
+}
+
 export function Sidebar() {
   const { setPaletteOpen } = useAppState()
   const { user } = useSession()
@@ -49,6 +61,8 @@ export function Sidebar() {
   const activeId = processFromPath(location.pathname)
 
   const processes = useQuery({ queryKey: keys.processes, queryFn: () => api.listProcesses() })
+  const planes = useQuery({ queryKey: keys.planesHealth, queryFn: () => api.planesHealth() })
+  const health = worstHealth(planes.data)
 
   return (
     <aside className="flex w-[232px] shrink-0 flex-col">
@@ -63,6 +77,7 @@ export function Sidebar() {
           trace<span className="text-faint">[.]</span>it
         </p>
         {mode === 'mock' ? <StatusBadge value="ESCALAR">MOCK DATA</StatusBadge> : null}
+        {health ? <StatusBadge value={health}>{t(`health.${health}`)}</StatusBadge> : null}
       </Link>
 
       <div className="px-3 pb-5">
