@@ -56,6 +56,15 @@ The ERP connector (a source adapter reusable by any process) must:
 All parameters (retries, backoff, rate, timeouts, breaker threshold) are configurable at
 runtime; values are fixed after load testing against the challenge ERP.
 
+The connector configuration belongs to the **use case** (ADR 0011), not to one process: a
+sync finds the pack whose `use_case` is the process's use case and reads its
+`sources.json`, so every process of the use case (one created from a norm included) reads
+the same ERP. We found this in a live demo: the lookup went by process name, and "Invoice
+payment - live norm" got 404. Alternatives were copying `sources.json` into the database
+(a migration, and a change would no longer apply on the next sync without a reload) or a
+`sources` section inside `use-case.json` (the same file split in two places); the lookup
+through the use case needs neither.
+
 ## Consequences
 - ERP data can be minutes old; accepted, because decisions must be reproducible (ADR 0008).
 - One more connector to maintain, but it is the template for any HTTP source.
@@ -66,6 +75,8 @@ runtime; values are fixed after load testing against the challenge ERP.
   `processes/invoice-payment/sources.json`; see `docs/sources-http.md`. Points 1-7 and 9
   are done; the circuit breaker (8) is bounded retries plus "the previous snapshot stays
   current" rather than a breaker with a cool-down.
+- `sources/tests/test_erp_sync.py`: a second process of the use case syncs through the
+  pack's connector; a use case without a pack answers 404.
 - `sources/tests/test_erp_sync.py` against the real challenge ERP as a subprocess: 516
   entries in 26 pages, `ORA-00600` retried, 429 honoured, token renewed by uses, a failed
   sync keeps the previous snapshot, a batch-2 update diffed. `make demo`: 516 rows, 26
@@ -74,4 +85,4 @@ runtime; values are fixed after load testing against the challenge ERP.
   `.artifacts/specs/batch1-analysis.md` (516 entries: 507 PENDIENTE, 9 PAGADA).
 
 ## Related
-ADR 0007 (`sources.json`), 0008. `docs/sources-http.md`.
+ADR 0007 (`sources.json`), 0008, 0011 (use cases). `docs/sources-http.md`.

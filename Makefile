@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: setup compile activate demo erp erp-sync test test-db test-e2e eval-compiler eval-norm check down reset-db
+.PHONY: setup compile activate demo erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 
@@ -31,6 +31,22 @@ erp:
 erp-sync:  # needs `make erp` running; writes a new erp snapshot (docs/sources-http.md)
 	cd backend && uv run python -m app.cli sources sync ../processes/invoice-payment.json
 
+# Saturday's batch 2 (docs/runbook-batch2.md). The live database runs in the compose `db`
+# container; its name depends on the folder compose was started from.
+DB_CONTAINER ?= trace-pay-db-1
+DB_NAME ?= trace
+PACK = ../processes/invoice-payment.json
+
+backup:  # pg_dump of the live database -> backups/<db>-<time>.dump (restore: the runbook)
+	mkdir -p backups
+	docker exec $(DB_CONTAINER) pg_dump -U trace -Fc $(DB_NAME) > backups/$(DB_NAME)-$$(date +%Y%m%d-%H%M%S).dump
+	@ls -l backups | tail -1
+
+export-batch:  # FILES=<folder of PDFs> OUT=<file>: outcomes of those files only, then checked
+	cd backend && uv run python -m app.cli export $(PACK) --files $(abspath $(FILES)) --output $(abspath $(OUT))
+
+check-outcomes:  # OUT=<file> FILES=<folder of PDFs>: one line per file, valid results
+	cd backend && uv run python -m app.cli check-outcomes $(abspath $(OUT)) --files $(abspath $(FILES))
 
 # Tests use their own database (recreated each run), never the one `make setup` fills.
 TEST_DB_URL ?= postgresql+psycopg://trace:trace@localhost:5432/trace_test
@@ -53,6 +69,10 @@ eval-compiler:  # opt-in, calls real LLMs (keys in .env); writes backend/evals/r
 
 eval-norm:  # opt-in, real LLMs: the client's norm -> rules -> code -> batch 1 vs golden
 	cd backend && uv run python -u -m evals.eval_norm
+
+demo-llm-down:  # real LLMs: the primary model's provider is unreachable, a fallback answers (ADR 0019)
+	cd backend && OPENAI_BASE_URL=http://127.0.0.1:9/v1 OPENAI_API_KEY=unreachable PYDANTIC_AI_NO_BANNER=1 \
+		uv run --env-file ../.env python ../tools/demo_llm_down.py
 
 check:
 	cd backend && uv run ruff check . && uv run ruff format --check .

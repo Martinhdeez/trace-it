@@ -2,6 +2,8 @@
 
 The API returns as many field readings as it can from PDF and XLSX. Missing or conflicting
 fields retain available text and alternatives, without document review states.
+NIF, IBAN and purchase order separate verified transcriptions from proposals;
+see [focused verification and measured tradeoffs](focused-verification.md).
 
 Use the main API, `uv run uvicorn app.main:app --env-file ../.env --workers 1`, from
 `backend/`. Follow the [team setup](../team-guide.md) for PostgreSQL and users.
@@ -25,6 +27,10 @@ and evidence separately. Download weights on the host before using local OCR in 
 Preserve originals by SHA-256; validate; read native text; run both local recognizers on
 pages needing OCR; consult configured visual and textual providers; return readings and
 evidence. The second recognizer runs even when the first extraction is incomplete.
+Process uploads also populate declared invoice-payment symbols from these readings;
+the existing `/run` and `/export` endpoints then execute the active rules and return
+JSONL. Workbook reference tables can be loaded through the source-upload API.
+See the [complete application flow](api.md#workbook-sources-and-decision-flow).
 
 The invoice adapter extracts invoice number, supplier NIF, IBAN, purchase order, date,
 base, VAT rate/amount, total and currency. Amounts are decimal strings.

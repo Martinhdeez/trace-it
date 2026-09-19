@@ -16,3 +16,4 @@ build/
 default_rapidocr.yaml
 reports/
 output/
+backups/

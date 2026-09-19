@@ -4,11 +4,13 @@
 import asyncio
 import json
 import uuid
+from collections import Counter
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
+from app.common.exceptions import ConflictError
 from app.core.config import settings
 from app.core.database import engine, session_factory
 from app.core.events import Event
@@ -17,7 +19,10 @@ from app.features.agents.tests.test_assistant import _db_available
 from app.features.processes.model import DecisionType, Symbol
 from app.features.rules import service as rules_service
 from app.features.rules.model import Rule
+from app.features.use_cases.schemas import AgentSettings
 from app.main import app
+from evals import eval_norm
+from tests.support import pack
 from tests.support.models import per_role, retry_prompts, user_prompt
 
 TYPES = [
@@ -34,7 +39,8 @@ CHECK = {
     "text": "`iban` equals `suppliers.iban` of the issuer's row.",
     "type": "requirement",
     "decision": "NO_PAGAR",
-    "interpretation": "'Pay only if' means do not pay when it fails.",
+    "decision_source": "policy",
+    "interpretation": "'Pay only if' does not name the outcome of a failure.",
 }
 
 
@@ -49,10 +55,15 @@ def answer(checks: list[dict] | None = None, covered: list[int] | None = None) -
     return {"norm_rules": [sentence]}
 
 
-async def run(monkeypatch, replies: list[dict]) -> tuple[normalizer.Normalization, list]:
+async def run(
+    monkeypatch, replies: list[dict], policy: str | None = None
+) -> tuple[normalizer.Normalization, list]:
     seen: dict = {}
     monkeypatch.setattr(llm, "model_for", per_role({"normalizer": replies}, seen))
-    output, _ = await normalizer.normalize(NORM, "Conventions", TYPES, SYMBOLS, SOURCES, ACTIVE)
+    setup = llm.Setup(AgentSettings(failed_check_decision=policy))
+    output, _ = await normalizer.normalize(
+        NORM, "Conventions", TYPES, SYMBOLS, SOURCES, ACTIVE, setup
+    )
     return output, seen["normalizer"]
 
 
@@ -75,6 +86,7 @@ async def test_sees_the_whole_context(monkeypatch) -> None:
         (answer([{**CHECK, "text": "`iban` is not empty."}]), "already active rules"),
         (answer(covered=[99]), "names rules that do not exist: [99]"),
         ({"norm_rules": [{"number": 1, "text": "x"}]}, "have no check"),
+        (answer([{**CHECK, "decision_source": "explicit", "quote": "no pagar"}]), "is `explicit`"),
     ],
 )
 async def test_invalid_answers_are_retried(monkeypatch, bad: dict, complaint: str) -> None:
@@ -82,6 +94,64 @@ async def test_invalid_answers_are_retried(monkeypatch, bad: dict, complaint: st
 
     assert output == normalizer.Normalization.model_validate(answer())
     assert complaint in retry_prompts(calls[-1])[0]
+
+
+# --- The use case's policy for a failed check -----------------------------------------------
+
+EXPLICIT = {**CHECK, "decision": "ESCALAR", "decision_source": "explicit", "quote": "Pagar"}
+
+
+async def test_a_check_the_norm_does_not_decide_gets_the_policy(monkeypatch) -> None:
+    """'Pay only if' names no outcome: the configured decision replaces the model's."""
+    output, calls = await run(monkeypatch, [answer()], policy="ESCALAR")
+
+    assert output.norm_rules[0].checks[0].decision == "ESCALAR"
+    assert "kind `violation`:\n- ESCALAR" in user_prompt(calls[0])
+
+
+@pytest.mark.parametrize("policy", ["NO_PAGAR", None])
+async def test_a_doubt_the_norm_does_not_decide_escalates(monkeypatch, policy) -> None:
+    """Several invoices on one order: nobody can tell which is legitimate, so a person
+    decides, whatever the model proposed and whatever the policy for violations says."""
+    doubt = {**CHECK, "kind": "doubt", "kind_reason": "Which invoice is legitimate?"}
+    output, calls = await run(monkeypatch, [answer([doubt])], policy=policy)
+
+    assert output.norm_rules[0].checks[0].decision == "ESCALAR"
+    assert "kind `doubt`:\n- ESCALAR" in user_prompt(calls[0])
+
+
+@pytest.mark.parametrize("kind", ["violation", "doubt"])
+async def test_an_explicit_decision_is_kept(monkeypatch, kind: str) -> None:
+    named = {**EXPLICIT, "decision": "NO_PAGAR", "kind": kind}
+    output, _ = await run(monkeypatch, [answer([named])], policy="ESCALAR")
+
+    assert output.norm_rules[0].checks[0].decision == "NO_PAGAR"
+
+
+async def test_without_a_policy_the_model_decides(monkeypatch) -> None:
+    output, _ = await run(monkeypatch, [answer()])
+
+    assert output.norm_rules[0].checks[0].decision == "NO_PAGAR"
+
+
+@pytest.mark.parametrize(
+    ("policy", "complaint"), [("REJECT", "not a decision type"), ("PAGAR", "is the default")]
+)
+async def test_a_policy_that_would_pay_or_does_not_exist_is_refused(
+    monkeypatch, policy: str, complaint: str
+) -> None:
+    with pytest.raises(ConflictError, match=complaint):
+        await run(monkeypatch, [answer()], policy=policy)
+
+
+def test_the_invoice_use_case_rejects_what_fails_and_activates_valid_rules() -> None:
+    agents = pack.use_case().agents
+    types, _ = eval_norm.process()
+
+    assert agents["normalizer"].failed_check_decision == "NO_PAGAR"
+    normalizer.check_policy("NO_PAGAR", types)
+    assert "`doubt`" in agents["normalizer"].instructions  # the shared purchase order
+    assert llm.Setup(agents["compiler"]).limit("auto_activate_max_change", 0.05) == 1.0
 
 
 # --- The endpoint -------------------------------------------------------------------------
@@ -134,7 +204,7 @@ async def test_the_norm_becomes_norm_rules_whose_checks_compile(api, monkeypatch
     """Three checks in two norm rules: all compiled concurrently in one background job,
     each keeping the normalizer's reading next to the compiler's report."""
     client, process_id, headers = api
-    second = {**CHECK, "text": "`iban` is a valid IBAN.", "decision": "ESCALAR"}
+    second = {**CHECK, "text": "`iban` is a valid IBAN.", "kind": "doubt", "kind_reason": "Why"}
     third = {**CHECK, "text": "`iban` is not blacklisted."}
     reply = answer([CHECK, second])
     reply["norm_rules"].append(
@@ -161,9 +231,12 @@ async def test_the_norm_becomes_norm_rules_whose_checks_compile(api, monkeypatch
         assert rule["code"] == CODE
         assert rule["report"]["valid"] is True
         assert rule["report"]["norm"]["interpretation"] == CHECK["interpretation"]
+        assert rule["report"]["norm"]["decision_source"] == "policy"
     rule = (await client.get(f"/rules/{ids[0]}")).json()
     assert rule["norm_rule_id"] == first["id"]
     assert rule["report"]["norm"]["policies"] == ["When in doubt, escalate."]
+    doubt = (await client.get(f"/rules/{ids[1]}")).json()["report"]["norm"]
+    assert (doubt["kind"], doubt["kind_reason"]) == ("doubt", "Why")
 
     norm_rules = (await client.get(f"/processes/{process_id}/norm-rules")).json()
     assert [n["text"] for n in norm_rules] == [first["text"], "Nunca pagar a la lista negra."]
@@ -175,8 +248,24 @@ async def test_the_norm_becomes_norm_rules_whose_checks_compile(api, monkeypatch
         event = await s.scalar(
             select(Event).where(Event.step == "normalize_norm").order_by(Event.id.desc()).limit(1)
         )
-    assert event.data["model"] == "fake/model"
+        steps = Counter(await s.scalars(select(Event.step).where(Event.trace_id == event.trace_id)))
     assert event.data["output"]["norm_rules"][0]["number"] == 1
+    # One trace: the norm, its normalizer run, then the three checks compiled in the background.
+    assert steps["norm"] == 1 and steps["compile_rules"] == 1 and steps["compile_rule"] == 3
+    assert steps["llm_run"] == 1 + 3 * 2  # the normalizer, then a tester and a coder per check
+
+    # How the first check was produced: its norm sentence, the normalizer, its compilation.
+    trace = (await client.get(f"/rules/{ids[0]}/trace")).json()
+    assert trace["norm_rule_text"] == first["text"]
+    assert trace["normalization"]["data"]["checks"] == 3
+    [compilation] = trace["compilations"]
+    assert compilation["data"]["rule_status"] == "active"
+    assert [c["step"] for c in compilation["children"]] == [
+        "llm_run",
+        "coder_attempt",
+        "impact_check",
+        "activate_rule",
+    ]
 
 
 async def test_compilations_run_concurrently_up_to_the_limit(monkeypatch) -> None:

@@ -3,9 +3,10 @@
 Pure function. No database, no LLM, no clock, no network: the same inputs always give the
 same verdict, so a past decision can be replayed from its stored symbols.
 
-Every instance gets a decision. When a rule cannot be trusted (its code failed, or two
-decision types tie), the verdict is the process's escalation type with the reason: a
-person looks at it, and the default is never produced while a rule is unevaluated.
+Every instance gets a decision. When a required symbol is missing, or a rule cannot be
+trusted (its code failed, or two decision types tie), the verdict is the process's
+escalation type with the reason: a person looks at it, and the default is never produced
+while a rule is unevaluated.
 """
 
 import hashlib
@@ -27,11 +28,13 @@ RunDataset = Callable[[str, list[DatasetEntry], Sources, list[DatasetEntry]], li
 @dataclass(frozen=True)
 class Outcomes:
     """What a process can conclude: the priority of each decision type, the one that applies
-    when no rule fires, and the one that sends the case to a person."""
+    when no rule fires, and the one that sends the case to a person. An instance missing a
+    `required` symbol always goes to that person, whatever the rules say."""
 
     priorities: dict[str, int]
     default: str
     escalate: str
+    required: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -101,30 +104,44 @@ def _run_rule(
     return results
 
 
+def _missing(outcomes: Outcomes, symbols: dict[str, Any]) -> list[str]:
+    """Required symbols absent, None or blank: what a rule would read as "not extracted"."""
+    return [s for s in outcomes.required if (v := symbols.get(s)) is None or not str(v).strip()]
+
+
 def _combine(
-    rules: Sequence[Rule], results: list[RuleResult], outcomes: Outcomes, rules_hash: str
+    rules: Sequence[Rule],
+    results: list[RuleResult],
+    outcomes: Outcomes,
+    rules_hash: str,
+    missing: list[str],
 ) -> Verdict:
-    """No rule fires -> the default. Several fire -> the highest priority. A rule that could
-    not be evaluated, or a tie between types -> escalate with the reason."""
+    """A required symbol missing -> escalate, whatever the rules answered. No rule fires ->
+    the default. Several fire -> the highest priority. A rule that could not be evaluated,
+    or a tie between types -> escalate with the reason."""
 
     def verdict(decision: str, reason: str) -> Verdict:
         return Verdict(decision, reason, results, rules_hash)
+
+    if missing:
+        return verdict(outcomes.escalate, f"MISSING_DATA: {', '.join(missing)}")
 
     failures = [r.reason for r in results if r.fires is None]
     if failures:
         return verdict(outcomes.escalate, " | ".join(failures))
 
-    fired = [rule for rule, r in zip(rules, results, strict=True) if r.fires]
+    fired = [(rule, r) for rule, r in zip(rules, results, strict=True) if r.fires]
     if not fired:
         return verdict(outcomes.default, "")
 
-    highest = max(outcomes.priorities[r.decision] for r in fired)
-    winners = [r for r in fired if outcomes.priorities[r.decision] == highest]
-    decisions = sorted({r.decision for r in winners})
+    highest = max(outcomes.priorities[rule.decision] for rule, _ in fired)
+    winners = [(rule, r) for rule, r in fired if outcomes.priorities[rule.decision] == highest]
+    decisions = sorted({rule.decision for rule, _ in winners})
     if len(decisions) > 1:
         tie = f"RULE_CONFLICT: {', '.join(decisions)} share priority {highest}"
         return verdict(outcomes.escalate, tie)
-    return verdict(decisions[0], " | ".join(r.text for r in winners))
+    # The rule's own reason code; its text stays on the rule, joined by `rule_id`.
+    return verdict(decisions[0], " | ".join(r.reason or rule.text for rule, r in winners))
 
 
 def decide(
@@ -142,6 +159,6 @@ def decide(
     by_rule = [_run_rule(rule, instances, sources, population, run_dataset) for rule in rules]
     rules_hash = hash_rules(rules)
     return [
-        _combine(rules, [r[k] for r in by_rule], outcomes, rules_hash)
-        for k in range(len(instances))
+        _combine(rules, [r[k] for r in by_rule], outcomes, rules_hash, _missing(outcomes, values))
+        for k, (_, values) in enumerate(instances)
     ]

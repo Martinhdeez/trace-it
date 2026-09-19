@@ -26,6 +26,7 @@ class Symbol(Base):
     name: Mapped[str] = mapped_column(primary_key=True)
     type: Mapped[str]
     description: Mapped[str] = mapped_column(default="")
+    required: Mapped[bool] = mapped_column(default=False, server_default=false())
 
 
 class DecisionType(Base):

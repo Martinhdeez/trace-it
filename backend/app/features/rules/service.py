@@ -107,6 +107,14 @@ def _kept(rule: Rule, report: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _compile(session: AsyncSession, rule: Rule) -> RuleDetail:
+    links = {"rule_id": rule.id, "process_id": rule.process_id, "norm_rule_id": rule.norm_rule_id}
+    with events.span("compile_rule", **links) as span:
+        detail = await _compile_traced(session, rule)
+        span.set(rule_status=detail.status, valid=bool((detail.report or {}).get("valid")))
+        return detail
+
+
+async def _compile_traced(session: AsyncSession, rule: Rule) -> RuleDetail:
     symbols = list(
         await session.scalars(select(Symbol).where(Symbol.process_id == rule.process_id))
     )
@@ -147,14 +155,13 @@ async def compile_in_background(rule_id: int) -> None:
             error = f"{type(e).__name__}: {e}"
             rule.status = "draft"
             rule.report = _kept(rule, {"valid": False, "error": error})
-            events.record(session, "compile_rule", data={"rule_id": rule_id, "error": error})
             await session.commit()
 
 
-async def compile_all_in_background(rule_ids: list[int]) -> None:
+async def compile_all_in_background(rule_ids: list[int], parent: events.Span | None = None) -> None:
     """Compile several saved rules concurrently, at most `compile_concurrency` at once.
     One background job per request: FastAPI runs a request's background tasks one after
-    another."""
+    another. `parent`: the span of the request that saved them, whose trace this continues."""
     # ponytail: the bound is per job; two norms saved at once may double it. A module-wide
     # semaphore if providers start refusing.
     limit = asyncio.Semaphore(settings.compile_concurrency)
@@ -163,7 +170,8 @@ async def compile_all_in_background(rule_ids: list[int]) -> None:
         async with limit:
             await compile_in_background(rule_id)
 
-    await asyncio.gather(*(one(i) for i in rule_ids))
+    with events.span("compile_rules", parent=parent, rules=len(rule_ids)):
+        await asyncio.gather(*(one(i) for i in rule_ids))
 
 
 _jobs: set[asyncio.Task] = set()  # references, so a running compilation is not collected
@@ -203,6 +211,13 @@ async def _auto_activation(
     most `auto_activate_max_change` of the decisions already taken (ADR 0004)."""
     if not result.report["valid"]:
         return {"auto": False, "why": "not valid"}
+    with events.span("impact_check") as span:
+        activation = await _impact_gate(session, rule, was_blocked)
+        span.set(**activation)
+        return activation
+
+
+async def _impact_gate(session: AsyncSession, rule: Rule, was_blocked: bool) -> dict[str, Any]:
     impact = await audit.check(session, rule.process_id, await audit.proposal_with(session, rule))
     unblocked = await _own_escalations(session, rule, impact) if was_blocked else set()
     changed = len(impact.changes) - len(unblocked) + len(impact.conflicts)
@@ -261,10 +276,11 @@ async def activate(session: AsyncSession, rule_id: int) -> RuleDetail:
         raise ConflictError(f"Only a draft rule can be activated (it is {rule.status})")
     if not (rule.report or {}).get("valid"):
         raise ConflictError("The rule has unresolved discrepancies or is not compiled")
-    await _apply(session, rule, await audit.proposal_with(session, rule))
-    rule.status = "active"
-    rule.activated_at = datetime.now(UTC)
-    await session.commit()
+    with events.span("activate_rule", rule_id=rule.id, process_id=rule.process_id):
+        await _apply(session, rule, await audit.proposal_with(session, rule))
+        rule.status = "active"
+        rule.activated_at = datetime.now(UTC)
+        await session.commit()
     return _detail(rule)
 
 

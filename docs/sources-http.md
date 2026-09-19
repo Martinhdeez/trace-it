@@ -5,6 +5,13 @@ A process pack declares the external APIs its rules read in `processes/<pack>/so
 connector (`backend/app/features/sources/http_connector.py`) reads that configuration. The
 challenge ERP is its first configuration. ADR 0013 records why it works this way.
 
+**Connectors belong to the use case.** The ERP is the invoice use case's, not one process's.
+A sync of any process finds the pack of the process's use case: the `processes/*.json` whose
+`use_case` names it (a pack without `use_case` gives its own `name` to its use case), and
+reads `sources.json` beside it. A process created later in the same use case (e.g. from a
+norm, "Invoice payment - live norm") syncs with the same connector. A use case with no such
+pack answers 404 naming the use case.
+
 **Rules never call the API.** A sync downloads everything and writes one new `sources` row
 (a snapshot). The engine reads the latest snapshot per source name.
 
@@ -102,6 +109,10 @@ Restart the ERP with the update (`make erp-lote2` inside `.context/500-sombras-d
 or `python3 alberto_erp.py --lote2 <csv>`), then sync again. The response and the `diff`
 endpoint list the added, removed and changed entries. The trace shows
 `status.update_loaded == "SI"`.
+
+A new snapshot changes nothing already decided. To apply it to past decisions:
+`POST /processes/{id}/reprocess?dry_run=true` to see what would change, then without
+`dry_run` to append the new decisions (`docs/runbook-batch2.md`).
 
 
 ## Not generic yet

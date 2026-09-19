@@ -62,6 +62,12 @@ implementation only served as a test oracle, at the price of a second full compi
    (ADR 0008) finds no decision taken by a person that would change, and changes at most
    `TRACE_AUTO_ACTIVATE_MAX_CHANGE` (5%) of the decisions already taken. Otherwise it
    stays a draft with the reason in `report.activation`, for a person to decide.
+   The share limit is an opt-in safety net, set per use case in the compiler's
+   `limits.auto_activate_max_change`; `1.0` disables it. The invoice use case disables it
+   (2026-09-19): the client's norm is authoritative, and a norm rule left unapplied pays
+   invoices it should reject (in a live demo, 3 valid norm rules stayed drafts after a run
+   taken without them, "changes 27/500"). Its impact is still recorded as audit findings,
+   and a decision taken by a person that it would change still blocks it.
 7. **Compilation on save**: `POST /processes/{id}/rules` stores the rule as `compiling`
    and returns at once; a FastAPI background task compiles it with its own session and it
    ends `active`, `blocked` or `draft`. An error (LLM down, still malformed after repairs)
@@ -80,6 +86,10 @@ implementation only served as a test oracle, at the price of a second full compi
 - A `blocked` rule that recompiles goes through the impact gate, but the decisions it
   escalated itself (`RULE_NEEDS_DATA <id>`) do not count towards the share: undoing them
   is the point of the recompile. Contradicting a person still blocks it.
+- The invoice pack runs its tester on `helmcode:deepseek-v4-flash`, the coder's family,
+  against point 8: `helmcode:qwen3.6` took about 30 s per rule, deepseek about 3 s. We
+  accept a higher chance of a shared misreading for a compile that fits a demo; the
+  disputes, the review and the impact gate still stand between the two.
 - Background compilation lives in the API process: one server, no queue. Several API
   workers would each re-queue the same `compiling` rules on startup.
 - The report (`rules.report`) holds the tests with their results, the attempts, the

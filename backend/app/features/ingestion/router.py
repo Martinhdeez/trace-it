@@ -15,7 +15,7 @@ from app.common.exceptions import TraceError
 from .config import Settings
 from .errors import InvalidDocumentError
 from .runtime import current_service
-from .schemas import ExtractionResult, ExtractOptions
+from .schemas import CriticalField, ExtractionResult, ExtractOptions
 from .service import ExtractionService
 
 logger = logging.getLogger(__name__)
@@ -46,12 +46,15 @@ def create_router(
             bool | None,
             Form(description="Allow Jev recommendations; omitted enables the configured judge."),
         ] = None,
+        verify_fields: Annotated[list[CriticalField] | None, Form()] = None,
     ):
         engine = service or current_service(request)
         try:
             item = await run_in_threadpool(engine.ingest, file.file, file.filename)
             return await run_in_threadpool(
-                engine.extract, item, ExtractOptions(ocr=ocr, vlm=vlm, jev=jev)
+                engine.extract,
+                item,
+                ExtractOptions(ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or []),
             )
         except ValueError as exc:
             raise InvalidDocumentError(str(exc)) from exc
@@ -91,6 +94,7 @@ def create_router(
             bool | None,
             Form(description="Allow Jev recommendations; omitted enables the configured judge."),
         ] = None,
+        verify_fields: Annotated[list[CriticalField] | None, Form()] = None,
     ):
         engine = service or current_service(request)
         try:
@@ -104,7 +108,7 @@ def create_router(
             items = []
             for file in files:
                 items.append(await run_in_threadpool(engine.ingest, file.file, file.filename))
-            options = ExtractOptions(ocr=ocr, vlm=vlm, jev=jev)
+            options = ExtractOptions(ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or [])
             return await run_in_threadpool(engine.submit_batch, items, options)
         except ValueError as exc:
             raise InvalidDocumentError(str(exc)) from exc

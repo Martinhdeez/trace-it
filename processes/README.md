@@ -30,13 +30,13 @@ Loading is idempotent (`backend/app/features/processes/definition.py`):
 | `use_case` | no | Name of the use case the process belongs to. Its description and agent configuration apply to the process. Give `use_case` or `description`, not both (422) |
 | `description` | no | Only without `use_case`: the description of the process's own use case. Free text the compiler and the assistant receive with every rule: the conventions shared by all rules (normalisation, units, what to do when a value is missing) |
 | `decision_types` | yes | `[{name, priority, is_default, requires_human}]`. The highest `priority` wins when several rules fire. Exactly one `is_default` (applies when none fires) and it cannot be `requires_human`. Priorities must be distinct. At least one type must be `requires_human` |
-| `symbols` | no | `[{name, type, description}]`: what extraction fills in for each instance and the rules read |
+| `symbols` | no | `[{name, type, description, required}]`: what extraction fills in for each instance and the rules read. `required` (default `false`): an instance where the symbol is missing, `None` or blank is always escalated with `MISSING_DATA: <symbols>`, whatever the rules say (ADR 0016) |
 | `rules` | no | `[{text, type, decision, code}]`. `type`: `requirement` (fires if it does not hold) or `prohibition` (fires if it holds). `decision`: one of the `decision_types`. `code` (optional): path, relative to the definition, of a file defining `evaluate(instance, sources, others)`; see `rules-v3/` below |
 | `users` | no | `[{name, email, role}]`, `role`: `manager` or `operator` |
 
 Rejected: repeated types, symbols or rule texts; no default type or more than one; a default that requires a human; two types sharing a priority; no `requires_human` type; a rule whose decision does not exist.
 
-When a rule's code fails at runtime, or two fired types tie on priority, the engine decides the highest-priority `requires_human` type with the reason (`RULE_ERROR ...` / `RULE_CONFLICT ...`), so a person sees the case and the default is never produced with a rule unevaluated (ADR 0016). That is why every process needs such a type.
+When a required symbol is missing, a rule's code fails at runtime, or two fired types tie on priority, the engine decides the highest-priority `requires_human` type with the reason (`MISSING_DATA ...` / `RULE_ERROR ...` / `RULE_CONFLICT ...`), so a person sees the case and the default is never produced with a rule unevaluated (ADR 0016). That is why every process needs such a type.
 
 Names inside a definition (process, decision types, symbols, sources) are the process's own data. Write them in English, except where an external contract fixes them: the invoice process keeps `PAGAR`, `NO_PAGAR` and `ESCALAR` because the challenge's `outcomes.jsonl` requires them verbatim.
 
@@ -52,13 +52,13 @@ A use case is what the app is used for (e.g. "Invoice payment"); a process is on
 |---|---|
 | `name` | Unique name of the use case; the process's `use_case` names it |
 | `description` | The domain conventions every rule follows, shown to the compiler, tester and assistant |
-| `agents` | `{role: settings}`, roles `compiler`, `tester`, `assistant`, `normalizer`. Settings: `model` (`provider:model` or `helmcode:<id>`; default `TRACE_<ROLE>_MODEL`), `instructions` (domain guidance appended to the platform prompt in `backend/app/features/agents/prompts/`), `model_settings` (e.g. `{"temperature": 0}`), `limits` (compiler: `max_attempts`, `auto_activate_max_change`; tester: `min_tests`, `max_reviews`), `examples` (`[{text, type, code}]`, `code` a path relative to this file; the compiler sees the examples of the other rules, never the one being compiled) |
+| `agents` | `{role: settings}`, roles `compiler`, `tester`, `assistant`, `normalizer`. Settings: `model` (`provider:model` or `helmcode:<id>`; default `TRACE_<ROLE>_MODEL`), `fallback_models` (models tried in order when the one before fails at the provider: 5xx, 429, timeout, connection; ADR 0019), `timeout_seconds` (per request to the provider), `instructions` (domain guidance appended to the platform prompt in `backend/app/features/agents/prompts/`), `model_settings` (e.g. `{"temperature": 0}`), `limits` (compiler: `max_attempts`, `auto_activate_max_change`, `1.0` = a valid rule always activates; tester: `min_tests`, `max_reviews`), `failed_check_decision` (normalizer only: the decision of a check whose failure the norm does not name, e.g. "pay only if X"; a decision type of the process, never the default; without it the normalizer falls back to the norm's tie-breaker, then the most conservative type that requires a human), `examples` (`[{text, type, code}]`, `code` a path relative to this file; the compiler sees the examples of the other rules, never the one being compiled) |
 
 Loading never overrides what was changed at runtime: a role with no stored version gets the file's settings as version 1, active; settings that differ from every stored version enter as a new, inactive version, for a manager to activate (`POST /agent-configs/{id}/activate`).
 
 ## `invoice-payment/sources.json`: source connectors
 
-A pack may carry `<pack-name>/sources.json` with the connector configuration of its sources of truth. The invoice pack configures `erp` as an HTTP source: login, paged XML, field mapping, retries, rate limit. `make erp-sync` or `POST /processes/{id}/sources/erp/sync` download it into a new snapshot. Format and behaviour: `docs/sources-http.md`.
+A pack may carry `<pack-name>/sources.json` with the connector configuration of its sources of truth. The invoice pack configures `erp` as an HTTP source: login, paged XML, field mapping, retries, rate limit. `make erp-sync` or `POST /processes/{id}/sources/erp/sync` download it into a new snapshot. The connectors belong to the pack's use case: any process of "Invoice payment", whatever its name, syncs with this file (ADR 0013). Format and behaviour: `docs/sources-http.md`.
 
 ## Minimal example: travel expenses
 

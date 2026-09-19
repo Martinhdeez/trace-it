@@ -26,6 +26,7 @@ from app.features.ingestion.model import File, Instance
 from app.features.sources.model import Source
 from app.main import app
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.dialects.postgresql import insert
 
 import extractor
 import workbook
@@ -60,9 +61,17 @@ async def ingest(process_id: int, invoices: Path, book: Path, cutoff: str, limit
                 }
                 read += 1
             digest = hashlib.sha256(content).hexdigest()
-            session.add(File(hash=digest, name=path.name, content=content, text=text))
-            session.add(
-                Instance(process_id=process_id, file_hash=digest, name=path.name, symbols=symbols)
+            # A file already stored (same bytes under another name, or a second run over
+            # the same folder) is not stored twice, and an instance is never reset.
+            await session.execute(
+                insert(File)
+                .values(hash=digest, name=path.name, content=content, text=text)
+                .on_conflict_do_nothing()
+            )
+            await session.execute(
+                insert(Instance)
+                .values(process_id=process_id, file_hash=digest, name=path.name, symbols=symbols)
+                .on_conflict_do_nothing()
             )
         await session.commit()
     print(f"extraction: {read} read from the text layer, {scans} scans left without symbols")

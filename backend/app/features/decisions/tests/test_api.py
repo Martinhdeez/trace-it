@@ -10,11 +10,12 @@ from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import update
 
 from app.core.database import session_factory
 from app.features.agents import sandbox
 from app.features.ingestion.model import File, Instance
-from app.features.processes.model import DecisionType
+from app.features.processes.model import DecisionType, Symbol
 from app.features.rules.model import Rule
 from app.features.sources.model import Source
 from app.main import app
@@ -307,6 +308,55 @@ async def test_a_priority_tie_at_runtime_escalates(fake_sandbox: None) -> None:
         )
 
 
+async def test_a_required_symbol_missing_escalates(fake_sandbox: None) -> None:
+    """The process marks `nif` required: an instance extracted with no symbols at all is
+    escalated with the reason, never paid by default."""
+    async with client() as api:
+        process_id, _ = await create_process(api, "operator")
+        async with session_factory() as session:
+            nif = await session.get(Symbol, (process_id, "nif"))
+            assert nif is not None
+            nif.required = True
+            digest = uuid.uuid4().hex
+            session.add(File(hash=digest, name="scan.pdf", content=b"%PDF"))
+            scan = Instance(process_id=process_id, file_hash=digest, name="scan.pdf", symbols={})
+            session.add(scan)
+            await session.commit()
+            scan_id = scan.id
+
+        r = await api.post(f"/processes/{process_id}/run")
+        assert r.status_code == 200, r.text
+        assert r.json() == {"decided": 4, "by_decision": {"PAGAR": 1, "NO_PAGAR": 1, "ESCALAR": 2}}
+        detail = (await api.get(f"/instances/{scan_id}")).json()
+        assert detail["decision"] == "ESCALAR"
+        assert detail["decisions"][0]["reason"] == "MISSING_DATA: nif"
+
+
+@pytest.mark.parametrize(
+    ("status", "message"),
+    [("compiling", "rules are still compiling"), ("retired", "has no active rules")],
+)
+async def test_a_run_is_refused_until_the_rules_are_ready(
+    fake_sandbox: None, status: str, message: str
+) -> None:
+    """A run while the norm's rules compile, or with none enforced, would pay every
+    instance by default: it is refused and nothing is decided."""
+    async with client() as api:
+        process_id, _ = await create_process(api, "operator")
+        async with session_factory() as session:
+            await session.execute(
+                update(Rule).where(Rule.process_id == process_id).values(status=status)
+            )
+            await session.commit()
+
+        for action in ("run", "reprocess"):
+            r = await api.post(f"/processes/{process_id}/{action}")
+            assert r.status_code == 409, r.text
+            assert message in r.json()["message"]
+        r = await api.get(f"/processes/{process_id}/instances", params={"status": "PENDING"})
+        assert len(r.json()) == len(INVOICES)
+
+
 def test_flat_symbols_are_refused_on_write() -> None:
     with pytest.raises(ValueError, match="must be stored as"):
         Instance(name="x.pdf", symbols={"nif": "B96233419"})
@@ -368,3 +418,85 @@ async def test_the_run_reaches_the_real_sandbox() -> None:
         }
         assert decided["FA-5044_mensajería2.pdf"] == "ESCALAR"
         assert decided["FA-1016_papelería.pdf"] == "NO_PAGAR"
+
+
+async def test_what_a_console_reads(fake_sandbox: None) -> None:
+    """Summary, richer instance rows, filters, sources and the process trace: one call each."""
+    async with client() as api:
+        process_id, headers = await create_process(api, "manager")
+
+        # Before any run: the numbers are all zero and the sources are already there.
+        summary = (await api.get(f"/processes/{process_id}/summary")).json()
+        assert summary["instances"] == 4
+        assert summary["by_status"] == {"PENDING": 4}
+        assert summary["by_decision"] == {} and summary["queue"] == 0
+        assert summary["last_run_at"] is None
+        assert [(r["text"], r["status"], r["fires"]) for r in summary["rules"]] == [
+            ("iban_mismatch", "active", 0),
+            ("order_already_paid", "active", 0),
+        ]
+        # The current load of each source: the second `suppliers` load replaced the first.
+        assert [(s["name"], s["rows"], s["origin"]) for s in summary["sources"]] == [
+            ("suppliers", 2, "y"),
+            ("erp", 3, "erp:t"),
+        ]
+
+        assert (await api.post(f"/processes/{process_id}/run")).status_code == 200
+        [escalated] = (await api.get(f"/processes/{process_id}/queue")).json()
+        r = await api.post(
+            f"/instances/{escalated['id']}/resolve",
+            json={"decision": "NO_PAGAR", "reason": "Called the supplier"},
+            headers=headers,
+        )
+        assert r.status_code == 200, r.text
+
+        summary = (await api.get(f"/processes/{process_id}/summary")).json()
+        assert summary["by_status"] == {"PENDING": 1, "DECIDED": 3}
+        assert summary["by_decision"] == {"PAGAR": 1, "NO_PAGAR": 2}  # the latest decision counts
+        assert summary["queue"] == 0 and summary["resolved"] == 1
+        assert {r["text"]: r["fires"] for r in summary["rules"]} == {
+            "iban_mismatch": 1,
+            "order_already_paid": 1,
+        }
+        assert summary["last_run_at"] is not None
+
+        # An instance row says what was decided, by whom, why and when.
+        rows = (await api.get(f"/processes/{process_id}/instances")).json()
+        resolved = next(i for i in rows if i["id"] == escalated["id"])
+        assert resolved["author"] == "Ana" and resolved["reason"] == "Called the supplier"
+        assert resolved["decided_at"] is not None
+        pending = next(i for i in rows if i["status"] == "PENDING")
+        assert (pending["decision"], pending["author"], pending["decided_at"]) == (None,) * 3
+
+        r = await api.get(f"/processes/{process_id}/instances", params={"decision": "NO_PAGAR"})
+        assert {i["name"] for i in r.json()} == {"FA-1016_papelería.pdf", "FA-5044_mensajería2.pdf"}
+        r = await api.get(f"/processes/{process_id}/instances", params={"q": "PAPEL"})
+        assert [i["name"] for i in r.json()] == ["FA-1016_papelería.pdf"]
+
+        # The sources, with their rows.
+        r = await api.get(f"/processes/{process_id}/sources")
+        assert [(s["name"], s["rows"]) for s in r.json()] == [("suppliers", 2), ("erp", 3)]
+        r = await api.get(f"/processes/{process_id}/sources/suppliers")
+        assert r.json()["data"] == SUPPLIERS
+        assert (await api.get(f"/processes/{process_id}/sources/nope")).status_code == 404
+
+        # The trace of the process, newest first, filterable.
+        steps = [e["step"] for e in (await api.get(f"/processes/{process_id}/events")).json()]
+        # The run is a span with one child per rule; each decision is a point inside it.
+        assert steps == ["resolution", "run_process"] + ["evaluate_rule"] * 2 + ["decision"] * 3
+        r = await api.get(f"/processes/{process_id}/events", params={"step": "resolution"})
+        [event] = r.json()
+        assert event["instance_id"] == escalated["id"]
+        assert event["data"] == {"decision": "NO_PAGAR", "author": "Ana"}
+        r = await api.get(
+            f"/processes/{process_id}/events", params={"instance_id": escalated["id"]}
+        )
+        assert [e["step"] for e in r.json()] == ["resolution", "decision"]
+
+        # The file itself, for the viewer, with its exact name.
+        r = await api.get(f"/instances/{escalated['id']}/file")
+        assert r.status_code == 200
+        assert r.content == b"%PDF" and r.headers["content-type"] == "application/pdf"
+        assert r.headers["content-disposition"] == (
+            "inline; filename*=UTF-8''FA-5044_mensajer%C3%ADa2.pdf"
+        )

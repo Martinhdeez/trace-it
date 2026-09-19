@@ -104,6 +104,16 @@ def test_one_rule_fires() -> None:
     assert verdict.reason == "order_already_paid"
 
 
+def test_the_reason_is_the_rules_reason_code_not_its_text() -> None:
+    [rule] = rules("order_already_paid")
+    rule.text = "The ERP entry of the purchase order must not be PAGADA."
+
+    def run(code: str, instances: list, sources: dict, population: list) -> list:
+        return [{"fires": True, "reason": "ORDER_PAID PO-2026-0474"}]
+
+    assert decide_invoice([rule], ALREADY_PAID, run=run).reason == "ORDER_PAID PO-2026-0474"
+
+
 def test_several_fire_and_the_highest_priority_wins() -> None:
     """The IBAN is unknown *and* the order is already paid: a person looks at it first."""
     active = rules("iban_mismatch", "order_already_paid")
@@ -135,6 +145,39 @@ def test_a_priority_tie_between_different_decisions_escalates() -> None:
 
     assert verdict.decision == "ESCALAR"
     assert verdict.reason == "RULE_CONFLICT: ESCALAR, NO_PAGAR share priority 2"
+
+
+REQUIRED = Outcomes(
+    OUTCOMES.priorities, "PAGAR", "ESCALAR", required=("nif", "iban", "purchase_order")
+)
+
+
+def test_a_missing_required_symbol_escalates_whatever_the_rules_say() -> None:
+    """No rule fires on this invoice, yet without an IBAN it is never paid. The rules still
+    ran and their results are kept."""
+    active = rules("order_already_paid")
+
+    verdict = decide_invoice(active, {**CLEAN, "iban": None, "nif": "  "}, REQUIRED)
+
+    assert verdict.decision == "ESCALAR"
+    assert verdict.reason == "MISSING_DATA: nif, iban"
+    assert [(r.rule_id, r.fires) for r in verdict.results] == [(1, False)]
+
+
+def test_an_instance_without_symbols_misses_every_required_one() -> None:
+    """A scanned PDF with no text: every rule errors or passes, the reason names the data."""
+    verdict = decide_invoice(rules("iban_mismatch"), {}, REQUIRED)
+
+    assert verdict.decision == "ESCALAR"
+    assert verdict.reason == "MISSING_DATA: nif, iban, purchase_order"
+    assert verdict.results[0].fires is None
+
+
+def test_required_symbols_present_leave_the_rules_to_decide() -> None:
+    active = rules("iban_mismatch", "order_already_paid")
+
+    assert decide_invoice(active, CLEAN, REQUIRED).decision == "PAGAR"
+    assert decide_invoice(active, ALREADY_PAID, REQUIRED).decision == "NO_PAGAR"
 
 
 def test_the_cut_off_date_comes_from_a_source() -> None:

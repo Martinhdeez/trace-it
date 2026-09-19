@@ -24,6 +24,12 @@ class AgentSettings(BaseModel):
     defaults (`TRACE_<ROLE>_MODEL`, the limits in `agents/compiler.py`)."""
 
     model: str | None = Field(None, examples=["helmcode:deepseek-v4-flash"])
+    # Tried in order when the model before fails at the provider (5xx, 429 after the SDK's
+    # retries, timeout, connection) or its answer is cut by the output-token limit; a
+    # rejected answer (ModelRetry) never switches (ADR 0019).
+    fallback_models: list[str] = Field([], examples=[["helmcode:glm5.3-flash"]])
+    # Per request to the provider; None: the provider's own default.
+    timeout_seconds: float | None = None
     # Domain guidance appended to the role's platform prompt.
     instructions: str = ""
     # PydanticAI model settings, e.g. {"temperature": 0}.
@@ -31,6 +37,9 @@ class AgentSettings(BaseModel):
     # compiler: max_attempts, auto_activate_max_change; tester: min_tests, max_reviews.
     limits: dict[str, float] = {}
     examples: list[Example] = []
+    # normalizer: the decision of a check whose failure the norm does not name (ADR 0017).
+    # A decision type of the process, never the default. None: the prompt's own fallbacks.
+    failed_check_decision: str | None = None
 
 
 class UseCaseOut(BaseModel):

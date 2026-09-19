@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
 
+import logfire
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.common.exceptions import TraceError
+from app.core.events import configure_observability
 from app.features.agents.router import router as agents_router
 from app.features.decisions.router import router as decisions_router
 from app.features.ingestion.process_router import router as ingestion_router
@@ -14,6 +16,7 @@ from app.features.processes.router import router as processes_router
 from app.features.rules import service as rules_service
 from app.features.rules.router import router as rules_router
 from app.features.sources.router import router as sources_router
+from app.features.traces.router import router as traces_router
 from app.features.use_cases.router import router as use_cases_router
 from app.features.users.dependencies import current_user
 from app.features.users.router import router as users_router
@@ -26,6 +29,7 @@ async def lifespan(app: FastAPI):
         yield
 
 
+configure_observability()
 app = FastAPI(
     title="trace-it",
     version="0.1.0",
@@ -36,6 +40,8 @@ app = FastAPI(
         '`{"code", "message"}`.'
     ),
 )
+
+logfire.instrument_fastapi(app)
 
 # Open CORS for the hackathon frontend; restrict origins if deployed.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -62,6 +68,7 @@ for router in (
     ingestion_router,
     sources_router,
     use_cases_router,
+    traces_router,
 ):
     app.include_router(router)
 

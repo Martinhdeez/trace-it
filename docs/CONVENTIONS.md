@@ -28,7 +28,7 @@ Everything in this repository is in English: identifiers, database names and the
 - **Process version**: design term (ADR 0015), not a table. Every decision records `rules_hash`, the rule set it was taken with.
 - **Rule finding**: one rule's answer on one instance, `{rule_id, hash, fires, reason}`, stored in `decisions.results` (`RuleResult` in the engine). **Audit finding** (`Finding`, table `findings`): a past decision that a newer rule says was wrong; a notice, never a correction (ADR 0008). Never write "finding" alone in code.
 - **Engine decision**: a `decisions` row with `author = "engine"`. **Final decision**: an instance's latest row, whoever wrote it. **Exported decision**: the engine's latest decision; a person's decision is exported only when the engine never decided that instance (ADR 0016). Export answers 409 while any instance is `PENDING`.
-- **Escalation type**: the process's highest-priority `requires_human` type. The engine sends there any instance whose rule code failed (`RULE_ERROR ...`), whose rule is `blocked` for missing data (`RULE_NEEDS_DATA ...`) or whose fired types tie on priority (`RULE_CONFLICT ...`). There is no REVIEW state.
+- **Escalation type**: the process's highest-priority `requires_human` type. The engine sends there any instance missing a required symbol (`MISSING_DATA: ...`), whose rule code failed (`RULE_ERROR ...`), whose rule is `blocked` for missing data (`RULE_NEEDS_DATA ...`) or whose fired types tie on priority (`RULE_CONFLICT ...`). There is no REVIEW state.
 - **Manager** and **operator**: the two user roles. A person who resolves an instance writes a new decision row; the engine's row is never edited.
 
 ## Statuses

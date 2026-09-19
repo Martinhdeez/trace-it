@@ -46,6 +46,7 @@ def parse_invoice(lines: list[TextLine], min_confidence: float = 0.90):
             # Tolerate corrupted labels, never substitute characters inside financial values.
             text = re.sub(r"(?<!\w)(?:1I?BAN|\|BAN)\b", "IBAN", line.text, flags=re.I)
             text = re.sub(r"(?<!\w)(?:1VA|\|VA)(?=\W|\d)", "IVA", text, flags=re.I)
+            text = re.sub(r"^NIP(?=\s*[:.])", "NIF", text, flags=re.I)
             text = re.sub(r"^Pedid(?:a|α)?(?=\W|$)", "Pedido", text, flags=re.I)
             line = line.model_copy(update={"text": text})
         if re.match(rf"^(?:BASE|IMPORTE BASE|SUBTOTAL|{VAT}|CUOTA IVA)(?=\W|\d)", fold(line.text)):
