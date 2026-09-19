@@ -7,8 +7,9 @@ Each package is one PR from `feat/fe-<package>` into `integration`.
 Where this comes from:
 - [integration.md](integration.md): the reconciliation matrix and vocabulary. "Row N" in this page means a row of its matrix.
 - [integration-plan.md](integration-plan.md): the inconsistency list and the smoke test.
-- [api.md](api.md) and the OpenAPI spec of `feat/integration-phase0` (PR #91). Operation ids are the ones in that spec.
-- The frontend code on `origin/integration` @ 523dbb0.
+- [api.md](api.md) and `frontend/openapi.json` on `integration` after phase 0 (PR #91, merged at b9534a7). Operation ids are the ones in that spec.
+- The frontend code on `origin/integration` @ b9534a7.
+- The descriptions of the open backend PRs #92 (run history and manager auth) and #93 (proposals).
 
 Paths: `FE:` is `frontend/src/`. `BE:` is `backend/app/`.
 
@@ -28,10 +29,16 @@ Paths: `FE:` is `frontend/src/`. `BE:` is `backend/app/`.
 
 **One user: the manager.**
 - The person using the app is a manager, and a manager only handles escalations.
-- Every write needs `X-User-Id` of a manager.
-- Once `feat/integration-backend-runs-auth` lands, a missing header returns **401** and an operator returns **403**.
-- Until then, most writes accept any user, and a missing header returns **422** (`loc: ["header","x-user-id"]`).
-- Handle all three the same way: 401, or a 422 on `x-user-id`, sends the user to Login. 403 shows `ErrorNotice`.
+- Every write needs the manager's id in `X-User-Id`. `http.ts` already adds it to every request once `setUserId` has run, so the only work is to make sure a user is signed in (package 1).
+- What changes when PR #92 (`feat/integration-backend-runs-auth`) merges:
+  - A missing or unknown `X-User-Id` returns **401** `unauthenticated`.
+  - A user who is not a manager gets **403** `permission_denied` on run, reprocess, source sync, `POST /processes/definition`, resolve, alert ack and `POST /users`.
+  - The draft, publish, norm, chat, learning and rule activate/retire endpoints are already manager-only today.
+  - PR #93's proposal endpoints are all manager-only too.
+- Until #92 merges, most writes accept any user. A missing header returns **422** (`loc: ["header","x-user-id"]`), and an unknown id returns 404 on `/me`.
+- The UI handles them like this:
+  - 401, or a 422 on `x-user-id`: sign out and go to Login.
+  - 403: show `ErrorNotice` with the backend's message.
 
 **Vocabulary.**
 - The code uses the English API codes end to end.
@@ -65,7 +72,12 @@ Paths: `FE:` is `frontend/src/`. `BE:` is `backend/app/`.
 
 **Story:** As Carlos, I run the real backend locally and point the console at it, with the mock off.
 
-**Depends on:** pending: `feat/integration-phase0` (PR #91: proxy target, opt-in mock, `gen:api`). Review and merge it first.
+**Depends on:** available now. Phase 0 (PR #91) is merged into `integration` at b9534a7. It gives you:
+- **Proxy:** `/api` goes to `:8000` by default, and `VITE_API_TARGET` overrides it.
+- **Mock:** the `auto` mode and its silent fallback are gone, so the real API is the default. The mock runs only with `VITE_API_MODE=mock`, and then a MOCK DATA badge (the existing `StatusBadge`) stays next to the logo.
+- **Errors:** a failed call reaches `ErrorNotice`. When the backend is down (status 0, or a Vite 502/503/504 with no `{code}`), it says "El backend no responde".
+- **Types:** `make openapi` writes `frontend/openapi.json`, then `npm run gen:api` writes `src/api/schema.d.ts`. Both files are committed.
+- **Schema names:** `VersionDraftOut` (the process draft), `DiscoveryDraftOut` (the chat or discovery conversation) and `ProposalEvidence`. No `app__…` names are left.
 
 ### Backend
 
@@ -110,13 +122,50 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 - Every backend PR commits `frontend/openapi.json` and `src/api/schema.d.ts`. `backend/tests/test_openapi.py` fails when they are stale.
 - After you pull, the types are current.
 - If you ever need to regenerate them: `make openapi` from the repo root (it needs `uv`). It runs `npm run gen:api` too.
+- `package.json` has an `overrides` entry. `openapi-typescript` 7.13 declares TypeScript `^5` as a peer dependency, and we use TypeScript 6. The override lets it use ours, because it only uses the printer API. Keep the entry. If `npm ci` complains about peers, check that the entry is still there, rather than adding `--legacy-peer-deps`.
 
 **Done check:**
 - `npm run dev` with the backend up: Procesos lists the real processes, with no badge.
 - Stop the API: every screen says "El backend no responde".
 - `npm run build && npm run lint` pass.
 
-**Estimate:** S (mostly reviewing #91).
+**Estimate:** S.
+
+---
+
+## 0b. Error states where there are none
+
+**Story:** As the manager, when the API fails anywhere, I see why instead of an empty area.
+
+**Today:** these components run queries but never read `isError`, so a failure shows nothing:
+- `FE:components/shell/Sidebar.tsx`: the process list (`listProcesses`) stays empty.
+- `FE:components/shell/CommandPalette.tsx`: the process and instance search (`listProcesses`, `listInstances`) shows no results.
+- `FE:components/run/DocumentPane.tsx`: evidence (`getDocument`) quietly falls back to the bundled facsimile. After package 6, it would show a blank paper.
+- `FE:components/process/ProcessScreen.tsx` (`ProcessTabs`): the tab header (`getProcess`, `listInstances`) shows "…" forever.
+
+**Endpoints:** none new. These are the same queries.
+
+**Changes:**
+- In each component, when `query.isError`, render the existing `ErrorNotice error={query.error}` in the slot where the data would go:
+  - Sidebar: in place of the process list.
+  - CommandPalette: in place of the results list.
+  - DocumentPane: in place of the paper, with no fallback to bundled data.
+  - ProcessTabs: in place of the counts.
+- If `ErrorNotice` is too large for the Sidebar or the palette, use `Empty` with `error.message`. Both exist, so there is no new styling.
+- Keep TanStack's default retry (one retry for errors other than 4xx), and do not add polling.
+- A 401 goes to Login through the `http.ts` callback from package 1, so these components never handle auth themselves.
+
+**Vocabulary:** –
+
+**Depends on:** available now.
+
+**Done check (mock off):**
+1. Open a process, then stop the API and reload.
+2. The sidebar, the process tabs and ⌘K each say "El backend no responde" instead of staying empty.
+3. Open `/processes/9999`: the tabs show the 404 message.
+4. On a case with no stored document, the document pane shows the 404 message.
+
+**Estimate:** S.
 
 ---
 
@@ -162,7 +211,7 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 
 **Depends on:**
 - Available now: `/login` and `/me`.
-- 401 and 403 enforcement is pending: `feat/integration-backend-runs-auth`. Code for them now, because the 422 path covers today.
+- 401 and 403 enforcement is pending: PR #92 (`feat/integration-backend-runs-auth`). Code for them now, because the 422 path covers today.
 
 **Done check (mock off):**
 1. Clear site data and open http://127.0.0.1:5173/processes. You land on Login.
@@ -267,11 +316,11 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 |---|---|---|---|---|
 | `POST /processes/{id}/files` (`uploadProcessDocument`) | `X-User-Id` | multipart `file` | `DocumentUpload {instance_id, name, status, created, extraction.warnings}` | 422 `invalid_document`, 404 |
 | `POST /instances/{id}/extract` (`extractInstanceDocument`) | `X-User-Id` | `{}` | `DocumentUpload` | 409 already decided |
-| `POST /processes/{id}/run` (`runProcess`) | manager (after auth PR) | – | `RunSummary {decided, by_decision, down_sources?}` | 409 nothing published, a rule compiling, or no active rule |
-| `POST /processes/{id}/sources/workbook` (`uploadProcessWorkbook`) | `X-User-Id` | multipart `file`, `cut_off_date` (`YYYY-MM-DD`) | `WorkbookUpload {sources[] {name, rows}, warnings}` | 422 `invalid_document` |
+| `POST /processes/{id}/run` (`runProcess`) | manager (PR #92) | – | `RunSummary {decided, by_decision, down_sources?}` | 409 nothing published, a rule compiling, or no active rule |
+| `POST /processes/{id}/sources/workbook` (`uploadProcessWorkbook`) | `X-User-Id` | multipart `file`, `cut_off_date` (`YYYY-MM-DD`; optional today, required once PR #92 merges) | `WorkbookUpload {sources[] {name, rows}, warnings}` | 422 `invalid_document`; 422 with no `cut_off_date` (PR #92) |
 | `GET /processes/{id}/sources` (`listSources`) | – | – | `[{name, origin, rows, loaded_at, status, error, checked_at}]` | 404 |
 | `GET /processes/{id}/sources/parameters` (`getSource`) | – | – | `data[0].cut_off_date` (the current value) | 404 when not loaded yet |
-| `POST /processes/{id}/sources/{name}/sync` (`syncSource`) | manager (after auth PR) | – | `SyncResult {origin, rows, diff {added, removed, changed}}` | 502 `source_unavailable` |
+| `POST /processes/{id}/sources/{name}/sync` (`syncSource`) | manager (PR #92) | – | `SyncResult {origin, rows, diff {added, removed, changed}}` | 502 `source_unavailable` |
 
 **Changes:**
 - `live.ts`:
@@ -302,7 +351,7 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 - Escalation reason `SOURCE_UNAVAILABLE:` → Fuente no disponible, with the code visible.
 - Symbol `parameters.cut_off_date` → Fecha de corte.
 
-**Depends on:** available now. The 401/403 on `run` and `sync` is pending on `feat/integration-backend-runs-auth`, and package 1 already handles it.
+**Depends on:** available now. The 401/403 on `run` and `sync` is pending on PR #92, and package 1 already handles it.
 
 **Done check (mock off, a published version, `make erp` running):**
 1. Definición → Fuentes. The drop zone is disabled until you pick 2026-09-18.
@@ -377,10 +426,11 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 | Method, path (operationId) | Headers | Body | Response fields used | Errors |
 |---|---|---|---|---|
 | `GET /instances/{id}` (`getInstance`) | – | – | `reason` (engine escalation reason), `decisions[-1].results[] {rule_id, fires, reason}`, `reviews[-1] {recommendation, reasoning}` | 404 |
-| `GET /instances/{id}/suggestion` (`getSuggestion`) | `X-User-Id` after the auth PR | – | `Suggestion {decision, reasoning, proposed_rule, proposed_type}` | 409 not in the queue, 502 `llm_error` |
-| `POST /instances/{id}/resolve` (`resolveInstance`) | manager | `ResolveIn {decision, reason}` | `InstanceDetail` (`status`, `decision`, `review_pending`) | 409 unknown decision type, 403 operator (after the auth PR) |
+| `GET /instances/{id}/suggestion` (`getSuggestion`) | `X-User-Id` after PR #92 | – | `Suggestion {decision, reasoning, proposed_rule, proposed_type}` | 409 not in the queue, 502 `llm_error` |
+| `POST /instances/{id}/resolve` (`resolveInstance`) | manager | `ResolveIn {decision, reason}` | `InstanceDetail` (`status`, `decision`, `review_pending`) | 409 unknown decision type, 403 operator (after PR #92) |
 | `POST /processes/{id}/rules` (`createRule`) | `X-User-Id` | `RuleIn {text, type, decision}` | `RuleDetail {id, status}` | 422 |
-| **Pending:** `GET /processes/{id}/proposals?status=open` | – | – | the proposals with `kind=decision` and `instance_id` = this case (see package 8) | – |
+| **Pending, PR #93:** `POST /instances/{id}/proposal` | manager | – | `payload {proposed, why[], options[{decision, consequence}], escalation_reason, fired_rules}`, `evidence` | 502 `llm_error` |
+| **Pending, PR #93:** `POST /instances/{id}/resolve` with `ResolveIn.proposal_id` | manager | `{decision, reason, proposal_id}` | the proposal is accepted when `decision` equals the proposed one, and rejected otherwise | 409 |
 | **Pending:** `POST /proposals/{id}/accept`, `POST /proposals/{id}/reject` | manager | `{reason}` | the accepted proposal; for `decision`, the resolved instance | 409 already decided |
 
 **Changes, now (on today's endpoints):**
@@ -400,9 +450,10 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
   - "Resolver y crear la regla" stays as a soft `Button`. It sends `createRule` with `{text, type, decision}` in English.
   - On success, invalidate `queue`, `instance`, `summary` and `alerts`. The case leaves the list.
 
-**Changes, when `feat/integration-proposals` lands:**
-- The `Suggested` card lists the case's open `decision` proposals. It reuses the card and gives each proposal its own "Aceptar" (`Button primary`) and "Rechazar" (`Button soft`).
-- Accept calls `POST /proposals/{id}/accept`, which resolves the case. Reject asks for a reason in the existing `Textarea`.
+**Changes, when PR #93 lands:**
+- Opening the case calls `POST /instances/{id}/proposal`. `Suggested` shows `payload.why[]` as the explanation and `payload.options[]` as the choices, each with its `consequence`. The proposed option comes first.
+- Each option reuses the card, with "Aceptar" (`Button primary`) and "Rechazar" (`Button soft`).
+- Accept calls `POST /proposals/{id}/accept`, which resolves the case. Choosing another decision in the `Select` sends `resolve` with `proposal_id`, and the backend rejects the proposal. Reject asks for a reason in the existing `Textarea`.
 - `getSuggestion` stays only as a fallback, if the backend keeps it.
 
 **Vocabulary:**
@@ -412,7 +463,7 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 
 **Depends on:**
 - Available now: suggestion and resolve.
-- Pending: `feat/integration-proposals`, for the several proposals and accept/reject.
+- Pending: PR #93 (`feat/integration-proposals`, draft), for the explained options and accept/reject.
 
 **Done check (mock off, LLM keys set):**
 1. Revisión → select an ESCALAR case. "Por qué se escaló" shows the engine reason, for example `SOURCE_UNAVAILABLE: erp`, and the rule text.
@@ -491,12 +542,12 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 - `Process.tsx` `Runs` lists "Las de esta sesión", which is React state lost on reload (row 7).
 - "Historial" links to Instances unfiltered.
 
-**Endpoints (pending, provisional shape):** confirm them in `schema.d.ts` when the PR lands. If they differ, the OpenAPI wins.
+**Endpoints (PR #92, `feat/integration-backend-runs-auth`, draft):** the shape below comes from the PR description, and the planned operation ids are `listRuns` and `getRun`. Confirm it in `schema.d.ts` when the PR merges; if they differ, the OpenAPI wins.
 
 | Method, path | Headers | Body | Response fields to use | Errors |
 |---|---|---|---|---|
-| `GET /processes/{id}/runs` | – | – | a list, newest first: `id`, `created_at`, `version_id` (plus version `number` if the backend includes it), `author`, `decided`, `by_decision`, `down_sources` | 404 |
-| `GET /runs/{id}` | – | – | the same run plus its cases: `instances[] {id, name, decision}` | 404 |
+| `GET /processes/{id}/runs` (`listRuns`) | – | – | a list, newest first. Each run has its `execution_id`, time, version, `author`, `by_decision`, `escalated`, `escalations` and `rules_hash`. `by_decision` and `escalated` count every instance the run evaluated, so a reprocess can be compared with the run before it | 404 |
+| `GET /runs/{id}` (`getRun`) | – | – | the same run plus the decisions it appended (instance id, name, decision) | 404 |
 
 **Changes:**
 - `live.ts`: add `listRuns(processId)` and `getRun(id)`.
@@ -514,11 +565,11 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
   - Browser Back works, because the filter lives in the URL.
 - A rerun after learning:
   - Show whatever runs the backend returns. The split makes "fewer ESCALAR" visible, and no Learning screen is needed (Martín's decision).
-  - If the backend counts a reprocess as a run, it appears with no extra frontend work.
+  - PR #92 counts a reprocess as a run, so it appears with no extra frontend work. After a learning norm is adopted, a reprocess shows the drop in `escalated`.
 
 **Vocabulary:** version as `v{number}`. Decision names verbatim.
 
-**Depends on:** pending: `feat/integration-backend-runs-auth`.
+**Depends on:** pending: PR #92 (`feat/integration-backend-runs-auth`, draft).
 
 **Done check (mock off):**
 1. Run twice, then reload the Panel. Both runs are listed with their version and split.
@@ -550,13 +601,14 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 - The escalation suggestion: `GET /instances/{id}/suggestion`. One proposal, no accept endpoint.
 - Process chat (#69): `/process-drafts` with `{process_id}`, messages in `discuss` or `revise` mode, then `POST …/reviews` `{proposal, disposition: accepted|rejected}`, `…/prepare` and `…/publish`. **Its publish goes straight to a new version, not into the draft.** So do not wire accept through `…/prepare` or `…/publish`: that contradicts "accept stages into the draft".
 - Learning (#56): `POST /processes/{id}/learning`, then `GET /norm-proposals/{id}`, `…/validate` (up to 5 min), and `…/approve {validation_id, reason}` or `…/reject {reason}`. Its approve publishes directly.
-- The unified inbox API wraps these. Build against it, not against the three above.
+- PR #93 (`feat/integration-proposals`) wraps these in one inbox API. Build against it, not against the three above.
 
-**Endpoints (pending, provisional shape):**
+**Endpoints (PR #93, `feat/integration-proposals`, draft):** the shape below comes from the PR description, and the response schema is `ManagerProposalOut`. Confirm it in `schema.d.ts` when the PR merges; if they differ, the OpenAPI wins. Every endpoint needs the manager's `X-User-Id`. Without it you get 401, and a non-manager gets 403.
 
 | Method, path | Headers | Body | Response fields to use | Errors |
 |---|---|---|---|---|
-| `GET /processes/{id}/proposals?status=open` | manager | – | `[{id, kind, channel, status, title/text, reasoning, evidence[], instance_id?, payload, created_at}]` | 403 |
+| `POST /instances/{id}/proposal` | manager | – | creates the escalation proposal: `payload {proposed, why[], options[{decision, consequence}], escalation_reason, fired_rules}` and `evidence` | 409, 502 `llm_error` |
+| `GET /processes/{id}/proposals?status=open` | manager | – | `[{id, channel, kind, summary, rationale, evidence, payload, status, author, created_at, resolved_by, resolved_at, outcome}]` | 403 |
 | `POST /proposals/{id}/accept` | manager | `{reason?}` | the proposal with `status: accepted` and what it changed (the resolved instance, or the new draft `revision`) | 409 already decided, or a stale draft |
 | `POST /proposals/{id}/reject` | manager | `{reason}` | the proposal with `status: rejected` | 409 |
 
@@ -579,7 +631,7 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 - Channel `escalation`/`chat`/`learning` → Asistente/Chat/Aprendizaje.
 - Status `open`/`accepted`/`rejected` → Abierta/Aceptada/Rechazada.
 
-**Depends on:** pending: `feat/integration-proposals`.
+**Depends on:** pending: PR #93 (`feat/integration-proposals`, draft).
 
 **Done check (mock off, LLM keys set):**
 1. In the chat (package 9), ask for a rule. A `rule` proposal appears as a card.
@@ -609,7 +661,7 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 |---|---|---|---|---|
 | `GET /processes/{id}/draft` (`getProcessDraft`) | manager | – | `revision`, `snapshot` (current candidate) | 404 no draft |
 | `PUT /processes/{id}/draft` (`editProcessDraft`) | manager | `DraftIn {expected_revision, description?}` or `{expected_revision, symbols: SymbolIO[]}`. Omitted fields keep their values | `VersionDraftOut {revision, snapshot}` | 409 stale revision: reload and retry |
-| `POST /processes/definition` (`loadDefinition`) | manager (after the auth PR) | `Definition` (the English pack shape, sent as it is) | `LoadResult {process.id, new_rules, new_users}` | 409 rules with `code` files, or a draft exists; 422 |
+| `POST /processes/definition` (`loadDefinition`) | manager (after PR #92) | `Definition` (the English pack shape, sent as it is) | `LoadResult {process.id, new_rules, new_users}` | 409 rules with `code` files, or a draft exists; 422 |
 | `POST /processes/{id}/rules`, `POST /rules/{id}/compile`, `GET /rules/{id}`, `GET /rules/{id}/impact`, `POST /rules/{id}/activate`, `/retire` | manager for activate and retire | `RuleIn {text, type, decision}` | `RuleDetail {code, tests, report {valid, tests[], discrepancies, attempts, reviews, needs_data}}` | 409 |
 | `POST /processes/{id}/norm` (`normalizeNorm`) | manager | `NormIn {text}` | `NormOut.norm_rules[] {text, checks[] {text, type, decision, rule_id}}` | 502 `llm_error` |
 | `POST /process-drafts` (`startDiscoverySession`) | manager | `{process_id}` | `DiscoveryDraftOut {id, revision, messages}` | 409 |
@@ -656,7 +708,7 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 
 **Depends on:**
 - Available now: the draft edits, the import, rules, norm, and discuss-mode chat.
-- Pending: `feat/integration-proposals`, for the chat's proposals (package 8).
+- Pending: PR #93, for the chat's proposals (package 8). With #93, every revise-mode message on an existing process becomes proposals, one per changed kind, and a new revision supersedes the open ones.
 - Pending, integration-plan row 10: the backend rejecting `booleano` (not started). The `Select` already prevents it.
 
 **Done check (mock off):**
@@ -681,7 +733,7 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 | Method, path (operationId) | Headers | Body | Response fields used | Errors |
 |---|---|---|---|---|
 | `GET /processes/{id}/alerts?status=open` (`listAlerts`) | – | – | `[{id, instance_id, name, before, after, trigger {type: source_sync or rule_change, …}, evidence, status, created_at}]` | 404 |
-| `POST /alerts/{id}/ack` (`ackAlert`) | manager (after the auth PR) | `AckIn {note?}` | `AlertOut {status, acknowledged_by, acknowledged_at, note}` | 409 already acknowledged |
+| `POST /alerts/{id}/ack` (`ackAlert`) | manager (after PR #92) | `AckIn {note?}` | `AlertOut {status, acknowledged_by, acknowledged_at, note}` | 409 already acknowledged |
 
 **Changes:**
 - `live.ts`: add `listAlerts(processId, status)` and `ackAlert(id, note)`.
@@ -699,7 +751,7 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 - Alert status `open`/`acknowledged`/`resolved` → Abierta/Vista/Resuelta.
 - Trigger `source_sync`/`rule_change` → Cambio en la fuente/Cambio de reglas.
 
-**Depends on:** available now. The manager-only ack is pending on the auth PR, and package 1 handles it.
+**Depends on:** available now. The manager-only ack is pending on PR #92, and package 1 handles it.
 
 **Done check (mock off):**
 1. Load the workbook with a different cut-off, or sync the ERP after changing a supplier's row, so some decided rows change.
@@ -789,30 +841,31 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 
 | # | Package | Depends on | Status | Estimate |
 |---|---|---|---|---|
-| 0 | Setup | #91 `feat/integration-phase0` | Waiting for the #91 merge | S |
-| 1 | Login and identity | available now (401/403: `feat/integration-backend-runs-auth`) | Can start | S |
+| 0 | Setup | #91 (merged) | Can start | S |
+| 0b | Error states where there are none | available now | Can start | S |
+| 1 | Login and identity | available now (401/403: PR #92) | Can start | S |
 | 2 | Panel and publish with version | available now | Can start | M |
 | 3 | Upload, run and sources | available now | Can start | M |
 | 4 | Queue and tabs (`review_pending`) | available now | Can start | S |
-| 5 | Escalation detail and resolve | available now; several proposals: `feat/integration-proposals` | Can start | M |
+| 5 | Escalation detail and resolve | available now; explained options and accept/reject: PR #93 | Can start | M |
 | 6 | Trace view with the real document | available now; `FieldReading.symbol` (plan 0.5) has a workaround | Can start | M |
-| 7 | Run history timeline | `feat/integration-backend-runs-auth` | Waits | S |
-| 8 | Proposals inbox | `feat/integration-proposals` | Waits | M |
-| 9 | Definition editing and chat | available now; chat proposals: `feat/integration-proposals` | Can start | L |
+| 7 | Run history timeline | PR #92 | Waits | S |
+| 8 | Proposals inbox | PR #93 | Waits | M |
+| 9 | Definition editing and chat | available now; chat proposals: PR #93 | Can start | L |
 | 10 | Alerts with ack | available now | Can start | S |
 | 11 | Settings to the backend | available now | Can start | S |
-| 12 | Mock removal | 1-11 | Last | M |
+| 12 | Mock removal | 0b-11 | Last | M |
 
-Demo path if time runs short: 0 → 1 → 2 → 3 → 4 → 5 → 6.
+Demo path if time runs short: 0 → 0b → 1 → 2 → 3 → 4 → 5 → 6.
 Until package 9 lands, nobody clicks Contexto → Guardar or edits Inputs on the demo database.
 
 ## What the backend team delivers and when
 
 | Delivery | Branch or PR | What it gives the frontend | Unblocks | Status |
 |---|---|---|---|---|
-| Contract, typed client, mock opt-in | `feat/integration-phase0`, PR #91 | Proxy to `:8000` and `VITE_API_TARGET`; the mock only with `VITE_API_MODE=mock`; `npm run gen:api` and `schema.d.ts`; clean operation ids; typed `ExecutionOut` and `ReplayOut` | 0, and every typed package | Open; merge first |
-| Auth enforcement and run history | `feat/integration-backend-runs-auth` | 401 with no header, 403 for an operator on every write; `GET /processes/{id}/runs` and `GET /runs/{id}` | 7; hardens 1, 3, 5, 10 | In progress |
-| Unified proposals | `feat/integration-proposals` | `GET /processes/{id}/proposals?status=open`, `POST /proposals/{id}/accept` and `/reject` across the escalation, chat and learning channels | 8; the rest of 5 and 9 | In progress |
+| Contract, typed client, mock opt-in | PR #91 | Proxy to `:8000` and `VITE_API_TARGET`; the mock only with `VITE_API_MODE=mock`; `npm run gen:api` and `schema.d.ts`; clean operation ids; typed `ExecutionOut` and `ReplayOut` | 0, and every typed package | **Available now** (merged at b9534a7) |
+| Manager auth, run history, required cut-off | PR #92 `feat/integration-backend-runs-auth` | 401 `unauthenticated` with no or an unknown `X-User-Id`; 403 for a non-manager on run, reprocess, sync, definition, resolve, ack and `POST /users`; `GET /processes/{id}/runs` and `GET /runs/{id}`; `cut_off_date` required on the workbook upload (422 without it) | 7; hardens 1, 3, 5, 10 | Draft, in progress |
+| Unified proposals | PR #93 `feat/integration-proposals` | `POST /instances/{id}/proposal`, `GET /processes/{id}/proposals?status=`, `POST /proposals/{id}/accept` and `/reject`, `ResolveIn.proposal_id`; the chat and learning channels create proposals | 8; the rest of 5 and 9 | Draft, in progress |
 | `FieldReading.symbol` | none yet (integration-plan task 0.5) | Evidence joined to its symbol with no frontend map | Removes the workaround in 6 | Not started |
 | Symbol type enum | none yet (row 10) | `symbols[].type` rejects anything but `text`/`number`/`date` | Nothing (the `Select` covers it) | Not started |
 | `Last-Event-ID` on `/events/stream` | later (row 35) | Live updates without polling | Post-demo | Later |
