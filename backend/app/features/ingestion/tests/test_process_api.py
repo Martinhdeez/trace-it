@@ -12,9 +12,10 @@ from app.core.events import Event
 from app.features.ingestion.model import File, Instance
 from app.features.ingestion.runtime import current_service
 from app.features.ingestion.service import ExtractionService
-from app.features.processes.model import DecisionType, Process
+from app.features.processes.model import DecisionType
 from app.features.users.model import User
 from app.main import app
+from tests.support import rows
 
 from .conftest import VALID, NoOCR, NoVLM, pdf_bytes
 
@@ -30,9 +31,9 @@ pytestmark = [
 async def process_api(settings):
     suffix = uuid.uuid4().hex
     async with session_factory() as session:
-        process = Process(name="Ingestion test " + suffix, description="Generic process")
+        process = await rows.process(session, "Ingestion test " + suffix, "Generic process")
         user = User(name="Operator", email=suffix + "@test.invalid", role="operator")
-        session.add_all([process, user])
+        session.add(user)
         await session.flush()
         session.add(DecisionType(process_id=process.id, name="ACCEPT", priority=0, is_default=True))
         await session.commit()

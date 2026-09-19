@@ -23,6 +23,8 @@ from app.features.agents import llm, sandbox
 from app.features.processes.model import Process, Symbol
 from app.features.rules.model import Rule
 from app.features.sources.model import Source
+from app.features.use_cases import service as use_cases
+from app.features.use_cases.model import UseCase
 
 # A test case, as written by the tester from the rule text alone:
 # {"name": str, "instance": {...}, "sources": {...}, "others": [...], "fires": bool}
@@ -94,84 +96,30 @@ class Review(BaseModel):
     verdicts: list[Verdict]
 
 
-SHARED = """The rule is evaluated by a Python function
-`evaluate(instance, sources, others) -> {"fires": bool, "reason": str}`:
-- `instance`: {symbol: value} of the instance being evaluated.
-- `sources`: {source_name: [row, ...]}, each row a dict {column: value}.
-- `others`: the other instances of the process, each {symbol: value} plus "_instance" (its \
-name). Relevant only if the rule talks about other instances (duplicates, totals...).
-- Rule type: `requirement` = something that must hold; it fires when it does NOT hold. \
-`prohibition` = something that must not happen; it fires when it DOES happen.
-- A value the rule needs may be missing or None. If the rule text or the process \
-description says what to do then, that is what happens. Otherwise the function raises, \
-and the engine sends the instance to a person: it never guesses.
+@dataclass(frozen=True)
+class TesterDeps:
+    symbols: set[str]  # the only valid instance keys
+    min_tests: int
 
-Process description: conventions that apply to every rule of the process (normalisation, \
-units, tolerances...). Apply them before your own assumptions. If they contradict the \
-rule's text, the rule's text wins.
 
-If the rule needs data that is neither a symbol nor a source column, answer with \
-NeedsData (what is missing and why) instead of inventing a field."""
-
-TESTER = f"""You write the tests for ONE business rule, from its text and the process \
-context only. You never see the code: your tests are the reference it must meet.
-
-{SHARED}
-
-Write at least {MIN_TESTS} tests: each with `name` (unique), `instance_json` (JSON \
-object), `sources_json` (JSON object), `others_json` (JSON list) and `fires` (what the \
-rule must return). Cover cases where it fires and where it does not, and the limits and \
-exceptions the rule's text mentions. Use only the given symbol names as instance keys and \
-only the given source names. Do not test a missing value unless the text or the \
-description says what happens then."""
-
-CODER = f"""You compile ONE business rule into deterministic Python.
-
-{SHARED}
-
-Code contract (field `code`, Python code only, no markdown):
-- Define `evaluate(instance, sources, others)` returning {{"fires": bool, "reason": str}}.
-- Pure, deterministic function: no network, disk, clock, randomness or global state. \
-Only these imports are allowed: decimal, datetime, re, math, unicodedata.
-- Amounts and other decimals: compare with Decimal(str(value)). Use a tolerance only if \
-the rule or the description states one.
-- `reason`: short code in UPPER_CASE_WITH_UNDERSCORES (e.g. "VALUE_MISMATCH"). When it \
-does not fire, a reason such as "OK".
-
-You get tests written from the rule text by someone who never saw your code. Make them \
-pass. If you are sure a test contradicts the rule text, list it in `disputes` with your \
-argument (quote the text); it goes back to its author. Never special-case a test's data."""
-
-REVIEWER = f"""You wrote tests for a business rule. The person who implements it \
-disputes some of them. Re-read the rule text and the process context and, for each \
-disputed test, give the result the rule really requires (`fires`) and why. Change a test \
-only if the text supports the objection; otherwise keep it.
-
-{SHARED}"""
-
+# Instructions are not here: the platform prompts are files (`prompts/`), and each use case
+# adds its own guidance, model and limits (ADR 0011).
 tester = Agent(
     None,
-    deps_type=set[str],  # the symbol names: the only valid instance keys
+    deps_type=TesterDeps,
     output_type=[TestSuite, NeedsData],
-    instructions=TESTER,
     name="tester",
     retries=MAX_REPAIRS,
 )
-coder = Agent(
-    None,
-    output_type=[Proposal, NeedsData],
-    instructions=CODER,
-    name="compiler",
-    retries=MAX_REPAIRS,
-)
-reviewer = Agent(None, output_type=Review, instructions=REVIEWER, name="reviewer")
+coder = Agent(None, output_type=[Proposal, NeedsData], name="compiler", retries=MAX_REPAIRS)
+reviewer = Agent(None, output_type=Review, name="reviewer")
 
 
 def context(rule: Rule, symbols: list[Symbol], sources: Sources, description: str) -> str:
     """What every agent sees: the rule, the process conventions, the symbols and a sample
     of each source."""
     lines = [
-        "Process description (conventions shared by all its rules):",
+        "Use case description (conventions shared by all its rules):",
         description or "(no description)",
         "",
         f"Rule ({rule.type}): {rule.text}",
@@ -190,10 +138,10 @@ def context(rule: Rule, symbols: list[Symbol], sources: Sources, description: st
     return "\n".join(lines)
 
 
-def tests_of(suite: TestSuite) -> list[Test]:
+def tests_of(suite: TestSuite, min_tests: int = MIN_TESTS) -> list[Test]:
     """The suite's tests with their JSON decoded. Raises ValueError when malformed."""
-    if len(suite.tests) < MIN_TESTS:
-        raise ValueError(f"At least {MIN_TESTS} tests are needed; there are {len(suite.tests)}")
+    if len(suite.tests) < min_tests:
+        raise ValueError(f"At least {min_tests} tests are needed; there are {len(suite.tests)}")
     tests = []
     for t in suite.tests:
         try:
@@ -217,14 +165,14 @@ def tests_of(suite: TestSuite) -> list[Test]:
 
 
 @tester.output_validator
-def _well_formed(ctx: RunContext[set[str]], output: TestSuite | NeedsData) -> Any:
+def _well_formed(ctx: RunContext[TesterDeps], output: TestSuite | NeedsData) -> Any:
     if isinstance(output, NeedsData):
         return output
     try:
-        tests = tests_of(output)
+        tests = tests_of(output, ctx.deps.min_tests)
     except ValueError as e:
         raise ModelRetry(f"Malformed tests: {e}") from e
-    unknown = {k for t in tests for k in t["instance"]} - ctx.deps
+    unknown = {k for t in tests for k in t["instance"]} - ctx.deps.symbols
     if unknown:
         raise ModelRetry(
             f"Unknown instance keys {sorted(unknown)}: use only the symbols given. If the "
@@ -286,15 +234,26 @@ def _failure(f: dict[str, Any]) -> str:
     return f"{f['name']}: expected {_expect(f['expected'])}, got {f['got']}"
 
 
-class Runs:
-    """The agent runs of one compilation, and their traces."""
+Setups = dict[str, llm.Setup]  # role -> how it runs in the rule's use case
 
-    def __init__(self) -> None:
+
+class Runs:
+    """The agent runs of one compilation, with the use case's setups, and their traces."""
+
+    def __init__(self, setups: Setups | None = None) -> None:
+        self.setups = setups or {}
         self.traces: list[llm.Trace] = []
 
-    async def __call__(self, agent: Agent, role: str, prompt: str, deps: Any = None) -> Any:
+    def setup(self, role: str) -> llm.Setup:
+        return self.setups.get(role) or llm.Setup()
+
+    async def __call__(
+        self, agent: Agent, role: str, prompt: str, instructions: str, deps: Any = None
+    ) -> Any:
         try:
-            output, trace = await llm.run(agent, role, prompt, deps=deps)
+            output, trace = await llm.run(
+                agent, role, prompt, instructions=instructions, setup=self.setup(role), deps=deps
+            )
         except llm.AgentError as e:
             raise CompilationError(e.message) from e
         self.traces.append(trace)
@@ -319,9 +278,28 @@ async def _review(
         f"  {_as_json([by_name[d.test]])}\n  Objection: {d.argument}"
         for d in disputed
     )
-    review = await runs(reviewer, "tester", f"{ctx}\n\nDisputed tests:\n{question}")
+    review = await runs(
+        reviewer,
+        "tester",
+        f"{ctx}\n\nDisputed tests:\n{question}",
+        llm.prompt("reviewer", "shared"),
+    )
     asked = {d.test for d in disputed}
     return [v for v in review.verdicts if v.test in asked]
+
+
+def _examples(setup: llm.Setup, rule: Rule) -> str:
+    """The use case's approved rule/code pairs, never the rule being compiled: an example
+    of the rule itself would hand the model its answer."""
+    examples = [e for e in setup.settings.examples if e.text.strip() != rule.text.strip()]
+    if not examples:
+        return ""
+    return (
+        "\n\n## Approved code of other rules of this use case (follow their conventions)\n"
+        + "\n".join(
+            f"\nRule ({e.type}): {e.text}\n```python\n{e.code.strip()}\n```" for e in examples
+        )
+    )
 
 
 async def compile_text(
@@ -330,29 +308,35 @@ async def compile_text(
     """The compile loop, without the database: the tester's tests, then the coder against
     them until they pass or the attempts run out."""
     ctx = context(rule, symbols, sources, description)
-    suite = await runs(tester, "tester", ctx, deps={s.name for s in symbols})
+    min_tests = int(runs.setup("tester").limit("min_tests", MIN_TESTS))
+    max_reviews = int(runs.setup("tester").limit("max_reviews", MAX_REVIEWS))
+    max_attempts = int(runs.setup("compiler").limit("max_attempts", MAX_ATTEMPTS))
+    tester_instructions = llm.prompt("tester", "shared") + f"\n\nWrite at least {min_tests} tests."
+    deps = TesterDeps({s.name for s in symbols}, min_tests)
+    suite = await runs(tester, "tester", ctx, tester_instructions, deps=deps)
     if isinstance(suite, NeedsData):
         return _needs_data(suite, "tester")
-    tests = tests_of(suite)
+    tests = tests_of(suite, min_tests)
     by_name = {t["name"]: t for t in tests}
+    coder_instructions = llm.prompt("coder", "shared") + _examples(runs.setup("compiler"), rule)
 
     reviews: list[dict[str, Any]] = []
     review_rounds = 0
     feedback = ""
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+    for attempt in range(1, max_attempts + 1):
         prompt = f"{ctx}\n\nTests your code must pass (JSON):\n{_as_json(tests)}{feedback}"
-        proposal = await runs(coder, "compiler", prompt)
+        proposal = await runs(coder, "compiler", prompt, coder_instructions)
         if isinstance(proposal, NeedsData):
             return _needs_data(proposal, "compiler")
         results = await asyncio.to_thread(run_tests, proposal.code, tests)
         failures = [r for r in results if not r["passed"]]
-        if not failures or attempt == MAX_ATTEMPTS:
+        if not failures or attempt == max_attempts:
             break
         feedback = "\n\nYour previous code:\n" + proposal.code + "\n\nIt fails these tests:\n"
         feedback += "\n".join(f"- {_failure(f)}" for f in failures)
         failing = {f["name"] for f in failures}
         disputed = [d for d in proposal.disputes if d.test in failing]
-        if disputed and review_rounds < MAX_REVIEWS:
+        if disputed and review_rounds < max_reviews:
             review_rounds += 1
             verdicts = await _review(runs, ctx, disputed, by_name)
             for v in verdicts:
@@ -373,16 +357,19 @@ async def compile_text(
     return Compilation(proposal.code, tests, report)
 
 
-async def read_process(session: AsyncSession, process_id: int) -> tuple[str, Sources]:
-    """The process description and the current sources (latest load per name)."""
-    description = await session.scalar(select(Process.description).where(Process.id == process_id))
+async def read_process(session: AsyncSession, process_id: int) -> tuple[str, Sources, Setups]:
+    """The use case's description and agent setups, and the process's current sources
+    (latest load per name)."""
+    process = await session.get(Process, process_id)
+    use_case = await session.get(UseCase, process.use_case_id)
     loads = await session.scalars(
         select(Source)
         .where(Source.process_id == process_id)
         .order_by(Source.name, Source.loaded_at.desc())
         .distinct(Source.name)
     )
-    return description or "", {s.name: s.rows for s in loads}
+    setups = await use_cases.setups(session, use_case.id)
+    return use_case.description, {s.name: s.rows for s in loads}, setups
 
 
 async def compile_rule(session: AsyncSession, rule: Rule, symbols: list[Symbol]) -> Compilation:
@@ -392,8 +379,8 @@ async def compile_rule(session: AsyncSession, rule: Rule, symbols: list[Symbol])
             # returns {"fires": bool, "reason": str}
 
     against them. The result is reported, never silently accepted."""
-    description, sources = await read_process(session, rule.process_id)
-    runs = Runs()
+    description, sources, setups = await read_process(session, rule.process_id)
+    runs = Runs(setups)
     result = await compile_text(rule, symbols, sources, description, runs)
     for trace in runs.traces:
         events.record(

@@ -16,7 +16,11 @@ class DecisionTypeIO(BaseModel):
 
 class ProcessIn(BaseModel):
     name: str
-    description: str = ""
+    # The use case this process belongs to, by name; it must exist (`use-case.json` next to
+    # the pack, loaded first). Without it the process gets a use case of its own, with the
+    # same name and this `description`.
+    use_case: str | None = None
+    description: str | None = None
     decision_types: list[DecisionTypeIO]
     symbols: list[SymbolIO] = []
 
@@ -24,7 +28,8 @@ class ProcessIn(BaseModel):
 class ProcessOut(BaseModel):
     id: int
     name: str
-    description: str
+    use_case_id: int
+    description: str  # the use case's
 
 
 class ProcessDetail(ProcessOut):
