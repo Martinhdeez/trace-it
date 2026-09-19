@@ -104,6 +104,9 @@ async def load_workbook(session, process_id, user_id, result, content, cut_off_d
         },
     )
     await session.commit()
+    from app.features.alerts.service import after_source_load
+
+    await after_source_load(process_id, list(tables))
     return {
         "process_id": process_id,
         "file_hash": result.sha256,

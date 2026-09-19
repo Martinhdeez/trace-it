@@ -1,0 +1,32 @@
+[
+    {
+        "id": 69,
+        "trace_id": "01a0b90bf46a2c2a32d15c7641c82f87",
+        "instance_id": null,
+        "rule_id": null,
+        "step": "detect_stale_decisions",
+        "status": "ok",
+        "data": {
+            "trigger": {
+                "kind": "source_sync",
+                "sources": [
+                    {
+                        "name": "erp",
+                        "source_id": 5,
+                        "rows_added": 2,
+                        "previous_id": 4,
+                        "rows_removed": 2
+                    }
+                ]
+            },
+            "alert_ids": [
+                1
+            ],
+            "instances": 4,
+            "would_change": 2,
+            "alerts_created": 1
+        },
+        "duration_ms": 440,
+        "created_at": "2026-09-19T09:42:49.169278Z"
+    }
+]

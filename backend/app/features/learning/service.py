@@ -289,6 +289,9 @@ async def approve(
         adopted.snapshot = {**adopted.snapshot, **candidate, "version_id": published.id}
         await session.commit()
         span.set(adoption_id=adopted.id, rule_ids=rule_ids)
+    from app.features.alerts.service import after_publish
+
+    await after_publish(analysis.process_id, published.id)
     return out(AdoptionOut, adopted)
 
 

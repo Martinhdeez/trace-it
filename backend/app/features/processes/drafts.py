@@ -450,4 +450,7 @@ async def publish(session, draft_id, revision, user):
         },
     )
     await session.commit()
+    from app.features.alerts.service import after_publish
+
+    await after_publish(process.id, version.id)
     return await output(session, draft.id)

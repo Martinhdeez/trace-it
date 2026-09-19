@@ -261,6 +261,7 @@ class ExecutionMetrics(PlaneMetrics):
     resolutions_by_author: dict[str, int]
     resolution_p50_s: float | None  # engine decision -> the person's decision after it
     resolution_p95_s: float | None
+    open_alerts: int  # stale decisions nobody acknowledged or acted on (ADR 0026)
 
 
 class PlaneHealth(BaseModel):

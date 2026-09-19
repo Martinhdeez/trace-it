@@ -18,6 +18,7 @@ from app.core.database import session_factory
 from app.core.events import Event
 from app.features.agents import decision_reviewer
 from app.features.agents.llm import TRUNCATED
+from app.features.alerts import service as alerts
 from app.features.decisions import service as decisions
 from app.features.decisions.model import ENGINE, Decision
 from app.features.decisions.schemas import DecisionOut
@@ -114,6 +115,8 @@ PLANES: dict[str, Plane] = {
     "suggest_escalation": _EXECUTION,
     "resolution": _EXECUTION,
     "export_outcomes": _EXECUTION,
+    "detect_stale_decisions": _EXECUTION,  # ADR 0026
+    "ack_alert": _EXECUTION,
 }
 STREAM_POLL_S = 1.0
 
@@ -729,6 +732,7 @@ async def _execution(session: AsyncSession, where: list, base: dict) -> Executio
         resolutions_by_author=authors,
         resolution_p50_s=round(statistics.median(waits), 1) if waits else None,
         resolution_p95_s=round(_quantile(waits, 0.95), 1) if waits else None,
+        open_alerts=await alerts.open_count(session, process_id),
     )
 
 
