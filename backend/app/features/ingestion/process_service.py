@@ -11,7 +11,7 @@ from app.core.events import Event
 from app.features.processes.model import Process
 
 from .model import File, Instance
-from .process_extraction import reusable_evidence
+from .process_extraction import name_symbols, reusable_evidence
 from .schemas import ExtractionResult
 
 
@@ -138,7 +138,7 @@ async def document_result(session, instance_id):
     )
     if event is None:
         raise NotFoundError("No document extraction is recorded for this instance")
-    return ExtractionResult.model_validate(event.data["extraction"])
+    return name_symbols(ExtractionResult.model_validate(event.data["extraction"]), event.data)
 
 
 async def document_content(session, instance_id) -> tuple[str, bytes]:

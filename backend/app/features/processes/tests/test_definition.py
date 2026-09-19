@@ -136,3 +136,17 @@ async def test_a_missing_use_case_is_a_conflict() -> None:
         r = await api.post("/processes/definition", json=data)
     assert r.status_code == 409, r.text
     assert "does not exist" in r.json()["message"]
+
+
+async def test_a_symbol_type_outside_the_list_is_rejected() -> None:
+    """Both packs load (above); `booleano` gets a 422 on the pack and on the draft."""
+    data = _definition("travel-expenses.json")
+    data["symbols"][-1]["type"] = "booleano"
+    async with manager_client() as api:
+        r = await api.post("/processes/definition", json=data)
+        assert r.status_code == 422, r.text
+        data["symbols"][-1]["type"] = "boolean"
+        pid = (await _load(api, data))["process"]["id"]
+        symbols = [s | {"type": "booleano"} for s in data["symbols"]]
+        r = await api.put(f"/processes/{pid}/draft", json={"symbols": symbols})
+        assert r.status_code == 422, r.text

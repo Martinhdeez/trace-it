@@ -175,6 +175,8 @@ async def test_invoice_extension_preserves_default_fields_and_adds_new_symbol(pa
         assert extended["symbols"][name]["value"] == symbol["value"]
     for name, field in initial["extraction"]["fields"].items():
         assert extended["extraction"]["fields"][name] == field
+    assert extended["extraction"]["fields"]["expires_on"]["symbol"] == "expires_on"
+    assert extended["extraction"]["fields"]["supplier_tax_id"]["symbol"] == "issuer_nif"
 
 
 async def test_agent_published_field_reaches_extraction_and_rules_without_restart(

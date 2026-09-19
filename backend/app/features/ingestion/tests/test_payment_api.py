@@ -137,6 +137,12 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
     assert data["symbols"]["total"]["value"] == "1802.90"
     assert data["symbols"]["total"]["origin"] == "document:" + data["extraction"]["id"]
     instance_id = data["instance_id"]
+    document = (await client.get(f"/instances/{instance_id}/document")).json()
+    assert document["fields"] == data["extraction"]["fields"]
+    fed = {name: field["symbol"] for name, field in document["fields"].items()}
+    assert fed["supplier_tax_id"] == "issuer_nif" and fed["payment_iban"] == "iban"
+    assert fed["issued_on"] == "date" and fed["gross_amount"] == "total"
+    assert fed["currency"] is None  # read, but no symbol of this process takes it
     trace = (await client.get(f"/instances/{instance_id}")).json()["events"]
     assert trace[0]["data"]["source_ids"]["erp"] == erp_id
     original = await client.get(f"/instances/{instance_id}/file")
@@ -403,3 +409,42 @@ async def test_concurrent_runs_do_not_duplicate_decisions(payment_api):
     assert sorted([first.json()["decided"], second.json()["decided"]]) == [0, 1]
     detail = await client.get(f"/instances/{upload.json()['instance_id']}")
     assert len(detail.json()["decisions"]) == 1
+
+
+async def test_rate_limited_visual_reader_ends_missing_data_not_a_guess(payment_api):
+    """B6: in the delivery demo, Gemini answered 429 to the visual reads of two scans. The
+    two OCR readers disagree on the IBAN and the visual tie-breaker is rate limited: the
+    IBAN must stay null and the invoice end ESCALAR / MISSING_DATA, never PAGAR."""
+    from app.features.ingestion.ocr.errors import ProviderUnavailable
+
+    from .conftest import lines
+
+    client, process_id, service, _ = payment_api
+    assert (await load_sources(client, process_id)).status_code == 201
+    other_iban = VALID.replace("ES44 1465 0100 9517 0430 2211", "ES12 2100 0418 4502 0005 1332")
+
+    class RateLimited:
+        configured = True
+        calls = 0
+
+        def transcribe(self, *args):
+            RateLimited.calls += 1
+            error = ProviderUnavailable("gemini call unavailable")
+            error.http_status_code = 429
+            raise error
+
+    service.ocr.recognize = lambda *args: lines(VALID, "ocr", 0.99)
+    service.ocr.verify = lambda *args: lines(other_iban, "ocr", 0.99)
+    service.vlm = RateLimited()
+    response = await client.post(
+        f"/processes/{process_id}/files",
+        files={"file": ("scan.pdf", pdf_bytes(""))},
+        data={"ocr": "true", "jev": "false"},
+    )
+    assert response.status_code == 201, response.text
+    assert RateLimited.calls > 0
+    assert response.json()["symbols"]["iban"]["value"] is None
+    run = await client.post(f"/processes/{process_id}/run")
+    assert run.json()["by_decision"] == {"ESCALAR": 1}, run.text
+    export = json.loads((await client.get(f"/processes/{process_id}/export")).text)
+    assert export["result"] == "ESCALAR" and export["reason"].startswith("MISSING_DATA"), export
