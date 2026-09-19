@@ -86,7 +86,13 @@ Versions are append-only: only `active` moves. Tests script the model with `Func
 
 ## Running locally
 
-Requirements: Docker, [uv](https://docs.astral.sh/uv/), `pdftotext` (poppler) for the demo and the golden tests.
+For scanned documents, first follow [OCR and ingestion setup](ingestion/setup.md).
+It covers both downloaded readers, Gemini/Jev credentials, Windows commands and
+the production process API. `make setup` does not download OCR weights. Download
+them before `make demo`, which uploads the PDFs through the API and uses OCR on scans.
+
+Requirements: Docker and [uv](https://docs.astral.sh/uv/). The old text-layer
+benchmark and golden-reference tools also need `pdftotext` (poppler).
 
 | Command | What it does |
 |---|---|
@@ -98,7 +104,8 @@ Requirements: Docker, [uv](https://docs.astral.sh/uv/), `pdftotext` (poppler) fo
 | `make check-outcomes OUT=<file> FILES=<dir>` | Only the check, for a file already written |
 | `make activate` | Activates every draft rule whose code is validated: the hand-written `rules-v3/` need no model |
 | `make compile` | Compiles the draft rules with the two agents (needs LLM keys) |
-| `make demo` | The whole invoice process over the 500 challenge PDFs, through the API: `output/outcomes.jsonl` (`tools/README.md`) |
+| `make demo` | Activates the pack, uploads workbook and 500 PDFs through the production API, syncs the ERP, runs decisions and exports `output/outcomes.jsonl` (`tools/README.md`). Requires the backend and ERP running, plus downloaded OCR weights for scans |
+| `make demo DEMO_ARGS="--limit 5 --local-only"` | Small API run with local OCR and no Gemini/Jev requests; use a fresh database for comparable results |
 | `make test` | Unit tests (`-m "not e2e and not llm"`) |
 | `make test-e2e` | Golden outcomes of batch 1 and the API flow (needs the challenge submodule) |
 | `make check` | `ruff check`, `ruff format --check`, then `test` and `test-e2e`. Run before every PR |

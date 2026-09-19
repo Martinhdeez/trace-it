@@ -15,6 +15,7 @@ Start with the [root README](../README.md) for what the system does, then:
 | [mentor-questions.md](mentor-questions.md) | Open doubts about the reference outcomes, how we handle each and what flips it |
 | [sources-http.md](sources-http.md) | The HTTP source connector (the ERP): configuration and guarantees |
 | [ingestion/README.md](ingestion/README.md) | Document ingestion: PDF, OCR, workbook |
+| [ingestion/setup.md](ingestion/setup.md) | Reproduce OCR: prerequisites, pinned downloads, provider keys and complete API commands |
 | [../processes/README.md](../processes/README.md) | Format of a process pack |
 | [../tools/README.md](../tools/README.md) | The demo stand-ins that run the whole corpus |
 | [../backend/tests/golden/README.md](../backend/tests/golden/README.md) | The golden outcomes for batch 1 |

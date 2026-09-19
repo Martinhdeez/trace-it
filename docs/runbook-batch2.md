@@ -8,6 +8,9 @@ every change is a new decision row (ADR 0008).
 
 Rehearsed on 2026-09-19 on a scratch database (`trace_rehearsal`) with 10 batch-1 PDFs under
 new names, a two-row ERP update and a v4 rule in Spanish. Timings are at the end.
+That rehearsal used the former text-layer `demo_run.py`. The current driver
+uploads through the production API and requires OCR weights for scanned PDFs;
+re-measure timings and review scan decisions before delivery.
 
 ## Roles
 
@@ -55,8 +58,8 @@ challenge inputs). The challenge Makefile expects the CSV at
 | | `draft` with `valid: false` or `report.error` | Tests failed, or the model was down | `POST $API/rules/{id}/compile`; still failing: 6d |
 | | `blocked` | The rule needs a symbol or source the process lacks (`report.needs_data`) | Enforced as ESCALAR for every instance it runs on. Decide before step 7: provide the data (new source / symbol) and recompile, or retire it (`POST /rules/{id}/retire`) if the norm does not really need it |
 | 6d | Fallback: `curl -X POST $API/processes/1/rules -H 'Content-Type: application/json' -d '{"text": "<the condition in English, symbols in backticks>", "type": "prohibition", "decision": "ESCALAR"}'` | status `compiling`, then as 6c | Retire the failed check first so it does not also run |
-| 7 | `cd backend && uv run python ../tools/demo_run.py --invoices $L2/facturas --output ../output/lote2-run; cd ..` (add `--book $L2/<new>.xlsx` if a new workbook came) | `extraction: N read ..., M scans ...`, `erp sync: ...`, `run: {'decided': 40, ...}` | `--output` must not be `output/`: that holds Friday's files. Export refused (409): something is PENDING; step 8 |
-| 7' | Álvaro's API instead: `for f in $L2/facturas/*.pdf; do curl -s -X POST $API/processes/1/files -H "$MANAGER" -F file=@"$f" > /dev/null; done; curl -s -X POST $API/processes/1/run` | 201 per file; `{"decided": 40, ...}` | Use the path batch 1 went through on the live database, so both batches are read the same way. Without `.models/`, scans come back with every symbol `None` (ESCALAR, `MISSING_DATA`), same as the demo path |
+| 7 | `uv run --project backend --locked --env-file .env python tools/demo_run.py --invoices "$L2/facturas" --output output/lote2-run` (add `--book "$L2/<new>.xlsx"` if a new workbook came) | API upload progress, ERP sync and `run` summary; scan responses contain OCR extraction evidence | Ensure the same backend, rules and model configuration used for batch 1. `--output` must not be `output/`: that holds Friday's files. Export refused (409): something is PENDING; step 8 |
+| 7' | Manual API alternative: `for f in $L2/facturas/*.pdf; do curl --fail-with-body -sS "$API/processes/1/files" -H "$MANAGER" -F "file=@$f" -F 'ocr=true' > /dev/null; done; curl --fail-with-body -sS -X POST "$API/processes/1/run"` | 201 per file; `{"decided": 40, ...}` | Check `.models/` and both manifests before scans; without weights, extraction may leave values unresolved. Preserve each response if OCR evidence is needed. |
 | 8 | `curl -s $API/processes/1/summary \| python3 -m json.tool \| head -12`; `curl -s "$API/processes/1/instances?status=PENDING"` | `PENDING` absent, `[]` | PENDING = no symbols: `POST /instances/{id}/extract` (Álvaro), then `POST /processes/1/run` |
 | 8b | `curl -s "$API/processes/1/queue" \| python3 -c 'import json,sys; from collections import Counter; print(Counter(i["reason"][:40] for i in json.load(sys.stdin)))'` | ESCALAR reasons: `MISSING_DATA` (scans), the v4 rule, R16 duplicates, IBAN | Any `RULE_ERROR` or `RULE_NEEDS_DATA`: a rule failed or is blocked; fix it (6c) and step 9 |
 | 9 | Only if a rule was fixed after step 7: `curl -s -X POST "$API/processes/1/reprocess?dry_run=true" -H 'Content-Type: application/json' -d "$(python3 -c 'import json,os,sys; print(json.dumps({"names": os.listdir(sys.argv[1])}))' $L2/facturas)"`, then without `dry_run` | Only batch-2 changes | `names` keeps batch 1 out of it |
@@ -103,7 +106,7 @@ applies to batch 1 too: step 5 again after step 6, with `names` = batch 1.
 
 | Step | Time | Notes |
 |---|---:|---|
-| Batch 1 from scratch (`demo_run.py`, 500 PDFs) | 28 s | PAGAR 433 / NO_PAGAR 36 / ESCALAR 31, as the golden |
+| Batch 1 from scratch (former text-layer `demo_run.py`, 500 PDFs) | 28 s | PAGAR 433 / NO_PAGAR 36 / ESCALAR 31, as the golden; excludes scan OCR |
 | 2. `make backup` | 0.5 s | 5.3 MB dump |
 | Restore of that dump into a new database | 0.3 s | 500 decisions back |
 | 4. ERP restart with `--lote2` | 1 s | `517 asientos`, `actualizacion_cargada SI` |
@@ -112,13 +115,13 @@ applies to batch 1 too: step 5 again after step 6, with `names` = batch 1.
 | 6. `POST /norm` (Helmcode `deepseek-v4-flash`) | 6 s | one norm rule, one check: `total` over 10,000 EUR -> ESCALAR; 2 policies |
 | 6b. Compilation to a status | 15 s | `draft`: valid, but changes 38/500 past decisions (limit then 5 %; now `active` at once) |
 | 6c. Impact, activate | 1 s each | 36 PAGAR -> ESCALAR, 2 NO_PAGAR -> ESCALAR; 38 findings |
-| 7. `demo_run.py` over 10 batch-2 PDFs | 8 s | 9 read, 1 scan; all 10 ESCALAR (copies share their order with batch 1: R16) |
+| 7. Former text-layer `demo_run.py` over 10 batch-2 PDFs | 8 s | 9 read, 1 scan without OCR; all 10 ESCALAR (copies share their order with batch 1: R16) |
 | 7'. Upload API, one text PDF / one scan | 0.06 s / 0.55 s | symbols filled / all `None` (no local OCR models) |
 | 10, 10b. `make export-batch` | under 1 s each | `OK` for 10/10 and 500/500 |
 
 For 40 PDFs, from the organisers' zip to the two checked files: about 15 minutes of commands
 and reading, most of it step 6c (reading what v4 changes).
 
-Found by the rehearsal and fixed in this change: `demo_run.py` crashed on a batch-2 PDF with
+Found by the rehearsal and fixed then: the former `demo_run.py` crashed on a batch-2 PDF with
 the same bytes as a batch-1 one (the file is now stored once); there was no way to re-decide
 decided instances (`reprocess`) nor to export one batch (`make export-batch`).

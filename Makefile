@@ -2,6 +2,7 @@
 .PHONY: setup compile activate demo erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
+DEMO_ARGS ?=
 
 setup:
 	test -f .env || cp .env.example .env
@@ -17,12 +18,12 @@ activate:  # put into the process every rule whose code is already validated
 	$(LOAD) --activate
 
 # The whole process over the challenge corpus -> output/outcomes.jsonl. Needs `make erp`
-# running in another terminal, and writes to the database `make setup` filled.
+# running in another terminal, `make setup` and downloaded OCR weights.
 demo:
 	test -f .env || cp .env.example .env
 	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
-	cd backend && set -a && . ../.env && set +a && uv run python -m app.cli load ../processes/invoice-payment.json --activate
-	cd backend && set -a && . ../.env && set +a && uv run python ../tools/demo_run.py
+	$(LOAD) --activate
+	uv run --project backend --locked --env-file .env python tools/demo_run.py $(DEMO_ARGS)
 
 erp:
 	test -f .context/500-sombras-de-alberto/alberto_erp.py || git submodule update --init .context/500-sombras-de-alberto

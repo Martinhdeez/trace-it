@@ -1,5 +1,9 @@
 # Document ingestion
 
+**New machine:** follow [Reproduce the OCR and ingestion setup](setup.md) for
+prerequisites, the two pinned OCR readers, API keys, Docker/standalone startup,
+scan checks and the full production API flow on Windows or Linux/macOS.
+
 The API returns as many field readings as it can from PDF and XLSX. Missing or conflicting
 fields retain available text and alternatives, without document review states.
 NIF, IBAN and purchase order separate verified transcriptions from proposals;
