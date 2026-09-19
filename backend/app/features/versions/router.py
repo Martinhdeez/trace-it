@@ -65,7 +65,7 @@ async def edit(
 @router.post("/processes/{process_id}/draft/validate", operation_id="validateProcessDraft")
 async def validate(process_id: int, session: Session, user: CurrentUser) -> VersionDraftOut:
     manager(user)
-    return out(VersionDraftOut, await service.validate(session, process_id))
+    return out(VersionDraftOut, await service.validate(session, process_id, user.name))
 
 
 @router.post(

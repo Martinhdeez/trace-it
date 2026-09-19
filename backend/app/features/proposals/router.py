@@ -64,8 +64,9 @@ async def list_proposals(
     session: Session,
     user: Manager,
     status: Literal["open", "accepted", "rejected", "superseded"] | None = None,
+    instance_id: int | None = None,
 ) -> list[ManagerProposalOut]:
-    return await service.list_for(session, process_id, status)
+    return await service.list_for(session, process_id, status, instance_id)
 
 
 @router.post(

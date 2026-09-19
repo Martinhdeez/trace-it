@@ -3,6 +3,7 @@ process and across processes, their health and the live stream. Models are scrip
 
 import ast
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -22,22 +23,41 @@ from app.features.use_cases.schemas import AgentSettings
 from tests.support.models import down, scripted
 
 ROOT = Path(__file__).resolve().parents[5]  # the repository
-EMITTERS = {"events.span", "events.record", "_status_span"}
+EMITTERS = {"events.span", "events.record", "_status_span", "span"}  # `span` inside events.py
+# Helpers that take the step as a later argument and pass it on to `events.record`: the
+# step is their last string constant (`drafts.save(session, ..., user, "load_draft_source")`).
+FORWARDERS = {"save"}
 
 
 def emitted_steps() -> set[str]:
     """Every span name the code writes: the first string argument of `events.span`,
-    `events.record` and `_status_span`, outside tests."""
+    `events.record` and `_status_span`, or the last of a forwarder, outside tests."""
     steps = set()
     for folder in (ROOT / "backend" / "app", ROOT / "tools"):
         for path in folder.rglob("*.py"):
             if "tests" in path.parts:
                 continue
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-                if isinstance(node, ast.Call) and ast.unparse(node.func) in EMITTERS:
+                if not isinstance(node, ast.Call):
+                    continue
+                name = ast.unparse(node.func)
+                strings = [
+                    a.value
+                    for a in node.args
+                    if isinstance(a, ast.Constant) and isinstance(a.value, str)
+                ]
+                if name in EMITTERS:
                     # `_status_span` passes its own argument on: its callers name the step.
-                    steps.update([a.value for a in node.args if isinstance(a, ast.Constant)][:1])
+                    steps.update(strings[:1])
+                elif name in FORWARDERS:
+                    steps.update(strings[-1:])
     return steps
+
+
+def test_forwarded_and_error_steps_are_found() -> None:
+    steps = emitted_steps()
+    assert {"load_draft_source", "review_draft_proposal", "unhandled_error"} <= steps
+    assert "validate_process_draft" in steps
 
 
 def test_every_span_name_has_exactly_one_plane() -> None:
@@ -269,6 +289,69 @@ async def test_plane_health_follows_the_thresholds(monkeypatch: pytest.MonkeyPat
     assert all(h["spans"] >= 1 for h in healthy)
     assert {h["status"] for h in slow} == {"degraded"} and "p95" in slow[0]["reason"]
     assert {h["status"] for h in down_} == {"down"}
+
+
+async def test_one_step_failing_throughout_degrades_its_plane(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every OCR call failing, among many good spans: the plane's average hides it."""
+    for _ in range(20):
+        with events.span("upload_document"):
+            pass
+    for _ in range(3):
+        with events.span("ocr") as ocr:
+            ocr.status = "error"
+    monkeypatch.setattr(settings, "health_window_minutes", 0.05)  # these spans only
+    monkeypatch.setattr(settings, "health_min_spans", 3)
+    monkeypatch.setattr(settings, "health_degraded_error_rate", 0.5)
+    monkeypatch.setattr(settings, "health_down_error_rate", 2.0)
+    monkeypatch.setattr(settings, "health_p95_ms", {p: 10**9 for p in Plane})
+    monkeypatch.setattr(service.sources, "down_sources", _no_sources_down)
+    async with client() as api:
+        planes = (await api.get("/health/planes")).json()
+    ingestion = next(h for h in planes if h["plane"] == "ingestion")
+    assert ingestion["error_rate"] < 0.5  # the plane as a whole looks fine
+    assert ingestion["status"] == "degraded" and ingestion["reason"].startswith("ocr: ")
+
+
+def test_percentiles_are_rounded() -> None:
+    from app.features.traces.schemas import StepStats
+
+    stats = StepStats(step="ocr", count=2, errors=0, p50_ms=4.799999999999996, p95_ms=None)
+    assert (stats.p50_ms, stats.p95_ms) == (4.8, None)
+
+
+async def test_instances_per_second_leave_out_the_source_syncs() -> None:
+    async with client() as api:
+        process_id, _ = await create_process(api, "manager")
+        trace, run = uuid.uuid4().hex, uuid.uuid4().hex[:16]
+        common = {"trace_id": trace, "process_id": process_id, "status": "ok"}
+        async with session_factory() as session:
+            now = datetime.now(UTC)
+            session.add_all(
+                [
+                    Event(
+                        **common,
+                        span_id=run,
+                        step="run_process",
+                        started_at=now,
+                        duration_ms=2000,
+                        data={"instances": 10},
+                    ),
+                    Event(
+                        **common,
+                        span_id=uuid.uuid4().hex[:16],
+                        parent_id=run,
+                        step="sync_source",
+                        started_at=now,
+                        duration_ms=1000,
+                        data={"source": "erp"},
+                    ),
+                ]
+            )
+            await session.commit()
+        execution = (await api.get(f"/processes/{process_id}/metrics/execution")).json()
+    assert execution["instances_per_second"] == 10.0  # 10 in 1 s of engine, not 2 s
 
 
 async def test_a_plane_with_too_few_spans_is_ok(monkeypatch: pytest.MonkeyPatch) -> None:

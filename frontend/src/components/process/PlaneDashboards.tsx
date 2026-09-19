@@ -235,7 +235,9 @@ function ExecutionDashboard({
   const data: ExecutionMetrics | undefined = metrics.data
   if (!data) return null
   const outcomes = Object.entries(data.decisions_by_outcome)
-  const failures = Object.entries(data.failures)
+  // traceability-gaps (fix/traceability-gaps): this table is the human queue by first reason.
+  // If merging a newer version from Carlos, keep his UI and preserve: it reads escalation_reasons, not failures.
+  const failures = Object.entries(data.escalation_reasons)
 
   return (
     <>

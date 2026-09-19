@@ -8,7 +8,9 @@ import type {
   SymbolIO,
   SymbolReading,
 } from '../../api/contracts'
-import { formatMs } from '../../lib/format'
+import { Link } from 'react-router'
+import { formatMs, formatRunDate } from '../../lib/format'
+import { ALERTS_TAB, paths } from '../../lib/paths'
 import { cn } from '../../lib/cn'
 import { t } from '../../i18n'
 import { label, tone } from '../../lib/status'
@@ -121,6 +123,14 @@ export function TracePane({
         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
           <span>{latest?.author === 'engine' ? 'Decidido por el motor' : latest?.author}</span>
           {latest ? <span className="font-mono text-faint">{latest.rules_hash.slice(0, 12)}</span> : null}
+          {/* traceability-gaps (fix/traceability-gaps): which published version decided, who published it and when.
+              If merging a newer version from Carlos, keep his UI and preserve: trace.version shown as vN · author · date. */}
+          {trace?.version ? (
+            <span>
+              {t('trace.version')} v{trace.version.number} · {trace.version.author} ·{' '}
+              {formatRunDate(trace.version.created_at)}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -226,6 +236,33 @@ export function TracePane({
         )}
         </Block>
 
+        {/* traceability-gaps (fix/traceability-gaps): the sources of truth this decision read, and what
+            still waits on this case. If merging a newer version from Carlos, keep his UI and preserve:
+            trace.sources_read rows and trace.pending links to Revisión with ?i=<instance>. */}
+        {trace?.sources_read.length ? (
+          <Block title={`${t('trace.sourcesRead')} · ${trace.sources_read.length}`}>
+            <ul className="divide-y divide-hairline">
+              {trace.sources_read.map((source) => (
+                <li key={source.source} className="flex items-baseline gap-2 px-3 py-2">
+                  <span className="font-mono text-[11px] text-ink">{source.source}</span>
+                  <span className={cn('font-mono text-[10px]', source.status === 'ok' ? 'text-faint' : 'text-nopagar')}>
+                    {source.status}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted">
+                    {source.requests} {t('trace.requests')} · {source.retries} {t('trace.retries')} ·{' '}
+                    {source.rate_limited} {t('trace.rateLimited')} · {source.timeouts} {t('trace.timeouts')}
+                  </span>
+                  <span className="shrink-0 text-[10.5px] text-faint">
+                    {source.duration_ms == null ? '—' : formatMs(source.duration_ms)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Block>
+        ) : null}
+
+        {trace ? <PendingBlock trace={trace} /> : null}
+
         <Block title={`traza · ${trace?.spans.length ?? 0} pasos`}>
           {(trace?.spans ?? []).map((span) => (
             <SpanBlock key={span.span_id} span={span} />
@@ -272,6 +309,52 @@ function DocumentHeader({ instance, onOpen }: { instance: InstanceDetail; onOpen
         Abrir documento
       </button>
     </div>
+  )
+}
+
+/**
+ * traceability-gaps (fix/traceability-gaps): what this case still waits for, each linked to Revisión.
+ * If merging a newer version from Carlos, keep his UI and preserve: waiting, open proposals and open
+ * alerts from trace.pending, each opening Revisión on this instance (?i=).
+ */
+function PendingBlock({ trace }: { trace: InstanceTrace }) {
+  const { pending } = trace
+  const review = `${paths.review(trace.process_id)}?i=${trace.id}`
+  const alerts = `${paths.review(trace.process_id)}?tipo=${ALERTS_TAB}&i=${trace.id}`
+  const rows = [
+    ...(pending.waiting_for_person
+      ? [{ id: 'person', label: t(pending.review_pending ? 'trace.reviewPending' : 'trace.waitingForPerson'), to: review, date: undefined }]
+      : []),
+    ...pending.proposals.map((item) => ({
+      id: `p-${item.id}`,
+      label: `${t('trace.openProposals')} · ${t(`proposalKind.${item.kind}`)} #${item.id}`,
+      to: review,
+      date: item.created_at,
+    })),
+    ...pending.alerts.map((item) => ({
+      id: `a-${item.id}`,
+      label: `${t('trace.openAlerts')} · ${t(`alertTrigger.${item.kind}`)} #${item.id}`,
+      to: alerts,
+      date: item.created_at,
+    })),
+  ]
+  return (
+    <Block title={`${t('trace.pending')} · ${rows.length}`} openByDefault={rows.length > 0}>
+      {rows.length === 0 ? (
+        <p className="px-3 py-3 text-[12px] text-muted">{t('trace.nothingPending')}</p>
+      ) : (
+        <ul className="divide-y divide-hairline">
+          {rows.map((row) => (
+            <li key={row.id} className="flex items-baseline gap-2 px-3 py-2">
+              <Link to={row.to} className="min-w-0 flex-1 truncate text-[12px] text-ink underline">
+                {row.label}
+              </Link>
+              {row.date ? <span className="shrink-0 text-[10.5px] text-faint">{formatRunDate(row.date)}</span> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Block>
   )
 }
 

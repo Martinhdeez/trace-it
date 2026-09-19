@@ -62,8 +62,12 @@ async def supersede(session: AsyncSession, cause: str, *where) -> list[int]:
     return [r.id for r in rows]
 
 
-async def list_for(session: AsyncSession, process_id: int, status: str | None):
+async def list_for(
+    session: AsyncSession, process_id: int, status: str | None, instance_id: int | None = None
+):
     query = select(ManagerProposal).where(ManagerProposal.process_id == process_id)
+    if instance_id is not None:
+        query = query.where(ManagerProposal.instance_id == instance_id)
     if status:
         query = query.where(ManagerProposal.status == status)
     return [out(r) for r in await session.scalars(query.order_by(ManagerProposal.id.desc()))]
