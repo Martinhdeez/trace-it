@@ -21,11 +21,13 @@ One dict, `PLANES` in `backend/app/features/traces/service.py`.
 
 - **ingestion:** `upload_document`, `store_file`, `extraction`, `native_text`, `ocr`,
   `vision`, `text_judge`, `focused_read`, `ingest_document`, `reextract_document`,
-  `extract_document`, `upload_workbook`, `load_workbook`, `sync_source`, `demo_ingest`.
+  `extract_document`, `upload_workbook`, `load_workbook`, `sync_source`.
 - **agents:** `load_use_case`, `load_definition`, `configure_agent`,
   `activate_agent_config`, `save_rule`, `norm`, `normalize_norm`, `compile_rules`,
   `compile_rule`, `coder_attempt`, `run_tests`, `impact_check`, `activate_rule`,
-  `retire_rule`, `llm_run`, `demo_llm_down`.
+  `retire_rule`, `llm_run`, `demo_llm_down`, `learn_norms`, `validate_norm`,
+  `adopt_norm`, `reject_norm`. The four learning spans came from #56 (merged into `dev`
+  mid-task). `demo_ingest` left with #53, so it was removed.
 - **execution:** `run_process`, `evaluate_rule`, `decision`, `reprocess`,
   `review_decision`, `suggest_escalation`, `resolution`, `export_outcomes`.
 

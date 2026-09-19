@@ -70,7 +70,6 @@ PLANES: dict[str, Plane] = {
     "upload_workbook": _INGESTION,
     "load_workbook": _INGESTION,
     "sync_source": _INGESTION,
-    "demo_ingest": _INGESTION,
     # Agents writing the rules' code, and what defines and gates it.
     "load_use_case": _AGENTS,
     "load_definition": _AGENTS,
@@ -88,6 +87,10 @@ PLANES: dict[str, Plane] = {
     "retire_rule": _AGENTS,
     "llm_run": _AGENTS,
     "demo_llm_down": _AGENTS,
+    "learn_norms": _AGENTS,  # norms proposed from past cases, then validated and adopted
+    "validate_norm": _AGENTS,
+    "adopt_norm": _AGENTS,
+    "reject_norm": _AGENTS,
     # Running compiled code over instances, and the people acting on its decisions.
     "run_process": _EXECUTION,
     "evaluate_rule": _EXECUTION,
