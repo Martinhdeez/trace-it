@@ -15,9 +15,12 @@ class DecisionOut(BaseModel):
 
 
 class EventOut(BaseModel):
-    step: str
+    id: int
+    instance_id: int | None
+    step: str = Field(examples=["decision", "resolution", "compile_rule", "sync_source"])
     data: dict[str, Any] | None
     latency_ms: int | None
+    cost: float | None
     created_at: datetime
 
 
@@ -25,7 +28,11 @@ class InstanceOut(BaseModel):
     id: int
     name: str = Field(examples=["factura_1217.pdf"])  # the exact file_id of the export
     status: str
-    decision: str | None  # the latest decision, if any
+    # The latest decision, if any: what it was, who took it and why.
+    decision: str | None
+    author: str | None = None  # "engine" or the person's name
+    reason: str | None = None
+    decided_at: datetime | None = None
 
 
 class InstanceDetail(InstanceOut):
@@ -38,6 +45,38 @@ class InstanceDetail(InstanceOut):
 class ResolveIn(BaseModel):
     decision: str = Field(examples=["NO_PAGAR"])  # must be a decision type of the process
     reason: str
+
+
+class RuleSummary(BaseModel):
+    id: int
+    text: str
+    type: str
+    decision: str
+    status: str
+    fires: int  # instances whose latest engine decision has this rule firing
+
+
+class SourceSummary(BaseModel):
+    id: int
+    name: str = Field(examples=["suppliers", "erp"])
+    origin: str
+    rows: int
+    loaded_at: datetime
+
+
+class ProcessSummary(BaseModel):
+    """Everything a process page shows in one call."""
+
+    id: int
+    name: str
+    instances: int
+    by_status: dict[str, int] = Field(examples=[{"PENDING": 0, "DECIDED": 500}])
+    by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
+    queue: int  # latest decision is one a person must look at
+    resolved: int  # instances whose latest decision a person took
+    rules: list[RuleSummary]
+    sources: list[SourceSummary]  # the current load of each source
+    last_run_at: datetime | None  # the engine's most recent decision
 
 
 class RunSummary(BaseModel):

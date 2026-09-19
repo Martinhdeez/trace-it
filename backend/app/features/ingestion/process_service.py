@@ -53,6 +53,7 @@ async def attach_document(session, process_id, user_id, content, result):
     events.record(
         session,
         "ingest_document",
+        process_id=process_id,
         instance_id=instance.id,
         data={
             "user_id": user_id,
@@ -85,3 +86,12 @@ async def document_result(session, instance_id):
     if event is None:
         raise NotFoundError("No document extraction is recorded for this instance")
     return ExtractionResult.model_validate(event.data["extraction"])
+
+
+async def document_content(session, instance_id) -> tuple[str, bytes]:
+    """The file an instance was made from, byte for byte, with its name."""
+    instance = await session.get(Instance, instance_id)
+    if instance is None:
+        raise NotFoundError(f"Instance {instance_id} does not exist")
+    file = await session.get(File, instance.file_hash)
+    return instance.name, file.content

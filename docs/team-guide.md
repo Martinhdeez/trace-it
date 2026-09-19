@@ -20,7 +20,7 @@ Organised by feature, not by file type (ADR 0012).
 ```
 backend/
   pyproject.toml              # dependencies (uv)
-  alembic/versions/           # one migration: 0001_initial_schema.py
+  alembic/versions/           # 0001_initial_schema.py (squashed), then one file per change
   app/
     main.py                   # FastAPI app, routers, TraceError -> {"code", "message"}
     models.py                 # imports every model (Alembic needs it)
@@ -80,7 +80,7 @@ Without Docker for the backend (faster loop): `docker compose up db -d`, then in
 
 ## Database and migrations
 
-The migration history was squashed into `alembic/versions/0001_initial_schema.py`. An existing local database predates it: `make reset-db && make setup`.
+The migration history was squashed into `alembic/versions/0001_initial_schema.py`; later changes are ordinary migrations that `make setup` applies. A local database from before the squash needs `make reset-db && make setup` once.
 
 To change a table: edit the feature's `model.py` (a new table must be imported in `app/models.py`), then in `backend/`: `uv run alembic revision --autogenerate -m "add x to rules"`. Read the generated file before committing. Two branches generating migrations at once leave two heads: `uv run alembic merge heads` and tell the group.
 

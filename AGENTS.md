@@ -14,7 +14,7 @@ process of the "500 Sombras de Alberto" challenge is the first pack. No LLM ever
 | `backend/app/cli.py` | `load <pack> [--compile] [--activate]`, `sources sync <pack>` |
 | `processes/` | Process packs; `invoice-payment.json` + `invoice-payment/sources.json` + `rules-v3/*.py` |
 | `tools/` | Demo stand-ins for extraction over the challenge corpus (`make demo`) |
-| `frontend/` | The manager's console (Vite + React) |
+| `frontend/` | The manager's console (Vite + React). Its API, screen by screen: `docs/api.md` |
 | `docs/adr/` | Decisions. ADR 0001 wins over any other document |
 | `.artifacts/` | Archived plans and analyses. History, not guidance |
 
@@ -39,7 +39,7 @@ process of the "500 Sombras de Alberto" challenge is the first pack. No LLM ever
 make setup      # Postgres + API in Docker, pack loaded        make test       # unit tests
 make erp        # the challenge ERP bridge (other terminal)    make test-e2e   # golden + API flow
 make demo       # decide the 500 invoices -> output/outcomes.jsonl
-make reset-db   # after a schema change: the migration history is a single 0001
+make reset-db   # only if your database predates the squashed 0001 migration
 ```
 
 Details: `docs/team-guide.md`. Why things are the way they are: `docs/adr/README.md`.

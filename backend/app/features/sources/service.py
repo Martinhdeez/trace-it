@@ -57,6 +57,61 @@ class SyncResult(BaseModel):
     diff: Diff
 
 
+class SourceOut(BaseModel):
+    id: int
+    name: str
+    origin: str
+    rows: int
+    loaded_at: datetime
+
+
+class SourceDetail(SourceOut):
+    data: list[dict[str, Any]]  # the rows of this load, as the rules see them
+
+
+async def current_loads(session: AsyncSession, process_id: int) -> list[Source]:
+    """The latest load of each source, in order of first appearance. Every load is kept;
+    only the last one per name is current."""
+    loads = await session.scalars(
+        select(Source).where(Source.process_id == process_id).order_by(Source.id)
+    )
+    current: dict[str, Source] = {}
+    for load in loads:
+        current[load.name] = load
+    return list(current.values())
+
+
+def _out(load: Source) -> SourceOut:
+    return SourceOut(
+        id=load.id,
+        name=load.name,
+        origin=load.origin,
+        rows=len(load.rows),
+        loaded_at=load.loaded_at,
+    )
+
+
+async def list_sources(session: AsyncSession, process_id: int) -> list[SourceOut]:
+    if await session.get(Process, process_id) is None:
+        raise NotFoundError(f"Process {process_id} does not exist")
+    return [_out(load) for load in await current_loads(session, process_id)]
+
+
+async def get_source(session: AsyncSession, process_id: int, name: str) -> SourceDetail:
+    """The current load of one source, rows included."""
+    if await session.get(Process, process_id) is None:
+        raise NotFoundError(f"Process {process_id} does not exist")
+    load = await session.scalar(
+        select(Source)
+        .where(Source.process_id == process_id, Source.name == name)
+        .order_by(Source.id.desc())
+        .limit(1)
+    )
+    if load is None:
+        raise NotFoundError(f"Process {process_id} has no load of source {name!r}")
+    return SourceDetail(**_out(load).model_dump(), data=load.rows)
+
+
 def pack_sources_file(pack_file: Path) -> Path:
     """`processes/invoice-payment.json` keeps its sources in `processes/invoice-payment/`."""
     return pack_file.with_suffix("") / "sources.json"
@@ -147,6 +202,7 @@ async def sync(
         events.record(
             session,
             "sync_source_failed",
+            process_id=process_id,
             data={"source": name, "error": str(e), **connector.stats.__dict__},
             latency_ms=connector.stats.duration_ms,
         )
@@ -165,6 +221,7 @@ async def sync(
     events.record(
         session,
         "sync_source",
+        process_id=process_id,
         data={
             "source": name,
             "source_id": source.id,
