@@ -11,6 +11,8 @@ from app.features.decisions.schemas import (
     InstanceDetail,
     InstanceOut,
     ProcessSummary,
+    ReprocessIn,
+    ReprocessSummary,
     ResolveIn,
     RunSummary,
 )
@@ -26,6 +28,21 @@ router = APIRouter(tags=["decisions"])
 )
 async def run_process(process_id: int, session: Session) -> RunSummary:
     return await service.run(session, process_id)
+
+
+@router.post(
+    "/processes/{process_id}/reprocess",
+    operation_id="reprocessProcess",
+    summary="Decide the decided instances again with the current rules and sources",
+    description="After a source resync, a corrected datum or a rule adopted later. Only a "
+    "decision that changes is written, as a new engine row; the history stays. An instance "
+    "a person decided last is never re-decided: a disagreement comes back in `conflicts`. "
+    "`names` limits it to those instances; `dry_run=true` only reports.",
+)
+async def reprocess_process(
+    process_id: int, session: Session, body: ReprocessIn | None = None, dry_run: bool = False
+) -> ReprocessSummary:
+    return await service.reprocess(session, process_id, body.names if body else None, dry_run)
 
 
 @router.get(

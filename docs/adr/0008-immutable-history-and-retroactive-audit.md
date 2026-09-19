@@ -43,6 +43,13 @@ second; the table `findings` stores audit findings.
   but due) for past decisions the engine concluded alone (not those that went to a
   person). Findings are notices; the past is never edited, and acting on them
   (claim money back, pay what is owed) happens outside the system.
+- **Reprocess** (added 2026-09-19 for the batch 2 weekend): after a source resync, a
+  corrected datum or a rule adopted later, `POST /processes/{id}/reprocess` decides the
+  decided instances again with the current rules and latest sources. Where the engine now
+  decides otherwise it appends a new engine decision (the old row stays, the `decision`
+  event carries `reprocess` and the previous row's id), so the export follows. An instance
+  whose latest decision is a person's is never re-decided; a disagreement is reported as a
+  conflict, as in the audit. `dry_run=true` reports without writing.
 - **Rule versions** are linear: one active rule set per process; going back activates an
   earlier version and is itself recorded. Processes do not share rules or history. ADR 0015
   extends this to a snapshot of the whole process version.
@@ -63,6 +70,7 @@ second; the table `findings` stores audit findings.
   `rules/service._apply` (conflicts refuse the change); 5 tests in
   `decisions/tests/test_audit.py`.
 - `decisions/service.resolve`: a person's decision is a new row, never an edit.
+- `decisions/service.reprocess`; `decisions/tests/test_reprocess.py`.
 
 ## Related
 ADR 0001, 0004, 0009, 0010, 0015. Plan P2, P13, P14, P15, P16; PR #16.

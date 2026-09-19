@@ -103,6 +103,10 @@ or `python3 alberto_erp.py --lote2 <csv>`), then sync again. The response and th
 endpoint list the added, removed and changed entries. The trace shows
 `status.update_loaded == "SI"`.
 
+A new snapshot changes nothing already decided. To apply it to past decisions:
+`POST /processes/{id}/reprocess?dry_run=true` to see what would change, then without
+`dry_run` to append the new decisions (`docs/runbook-batch2.md`).
+
 
 ## Not generic yet
 

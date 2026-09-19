@@ -101,6 +101,18 @@ class ImpactOut(BaseModel):
     conflicts: list[ChangeOut]  # a person decided it and the rules would contradict them
 
 
+class ReprocessIn(BaseModel):
+    names: list[str] | None = Field(None, examples=[["factura_1217.pdf"]])  # None: all
+
+
+class ReprocessSummary(BaseModel):
+    """What re-deciding the decided instances changed. Only `changes` got a new decision."""
+
+    unchanged: int
+    changes: list[ChangeOut]  # the engine decided it before and decides otherwise now
+    conflicts: list[ChangeOut]  # a person decided it last; left alone, for the manager
+
+
 class FindingOut(BaseModel):
     id: int
     decision_id: int

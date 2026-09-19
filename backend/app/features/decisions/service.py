@@ -14,12 +14,14 @@ from app.features.agents import sandbox
 from app.features.decisions.engine import Outcomes, Verdict, decide
 from app.features.decisions.model import ENGINE, Decision, Finding
 from app.features.decisions.schemas import (
+    ChangeOut,
     DecisionOut,
     EventOut,
     FindingOut,
     InstanceDetail,
     InstanceOut,
     ProcessSummary,
+    ReprocessSummary,
     ResolveIn,
     RuleSummary,
     RunSummary,
@@ -163,28 +165,87 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
 
     count: Counter[str] = Counter()
     for instance, verdict in zip(pending, verdicts, strict=True):
-        session.add(
-            Decision(
-                instance_id=instance.id,
-                decision=verdict.decision,
-                results=[asdict(r) for r in verdict.results],
-                rules_hash=verdict.rules_hash,
-                author=ENGINE,
-                reason=verdict.reason or None,
-            )
-        )
-        instance.status = "DECIDED"
-        events.record(
-            session,
-            "decision",
-            process_id=process_id,
-            instance_id=instance.id,
-            data={"decision": verdict.decision, "rules_hash": verdict.rules_hash},
-        )
+        _append(session, process_id, instance, verdict)
         count[verdict.decision] += 1
 
     await session.commit()
     return RunSummary(decided=sum(count.values()), by_decision=dict(count))
+
+
+def _append(
+    session: AsyncSession, process_id: int, instance: Instance, verdict: Verdict, **trace
+) -> None:
+    """A new engine decision: a row added to the history, never an edit (ADR 0008)."""
+    session.add(
+        Decision(
+            instance_id=instance.id,
+            decision=verdict.decision,
+            results=[asdict(r) for r in verdict.results],
+            rules_hash=verdict.rules_hash,
+            author=ENGINE,
+            reason=verdict.reason or None,
+        )
+    )
+    instance.status = "DECIDED"
+    events.record(
+        session,
+        "decision",
+        process_id=process_id,
+        instance_id=instance.id,
+        data={"decision": verdict.decision, "rules_hash": verdict.rules_hash, **trace},
+    )
+
+
+async def reprocess(
+    session: AsyncSession, process_id: int, names: list[str] | None, dry_run: bool = False
+) -> ReprocessSummary:
+    """Decide the decided instances again with the rules active now and the latest sources.
+
+    For a source resync, a corrected datum or a rule adopted after the fact. Only a
+    decision that changes is written, as a new engine row: the old one stays in the
+    history. An instance whose latest decision is a person's is never re-decided: where
+    the engine would now say otherwise it is reported as a conflict, as in the audit.
+    `names` limits it to those instance names (all decided instances if None); `dry_run`
+    answers the same without writing anything.
+    """
+    await get_process(session, process_id)
+    query = (
+        select(Instance)
+        .where(Instance.process_id == process_id, Instance.status == "DECIDED")
+        .order_by(Instance.id)
+        .with_for_update()
+    )
+    if names is not None:
+        query = query.where(Instance.name.in_(names))
+    selected = [i for i in await session.scalars(query) if i.symbols is not None]
+    latest = await latest_decisions(session, selected)
+    rules = await active_rules(session, process_id)
+    verdicts = await decide_all(session, process_id, rules, selected)
+
+    unchanged = 0
+    changed: list[ChangeOut] = []
+    conflicts: list[ChangeOut] = []
+    for instance, verdict in zip(selected, verdicts, strict=True):
+        previous = latest[instance.id]
+        if verdict.decision == previous.decision:
+            unchanged += 1
+            continue
+        change = ChangeOut(
+            instance_id=instance.id,
+            name=instance.name,
+            before=previous.decision,
+            after=verdict.decision,
+            previous_author=previous.author,
+            reason=verdict.reason,
+        )
+        if previous.author != ENGINE:
+            conflicts.append(change)
+            continue
+        changed.append(change)
+        if not dry_run:
+            _append(session, process_id, instance, verdict, reprocess=True, previous=previous.id)
+    await (session.rollback() if dry_run else session.commit())
+    return ReprocessSummary(unchanged=unchanged, changes=changed, conflicts=conflicts)
 
 
 async def list_instances(
@@ -355,19 +416,24 @@ async def resolve(
     return await get_instance(session, instance_id)
 
 
-async def export(session: AsyncSession, process_id: int) -> tuple[str, list[str]]:
+async def export(
+    session: AsyncSession, process_id: int, names: set[str] | None = None
+) -> tuple[str, list[str]]:
     """`outcomes.jsonl` for the challenge: one line per instance name, nothing else.
 
     Returns the body and the names shared by several instances. `file_id` is the filename
     exactly as it was supplied, accents included. What is exported is the process output:
     the engine's latest decision (ADR 0009). A person's resolution never changes it; it is
-    exported only for an instance the engine never decided.
+    exported only for an instance the engine never decided. `names` limits it to those
+    instance names (one delivery batch); the others may still be pending.
     """
     await get_process(session, process_id)
     # Two files can share a name: only the most recent instance of each name is exported.
     by_name: dict[str, Instance] = {}
     times: Counter[str] = Counter()
     for instance in await instances_of(session, process_id):  # ordered by id
+        if names is not None and instance.name not in names:
+            continue
         by_name[instance.name] = instance
         times[instance.name] += 1
     duplicates = [name for name, n in times.items() if n > 1]
