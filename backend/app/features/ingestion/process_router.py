@@ -1,7 +1,6 @@
 """Process-facing ingestion routes composed into the main dev application."""
 
 import logging
-import mimetypes
 import zipfile
 from datetime import date
 from typing import Annotated, Literal
@@ -21,6 +20,7 @@ from app.features.sources.workbook import load_workbook
 from app.features.users.dependencies import CurrentUser
 
 from . import process_service
+from .documents import IMAGE_TYPES, document_format
 from .errors import InvalidDocumentError
 from .extraction_plan import ExtractionPlan, ExtractionPlanOut, load_extraction_plan
 from .pdf.locations import DocumentLocations, locate_document, render_page
@@ -76,7 +76,7 @@ async def extraction_plan(
     "/processes/{process_id}/files",
     status_code=201,
     operation_id="uploadProcessDocument",
-    summary="Store a PDF and its reading evidence as an instance of a process",
+    summary="Store a PDF, JPG, PNG or HTML document with its reading evidence",
     response_model=DocumentUpload,
 )
 async def upload_document(
@@ -99,7 +99,8 @@ async def upload_document(
                     item = await run_in_threadpool(service.ingest, file.file, file.filename)
                 if item["kind"] != "invoice":
                     raise InvalidDocumentError(
-                        "Process documents must be PDF; use /v1/extractions to inspect a workbook"
+                        "Process documents must be PDF, JPG, PNG or HTML; "
+                        "use /v1/extractions to inspect a workbook"
                     )
                 options = ExtractOptions(
                     mode=mode, ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or []
@@ -128,7 +129,9 @@ async def upload_document(
                     options,
                 )
             except (ValueError, pymupdf.FileDataError) as exc:
-                raise InvalidDocumentError("Invalid or unsupported PDF document") from exc
+                raise InvalidDocumentError(
+                    "Invalid or unsupported document (PDF, JPG, PNG or HTML)"
+                ) from exc
             except TraceError:
                 raise
             except Exception as exc:
@@ -185,10 +188,10 @@ async def get_document_locations(
     operation_id="getDocumentPage",
 )
 async def get_document_page(
-    instance_id: int, page_number: int, session: Session, user: CurrentUser
+    instance_id: int, page_number: int, session: Session, user: CurrentUser, service: Service
 ):
     _, content = await process_service.document_content(session, instance_id)
-    image = await run_in_threadpool(render_page, content, page_number)
+    image = await run_in_threadpool(render_page, content, page_number, service.settings)
     return Response(
         image, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"}
     )
@@ -246,13 +249,28 @@ async def upload_workbook(
 @router.get(
     "/instances/{instance_id}/file",
     operation_id="getInstanceFile",
-    summary="The file the instance was made from, byte for byte (usually a PDF)",
+    summary="The file the instance was made from, byte for byte (PDF, JPG, PNG or HTML)",
     response_class=Response,
-    responses={200: {"content": {"application/pdf": {}}}},
+    responses={
+        200: {
+            "content": {
+                mime: {} for mime in ("application/pdf", "image/jpeg", "image/png", "text/html")
+            }
+        }
+    },
 )
 async def get_file(instance_id: int, session: Session) -> Response:
     name, content = await process_service.document_content(session, instance_id)
-    media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    kind = document_format(content)
+    media_type = IMAGE_TYPES.get(kind, "application/pdf" if kind == "pdf" else "text/html")
     # RFC 5987: the name may carry accents; `filename*` keeps them for the browser.
-    disposition = f"inline; filename*=UTF-8''{quote(name)}"
-    return Response(content, media_type=media_type, headers={"Content-Disposition": disposition})
+    disposition = f"{'attachment' if kind == 'html' else 'inline'}; filename*=UTF-8''{quote(name)}"
+    return Response(
+        content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": disposition,
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "sandbox; default-src 'none'",
+        },
+    )

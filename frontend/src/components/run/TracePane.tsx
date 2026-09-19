@@ -189,7 +189,7 @@ export function TracePane({
                   {symbol.origin?.match(/^(document|scan):/) ? (
                     <button
                       type="button"
-                      aria-label={`View ${name} in original PDF`}
+                      aria-label={`View ${name} in original document`}
                       onClick={() => setDocument({ instanceId: instance.id, symbol: name })}
                       className={cn(
                         'inline-flex items-center gap-1.5 text-left text-[12px] text-ocr underline decoration-ocr/30 underline-offset-4 hover:decoration-ocr',
