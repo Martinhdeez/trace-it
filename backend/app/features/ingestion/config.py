@@ -34,7 +34,9 @@ class Settings:
     ocr_threads: int = field(default_factory=lambda: int(os.getenv("TRACEPAY_OCR_THREADS", "4")))
     ocr_use_cuda: bool = field(default_factory=lambda: os.getenv("TRACEPAY_OCR_CUDA", "0") == "1")
     ocr_dpi: int = 240
-    ocr_profile: str = field(default_factory=lambda: os.getenv("TRACEPAY_OCR_PROFILE", "verified"))
+    ocr_profile: str = field(
+        default_factory=lambda: os.getenv("TRACEPAY_OCR_PROFILE", "experimental")
+    )
     ocr_min_confidence: float = 0.90
     ocr_mode: str = field(default_factory=lambda: os.getenv("TRACEPAY_OCR_MODE", "hybrid").lower())
     vlm_url: str | None = field(default_factory=lambda: os.getenv("TRACEPAY_VLM_URL"))
@@ -66,9 +68,7 @@ class Settings:
         default_factory=lambda: os.getenv("TRACEPAY_HELMCODE_TEXT_MODEL", "qwen3.6")
     )
     vision_providers: tuple[str, ...] = field(
-        default_factory=lambda: _providers(
-            "TRACEPAY_VISION_PROVIDERS", "compatible,gemini,helmcode"
-        )
+        default_factory=lambda: _providers("TRACEPAY_VISION_PROVIDERS", "helmcode")
     )
     text_providers: tuple[str, ...] = field(
         default_factory=lambda: _providers("TRACEPAY_TEXT_PROVIDERS", "jev,helmcode")

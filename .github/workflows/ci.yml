@@ -49,6 +49,8 @@ jobs:
       # LLM tests (`-m llm`) are never run here.
       - name: make check
         run: make check
+      - name: ERP subpath, original faults and guarded bootstrap
+        run: uv run --project backend pytest deploy/erp -q
 
   # The demo path through the real console and API in Chromium (tests/integration/README.md).
   e2e-integration:

@@ -90,10 +90,11 @@ The public Hugging Face model repositories do not require a paid API key.
 The four ONNX files occupy approximately 102 MB together; allow additional space
 for download caches, Python dependencies and Docker images. `.models/` is ignored
 by Git and mounted read-only at `/srv/.models` in the running backend. Model
-loading is lazy. By default, both API applications verify the pinned weights,
-detector configuration and dictionaries at startup, and require the evaluated
-Gemini/Jev model IDs and credentials. Missing or different components stop startup
-with a configuration error. This checks configuration, not provider availability.
+loading is lazy. The current Helmcode configuration uses the `experimental`
+profile: it has not inherited the historical Gemini/Jev evaluation. Keep the
+downloaded primary and verifier weights; extraction still checks corroboration
+and preserves uncertainty. The historical `verified` profile remains available
+only to reproduce its original committee and is not the deployment default.
 
 Do not use `--no-verifier`, `v6-small`, or a different primary profile when
 reproducing this setup. Those switches are for experiments. The API never
@@ -118,30 +119,29 @@ the configuration used for the documented OCR evaluation, not a guarantee that
 every provider account has access to them:
 
 ```dotenv
-GEMINI_API_KEY=your_gemini_key
+HELMCODE_API_KEY=your_helmcode_key
 TYPESAFE_API_KEY=your_typesafe_key
-TRACEPAY_GEMINI_MODEL=gemini-3.1-flash-lite
-TRACEPAY_OCR_PROFILE=verified
+TRACEPAY_VISION_PROVIDERS=helmcode
+TRACEPAY_HELMCODE_VISION_MODELS=qwen3.6,gemma4
+TRACEPAY_PROVIDER_RETRY_MAX_WAIT_S=2
+TRACEPAY_OCR_PROFILE=experimental
 TRACEPAY_JEV_MODEL=jev-1.13.0
 TRACEPAY_WORKERS=2
 TRACEPAY_OCR_THREADS=4
 TRACEPAY_OCR_CUDA=0
 TRACEPAY_OCR_MODE=hybrid
-# Optional visual/text fallback when an earlier provider is unavailable:
-HELMCODE_API_KEY=your_helmcode_key
 ```
 
 | Credential | Used for | Needed to reproduce the OCR committee? |
 |---|---|---|
-| `GEMINI_API_KEY` | Image transcription and focused visual rechecks. Create a key through [Google AI Studio](https://ai.google.dev/gemini-api/docs/api-key). | Yes, for the Gemini path |
 | `TYPESAFE_API_KEY` | Jev's text-only selection among reader candidates, via `https://api.typesafe.ai/v1/systemone`. Obtain API access from [TypeSafe](https://typesafe.ai/). | Yes, for the Jev stage |
-| `HELMCODE_API_KEY` | Optional OCR fallback (Qwen/Gemma), plus separately configured norm/rule/assistant agents | No; the original committee works without it |
-| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY` | Alternative rule-agent providers, if selected in the agent configuration | No |
+| `HELMCODE_API_KEY` | Primary image reader (Qwen 3.6), Gemma fallback, plus separately configured agents | Yes |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | Alternative rule-agent providers, if selected in the agent configuration | No |
 | `FAL_KEY` | Historical `compare_fal_ocr` experiments | No; not used by the production committee |
 | `LOGFIRE_TOKEN` | Optional external observability | No |
 
-The OCR adapter specifically reads `GEMINI_API_KEY`; setting only
-`GOOGLE_API_KEY` does not enable it. Jev never sees pixels and is not another
+Remove retired `GEMINI_API_KEY`, `GOOGLE_API_KEY` and `TRACEPAY_GEMINI_MODEL`
+entries from active environments. Jev never sees pixels and is not another
 visual verifier. `load --activate --manager-id 1` uses the supplied hand-written rules without
 calling rule agents. Agent settings in `processes/invoice-payment/use-case.json`
 are separate from `TRACEPAY_*`; changing the compiler model does not change OCR.
@@ -149,7 +149,7 @@ are separate from `TRACEPAY_*`; changing the compiler model does not change OCR.
 For local-only operation or a different model, explicitly set
 `TRACEPAY_OCR_PROFILE=experimental` before starting the API. Native PDF/XLSX
 extraction and available local readers still work in that mode, but it has
-different coverage. The default `verified` profile never silently drops those
+different coverage. The historical `verified` profile never silently drops its
 providers. `make setup` installs both pinned local readers and runs `make ocr-check`
 before starting Docker. You can run `make ocr-check` separately after editing `.env`.
 Focused local/visual corroboration requires an enabled visual provider. Requests
@@ -159,20 +159,18 @@ and `jev=false` explicitly disable them, even when keys exist.
 An alternative image service can be configured with `TRACEPAY_VLM_URL`,
 `TRACEPAY_VLM_MODEL` and optionally `TRACEPAY_VLM_API_KEY`. The URL is the API
 base, typically ending in `/v1`; the adapter appends `/chat/completions` and sends
-an image. A complete URL/model pair takes precedence over Gemini; leave all three
-unset to reproduce the Gemini run. Partial generic settings permit configured
-Gemini. The default visual chain tries configured compatible, Gemini and Helmcode
-readers in that order; failure can move to the next configured reader. To preserve
-a single-provider experiment, explicitly restrict `TRACEPAY_VISION_PROVIDERS`.
+an image. Add `compatible` to `TRACEPAY_VISION_PROVIDERS` to select it.
+The default visual chain uses Helmcode Qwen followed by Gemma; it does not select
+Gemini, even if an old environment still contains its key.
 See [provider order, local/API modes and billing](providers-and-modes.md).
 
 ### Helmcode as the primary image reader
 
-Use this when Gemini is out of quota (HTTP 429 on every scan) or when its key is refused:
+Gemini has been retired after exhausting its quota. The active configuration is:
 
 ```bash
 TRACEPAY_OCR_PROFILE=experimental      # the verified profile requires Gemini first
-TRACEPAY_VISION_PROVIDERS=helmcode,gemini
+TRACEPAY_VISION_PROVIDERS=helmcode
 HELMCODE_API_KEY=...                   # Qwen 3.6 reads the images; Jev stays the text judge
 ```
 
@@ -182,9 +180,12 @@ the version is published. The version then carries no deployment fallback.
 With the settings above, the version reads with `helmcode:qwen3.6` and does not use Gemini.
 Set the variables before `make load-frozen` or `load --activate`. A version that was
 already published with `gemini:...` keeps Gemini. To switch it, `GET` the
-`/processes/{P}/draft`, set `execution.extraction.vision_model` to `helmcode:qwen3.6`,
-`PUT` it back, then validate and publish. The experimental profile skips the startup
-check of the local OCR weights, so run `make ocr-check` yourself.
+`/processes/{P}/execution`, copy `settings`, change `extraction.vision_model` to
+`helmcode:qwen3.6`, then PUT `{"execution": settings}` to `/processes/{P}/draft`
+and validate/publish it. Preserve any existing draft and use its `expected_revision`.
+The [VPS repair bundle](../../deploy/erp/README.md) performs the guarded migration.
+The experimental profile skips the historical committee startup certification;
+`make ocr-check` reports that profile and does not certify Helmcode accuracy.
 
 Keys stay in the ignored `.env`. Changing `.env` requires recreating the Docker
 backend (`docker compose up -d --force-recreate backend`) or restarting a local
