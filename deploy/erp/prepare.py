@@ -9,6 +9,10 @@ from pathlib import Path
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--update", type=Path, help="Reviewed incremental ERP CSV")
+    parser.add_argument(
+        "--workbook", type=Path, help="Reviewed cumulative reference workbook"
+    )
     args = parser.parse_args()
     here = Path(__file__).resolve().parent
     challenge = here.parents[1] / ".context/500-sombras-de-alberto"
@@ -17,6 +21,7 @@ def main():
         for name in (
             "Dockerfile",
             "compose.yml",
+            "compose.update.yml",
             "server.py",
             "install.sh",
             "bootstrap_sources.py",
@@ -27,10 +32,13 @@ def main():
     files.update(
         {
             "alberto_erp.py": challenge / "alberto_erp.py",
-            "reference.xlsx": challenge / "FINAL_v7_DEFINITIVO_ahorasi.xlsx",
+            "reference.xlsx": args.workbook
+            or challenge / "FINAL_v7_DEFINITIVO_ahorasi.xlsx",
             "activate-route.py": here.parent / "activate-route.py",
         }
     )
+    if args.update:
+        files["erp_export_lote2.csv"] = args.update
     if any(not path.is_file() for path in files.values()):
         parser.error(
             "Initialize the pinned challenge submodule before preparing the bundle"

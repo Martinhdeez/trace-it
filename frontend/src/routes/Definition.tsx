@@ -218,7 +218,9 @@ export function Definition() {
       mode: 'discuss' | 'revise'
       revising?: Turn
     }): Promise<Partial<Turn>> => {
-      if (pane === 'normas') {
+      // A plain Normas message uses the focused rule normalizer. Evidence or an explicit
+      // change request belongs to discovery, which can revise sources and the full process.
+      if (pane === 'normas' && files.length === 0 && mode === 'discuss') {
         const norm = revising?.norm ?? prompt
         const preview = await api.previewNorm(
           processId,
@@ -411,7 +413,7 @@ export function Definition() {
             onDraft={setDraft}
             focusTick={focusTick}
             busy={send.isPending}
-            allowChanges={pane !== 'normas'}
+            allowChanges
             onSend={(text, files, mode) => {
               send.mutate({ prompt: text, files, mode, revising: openProposal })
               setDraft('')

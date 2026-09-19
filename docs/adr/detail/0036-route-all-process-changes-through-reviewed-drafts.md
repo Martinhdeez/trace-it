@@ -36,6 +36,9 @@ an agent write published configuration directly would also confuse evidence with
 - Materialize accepted source bindings in ordinary code. Compile rules, run acceptance examples
   and historical impact, then require manager publication of the exact revision. Publication
   atomically creates or updates the process version and immutable source snapshots.
+- Require each source change to declare `replace`, `append`, `upsert` or `delete`. Upserts and
+  deletions identify rows with reviewed canonical key fields. Reject missing and duplicate keys
+  before preview so an incremental asset cannot silently replace a complete source.
 - Keep connector generation, unstructured file readers and unattended publication outside this
   decision. They can extend evidence acquisition without changing the review contract.
 

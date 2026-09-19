@@ -5,11 +5,13 @@ faked, models scripted: no LLM key."""
 import uuid
 
 import pytest
+from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.models.function import FunctionModel
 from sqlalchemy import select
 
 from app.core.database import session_factory
 from app.core.events import Event
-from app.features.agents import compiler, llm, sandbox
+from app.features.agents import assistant, compiler, llm, sandbox
 from app.features.decisions.engine import Outcomes
 from app.features.decisions.model import Decision
 from app.features.decisions.tests.test_api import RULES_V3, client, create_process, stored
@@ -18,6 +20,7 @@ from app.features.proposals.service import learnable
 from app.features.versions.tests.test_api import publish, validate
 from tests.support.fakes import dataset_runner
 from tests.support.models import instructions, per_role, retry_prompts, user_json
+from tests.support.pack import use_case
 
 OUTCOMES = Outcomes({"ESCALAR": 3, "NO_PAGAR": 2, "PAGAR": 1}, "PAGAR", "ESCALAR")
 HUMAN = {"ESCALAR"}
@@ -67,9 +70,9 @@ SUGGESTION = {
 }
 
 
-async def resolved(api, monkeypatch, replies, decision="PAGAR"):
+async def resolved(api, monkeypatch, replies, decision="PAGAR", runner=None):
     """FA-5044 escalated by `iban_mismatch` alone, resolved by Ana; the agent scripted."""
-    monkeypatch.setattr(sandbox, "run_dataset", dataset_runner(RULES))
+    monkeypatch.setattr(sandbox, "run_dataset", runner or dataset_runner(RULES))
     pid, headers = await create_process(api, "manager")
     assert (await api.post(f"/processes/{pid}/run")).status_code == 200
     [case] = (await api.get(f"/processes/{pid}/queue")).json()
@@ -142,6 +145,108 @@ async def test_a_rule_that_names_the_case_is_sent_back(monkeypatch):
     assert "names this case" in retry and "FA-5044_mensajería2" in retry
 
 
+NARROWER = {
+    **SUGGESTION,
+    "text": "The iban differs from every iban the suppliers master has for that nif, "
+    "unless the erp order is still PENDIENTE and its amount matches total.",
+}
+
+
+def naming(other: str):
+    """The fake sandbox, with the escalating rule reporting `other` like a duplicate order
+    names the invoices it shares the order with."""
+    run = dataset_runner(RULES)
+
+    def run_dataset(code, instances, sources, population):
+        answers = run(code, instances, sources, population)
+        return [
+            {**a, "reason": f"Same order as: {other}"} if isinstance(a, dict) and a["fires"] else a
+            for a in answers
+        ]
+
+    return run_dataset
+
+
+async def test_the_agent_sees_the_related_cases_and_cannot_invent_their_values(monkeypatch):
+    """Fix 1: a duplicate-order rule names the other invoice; the agent gets its symbols
+    and which it shares with this case, and a value it made up is sent back."""
+    made_up = {**SUGGESTION, "rationale": "La otra factura es de otro emisor (B12345678)."}
+    async with client() as api:
+        _, headers, iid, seen = await resolved(
+            api, monkeypatch, [made_up, SUGGESTION], runner=naming("factura_1217.pdf")
+        )
+        proposal = await suggest(api, iid, headers)
+
+    assert proposal["rationale"] == SUGGESTION["rationale"]
+    context = user_json(seen["assistant"][0])
+    assert context["escalation"]["rule_evidence"] == "Same order as: factura_1217.pdf"
+    [related] = context["escalation"]["related_cases"]
+    assert related["name"] == "factura_1217.pdf" and related["symbols"]["nif"] == "B96233419"
+    assert related["same_as_case"] == []  # FA-5044 has another nif, iban and order
+    [retry] = retry_prompts(seen["assistant"][-1])
+    assert "nif B12345678" in retry and "B78451236, B96233419" in retry
+
+
+async def test_asking_again_after_a_reject_gets_a_different_rule(monkeypatch):
+    """Fix 2: the rejected rule and its reason are in the context, and the same rule again
+    is sent back."""
+    async with client() as api:
+        _, headers, iid, seen = await resolved(api, monkeypatch, [SUGGESTION, SUGGESTION, NARROWER])
+        first = await suggest(api, iid, headers)
+        r = await api.post(
+            f"/proposals/{first['id']}/reject", json={"reason": "Too broad"}, headers=headers
+        )
+        assert r.status_code == 200, r.text
+        second = await suggest(api, iid, headers)
+
+    assert second["payload"]["text"] == NARROWER["text"]
+    assert user_json(seen["assistant"][0])["rejected_suggestions"] == []
+    assert user_json(seen["assistant"][-1])["rejected_suggestions"] == [
+        {"text": SUGGESTION["text"], "reject_reason": "Too broad"}
+    ]
+    [retry] = retry_prompts(seen["assistant"][-1])
+    assert "already rejected" in retry
+
+
+async def test_the_reviewer_runs_without_reasoning_under_a_tight_cap(monkeypatch):
+    """Fix 3: a one-line rule took 9-15k output tokens, mostly reasoning cut by max_tokens
+    and retried down the fallback chain. The pack's `assistant` role (the reviewer's) turns
+    reasoning off and caps the answer; the model receives both."""
+    received = []
+
+    def answer(messages, info):
+        received.append(info.model_settings)
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, SUGGESTION)])
+
+    monkeypatch.setattr(llm, "resolve", lambda name, *_: FunctionModel(answer, model_name=name))
+    setup = llm.Setup(use_case().agents["assistant"])
+    deps = assistant.RuleDeps([], {"symbol:iban", "symbol:purchase_order"})
+    await llm.run(
+        assistant.reviewer_agent, "assistant", "{}", instructions="", setup=setup, deps=deps
+    )
+
+    [settings] = received
+    assert settings["openai_reasoning_effort"] == "none"
+    assert settings["max_tokens"] <= 1500
+
+
+async def test_the_model_call_is_in_the_case_trace(monkeypatch):
+    """Fix 4: the `llm_run` under `suggest_rule` carries the instance id."""
+    async with client() as api:
+        _, headers, iid, _ = await resolved(api, monkeypatch, [SUGGESTION])
+        await suggest(api, iid, headers)
+        trace = (await api.get(f"/instances/{iid}/trace")).json()
+
+    def walk(nodes):
+        for n in nodes:
+            yield n
+            yield from walk(n["children"])
+
+    [parent] = [n for n in walk(trace["spans"]) if n["step"] == "suggest_rule"]
+    [run] = [n for n in parent["children"] if n["step"] == "llm_run"]
+    assert run["instance_id"] == iid and run["data"]["agent"] == "reviewer_agent"
+
+
 async def test_a_case_no_rule_can_learn_is_409_in_spanish_and_spends_nothing(monkeypatch):
     async with client() as api:
         pid, headers, iid, seen = await resolved(api, monkeypatch, [])
@@ -181,7 +286,7 @@ async def test_ignored_and_rejected_suggestions_differ(monkeypatch):
     """Rejected: the manager said no, with a reason. Ignored: the manager moved on and
     resolved another case; the suggestion closes as `superseded`, cause `ignored`."""
     async with client() as api:
-        pid, headers, iid, _ = await resolved(api, monkeypatch, [SUGGESTION, SUGGESTION])
+        pid, headers, iid, _ = await resolved(api, monkeypatch, [SUGGESTION, NARROWER])
         first = await suggest(api, iid, headers)
         r = await api.post(
             f"/proposals/{first['id']}/reject", json={"reason": "Too broad"}, headers=headers
@@ -253,6 +358,31 @@ async def test_accepting_stages_the_amended_rule_in_place_of_the_old_one(monkeyp
         )
         steps = set(await s.scalars(select(Event.step).where(Event.trace_id == span.trace_id)))
     assert {"accept_proposal", "save_rule", "retire_rule", "compile_rules", "compile_rule"} <= steps
+
+
+async def test_the_manager_edits_the_rule_before_accepting(monkeypatch):
+    """The manager's `text` is the rule that compiles; the payload keeps the agent's."""
+    monkeypatch.setattr(compiler, "compile_rule", compiled("iban_unless_pending"))
+    edited = "The IBAN differs from the master, unless the ERP entry is PENDIENTE."
+    async with client() as api:
+        _, headers, iid, _ = await resolved(api, monkeypatch, [SUGGESTION])
+        proposal = await suggest(api, iid, headers)
+        r = await api.post(
+            f"/proposals/{proposal['id']}/accept", json={"text": edited}, headers=headers
+        )
+        assert r.status_code == 200, r.text
+        accepted = r.json()
+        rule = (await api.get(f"/rules/{accepted['outcome']['rule_id']}")).json()
+
+    assert rule["text"] == edited
+    assert accepted["payload"]["text"] == SUGGESTION["text"]
+    assert accepted["outcome"]["edited"] is True
+    assert accepted["outcome"]["original_text"] == SUGGESTION["text"]
+    async with session_factory() as s:
+        span = await s.scalar(
+            select(Event).where(Event.step == "accept_proposal").order_by(Event.id.desc())
+        )
+    assert span.data["edited"] is True and span.data["original_text"] == SUGGESTION["text"]
 
 
 # BE-4: the program learns. Two hotel invoices at 10 % VAT escalate under "VAT other than

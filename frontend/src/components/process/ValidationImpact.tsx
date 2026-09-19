@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
-import type { ValidationChange } from '../../api/contracts'
+import type { ResolvedByPerson, ValidationChange } from '../../api/contracts'
+import { t } from '../../i18n'
 import { paths } from '../../lib/paths'
 
 function transitions(changes: ValidationChange[]): [string, number][] {
@@ -11,17 +12,18 @@ function transitions(changes: ValidationChange[]): [string, number][] {
   return [...totals].sort(([a], [b]) => a.localeCompare(b))
 }
 
-function Cases({ processId, title, items }: {
+function Cases({ processId, title, items, link = paths.instance }: {
   processId: number
   title: string
   items: ValidationChange[]
+  link?: (processId: number, instanceId: number) => string
 }) {
   if (!items.length) return null
   return <details className="rounded-[10px] bg-canvas px-3 py-2">
     <summary className="cursor-pointer text-[12px] text-muted">{title} · {items.length}</summary>
     <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
       {items.map(item => <li key={`${item.instance_id}:${item.before}:${item.after}`} className="flex items-baseline gap-2 text-[12px]">
-        <Link to={paths.instance(processId, item.instance_id)} className="min-w-0 flex-1 truncate text-ink hover:underline">
+        <Link to={link(processId, item.instance_id)} className="min-w-0 flex-1 truncate text-ink hover:underline">
           {item.name || `Caso ${item.instance_id}`}
         </Link>
         <span className="shrink-0 font-mono text-[10px] text-muted">{item.before} → {item.after}</span>
@@ -37,6 +39,7 @@ export function ValidationImpact({ processId, validation }: {
     unchanged?: number
     changes?: ValidationChange[]
     conflicts?: ValidationChange[]
+    resolved_by_person?: ResolvedByPerson[]
     errors?: { instance_id: number; name?: string; reason?: string }[]
   }
 }) {
@@ -45,6 +48,11 @@ export function ValidationImpact({ processId, validation }: {
   const errors = validation.errors ?? []
   const unchanged = validation.unchanged ?? 0
   const total = unchanged + changes.length + conflicts.length
+  // reviewer-agent FE-4 (docs/reviewer-agent.md): the manager sees how the draft treats their own
+  // resolutions before publishing. If merging a newer version from Carlos, keep his UI and
+  // preserve: agree when after === resolution; contradicting cases link to review?i=<instance>.
+  const mine = validation.resolved_by_person ?? []
+  const contradicting = mine.filter(item => item.after !== item.resolution)
 
   return <div className="space-y-3">
     <div className="grid grid-cols-2 overflow-hidden rounded-[10px] bg-canvas ring-1 ring-line sm:grid-cols-4">
@@ -64,6 +72,11 @@ export function ValidationImpact({ processId, validation }: {
         {label} · {count}
       </span>)}
     </div> : <p className="text-[12px] text-muted">Ninguna decisión cambiaría con esta versión.</p>}
+
+    {mine.length ? <p className="text-[12px] text-muted">
+      {t('reviewerAgent.yourDecisions')}: {mine.length} — {t('reviewerAgent.agree')} {mine.length - contradicting.length}, {t('reviewerAgent.contradict')} {contradicting.length}
+    </p> : null}
+    <Cases processId={processId} title={t('reviewerAgent.contradicting')} items={contradicting} link={paths.reviewCase} />
 
     <Cases processId={processId} title="Decisiones del motor que cambiarían" items={changes} />
     <Cases processId={processId} title="Decisiones protegidas que entrarían en conflicto" items={conflicts} />

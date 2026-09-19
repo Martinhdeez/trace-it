@@ -62,8 +62,12 @@ async def supersede(session: AsyncSession, cause: str, *where) -> list[int]:
     return [r.id for r in rows]
 
 
-async def list_for(session: AsyncSession, process_id: int, status: str | None):
+async def list_for(
+    session: AsyncSession, process_id: int, status: str | None, instance_id: int | None = None
+):
     query = select(ManagerProposal).where(ManagerProposal.process_id == process_id)
+    if instance_id is not None:
+        query = query.where(ManagerProposal.instance_id == instance_id)
     if status:
         query = query.where(ManagerProposal.status == status)
     return [out(r) for r in await session.scalars(query.order_by(ManagerProposal.id.desc()))]
@@ -278,9 +282,10 @@ async def propose_rule(session: AsyncSession, instance_id: int) -> ManagerPropos
     return out(row)
 
 
-async def _amend(session, row, user, background) -> dict:
+async def _amend(session, row, user, background, text: str | None = None) -> dict:
     """Stage the amended rule in the draft in place of the one it replaces; it compiles in
-    the background. Publishing stays validate + publish of the process draft."""
+    the background. Publishing stays validate + publish of the process draft. `text` is the
+    manager's edit of `payload.text`; the payload stays as the agent wrote it."""
     from app.features.rules import service as rules
     from app.features.rules.schemas import RuleIn
     from app.features.versions.model import ProcessDraft
@@ -290,7 +295,9 @@ async def _amend(session, row, user, background) -> dict:
         rule = await rules.create(
             session,
             row.process_id,
-            RuleIn(text=p["text"], summary=p["summary"], type=p["type"], decision=p["decision"]),
+            RuleIn(
+                text=text or p["text"], summary=p["summary"], type=p["type"], decision=p["decision"]
+            ),
         )  # commits the settlement too
         span.set(rule_id=rule.id, proposal_id=row.id)
     await rules.retire(session, p["replaces"], user.name)
@@ -464,9 +471,10 @@ async def _stage(session, row, user) -> dict:
 
 
 async def accept(
-    session: AsyncSession, proposal_id: int, reason: str, user, background=None
+    session: AsyncSession, proposal_id: int, reason: str, user, background=None, text=None
 ) -> ManagerProposalOut:
-    """`background` (FastAPI's BackgroundTasks): where an accepted rule is compiled."""
+    """`background` (FastAPI's BackgroundTasks): where an accepted rule is compiled. `text`:
+    the manager's edit of an escalation rule suggestion, compiled instead of `payload.text`."""
     row = await get(session, proposal_id, lock=True)
     if row.status != "open":
         raise ConflictError(f"Proposal {proposal_id} is {row.status}")
@@ -478,10 +486,16 @@ async def accept(
         channel=row.channel,
         kind=row.kind,
         author=user.name,
-    ):
+    ) as span:
         if row.channel == "escalation" and row.kind == "rule":
-            settle(row, "accepted", user.name, {"reason": reason})
-            row.outcome = {**row.outcome, **await _amend(session, row, user, background)}
+            original = row.payload["text"]
+            edit = (text or "").strip()
+            changed = bool(edit) and edit != original
+            edited = {"edited": True, "original_text": original} if changed else {}
+            span.set(edited=changed, **({"original_text": original} if changed else {}))
+            settle(row, "accepted", user.name, {"reason": reason, **edited})
+            amended = await _amend(session, row, user, background, edit if edited else None)
+            row.outcome = {**row.outcome, **amended}
         elif row.channel == "escalation":
             from app.features.decisions import service as decisions
             from app.features.decisions.schemas import ResolveIn

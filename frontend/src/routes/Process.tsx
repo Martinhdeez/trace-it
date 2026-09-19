@@ -32,7 +32,7 @@ import { ErrorNotice } from '../components/shell/Notice'
 import { NestedCard } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { ALERTS_TAB, paths } from '../lib/paths'
-import type { VersionOut, RunOut, UploadProgress, ExecutionMetrics, NormRule, ProcessDetail, ProcessMetrics, ProcessSummary, Rule } from '../api/contracts'
+import type { VersionOut, RunOut, UploadProgress, ExecutionMetrics, NormRule, ProcessDetail, ProcessMetrics, ProcessSummary, Proposal, Rule } from '../api/contracts'
 import { t } from '../i18n'
 import { formatEuro, formatMs, formatRunDate } from '../lib/format'
 import { decisionTone, type DecisionTone } from '../lib/process'
@@ -109,6 +109,16 @@ export function Process() {
     queryFn: () => api.listProposals(processId, 'open'),
     enabled: isManager,
     select: (items) => items.filter((item) => item.channel !== 'escalation'),
+  })
+  // reviewer-agent FE-5 (docs/reviewer-agent.md): open rule suggestions live on their case, so
+  // the Panel counts them and links to that case. If merging a newer version from Carlos, keep his
+  // UI and preserve: escalation proposals link to review?i=<instance_id>; the count is
+  // kind=rule, channel=escalation, status=open. Same cache as `proposals`, another view of it.
+  const ruleSuggestions = useQuery({
+    queryKey: keys.proposals(processId, 'open'),
+    queryFn: () => api.listProposals(processId, 'open'),
+    enabled: isManager,
+    select: (items) => items.filter((item) => item.channel === 'escalation' && item.kind === 'rule'),
   })
   const findings = useQuery({
     queryKey: keys.findings(processId),
@@ -313,6 +323,7 @@ export function Process() {
           draftVersion={hasDraft && draft.data ? nextVersion : undefined}
           alerts={alerts.data?.length ?? 0}
           proposals={proposals.data?.length ?? 0}
+          ruleSuggestions={ruleSuggestions.data ?? []}
         />
 
         {summary.data?.instances === 0 ? (
@@ -364,6 +375,7 @@ function Alerts({
   draftVersion,
   alerts,
   proposals,
+  ruleSuggestions,
 }: {
   processId: number
   waiting: number
@@ -372,6 +384,7 @@ function Alerts({
   draftVersion: number | undefined
   alerts: number
   proposals: number
+  ruleSuggestions: Proposal[]
 }) {
   const items = [
     waiting > 0
@@ -390,6 +403,12 @@ function Alerts({
       ? {
           to: paths.definition(processId),
           text: `${proposals} propuesta${proposals === 1 ? ' espera' : 's esperan'} tu decisión`,
+        }
+      : null,
+    ruleSuggestions[0]?.instance_id != null
+      ? {
+          to: paths.reviewCase(processId, ruleSuggestions[0].instance_id),
+          text: `${ruleSuggestions.length} ${t(ruleSuggestions.length === 1 ? 'reviewerAgent.ruleSuggestion' : 'reviewerAgent.ruleSuggestions')}`,
         }
       : null,
     alerts > 0

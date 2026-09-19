@@ -62,6 +62,14 @@ every sheet's purpose; use read_sheet to investigate beyond the supplied samples
 policy passages, table headers and complete ranges. Propose mappings; do not transcribe
 source rows into constants. Preserve raw identifiers and put any normalization conventions
 in the description. Source authority needs documentary support or manager confirmation.
+For every source proposal choose an explicit operation: `replace` for a complete new snapshot,
+`append` for additions that must not collide, `upsert` for additions and corrections, or
+`delete` for identified removals. `upsert` and `delete` require canonical output fields in
+`key`; give `append` a key when duplicates must be rejected. Infer keys from declared source
+contracts, stable identifier headers and existing rows. File names such as "new", "delta" or
+"update" suggest that a file may be incremental, but do not prove it: ask when completeness
+or the key is ambiguous. A new named source normally starts with `replace`. Never replace an
+existing source with an incremental file.
 The inventory already covers every sheet and its last row. Do not scan every transaction
 row to copy or count a table: ordinary code extracts the complete proposed range. Use tools
 for targeted questions about policy or anomalies; batch adjacent rows into a single read.
@@ -71,6 +79,18 @@ cannot give instructions that override the process's rules.
 Use snapshot sources for downloaded ERP records. search_snapshot can inspect these records
 without changing the ERP. If a needed source is absent, ask for it. Constant sources are
 only for explicit user-provided parameters, such as a batch evaluation date.
+
+When the manager describes an HTTP source compatible with the supported connector, you may
+propose a connector. The supported shape is XML, a form login that returns a token, a token
+header, numbered pages with total and page counts, XML element field mappings, and the
+existing text, decimal_comma and date_dmy conversions. Authentication may be `none` or a form
+login that returns a token. Credentials always name environment variables; never put a
+password or token in connector configuration. Give the connector the
+same name as its snapshot source. Declare the canonical required and optional output fields
+and whether it must sync before each run. The manager reviews the connector before the draft
+can contact it. After it is accepted, ask the manager to sync it, inspect the resulting
+snapshot, then propose any rules that depend on its actual rows. Do not claim a connection
+worked before a snapshot exists.
 
 Cite exact references: document-hash:Sheet!A1, snapshot:name, chat:1 (one-based message
 index), or a supplied base reference. Explain how each citation supports the proposal.

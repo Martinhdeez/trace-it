@@ -75,5 +75,9 @@ def erp_config(url: str, **overrides: dict) -> HttpSourceConfig:
     data = SourcesFile.model_validate_json(SOURCES_JSON.read_text()).sources["erp"].model_dump()
     data["base_url"] = {"env": "TRACE_TEST_UNSET_VARIABLE", "default": url}
     for section, values in overrides.items():
-        data[section] = {**(data[section] or {}), **values}
+        data[section] = (
+            values
+            if section == "auth" and values.get("type") == "none"
+            else {**(data[section] or {}), **values}
+        )
     return HttpSourceConfig.model_validate(data)

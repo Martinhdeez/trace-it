@@ -1,10 +1,13 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 
 from app.features.decisions.schemas import DecisionOut
+
+# A percentile of durations, to 0.1 ms: `percentile_cont` interpolates to float noise.
+Ms = Annotated[float | None, AfterValidator(lambda v: None if v is None else round(v, 1))]
 
 
 class SpanOut(BaseModel):
@@ -68,6 +71,31 @@ class SourceRead(BaseModel):
     trace_id: str  # `GET /traces/{trace_id}`: the sync's tree
 
 
+class PendingItem(BaseModel):
+    id: int
+    kind: str = Field(examples=["decision", "rule", "source_sync", "rule_change"])
+    created_at: datetime
+
+
+class Pending(BaseModel):
+    """What this instance still waits for: a person, or a manager settling its proposals and
+    alerts (`GET /processes/{id}/proposals?instance_id=`, `/alerts?instance_id=`)."""
+
+    waiting_for_person: bool  # the latest decision is a human outcome, or its review is
+    review_pending: bool  # the decision reviewer asked a person to check it
+    proposals: list[PendingItem]  # open, `kind` as the proposal's
+    alerts: list[PendingItem]  # open, `kind` the trigger's (source_sync, rule_change)
+
+
+class VersionRef(BaseModel):
+    """The published process version that took the latest decision."""
+
+    id: int
+    number: int
+    author: str
+    created_at: datetime
+
+
 class InstanceTrace(BaseModel):
     """The journey of one instance: its file, how it was read, its symbols, every decision
     with each rule's answer, what people did, and what the export writes for it."""
@@ -82,6 +110,8 @@ class InstanceTrace(BaseModel):
     exported_decision: str | None  # what `GET /processes/{id}/export` writes (ADR 0016)
     spans: list[SpanNode]  # ingestion, runs (with per-rule spans), resolutions, exports
     sources_read: list[SourceRead] = []  # by source name; empty before any decision
+    pending: Pending
+    version: VersionRef | None  # None before any decision, or one taken before versions
 
 
 class RuleRuntime(BaseModel):
@@ -91,8 +121,8 @@ class RuleRuntime(BaseModel):
     instances: int
     fired: int
     errors: int
-    p50_ms: float | None
-    p95_ms: float | None
+    p50_ms: Ms
+    p95_ms: Ms
 
 
 class RuleTrace(BaseModel):
@@ -116,8 +146,8 @@ class StepStats(BaseModel):
     step: str
     count: int
     errors: int
-    p50_ms: float | None
-    p95_ms: float | None
+    p50_ms: Ms
+    p95_ms: Ms
     traces: str | None = None  # `GET /traces?...`: the spans behind this row
 
 
@@ -156,8 +186,8 @@ class ProviderStats(BaseModel):
     cached_tokens: int = 0
     reasoning_tokens: int = 0
     network_latency_ms: int = 0
-    network_p50_ms: float | None = None
-    network_p95_ms: float | None = None
+    network_p50_ms: Ms = None
+    network_p95_ms: Ms = None
     known_cost_usd: float = 0
     priced_requests: int = 0
     included_requests: int = 0
@@ -175,7 +205,7 @@ class SourceStats(BaseModel):
     requests: int
     retries: int
     rate_limited: int  # 429 responses
-    p95_ms: float | None
+    p95_ms: Ms
     traces: str | None = None  # `GET /traces?...`: the spans behind this row
 
 
@@ -303,8 +333,8 @@ class RuleRunStats(BaseModel):
     instances: int
     fired: int
     errors: int
-    p50_ms: float | None
-    p95_ms: float | None
+    p50_ms: Ms
+    p95_ms: Ms
     traces: str | None = None  # `GET /traces?...`: the spans behind this row
 
 
@@ -333,5 +363,5 @@ class PlaneHealth(BaseModel):
     spans: int
     errors: int
     error_rate: float | None
-    p95_ms: float | None
+    p95_ms: Ms
     reason: str | None  # why it is not ok

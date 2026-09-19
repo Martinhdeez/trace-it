@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync sources up backup export-batch check-outcomes test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down hiring-data hiring-demo check down reset-db
+.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync sources up backup export-batch check-outcomes test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down hiring-data hiring-demo hiring-erp reviewer-demo-pdfs check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 DEMO_ARGS ?=
@@ -109,7 +109,7 @@ test-e2e: test-db  # golden outcomes of batch 1 + API flow (needs the challenge 
 
 # Synthetic IMAP, worker, API, PostgreSQL and console on an isolated test database.
 MAIL_TEST_DB_URL ?= postgresql+psycopg://trace:trace@localhost:$${DB_PORT:-5432}/trace_mail_browser_test
-.PHONY: e2e-mail
+.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync sources up backup export-batch check-outcomes test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down hiring-data hiring-demo reviewer-demo-pdfs check down reset-db
 e2e-mail:
 	cd backend && TRACE_DATABASE_URL=$(MAIL_TEST_DB_URL) uv run python -m tests.support.prepare_db
 	cd backend && TRACE_DATABASE_URL=$(MAIL_TEST_DB_URL) uv run alembic upgrade head
@@ -148,8 +148,14 @@ demo-llm-down:  # real LLMs: the primary model's provider is unreachable, a fall
 hiring-demo:
 	uv run --project backend --locked python tools/hiring_demo.py $(HIRING_ARGS)
 
+hiring-erp:  # HIRING_ERP_PORT=<port> if 8010 is taken
+	python3 processes/hiring-screening/criminal_records_erp.py --port $${HIRING_ERP_PORT:-8010}
+
 hiring-data:  # regenerate processes/hiring-screening/data (deterministic; committed)
 	uv run --project backend --locked python tools/hiring_mock.py
+
+reviewer-demo-pdfs:  # OUT=<folder>: the reviewer agent's demo invoices (docs/reviewer-agent.md)
+	uv run --project backend --locked python tools/reviewer_demo_pdfs.py $(or $(OUT),output/reviewer-demo)
 
 check:
 	cd backend && uv run ruff check . && uv run ruff format --check .

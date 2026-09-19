@@ -120,6 +120,12 @@ def resolve(model: Model | str, local_endpoint: str | None = None) -> Model | st
             base_url=settings.helmcode_base_url, api_key=os.environ.get("HELMCODE_API_KEY")
         )
         return OpenAIChatModel(model.removeprefix("helmcode:"), provider=provider)
+    if isinstance(model, str) and model.startswith("vercel:"):
+        provider = OpenAIProvider(
+            base_url=settings.ai_gateway_base_url,
+            api_key=os.environ.get("AI_GATEWAY_API_KEY"),
+        )
+        return OpenAIChatModel(model.removeprefix("vercel:"), provider=provider)
     return model
 
 
@@ -234,9 +240,11 @@ async def run(
     instructions: str,
     setup: Setup | None = None,
     deps: Any = None,
+    instance_id: int | None = None,
 ) -> tuple[Any, Trace]:
     """One agent run for `role`: the platform `instructions` plus the use case's guidance,
-    with the use case's model and settings. Returns the validated output and its trace."""
+    with the use case's model and settings. Returns the validated output and its trace.
+    `instance_id` links the `llm_run` span to the case it is about (its trace shows it)."""
     setup = setup or Setup()
     if setup.settings.instructions:
         instructions += "\n\n## Guidance for this use case\n" + setup.settings.instructions
@@ -251,6 +259,7 @@ async def run(
     prompt_hash = hashlib.sha256(instructions.encode()).hexdigest()[:12]
     with events.span(
         "llm_run",
+        instance_id=instance_id,
         role=role,
         agent=agent.name or "",
         model=model.models[0].model_name,  # the answering model replaces it

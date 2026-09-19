@@ -1,0 +1,11 @@
+services:
+  erp:
+    environment:
+      TRACE_ERP_UPDATE: /updates/erp.csv
+    volumes:
+      - type: bind
+        source: ${TRACE_ERP_UPDATE_FILE:?Set the absolute path to the reviewed ERP CSV}
+        target: /updates/erp.csv
+        read_only: true
+        bind:
+          create_host_path: false

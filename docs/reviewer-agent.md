@@ -7,7 +7,9 @@ No LLM decides: the manager accepts, validates and publishes, and the engine dec
 Why it works this way: [ADR 0035](adr/detail/0035-learn-from-resolved-escalations.md).
 Endpoints and payloads: [api.md, Proposals](api.md#proposals).
 
-Status: backend done (this PR). Frontend: work packages FE-1 to FE-6 below.
+Status: backend done (#152). Frontend: FE-1, FE-2, FE-3 and FE-6 built on Carlos's patterns
+(see [Frontend implementation and merge notes](#frontend-implementation-and-merge-notes));
+FE-4 and FE-5 in #162 ([their merge notes](#fe-4fe-5-merge-notes)).
 
 ## Target flow
 
@@ -27,7 +29,17 @@ Status: backend done (this PR). Frontend: work packages FE-1 to FE-6 below.
 5. **Sugerir regla** → `POST /instances/{id}/rule-proposal`. The pure gate
    `learnable()` runs first: 409 with a Spanish reason and 0 tokens when the case cannot be
    learned. Otherwise the reviewer agent writes the amended rule, stored as a proposal
-   `channel: escalation`, `kind: rule`. Spans: `suggest_rule`, `llm_run`.
+   `channel: escalation`, `kind: rule`. Spans: `suggest_rule`, `llm_run` (both carry the
+   instance id, so `GET /instances/{id}/trace` shows the model call).
+   What the agent is given, besides the rule and the resolution: the case's symbols, the
+   fired rule's own reason (`escalation.rule_evidence`), the other cases that reason names
+   with their symbols and `same_as_case` (`escalation.related_cases`: the other invoice of
+   a duplicate order), and the suggestions the manager already rejected on this case with
+   their reason (`rejected_suggestions`). Its answer is sent back once when it names the
+   case or a related one, repeats a rejected rule, or quotes an identifier (a nif, an iban,
+   an order) that is none of the values it was shown. It runs on the `assistant` role's
+   settings with reasoning off and `max_tokens` 1500: about 450 output tokens a call,
+   against 3.5k per call (9-15k with the fallbacks) when reasoning ran into the cap.
 6. **The manager decides on the suggestion:**
    - **Accept** → `POST /proposals/{id}/accept`. The new rule is created in the process
      draft and `payload.replaces` is retired there; the rule compiles in the background.
@@ -103,7 +115,10 @@ typed contract is already regenerated (`frontend/openapi.json`, `src/api/schema.
 - On reopening a resolved case, find its open suggestion with
   `GET /processes/{id}/proposals?status=open` (`instance_id`, `kind === 'rule'`,
   `channel === 'escalation'`).
-- Aceptar → `POST /proposals/{id}/accept` `{reason?}` → `outcome.rule_id`: link to the Rule
+- The rule text is editable before Aceptar (the textarea "Regla que entra con esta
+  decisión", prefilled with `payload.text`); the edit goes as `text`.
+- Aceptar → `POST /proposals/{id}/accept` `{reason?, text?}` → `outcome.rule_id` (plus
+  `edited: true, original_text` when the text was edited): link to the Rule
   page (`/rules/{rule_id}`, status `compiling` → `draft`) and to Panel → Publicar.
 - Rechazar → `POST /proposals/{id}/reject` `{reason}`.
 - A suggestion that comes back `superseded` shows why from `outcome.cause`: `ignored`,
@@ -124,11 +139,69 @@ typed contract is already regenerated (`frontend/openapi.json`, `src/api/schema.
 - Proposals with `channel === 'escalation'` link to `review?i={instance_id}`; count open
   rule suggestions (`kind === 'rule'`).
 
+### FE-4/FE-5 merge notes
+Done in `feat/reviewer-agent-publish-impact`, functionality only, in Carlos's existing UI:
+`components/process/ValidationImpact.tsx`, `components/process/PublishDraft.tsx`,
+`routes/Process.tsx` (Panel alerts), `api/contracts.ts` (`ResolvedByPerson`),
+`lib/paths.ts` (`reviewCase`), `i18n/es.ts` (`reviewerAgent` block). Each changed block has a
+`reviewer-agent FE-n` comment. When merging a newer version, keep his UI and preserve:
+- publish is blocked while a rule compiles (Validar and Publicar disabled, reason shown);
+- the manager sees agree/contradict counts before publishing (`after === resolution`);
+- escalation proposals link to their case (`review?i=<instance_id>`).
+
 ### FE-6. Client
 - `api/contracts.ts` + `api/live.ts`: add
   `proposeRule(instanceId: number): Promise<Proposal>` →
   `post(`/instances/${instanceId}/rule-proposal`)`. `schema.d.ts` is regenerated here;
   re-run `make openapi` if the backend changes.
+
+## Frontend implementation and merge notes
+
+Built for Carlos, on his patterns: react-query through the typed client (`api/live.ts`,
+`api/queries.ts` keys, `families` invalidation), his components (`Notice`, `ErrorNotice`,
+`Button`, `Textarea`, `StatusBadge`, `TerminalLoader`), his classes only, no new styling.
+The rule suggestion card follows #159's "preview, then accept" (`NormProposal`) and the
+Definition inbox's "Rechazar needs a reason" (`InboxCard`). Every changed block carries a
+`// reviewer-agent FE-n (docs/reviewer-agent.md)` comment with the invariants below.
+
+| Package | Files | Components and what they do |
+|---|---|---|
+| FE-1 | `frontend/src/routes/Queue.tsx` | `Resolve`: the open decision proposal is listed (`listProposals`, `status=open`, `instance_id`, `kind === 'decision'`); `ask` mutation behind "Pedir propuesta al asistente", hidden on `SOURCE_UNAVAILABLE`; `Suggested` options clickable only while `open`; the Decisión dropdown lists only final types (no ESCALAR); one "Resolver" button |
+| FE-2 | `frontend/src/routes/Queue.tsx`, `frontend/src/i18n/es.ts` (`escalationWhy`) | `explain()` and `WhyEscalated`: one Spanish sentence per code from the engine's decision (also on a resolved case), `symbols.*` labels and the fired rules' `rule_summary`; the raw reason stays as a chip |
+| FE-3 | `frontend/src/routes/Queue.tsx`, `frontend/src/api/queries.ts` (`caseRuleProposal`), `frontend/src/api/contracts.ts` (`RuleProposalPayload`, `ProposalOutcome`), `frontend/src/i18n/es.ts` (`proposalCause`) | `Queue` keeps a resolved case open through `?i=`; `SuggestRule`: "Sugerir regla" → `proposeRule`; 409 `message` in a `Notice`; 502 `ErrorNotice` with Reintentar; the card (summary, rationale, `payload.text` in the editable "Regla que entra con esta decisión" textarea, "Sustituye a la regla N", Aceptar with the edited `text` / Rechazar with a reason; an edited accepted rule shows the agent's original); accepted shows the new rule and its status with links to the rule and Panel → Publicar; `rejected` shows its reason, `superseded` its `outcome.cause` |
+| FE-6 | `frontend/src/api/contracts.ts`, `frontend/src/api/live.ts` | `proposeRule(instanceId)`; `make openapi` left `openapi.json` and `schema.d.ts` unchanged |
+| Test | `tests/integration/demo-path.spec.ts` | no POST /proposal on opening a case; resolve; 409 on a MISSING_DATA scan; a rule suggestion stored with `tests.support.proposals rule`, shown, rejected, `Rechazada`; another edited then accepted: the created rule has the edit and `outcome.edited` |
+| Backend | `backend/app/features/proposals/{schemas,router,service}.py`, `tests/test_reviewer_agent.py` | `AcceptIn.text`: accepting an escalation rule suggestion with an edited text creates that rule; `outcome` and the `accept_proposal` span record `edited`, `original_text` |
+
+**Behaviour invariants a merge must preserve**
+
+- Opening a case makes no LLM call: no `POST /instances/{id}/proposal` (nor `/suggestion`)
+  until the manager presses the button.
+- Resolving never waits on the rule suggestion; "Sugerir regla" only appears after it.
+- A 409 from `/rule-proposal` shows the backend's Spanish `message` as is.
+- Aceptar stages the rule in the process draft and does not publish; publishing stays in
+  Panel → Publicar.
+- `rejected` (the manager's no, with a reason) is shown apart from `superseded` and its
+  `outcome.cause` (`ignored`, `version_published`, `case_changed`, `superseded`).
+- Publish is blocked while a rule is compiling (FE-4, #162).
+- The manager can edit the rule before accepting; the edit is what compiles, and the
+  outcome records `edited` and `original_text`.
+- The existing decision accept/reject stays: the assistant's decision proposal keeps
+  Aceptar / Rechazar as on main, only asked for by the button.
+
+**Endpoints and operationIds used**
+
+| Call | operationId | Where |
+|---|---|---|
+| `GET /processes/{id}/proposals[?status=open]` | `listProposals` | `Resolve`, `SuggestRule` |
+| `POST /instances/{id}/proposal` | `proposeDecision` | `Resolve` (button only) |
+| `POST /instances/{id}/resolve` | `resolveInstance` (existing) | `Resolve` |
+| `POST /instances/{id}/rule-proposal` | `proposeRule` | `SuggestRule` |
+| `POST /proposals/{id}/accept` `{reason?, text?}`, `/reject` `{reason}` | `acceptProposal`, `rejectProposal` | `Resolve`, `SuggestRule` (`text` = the edited rule) |
+| `GET /rules/{id}` | `getRule` | `SuggestRule` (the accepted rule compiling) |
+
+**If this conflicts with Carlos's branch:** prefer his markup and styling, then re-apply
+these invariants.
 
 ## Demo pair
 
@@ -162,9 +235,13 @@ Checked with the hand-written v3 rule code in the real sandbox and the real sour
 
 Script: resolve A as `PAGAR` with "La hostelería tributa al 10 %", Sugerir regla, Aceptar,
 wait for the compile, Validar (A in `resolved_by_person` with `after: PAGAR`, B in
-`changes` `ESCALAR → PAGAR`), Publicar, Reprocesar: B becomes `PAGAR` by the engine. The two
-PDFs are not in the repository; generate them for the rehearsal with those values (any
-invoice number and date up to 2026-09-18). The backend loop test
+`changes` `ESCALAR → PAGAR`), Publicar, Reprocesar: B becomes `PAGAR` by the engine. The
+PDFs are not in the repository; `make reviewer-demo-pdfs [OUT=<folder>]`
+([`tools/reviewer_demo_pdfs.py`](../tools/reviewer_demo_pdfs.py), default
+`output/reviewer-demo/`) writes A (`hosteleria_A_F26-0726.pdf`), B
+(`hosteleria_B_F26-0717.pdf`) and `sin_pedido_F26-0999.pdf`, an invoice without a purchase
+order that escalates `MISSING_DATA` and shows the 409 of a case no rule can learn. Upload
+them like any invoice. The backend loop test
 `proposals/tests/test_reviewer_agent.py::test_the_program_learns_from_a_resolved_escalation`
 runs the same shape with no LLM key.
 

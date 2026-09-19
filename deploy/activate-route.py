@@ -26,8 +26,14 @@ if sys.argv[1:] == ["--erp"]:
     snippet = snippet.replace(b"/nexia/trace-it", b"/nexia/erp")
     snippet = snippet.replace(b"127.0.0.1:18173", b"127.0.0.1:18009")
     route = b"/nexia/erp"
+elif sys.argv[1:] == ["--criminal-records"]:
+    marker = b"# trace-it criminal records managed subpath"
+    snippet = snippet.replace(b"# trace-it managed subpath", marker)
+    snippet = snippet.replace(b"/nexia/trace-it", b"/nexia/criminal-records")
+    snippet = snippet.replace(b"127.0.0.1:18173", b"127.0.0.1:18010")
+    route = b"/nexia/criminal-records"
 elif sys.argv[1:]:
-    raise SystemExit("Usage: activate-route.py [--erp]")
+    raise SystemExit("Usage: activate-route.py [--erp|--criminal-records]")
 if marker in original:
     if snippet not in original:
         raise SystemExit(

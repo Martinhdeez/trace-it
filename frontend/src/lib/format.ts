@@ -9,7 +9,9 @@ export function formatMs(value: number): string {
   if (value >= 1000) {
     return `${(value / 1000).toLocaleString('es-ES', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} s`
   }
-  return `${value} ms`
+  // traceability-gaps (fix/traceability-gaps): percentiles arrive as floats ("4.799999999999996 ms").
+  // If merging a newer version from Carlos, keep his UI and preserve: at most one decimal below 1 s.
+  return `${value.toLocaleString('es-ES', { maximumFractionDigits: 1 })} ms`
 }
 
 export function formatRunDate(iso: string): string {

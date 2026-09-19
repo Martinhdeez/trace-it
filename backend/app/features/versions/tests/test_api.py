@@ -471,6 +471,35 @@ async def test_concurrent_publish_once():
         assert len((await api.get(f"/processes/{pid}/versions")).json()) == 1
 
 
+async def test_validation_and_refused_publication_are_traced():
+    """A validation is one span holding its replayed rules, never counted as execution; a
+    refused publication is an error span."""
+    async with client() as api:
+        pid, headers, rid, _ = await seed(api)
+        await publish(api, pid, headers)
+        assert (await api.post(f"/processes/{pid}/run")).status_code == 200
+        await api.put(f"/processes/{pid}/draft", headers=headers, json={"description": "New"})
+        draft = await validate(api, pid, headers)
+        body = {"revision": draft["revision"], "validation_hash": "stale", "reason": "x"}
+        refused = await api.post(f"/processes/{pid}/draft/publish", headers=headers, json=body)
+        assert refused.status_code == 409
+        params = {"process_id": pid, "name": "validate_process_draft"}
+        check = (await api.get("/traces", params=params)).json()[0]
+        tree = (await api.get(f"/traces/{check['trace_id']}")).json()
+        params["name"] = "publish_process_version"
+        published = (await api.get("/traces", params=params)).json()
+        execution = (await api.get(f"/processes/{pid}/metrics/execution")).json()
+    assert check["status"] == "ok" and check["data"]["author"] == "Manager"
+    assert [check["data"][k] for k in ("changes", "conflicts", "errors")] == [0, 0, 0]
+    [root] = [n for n in tree if n["step"] == "validate_process_draft"]
+    assert [(c["step"], c["rule_id"], c["process_id"]) for c in root["children"]] == [
+        ("evaluate_rule", rid, pid)
+    ]
+    assert published[0]["status"] == "error" and "validation" in published[0]["data"]["error"]
+    # Only the run's evaluation: the validation replayed the rule too, and does not count.
+    assert [(r["rule_id"], r["evaluations"]) for r in execution["rules"]] == [(rid, 1)]
+
+
 async def test_publication_waits_for_a_batch_and_rejects_its_stale_preview(monkeypatch):
     import threading
 
