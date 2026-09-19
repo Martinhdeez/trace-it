@@ -82,7 +82,7 @@ class DraftPlan(BaseModel):
             name=self.name,
             description=self.description,
             decision_types=self.decision_types,
-            symbols=self.symbols,
+            symbols=[s.model_dump() for s in self.symbols],  # checked as input here
             decision_review=self.decision_review,
             rules=[r.model_dump(exclude={"name", "evidence"}) for r in self.rules],
         )

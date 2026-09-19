@@ -2108,7 +2108,7 @@ export interface components {
              * Symbols
              * @default []
              */
-            symbols: components["schemas"]["SymbolIO"][];
+            symbols: components["schemas"]["SymbolIn"][];
             decision_review?: components["schemas"]["DecisionReviewConfig"] | null;
             /**
              * Rules
@@ -2261,7 +2261,7 @@ export interface components {
             /** Decision Types */
             decision_types?: components["schemas"]["DecisionTypeIO"][] | null;
             /** Symbols */
-            symbols?: components["schemas"]["SymbolIO"][] | null;
+            symbols?: components["schemas"]["SymbolIn"][] | null;
             /** Acceptance Examples */
             acceptance_examples?: {
                 [key: string]: unknown;
@@ -2692,6 +2692,8 @@ export interface components {
         FieldReading: {
             /** Value */
             value?: string | null;
+            /** Symbol */
+            symbol?: string | null;
             /** Proposed Value */
             proposed_value?: string | null;
             /** Proposed By */
@@ -4098,7 +4100,10 @@ export interface components {
              */
             source: "document" | "filename" | "text" | "none";
         };
-        /** SymbolIO */
+        /**
+         * SymbolIO
+         * @description A symbol as stored. Output keeps `type` free text, so an older row still reads.
+         */
         SymbolIO: {
             /** Name */
             name: string;
@@ -4107,8 +4112,33 @@ export interface components {
              * @example text
              * @example number
              * @example date
+             * @example boolean
              */
             type: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+            extraction?: components["schemas"]["SymbolExtraction"] | null;
+        };
+        /**
+         * SymbolIn
+         * @description A symbol as written: `type` is one of a fixed list.
+         */
+        SymbolIn: {
+            /** Name */
+            name: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "text" | "number" | "date" | "boolean";
             /**
              * Description
              * @default

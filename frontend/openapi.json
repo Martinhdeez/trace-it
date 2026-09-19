@@ -6994,7 +6994,7 @@
           },
           "symbols": {
             "items": {
-              "$ref": "#/components/schemas/SymbolIO"
+              "$ref": "#/components/schemas/SymbolIn"
             },
             "type": "array",
             "title": "Symbols",
@@ -7421,7 +7421,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/SymbolIO"
+                  "$ref": "#/components/schemas/SymbolIn"
                 },
                 "type": "array"
               },
@@ -8505,6 +8505,17 @@
               }
             ],
             "title": "Value"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
           },
           "proposed_value": {
             "anyOf": [
@@ -12228,7 +12239,8 @@
             "examples": [
               "text",
               "number",
-              "date"
+              "date",
+              "boolean"
             ]
           },
           "description": {
@@ -12257,7 +12269,53 @@
           "name",
           "type"
         ],
-        "title": "SymbolIO"
+        "title": "SymbolIO",
+        "description": "A symbol as stored. Output keeps `type` free text, so an older row still reads."
+      },
+      "SymbolIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number",
+              "date",
+              "boolean"
+            ],
+            "title": "Type"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": false
+          },
+          "extraction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SymbolExtraction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "SymbolIn",
+        "description": "A symbol as written: `type` is one of a fixed list."
       },
       "SyncResult": {
         "properties": {
