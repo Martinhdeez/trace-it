@@ -1,0 +1,3 @@
+cd backend && uv run python -m app.cli check-outcomes /Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/output/b8-demo/outcomes.jsonl --files /Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/.context/500-sombras-de-alberto/facturas
+/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/output/b8-demo/outcomes.jsonl: 500 lines for 500 PDFs in /Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/.context/500-sombras-de-alberto/facturas
+OK: one line per file, valid results {'ESCALAR': 28, 'NO_PAGAR': 36, 'PAGAR': 436}

@@ -41,7 +41,11 @@ overstates the available evidence. The runtime requirement must still apply to n
    them through the proposed policy with all other required fields present. Preserve
    initial bootstrap validation, static code checks, declared-symbol checks and stored tests.
    Missing required values in new cases must still escalate; the runtime engine is unchanged.
-6. Publish through the existing revision, snapshot and captured-input hash checks. New
+6. A case missing an existing required field whose latest decision is already an escalation
+   naming those fields (`MISSING_DATA` or `UNVERIFIED_DATA`) followed the policy: report it in
+   `already_escalated`, not as an error (2026-09-19, rehearsal 2 blocked on 8 unread scans).
+   The same gap on a case decided otherwise stays `MISSING_EXISTING_REQUIRED`.
+7. Publish through the existing revision, snapshot and captured-input hash checks. New
    uploads and pending re-extractions use the new schema. Never re-extract historical
    documents automatically or alter earlier decisions and evidence.
 

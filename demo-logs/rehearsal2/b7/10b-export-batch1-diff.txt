@@ -1,0 +1,7 @@
+$ make export-batch PACK=$FROZEN FILES=$B1 OUT=output/rehearsal2/delivery/outcomes.jsonl 2>&1 | tail -1; diff <(sort output/rehearsal2/friday/outcomes.jsonl) <(sort output/rehearsal2/delivery/outcomes.jsonl)
+OK: one line per file, valid results {'ESCALAR': 21, 'NO_PAGAR': 35, 'PAGAR': 444}
+64c64
+< {"file_id": "2026-03-28_P002.pdf", "result": "NO_PAGAR", "reason": "The ERP says PAGADA | The ERP says PAGADA for PO20260476"}
+---
+> {"file_id": "2026-03-28_P002.pdf", "result": "PAGAR", "reason": "NO_FINDING"}
+[exit 1] [1.06 s] [14:54:09]

@@ -95,7 +95,8 @@ class ProcessSummary(BaseModel):
     instances: int
     by_status: dict[str, int] = Field(examples=[{"PENDING": 0, "DECIDED": 500}])
     by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
-    # Live sources whose pre-run sync failed, name -> why; omitted when none (ADR 0028).
+    # Sources whose pre-run sync failed or that were never loaded, name -> why; omitted when
+    # none (ADR 0028).
     down_sources: dict[str, str] = {}
     queue: int  # latest decision is one a person must look at
     resolved: int  # instances whose latest decision a person took
@@ -107,7 +108,8 @@ class ProcessSummary(BaseModel):
 class RunSummary(BaseModel):
     decided: int
     by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
-    # Live sources whose pre-run sync failed, name -> why; omitted when none (ADR 0028).
+    # Sources whose pre-run sync failed or that were never loaded, name -> why; omitted when
+    # none (ADR 0028).
     down_sources: dict[str, str] = {}
 
 

@@ -1,0 +1,9 @@
+$ curl -s "$API/processes/$P/alerts?status=open" | python3 -c "import json,sys; a=json.load(sys.stdin); print(len(a) if isinstance(a,list) else a); [print(x[\"id\"], x.get(\"instance_id\"), x.get(\"name\") or \"\", json.dumps(x.get(\"before\",{}).get(\"decision\")), \"->\", json.dumps(x.get(\"after\",{}).get(\"decision\"))) for x in (a if isinstance(a,list) else [])]"; curl -s "$API/processes/$P/alerts?status=open" | head -c 700; echo
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; a=json.load(sys.stdin); print(len(a) if isinstance(a,list) else a); [print(x["id"], x.get("instance_id"), x.get("name") or "", json.dumps(x.get("before",{}).get("decision")), "->", json.dumps(x.get("after",{}).get("decision"))) for x in (a if isinstance(a,list) else [])]
+                                                                                                                                                               ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'get'
+1
+[{"id":1,"process_id":2,"instance_id":64,"name":"2026-03-28_P002.pdf","decision_id":64,"before":"NO_PAGAR","after":"PAGAR","trigger":{"kind":"source_sync","rows":{"after":[{"nif":"A41220987","date":"2026-03-28","amount":"2551.64","status":"PENDIENTE","entry_id":"AS-00476","supplier_id":"P002","purchase_order":"PO-2026-0476"}],"before":[{"nif":"A41220987","date":"2026-03-28","amount":"2551.64","status":"PAGADA","entry_id":"AS-00476","supplier_id":"P002","purchase_order":"PO-2026-0476"}]},"sources":[{"name":"erp","source_id":5,"rows_added":2,"previous_id":4,"rows_removed":1}]},"evidence":{"after":{"author":"engine","reason":""},"before":{"author":"engine","reason":"The ERP says PAGADA | The ER
+[exit 0] [0.06 s] [14:50:50]

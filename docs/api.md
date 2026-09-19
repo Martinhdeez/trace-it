@@ -20,10 +20,11 @@ The committed contract is `frontend/openapi.json` (`make openapi`), with typed
 **Who may call what.** Identify with `X-User-Id` (the id `POST /login` returns). The console's
 user is the manager, who handles only escalations (Q5 in [integration.md](integration.md)).
 Reads stay open. These need a manager: run, reprocess, source sync,
-`POST /processes/definition`, draft validate and publish, resolve, alert ack, `POST /users`,
-rule activate and retire, learning, proposals (propose, list, accept, reject). A missing header, or an id that does not exist, answers
+`POST /processes/definition`, draft read, edit, validate, publish and discard, resolve, alert ack,
+`POST /users`, rule create, compile, activate and retire, norm submit, learning, proposals
+(propose, list, accept, reject). A missing header, or an id that does not exist, answers
 401 `{"code": "unauthenticated"}`; a user who is not a manager answers 403
-`{"code": "permission_denied"}`. Uploads, extraction and rule creation need any known user.
+`{"code": "permission_denied"}`. Uploads and extraction need any known user.
 The first manager comes from the pack (`make setup` loads its `users`).
 
 ## One screen, one call
@@ -47,8 +48,8 @@ The first manager comes from the pack (`make setup` loads its `users`).
 | Proposals | `GET /processes/{id}/proposals?status=open`, `POST /proposals/{id}/accept`, `POST /proposals/{id}/reject` `{reason?}`, `POST /instances/{id}/proposal` | everything an agent proposes, in one shape; manager-only. See [Proposals](#proposals) |
 | Rules | `GET /processes/{id}/rules?status=` | compiling, draft, active, blocked, retired |
 | Rule | `GET /rules/{id}` | `code`, `tests`, `report` (`valid`, `tests`, `discrepancies`, `attempts`, `reviews`; `needs_data` when blocked) |
-| Norm | `POST /processes/{id}/norm`, `GET /processes/{id}/norm-rules` | the client's norm split into norm rules, each with its rules |
-| Rule lifecycle | `POST /processes/{id}/rules` (compiles in the background), `POST /rules/{id}/compile`, `GET /rules/{id}/impact`, `POST /rules/{id}/activate`, `POST /rules/{id}/retire` | impact = `unchanged`, `changes`, `conflicts`; activate/retire need a manager |
+| Norm | `POST /processes/{id}/norm`, `GET /processes/{id}/norm-rules` | the client's norm split into norm rules, each with its rules; the POST needs a manager |
+| Rule lifecycle | `POST /processes/{id}/rules` (compiles in the background), `POST /rules/{id}/compile`, `GET /rules/{id}/impact`, `POST /rules/{id}/activate`, `POST /rules/{id}/retire` | impact = `unchanged`, `changes`, `conflicts`; create, compile, activate and retire need a manager |
 | Learning | `POST /processes/{id}/learning`, `GET /processes/{id}/learning` | Manager-only analysis and proposed norms; [full flow](learning.md) |
 | Norm proposal | `GET /norm-proposals/{id}`, `POST .../validate`, `POST .../approve`, `POST .../reject` | Isolated previews; explicit manager adoption with a validation ID |
 | Sources | `GET /processes/{id}/sources` | current load per source: rows count, origin, `loaded_at`, and from its latest sync `status` (`ok`/`down`, null if never synced), `error`, `checked_at`. A `down` load is not read by runs until a sync succeeds (ADR 0028) |
@@ -58,7 +59,7 @@ The first manager comes from the pack (`make setup` loads its `users`).
 | Findings | `GET /processes/{id}/findings` | past decisions a later rule says were wrong |
 | Alerts | `GET /processes/{id}/alerts?status=open\|acknowledged\|resolved` | past decisions that newer data or rules would decide otherwise (ADR 0026): `before`, `after`, `trigger` (`source_sync` with the rows involved, or `rule_change` with rule ids), `evidence` (reason codes before and after), `acknowledged_by`, `resolved_by_decision_id`. Raised after a sync that changes rows and after a version is published |
 | Acknowledge | `POST /alerts/{id}/ack` `{note?}` | manager; 409 if already acknowledged. Act with Resolve or Reprocess; the later decision marks the alert `resolved` |
-| Run | `POST /processes/{id}/run` | manager. First syncs every live source (`sync_before_run` in the pack's `schema.json`), then decides every PENDING instance with symbols; `down_sources` (`{name: why}`, omitted when none) lists sources whose sync failed: their rules do not run and those cases escalate `SOURCE_UNAVAILABLE: <source>` unless a rule that ran already rejects (ADR 0028); 409 while a rule is `compiling` or when no rule is `active`/`blocked` |
+| Run | `POST /processes/{id}/run` | manager. First syncs every live source (`sync_before_run` in the pack's `schema.json`), then decides every PENDING instance with symbols; `down_sources` (`{name: why}`, omitted when none) lists sources whose sync failed, and sources a rule reads that were never loaded in the process (`never loaded`; a loaded empty table is not listed): their rules do not run and those cases escalate `SOURCE_UNAVAILABLE: <source>` unless a rule that ran already rejects (ADR 0028); 409 while a rule is `compiling` or when no rule is `active`/`blocked` |
 | Reprocess | `POST /processes/{id}/reprocess?dry_run=` (optional `{"names": [...]}`) | manager. Decides the DECIDED instances again with the current rules and sources; appends a new engine decision only where it changes; an instance a person decided last is never touched and comes back in `conflicts`. Syncs live sources first like Run (`down_sources`), except with `dry_run=true`. Same 409 as Run |
 | Run history | `GET /processes/{id}/runs?limit=50` | every run and reprocess, newest first (Q1): `id`, `kind` (`run`/`reprocess`), `started_at`, `finished_at`, `author`, `version_id`, `version_number`, `rules_hash`, `instances` evaluated, `decided` (decisions it appended), `by_decision` and `escalated` over **every** evaluated instance (so a rerun of the same invoices compares with the run before it), `escalation_reasons` (`{reason code: n}`), `down_sources`, `trace_id` |
 | Past run | `GET /runs/{id}` | the same plus `decisions[]` (`decision_id`, `instance_id`, `name`, `decision`, `reason`, `created_at`): what that run appended, read-only |
@@ -68,9 +69,10 @@ The first manager comes from the pack (`make setup` loads its `users`).
 | Re-extract | `POST /instances/{id}/extract` (JSON `{}` or reader options) | pending documents only; current symbol schema, rules and source snapshots, preserved evidence; 409 if already decided |
 | Users | `GET /users`, `POST /users`, `POST /login`, `GET /me` | roles `manager`, `operator`; `POST /users` needs a manager |
 | Metrics | `GET /processes/{id}/metrics?since=` | runs, step durations, LLM tokens by model and role, outcomes (unchanged) |
-| Monitoring: ingestion | `GET /processes/{id}/metrics/ingestion?since=`, `GET /metrics/ingestion` (all processes) | `files`, `files_per_second`, `pages`, `ocr_calls`, `vision_calls`, `judge_calls`, `focused_reads`, `cache_hits`, `abstentions`, `abstentions_by_field`, `steps[]` |
-| Monitoring: agents | `GET /processes/{id}/metrics/agents?since=`, `GET /metrics/agents` | tokens in/out/cached, requests, retries, fallbacks, truncations `by_model`, `by_role`, `by_rule`, `by_norm_rule`, `by_use_case`; `per_hour[]`; `compile` (success rate, attempts); `norms[]` (tokens, `seconds_to_active`) |
-| Monitoring: execution | `GET /processes/{id}/metrics/execution?since=`, `GET /metrics/execution` | `runs`, `instances_per_second`, `rules[]` (p50/p95 per rule), `decisions_by_outcome`, `failures`, `escalated`, `pending`, `resolutions_by_author`, `resolution_p50_s`/`p95_s`, `open_alerts` |
+| Monitoring: ingestion | `GET /processes/{id}/metrics/ingestion?since=`, `GET /metrics/ingestion` (all processes); `IngestionMetrics` | `files`, `files_per_second`, `pages`, `ocr_calls`, `vision_calls`, `judge_calls`, `focused_reads`, `cache_hits`, `abstentions`, `abstentions_by_field`, `steps[]`; `providers[]` per provider, model and operation: `network_requests`, `replays`, tokens, `known_cost_usd`, `unpriced_requests` |
+| Monitoring: agents | `GET /processes/{id}/metrics/agents?since=`, `GET /metrics/agents`; `AgentsMetrics` | `total`, and `by_model`, `by_role`, `by_rule`, `by_norm_rule`, `by_use_case`: tokens in/out/cached, requests, retries, fallbacks, truncations, `known_cost_usd` (runs whose model has a price) and `unpriced_requests` (requests with none: show the count, never 0 USD). Helmcode is unpriced until `TRACEPAY_HELMCODE_BILLING_MODE` is `included` or `metered` with its rates, as for ingestion. `per_hour[]`; `compile` (success rate, attempts); `norms[]` (tokens, `seconds_to_active`) |
+| Monitoring: execution | `GET /processes/{id}/metrics/execution?since=`, `GET /metrics/execution`; `ExecutionMetrics` | `runs`, `instances_per_second`, `rules[]` (p50/p95 per rule), `decisions_by_outcome`, `failures`, `escalated`, `pending`, `resolutions_by_author`, `resolution_p50_s`/`p95_s`, `open_alerts`. No LLM call: 0 tokens by design |
+| Drill-down | `traces` on every row above (`steps[]`, `providers[]`, `llm[]`, `total`, `by_*`, `per_hour[]`, `rules[]`, `norms[]`) | the `GET /traces?...` (or `/traces/{trace_id}` for a norm) that lists the spans behind that row, in the same `process_id` and `since`. `null` when the row's key is null. `GET /traces` filters: `process_id`, `name`, `status`, `plane`, `since`, `until`, `rule_id`, `norm_rule_id`, `use_case_id`, `model`, `role`, `agent` (the `by_role` key), `provider`, `operation`, `limit` (max 1000) |
 | Plane health | `GET /health/planes` | per plane `status` `ok`/`degraded`/`down`, `error_rate`, `p95_ms`, `reason` (thresholds `TRACE_HEALTH_*`); ingestion is at least `degraded` (`sources down: <process>:<source>`) while a source's latest sync in the window failed |
 | Live feed | `GET /events/stream?plane=&process_id=&after=` | server-sent events: `event` = plane, `id` = span id, `data` = a span as in `GET /traces`; `: ping` every idle second. Use `EventSource` |
 
@@ -131,7 +133,7 @@ carry `{analysis_id, norm_proposal_id, norm_kind, ...}` for a norm, and
   `rule_id` with `GET /processes/{id}/rules` for the text. A person's row has no results.
 - **Escalation reasons** from the engine start with `RULE_ERROR <id>:` or `RULE_CONFLICT:`
   when a rule could not run or two outcomes tied, `SOURCE_UNAVAILABLE: <source>` when a
-  source the case needed was down (ADR 0028); otherwise it is the firing rule's reason
+  source the case needed was down or never loaded (ADR 0028); otherwise it is the firing rule's reason
   code (e.g. `IMPOSSIBLE_DATE 2026-02-31`, several joined by ` | `), never its text.
 - **Symbols** are stored as `{value, origin}`; `origin` says where extraction read it.
 - **Names** (`instance.name`) are the exact file names, accents included; they are the

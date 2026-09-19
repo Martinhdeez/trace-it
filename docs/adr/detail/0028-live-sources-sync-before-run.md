@@ -54,6 +54,17 @@ never use the last snapshot; escalate only what depends on it.
   source's status in `GET /processes/{id}/sources` is `down` with the error until a sync
   succeeds; `GET /health/planes` reports ingestion `degraded` with `sources down:
   <process>:<source>` while any source's latest sync in the window failed.
+- **Never loaded counts as down** (2026-09-19, found in the B8 rehearsal). A source a
+  published rule reads by name that has no load at all in the process (no `Source` row with
+  that name: a workbook, a cut-off row or an ERP never loaded) is down for the run with
+  `never loaded`, exactly as a failed sync: before, its rules read an empty table, so with
+  no workbook a P001 invoice ended `NO_PAGAR ISSUER_NIF_NOT_IN_SUPPLIERS |
+  PURCHASE_ORDER_NOT_FOUND` and the cut-off rule passed with no cut-off date. Now those
+  cases are `ESCALAR SOURCE_UNAVAILABLE: orders, parameters, suppliers` unless the rules
+  that ran decide. A load with zero rows is still a load: an explicitly empty table stays a
+  legitimate empty table. `decisions/service.py` (`_inputs`) computes it, so it lands in
+  the captured inputs (`down`) and a replay agrees; the run answers it in `down_sources`. A
+  rule that reads `*` (any source) is not matched against missing names.
 - **Which rules read which source** is found deterministically from each rule's code by
   `compiler.source_reads`: the literal keys `read_keys` already finds on the second
   parameter, plus literal names passed with it to a helper (`rows(sources, "erp")`, the form
@@ -92,7 +103,8 @@ never use the last snapshot; escalate only what depends on it.
   uses the fresh rows; ERP down: non-ERP rejection kept as NO_PAGAR, the other case
   `ESCALAR SOURCE_UNAVAILABLE: erp`, no stale snapshot in the inputs, replay matches,
   source `down`, ingestion `degraded`; a row missing `status` and a connector without
-  `purchase_order` fail the sync; precedence; the ERP readers among the 16 hand-written and
+  `purchase_order` fail the sync; precedence; no workbook or no cut-off row escalates
+  `SOURCE_UNAVAILABLE`, an explicitly empty table still rejects; the ERP readers among the 16 hand-written and
   12 frozen rules), `tests/e2e/test_api_flow.py` (the API flow against the real challenge
   ERP, synced by the run), golden 471/471 (`test_engine_golden.py`, `test_frozen_rules.py`).
 - Live run on 2026-09-19, fresh database `trace_erp_live`, frozen rule set, own challenge

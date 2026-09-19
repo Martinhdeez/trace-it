@@ -30,6 +30,8 @@ from functools import cache
 from typing import Any
 
 import logfire
+from fastapi import Request
+from fastapi.responses import JSONResponse
 from opentelemetry import context as otel_context
 from opentelemetry import trace as otel_trace
 from sqlalchemy import BigInteger, DateTime, create_engine, insert
@@ -237,3 +239,17 @@ def configure_observability() -> None:
     logfire.instrument_pydantic_ai()
     logfire.instrument_httpx()
     logfire.instrument_sqlalchemy(engine=engine.sync_engine)
+
+
+async def unhandled_error(request: Request, error: Exception) -> JSONResponse:
+    """A 500 as `{code, message}`, never the stack trace. The error is kept as an `error`
+    span; Starlette re-raises it after this response, so the server still logs it. This
+    runs outside the CORS middleware, so the open-CORS header is set here."""
+    with span("unhandled_error", method=request.method, path=request.url.path) as s:
+        s.status = "error"
+        s.data["error"] = f"{type(error).__name__}: {error}"[:1000]
+    return JSONResponse(
+        status_code=500,
+        content={"code": "internal_error", "message": f"Internal error (trace {s.trace_id})"},
+        headers={"Access-Control-Allow-Origin": "*"},
+    )

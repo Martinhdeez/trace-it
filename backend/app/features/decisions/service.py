@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
 from app.core.events import Event
-from app.features.agents import decision_reviewer, sandbox
+from app.features.agents import compiler, decision_reviewer, sandbox
 from app.features.decisions import runs
 from app.features.decisions.engine import Outcomes, RunDataset, Verdict, decide
 from app.features.decisions.model import ENGINE, Decision, DecisionReview, Finding
@@ -215,7 +215,7 @@ async def run(session: AsyncSession, process_id: int, author: str | None = None)
             )
             if i.symbols is not None
         ]
-        source_loads, inputs = await _inputs(session, process_id, down)
+        source_loads, inputs, down = await _inputs(session, process_id, down, version.snapshot)
         captured = Execution(process_id=process_id, version_id=version.id, inputs=inputs)
         session.add(captured)
         await session.flush()
@@ -262,18 +262,27 @@ async def run(session: AsyncSession, process_id: int, author: str | None = None)
 
 
 async def _inputs(
-    session: AsyncSession, process_id: int, down: dict[str, str]
-) -> tuple[list[Source], dict]:
+    session: AsyncSession, process_id: int, down: dict[str, str], snapshot: dict
+) -> tuple[list[Source], dict, dict[str, str]]:
     """The current loads and captured execution inputs, without the loads of `down`
-    sources: a rule never reads an older snapshot of a source that failed to sync. The
+    sources: a rule never reads an older snapshot of a source that failed to sync. A source
+    a published rule reads by name that has no load at all in the process (no `Source`
+    row: a workbook, cut-off or ERP never loaded) is down too, "never loaded": missing
+    reference data is unknown, not an empty table. A load with no rows stays a load. The
     down sources are part of the inputs, so a replay decides the same (ADR 0028)."""
-    loads = [s for s in await sources.current_loads(session, process_id) if s.name not in down]
+    current = await sources.current_loads(session, process_id)
+    loaded = {s.name for s in current}
+    # ponytail: a rule reading `*` (any source) is not matched; list its names if one appears.
+    read = {n for r in version_config.rules(snapshot) for n in compiler.source_reads(r.code)}
+    never = {n: "never loaded" for n in sorted(read - loaded - {compiler.ANY_SOURCE})}
+    down = {**never, **down}  # a failed sync's error says more
+    loads = [s for s in current if s.name not in down]
     inputs = await execution.capture(session, process_id)
     if down:
         kept = {s.id for s in loads}
         inputs["source_ids"] = [i for i in inputs["source_ids"] if i in kept]
         inputs["down"] = down
-    return loads, inputs
+    return loads, inputs, down
 
 
 def _append(
@@ -349,7 +358,7 @@ async def reprocess(
         selected = [i for i in await session.scalars(query) if i.symbols is not None]
         latest = await latest_decisions(session, selected)
         reviews = await decision_reviewer.for_decisions(session, list(latest.values()))
-        source_loads, inputs = await _inputs(session, process_id, down)
+        source_loads, inputs, down = await _inputs(session, process_id, down, version.snapshot)
         captured = Execution(process_id=process_id, version_id=version.id, inputs=inputs)
         if not dry_run:
             session.add(captured)

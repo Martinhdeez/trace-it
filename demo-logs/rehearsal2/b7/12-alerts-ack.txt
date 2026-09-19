@@ -1,0 +1,5 @@
+$ curl -s -w " %{http_code}\n" -X POST $API/alerts/1/ack -H "Content-Type: application/json" -d "{\"note\": \"rehearsal\"}"; curl -s -w " %{http_code}\n" -X POST $API/alerts/1/ack -H "$MANAGER" -H "Content-Type: application/json" -d "{\"note\": \"AS-00476 was never paid (rehearsal)\"}" | head -c 300; echo; curl -s $API/processes/$P/metrics/execution | python3 -c "import json,sys; print(\"open_alerts\", json.load(sys.stdin)[\"open_alerts\"])"
+{"code":"unauthenticated","message":"Send X-User-Id with the id POST /login returns"} 401
+{"id":1,"process_id":2,"instance_id":64,"name":"2026-03-28_P002.pdf","decision_id":64,"before":"NO_PAGAR","after":"PAGAR","trigger":{"kind":"source_sync","rows":{"after":[{"nif":"A41220987","date":"2026-03-28","amount":"2551.64","status":"PENDIENTE","entry_id":"AS-00476","supplier_id":"P002","purcha
+open_alerts 0
+[exit 0] [0.14 s] [14:54:25]
