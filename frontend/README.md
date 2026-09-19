@@ -8,18 +8,27 @@ npm install
 npm run dev
 ```
 
-Opens on http://127.0.0.1:5173. `/api` proxies to `http://127.0.0.1:8000`, where the
-backend serves at the root.
+Opens on http://127.0.0.1:5173. `/api` proxies to `http://127.0.0.1:8000`, where
+`make setup` serves the backend at the root. For an API on another port, set
+`VITE_API_TARGET` in the shell or in `frontend/.env.local`:
+
+```bash
+VITE_API_TARGET=http://127.0.0.1:8001 npm run dev
+```
 
 `VITE_API_MODE` picks the client in `src/api/client.ts`:
 
 | Value | What happens |
 |---|---|
-| `auto` (default) | Every call tries the backend and falls back to the in-memory mock when the endpoint answers 501, 502, is not mounted, or the backend is down |
-| `live` | Only the backend. Errors surface as they are |
-| `mock` | Only the mock, with the Caja lote 1 loaded. No backend needed |
+| unset (default) | Only the backend. Errors surface as they are ("El backend no responde" when it is down) |
+| `mock` | Only the in-memory mock, with the Caja lote 1 loaded. No backend needed. A "MOCK DATA" badge stays on screen |
 
-Settings shows, per API method, which of the two answered.
+## Typed API
+
+`src/api/schema.d.ts` holds the backend's types, generated from `openapi.json`. After a
+backend route or schema changes, run `make openapi` from the repo root: it dumps
+`openapi.json` from the FastAPI app (no server needed) and then runs `npm run gen:api`.
+Commit both files. A backend test fails while they are out of date.
 
 ## Layout
 

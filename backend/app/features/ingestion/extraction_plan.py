@@ -53,6 +53,15 @@ class ExtractionPlan(BaseModel):
         )
 
 
+class ExtractionPlanOut(BaseModel):
+    process_id: int
+    fields: list[ExtractionField]
+    rules: list[dict]
+    warnings: list[dict]
+    version: str
+    fingerprint: str
+
+
 def _canonical_json(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 

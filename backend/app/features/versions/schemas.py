@@ -41,10 +41,33 @@ class VersionOut(BaseModel):
     created_at: datetime
 
 
-class DraftOut(BaseModel):
+class VersionDraftOut(BaseModel):
     process_id: int
     base_version_id: int | None
     revision: int
     snapshot: dict[str, Any]
     author: str
     validation: dict[str, Any] | None
+
+
+class PresetPreview(BaseModel):
+    settings: ExecutionSettings | None = None
+    error: str | None = None
+
+
+class ExecutionOut(BaseModel):
+    settings: ExecutionSettings
+    revision: int | None
+    version_id: int | None
+    presets: dict[str, PresetPreview]
+    decision_review: dict[str, Any] | None
+
+
+class ReplayOut(BaseModel):
+    decision_id: int
+    version_id: int
+    execution_id: int
+    matches: bool
+    decision: str
+    reason: str | None
+    results: list[dict[str, Any]]
