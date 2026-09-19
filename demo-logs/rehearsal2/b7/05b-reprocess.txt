@@ -1,0 +1,5 @@
+$ curl -s -X POST "$API/processes/$P/reprocess" -H "$MANAGER" | python3 -m json.tool > $LOG/05b-reprocess.json; python3 -c "import json; d=json.load(open(\"$LOG/05b-reprocess.json\")); print({k:(len(v) if isinstance(v,list) else v) for k,v in d.items()})"; curl -s "$API/processes/$P/alerts?status=open" | python3 -c "import json,sys; print(\"open alerts\", len(json.load(sys.stdin)))"; curl -s "$API/processes/$P/alerts?status=resolved" | python3 -c "import json,sys; print(\"resolved alerts\", len(json.load(sys.stdin)))"
+{'unchanged': 499, 'changes': 1, 'conflicts': 0}
+open alerts 0
+resolved alerts 1
+[exit 0] [6.26 s] [14:51:07]

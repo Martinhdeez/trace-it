@@ -1,0 +1,40 @@
+{
+    "source_id": 5,
+    "origin": "erp:2026-09-19T12:50:38+00:00|http://127.0.0.1:8051",
+    "rows": 517,
+    "rows_hash": "aae94ab9934a6192683ca5e50039773a9e85dc10086c47cf99ac058e1d286ecc",
+    "stats": {
+        "requests": 30,
+        "pages": 26,
+        "retries": 2,
+        "logins": 1,
+        "rate_limited": 0,
+        "transient_errors": {
+            "ORA-00600": 2
+        },
+        "timeouts": 0,
+        "invalid_responses": 0,
+        "invalid_values": 0,
+        "duration_ms": 5031,
+        "status": {
+            "entries": "517",
+            "update_loaded": "SI"
+        }
+    },
+    "diff": {
+        "previous_id": 4,
+        "current_id": 5,
+        "added": [
+            "AS-00601"
+        ],
+        "removed": [],
+        "changed": {
+            "AS-00476": {
+                "status": [
+                    "PAGADA",
+                    "PENDIENTE"
+                ]
+            }
+        }
+    }
+}

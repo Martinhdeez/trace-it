@@ -1,0 +1,4 @@
+$ P=$(curl -s $API/processes | python3 -c 'import json,sys; print(next(p["id"] for p in json.load(sys.stdin) if p["name"] == "Invoice payment - frozen 2026-09-19"))'); echo "frozen process: $P"; curl -s $API/users | head -c 300; echo
+frozen process: 2
+[{"name":"Martín","email":"martin@trace-it.local","role":"manager","id":1},{"name":"Mateo","email":"mateo@trace-it.local","role":"operator","id":2},{"name":"Álvaro","email":"alvaro@trace-it.local","role":"operator","id":3},{"name":"Carlos","email":"carlos@trace-it.local","role":"operator","id":4},
+[exit 0] [0.04 s] [14:49:52]

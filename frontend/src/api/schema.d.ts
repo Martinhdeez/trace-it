@@ -573,7 +573,7 @@ export interface paths {
         put?: never;
         /**
          * Decide every pending instance with the active rules
-         * @description Syncs the process's live sources first; a source that fails is down for this run and listed in `down_sources` (ADR 0028).
+         * @description Syncs the process's live sources first; a source that fails is down for this run and listed in `down_sources`, as is a source a rule reads that was never loaded (ADR 0028).
          */
         post: operations["runProcess"];
         delete?: never;
@@ -1065,7 +1065,7 @@ export interface paths {
         };
         /**
          * Recent spans, newest first
-         * @description Every step the system took, as spans of the audit trail (ADR 0018). Filter by process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, `sync_source`, `upload_document`...) or status (`ok`, `error`).
+         * @description Every step the system took, as spans of the audit trail (ADR 0018). Filter by process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, `sync_source`, `upload_document`...), status (`ok`, `error`), plane, time window (`since` <= start < `until`), rule, norm rule, use case, or a span's `model`, `role`, `agent` (the agents plane's `by_role` key), `provider` and `operation`. Every row of `/metrics/{plane}` carries its drill-down here as `traces`.
          */
         get: operations["listSpans"];
         put?: never;
@@ -1147,7 +1147,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/processes/{process_id}/metrics/{plane}": {
+    "/processes/{process_id}/metrics/ingestion": {
         parameters: {
             query?: never;
             header?: never;
@@ -1155,10 +1155,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * One monitoring plane of a process: ingestion, agents or execution
-         * @description Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, provider attempts, network requests, replays and reported tokens), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: tokens by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution). Each has `steps` with count, errors, p50/p95. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.
+         * The ingestion plane of a process
+         * @description Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.
          */
-        get: operations["getProcessPlaneMetrics"];
+        get: operations["getProcessIngestionMetrics"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1167,7 +1167,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/metrics/{plane}": {
+    "/metrics/ingestion": {
         parameters: {
             query?: never;
             header?: never;
@@ -1175,10 +1175,90 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * One monitoring plane across every process
-         * @description Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, provider attempts, network requests, replays and reported tokens), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: tokens by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution). Each has `steps` with count, errors, p50/p95. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.
+         * The ingestion plane across every process
+         * @description Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.
          */
-        get: operations["getPlaneMetrics"];
+        get: operations["getIngestionMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/metrics/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The agents plane of a process
+         * @description Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.
+         */
+        get: operations["getProcessAgentsMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The agents plane across every process
+         * @description Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.
+         */
+        get: operations["getAgentsMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/metrics/execution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The execution plane of a process
+         * @description Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.
+         */
+        get: operations["getProcessExecutionMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/execution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The execution plane across every process
+         * @description Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.
+         */
+        get: operations["getExecutionMetrics"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1681,6 +1761,7 @@ export interface components {
             errors: number;
             /** Steps */
             steps: components["schemas"]["StepStats"][];
+            total: components["schemas"]["TokenStats"];
             /** Llm */
             llm: components["schemas"]["LlmStats"][];
             /** By Model */
@@ -2422,7 +2503,10 @@ export interface components {
             revision: number;
             execution: components["schemas"]["ExecutionSettings"];
         };
-        /** ExecutionMetrics */
+        /**
+         * ExecutionMetrics
+         * @description The engine never calls a model (ADR 0002): this plane spends 0 tokens by design.
+         */
         ExecutionMetrics: {
             plane: components["schemas"]["Plane"];
             /** Process Id */
@@ -2774,7 +2858,10 @@ export interface components {
             /** Conflicts */
             conflicts: components["schemas"]["ChangeOut"][];
         };
-        /** IngestionMetrics */
+        /**
+         * IngestionMetrics
+         * @description Tokens and USD cost per provider in `providers`; no LLM run of the agents counts.
+         */
         IngestionMetrics: {
             plane: components["schemas"]["Plane"];
             /** Process Id */
@@ -2945,6 +3032,18 @@ export interface components {
              * @default 0
              */
             truncations: number;
+            /**
+             * Known Cost Usd
+             * @default 0
+             */
+            known_cost_usd: number;
+            /**
+             * Unpriced Requests
+             * @default 0
+             */
+            unpriced_requests: number;
+            /** Traces */
+            traces?: string | null;
         };
         /** LoadResult */
         LoadResult: {
@@ -3085,6 +3184,8 @@ export interface components {
             rules_activated: number;
             /** Seconds To Active */
             seconds_to_active: number | null;
+            /** Traces */
+            traces: string;
         };
         /** Option */
         Option: {
@@ -3359,6 +3460,8 @@ export interface components {
              * @default 0
              */
             unpriced_requests: number;
+            /** Traces */
+            traces?: string | null;
         };
         /** PublishIn */
         PublishIn: {
@@ -3598,6 +3701,8 @@ export interface components {
             p50_ms: number | null;
             /** P95 Ms */
             p95_ms: number | null;
+            /** Traces */
+            traces?: string | null;
         };
         /**
          * RuleRuntime
@@ -4065,6 +4170,8 @@ export interface components {
             p50_ms: number | null;
             /** P95 Ms */
             p95_ms: number | null;
+            /** Traces */
+            traces?: string | null;
         };
         /** Suggestion */
         Suggestion: {
@@ -4182,6 +4289,8 @@ export interface components {
             output_tokens: number;
             /** Cached Tokens */
             cached_tokens: number;
+            /** Traces */
+            traces?: string | null;
         };
         /**
          * TokenStats
@@ -4208,6 +4317,12 @@ export interface components {
             output_tokens: number;
             /** Cached Tokens */
             cached_tokens: number;
+            /** Known Cost Usd */
+            known_cost_usd: number;
+            /** Unpriced Requests */
+            unpriced_requests: number;
+            /** Traces */
+            traces?: string | null;
         };
         /** UseCaseDetail */
         UseCaseDetail: {
@@ -6608,6 +6723,17 @@ export interface operations {
                 process_id?: number | null;
                 name?: string | null;
                 status?: string | null;
+                plane?: components["schemas"]["Plane"] | null;
+                since?: string | null;
+                until?: string | null;
+                rule_id?: number | null;
+                norm_rule_id?: number | null;
+                use_case_id?: number | null;
+                model?: string | null;
+                role?: string | null;
+                agent?: string | null;
+                provider?: string | null;
+                operation?: string | null;
                 limit?: number;
             };
             header?: never;
@@ -6769,7 +6895,7 @@ export interface operations {
             };
         };
     };
-    getProcessPlaneMetrics: {
+    getProcessIngestionMetrics: {
         parameters: {
             query?: {
                 since?: string | null;
@@ -6777,7 +6903,6 @@ export interface operations {
             header?: never;
             path: {
                 process_id: number;
-                plane: components["schemas"]["Plane"];
             };
             cookie?: never;
         };
@@ -6789,7 +6914,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IngestionMetrics"] | components["schemas"]["AgentsMetrics"] | components["schemas"]["ExecutionMetrics"];
+                    "application/json": components["schemas"]["IngestionMetrics"];
                 };
             };
             /** @description Validation Error */
@@ -6803,14 +6928,45 @@ export interface operations {
             };
         };
     };
-    getPlaneMetrics: {
+    getIngestionMetrics: {
+        parameters: {
+            query?: {
+                since?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionMetrics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getProcessAgentsMetrics: {
         parameters: {
             query?: {
                 since?: string | null;
             };
             header?: never;
             path: {
-                plane: components["schemas"]["Plane"];
+                process_id: number;
             };
             cookie?: never;
         };
@@ -6822,7 +6978,102 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IngestionMetrics"] | components["schemas"]["AgentsMetrics"] | components["schemas"]["ExecutionMetrics"];
+                    "application/json": components["schemas"]["AgentsMetrics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getAgentsMetrics: {
+        parameters: {
+            query?: {
+                since?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentsMetrics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getProcessExecutionMetrics: {
+        parameters: {
+            query?: {
+                since?: string | null;
+            };
+            header?: never;
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionMetrics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getExecutionMetrics: {
+        parameters: {
+            query?: {
+                since?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionMetrics"];
                 };
             };
             /** @description Validation Error */
