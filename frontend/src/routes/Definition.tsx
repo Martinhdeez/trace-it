@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUp, Check, ChevronDown, Hammer, Paperclip, Plus, Sparkles, X } from 'lucide-react'
+import { ArrowUp, BookOpenText, Check, ChevronDown, Hammer, Paperclip, Plus, Sparkles, X } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import { families, keys } from '../api/queries'
 import type {
@@ -28,7 +28,7 @@ import { ProcessScreen } from '../components/process/ProcessScreen'
 import { TruthSources } from '../components/process/TruthSources'
 import { ValidationImpact } from '../components/process/ValidationImpact'
 import { Button, Input, Select, Textarea } from '../components/shell/Controls'
-import { ErrorNotice, Empty, Notice } from '../components/shell/Notice'
+import { ErrorNotice, Empty, EmptyState, Notice } from '../components/shell/Notice'
 import { ExpandableText } from '../components/shell/ExpandableText'
 import { NestedCard } from '../components/shell/Well'
 import { t } from '../i18n'
@@ -57,6 +57,8 @@ type Turn = {
 
 const PANE_CHAT = {
   normas: {
+    title: 'Empieza por la norma',
+    intro: 'Pega la norma de tu empresa o escribe una regla. La convierto en comprobaciones y tú decides cuáles entran.',
     chips: [
       'El IBAN debe coincidir con el del maestro de proveedores',
       'Si falta el pedido, se escala',
@@ -66,16 +68,22 @@ const PANE_CHAT = {
     proposals: 'Reglas creadas · se compilan solas',
   },
   contexto: {
+    title: 'Pregunta sobre el proceso',
+    intro: 'Qué decide, por qué escala un caso o qué reglas usan un dato.',
     chips: ['¿Por qué se escalan estos casos?', '¿Qué reglas usan el IBAN?', '¿Qué falta para decidir?'],
     placeholder: 'Pregunta al asistente sobre este proceso.',
     proposals: 'Respuesta',
   },
   inputs: {
+    title: 'Los datos de cada documento',
+    intro: 'Pregunta qué dato falta para una regla o de dónde sale uno.',
     chips: ['issuer_nif', 'iban', 'purchase_order'],
     placeholder: '¿Qué símbolo falta para esta regla? issuer_nif, iban…',
     proposals: 'Respuesta',
   },
   fuentes: {
+    title: 'Las tablas de referencia',
+    intro: 'Adjunta un Excel o pregunta contra qué se comprueba cada documento.',
     chips: ['Maestro de proveedores', 'Pedidos abiertos', 'Parámetros del ERP'],
     placeholder: 'Adjunta un Excel o pregunta por las fuentes.',
     proposals: 'Respuesta',
@@ -297,7 +305,11 @@ export function Definition() {
                   </li>
                 ))}
               </ol>
-            ) : null}
+            ) : (
+              <EmptyState title={chat.title} className="h-full justify-center">
+                {chat.intro}
+              </EmptyState>
+            )}
           </div>
 
           {turns.length === 0 ? (
@@ -469,6 +481,11 @@ function RulesPane({
       <p className="mb-2 font-mono text-[11px] tracking-[0.12em] text-faint">
         NORMA · {rules.length}
       </p>
+      {rules.length === 0 ? (
+        <EmptyState icon={BookOpenText} title="Aún no hay normas" className="py-8">
+          Escríbelas en el chat de la izquierda, o añade una a mano aquí abajo.
+        </EmptyState>
+      ) : null}
       <ul className="divide-y divide-hairline">
         {rules.map((rule) => {
           const status = rule.status as RuleStatusCode

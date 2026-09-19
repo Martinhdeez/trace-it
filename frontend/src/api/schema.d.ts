@@ -4237,7 +4237,10 @@ export interface components {
             revision: number;
             /** Validation Hash */
             validation_hash: string;
-            /** Reason */
+            /**
+             * Reason
+             * @default
+             */
             reason: string;
         };
         /** ReadingLocation */

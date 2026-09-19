@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { ApiError } from '../../api/client'
 import { cn } from '../../lib/cn'
 
@@ -75,4 +76,30 @@ export function ErrorNotice({ error, action }: { error: unknown; action?: ReactN
 
 export function Empty({ children }: { children: ReactNode }) {
   return <p className="px-3.5 py-6 text-[13px] text-muted">{children}</p>
+}
+
+/** A screen or pane with nothing in it yet: what it will hold and the one step to fill it. */
+export function EmptyState({
+  icon: Icon,
+  title,
+  children,
+  action,
+  className,
+}: {
+  icon?: LucideIcon
+  title: string
+  children?: ReactNode
+  action?: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn('flex flex-col items-center px-6 py-12 text-center', className)}>
+      {Icon ? <Icon size={20} strokeWidth={1.4} className="text-faint" /> : null}
+      <p className="mt-3 text-[15px] font-medium tracking-[-0.02em] text-ink">{title}</p>
+      {children ? (
+        <p className="mt-1 max-w-sm text-[13px] leading-5 text-muted">{children}</p>
+      ) : null}
+      {action ? <div className="mt-5">{action}</div> : null}
+    </div>
+  )
 }
