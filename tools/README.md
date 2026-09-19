@@ -1,6 +1,9 @@
 # tools: demo stand-ins, on purpose
 
-The application does not ingest files or extract symbols yet (`features/instances` holds the models only). These scripts do that part for the demo, so the whole process can run end to end over the real corpus and there is a baseline to hold the real loaders against. They are not imported by the application and go away when those features land.
+The application now ingests PDF/XLSX through its production API, including OCR
+and visual verification. These scripts retain the original text-layer baseline
+for comparison; they are not imported by the application. To reproduce the
+complete OCR run, follow the [ingestion setup guide](../docs/ingestion/setup.md).
 
 | File | Stands in for |
 |---|---|

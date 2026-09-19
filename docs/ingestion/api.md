@@ -1,5 +1,8 @@
 # Ingestion API
 
+Install the models and configure credentials with the [setup guide](setup.md)
+before testing scans. It includes authenticated, copyable request sequences.
+
 Use `app.main:app`. Its `/health` remains `{"status":"ok"}`.
 The combined contract is in `/docs`, `/redoc` and `/openapi.json`.
 Ingestion uses the existing `X-User-Id` header obtained through `POST /login`.

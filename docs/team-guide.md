@@ -86,6 +86,11 @@ Versions are append-only: only `active` moves. Tests script the model with `Func
 
 ## Running locally
 
+For scanned documents, first follow [OCR and ingestion setup](ingestion/setup.md).
+It covers both downloaded readers, Gemini/Jev credentials, Windows commands and
+the production process API. `make setup` does not download OCR weights, and
+`make demo` uses the text-layer baseline rather than the OCR committee.
+
 Requirements: Docker, [uv](https://docs.astral.sh/uv/), `pdftotext` (poppler) for the demo and the golden tests.
 
 | Command | What it does |
