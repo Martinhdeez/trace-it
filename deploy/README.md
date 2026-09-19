@@ -199,58 +199,76 @@ References: [Vite public base](https://vite.dev/guide/build#public-base-path),
 [Playwright API tests](https://playwright.dev/docs/api-testing).
 
 
-## Demo reset on each application deployment
+## Cached full challenge on every main deployment
 
-This production URL is a disposable demonstration environment. On September 19, 2026,
-the operator requested automatic removal of test data on every application deployment.
-The root-owned `DEMO_RESET_ENABLED` marker opts this installation into that policy;
-other installations retain the original behavior. ERP-only releases do not reset Trace-it.
+This installation opts into a backed-up demo refresh through `DEMO_RESET_ENABLED`.
+The version-4 private `/opt/trace-it/demo-seed.json` contains all 500 PDFs from
+`facturas/`, all 40 from `facturas_primin/`, their original bytes and SHA256 values,
+accepted application symbols, extraction evidence and the cached extraction trace trees.
+It is built from the pinned original `ikurotime/500-sombras-de-alberto` checkout and
+saved application readings, never from hand-reviewed delivery outcomes. The six hiring
+examples are retained separately.
 
-After stopping frontend, backend and the active mail worker, deployment verifies a database
-dump and ingestion archive, runs migrations, then invokes the installed `reset-demo.py`.
-A reviewed private `/opt/trace-it/demo-seed.json` contains six extracted invoices and six
-CVs, with their original PDF bytes and checksums. The reset recreates them with new monotonic
-IDs, without extraction provider calls, then runs both processes through the normal decision
-service. The deployment compares every decision with the committed invoice and hiring JSONL
-references and stops on a missing or different result. Each example ends as decided with its
-normal execution, rule-evaluation, decision and process-run traces. Original extraction
-evidence is retained as explicitly marked seed events so PDF fields and evidence views remain
-usable. Runtime decisions, runs, proposals,
-learning results, alerts, traces, mail receipts and uploaded documents are removed.
-The complete extraction directory is cleared, including SQLite jobs and OCR/provider caches.
+The initial invoice process uses its original 516-entry ERP. A separate
+`Invoice payment - batch 2` process uses the 556-entry updated ERP, plus the new supplier
+and order CSVs. Each deployment appends fresh, pinned source snapshots. Automatic live
+ERP synchronization is disabled in these two demo versions so a later decision cannot
+silently replace the initial scenario with the updated one. Manual source changes remain
+possible for a demo, and the next deployment restores the pinned scenarios.
 
-Users, process configuration, agent settings, all reference source
-snapshots, original Excel workbooks, external ERP services and OCR models are retained.
-Initial rule baselines are restored in the rule/norm authoring tables and the active runtime
-snapshot. Added/edited rehearsal rules and drafts are removed, and old demo versions are
-replaced with one baseline version. The invoice baseline has the six original `Norma_Pagos_v3` clauses from the official
-`ikurotime/500-sombras-de-alberto` Excel, implemented by the frozen 12 checks. Capture
-verifies the workbook text and compiled-rule hashes; it requires `--norm-workbook`.
-Hiring uses its first approved version (13 rules). Current provider,
-execution and schema settings remain intact. The version-3 private fixture records and checks
-these baselines; it is never recaptured automatically from a modified live process.
-Mailbox identity, token and UID cursor are preserved, so old messages are not replayed.
-A previously active worker is checked and resumed with the new backend image after successful
-health checks; stopped workers stay stopped. Resending a removed PDF in a new email can
-create a fresh case. Duplicate detection still applies within the same deployment, including
-attempts to resend one of the twelve retained sample documents.
+Deployment stops application and mail writers, validates a database dump and ingestion
+archive, checks the extraction-cache identity, and transactionally restores the complete
+fixture. Instance IDs remain monotonic. Deleting the previous population before restoring
+it prevents repeated deployments from creating duplicate documents. Real duplicate orders
+within the original documents still escalate normally. Users and mailbox UID cursors are
+preserved; no old email is replayed.
 
-Install the reviewed script as `/opt/trace-it/reset-demo.py` (root-owned, mode 0644),
-fixture as `/opt/trace-it/demo-seed.json` (root:10001, mode 0640), and this deployment
-receiver as `/usr/local/sbin/trace-it-deploy`. Enable only after validating the fixture on an
-isolated restored database, by creating `/opt/trace-it/DEMO_RESET_ENABLED`. The fixture is
-installation data, not committed to Git. Remove the marker to disable future resets.
+`run-seed.py` captures each process population and pinned sources, evaluates the published
+rules with the application's deterministic engine, and appends normal decisions, findings,
+execution and rule traces. It does not invoke source synchronization, OCR, compilers or the
+optional LLM reviewer. Every restored case ends decided, including legitimate escalations.
+The original extraction trees retain their timestamps and are explicitly marked
+`cached_replay`, with `source_trace_id` and zero provider calls in this deployment. They are
+historical evidence, not newly billed calls. Engine decisions are recomputed; human-reviewed
+JSONL labels are never injected into the engine.
 
-The normal pre-deployment backup contains the removed history and originals. Reset failures
-roll back the SQL transaction and restore quarantined cache files. A leftover
-`.demo-reset-trash` directory means an interrupted reset and requires recovery from the
-recorded backup before another reset. Application rollback never automatically restores the
-old database. Backups remain under `/opt/trace-it/backups`; this reset does not delete them.
-The same release backup stores `demo-reset.json` and `demo-seed-run.json`; the latter lists
-the twelve verified results and the trace counts for an operator to review.
+The seed caches the code/dependency fingerprint, extraction settings and symbol schemas.
+Unrelated frontend or business-rule changes do not invalidate extraction. Changes to the
+extraction implementation, models, schema or locked dependencies stop deployment before
+reset, with a message to refresh the seed once. The initial single-reader-to-two-reader
+upgrade explicitly records its previous settings in `adopt_from`; the fixture then pins
+the settings used for its readings. Unexpected configurations are rejected. A partial OCR
+reading stays partial with its warnings and unverified fields; restoring it never promotes
+proposed values to accepted facts.
 
-Validation: `pytest deploy/test_demo_deploy.py deploy/erp/test_app_rollback.py` exercises
-successful deployment and backup/reset/seed-run/mail-check failures. `deploy/test_reset_demo.py`
-uses `DEMO_RESET_TEST_DATABASE_URL` (database must be `trace_demo_reset_test`) and
-`DEMO_RESET_TEST_SEED` against an isolated restored copy to verify deletion, repeatability,
-configuration/cursor preservation, rule restoration, foreign-key failure and filesystem rollback.
+Build a replacement only after processing the original PDF bytes with the intended OCR
+version and exporting the resulting application readings and trace trees:
+
+```sh
+python deploy/build-challenge-seed.py \
+  --challenge .context/500-sombras-de-alberto \
+  --base-seed /private/previous-demo-seed.json \
+  --readings /private/application-readings.json \
+  --cache /private/ocr-cache-identity.json \
+  --output /private/new-demo-seed.json
+```
+
+The builder checks every PDF hash against its saved reading and requires the exact 500/40
+populations. It reads workbook/CSV source data and the ERP's embedded export from the
+original repository. It does not call any API. Keep the fixture and all extraction artifacts
+outside Git; they are installation data, not code.
+
+Install `reset-demo.py`, `run-seed.py` and `seed_cache.py` under `/opt/trace-it`, the fixture
+as root:10001 mode 0640, and `deploy.sh` as `/usr/local/sbin/trace-it-deploy`. Install the
+matching Compose worker configuration too: image updates alone do not change the installed
+worker count. Version-3 six-example fixtures remain supported for other installations.
+A failed reset rolls back SQL and quarantined files. A failed deployment restarts the
+previous images; it never automatically restores the database. The previous fixture,
+configuration and database backup remain available for explicit recovery.
+
+Validation covers missing/duplicate/corrupt PDFs, wrong ERP populations, OCR identity
+changes, deployment ordering and backup/cache/reset/replay failures. The full private
+fixture is additionally restored twice against an isolated production database copy with
+HTTP clients blocked: identical document counts and results, no duplicate rows, zero
+provider calls, preserved extraction traces, and a separate ERP per batch. Each release
+records `demo-cache-check.json`, `demo-reset.json` and `demo-seed-run.json` in its backup.

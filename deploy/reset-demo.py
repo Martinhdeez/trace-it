@@ -142,6 +142,12 @@ def restore_rules(db, baselines):
         if not row or row["name"] != baseline["process_name"]:
             raise ValueError("Rule baseline does not match the installed process")
         snapshot = deepcopy(row["snapshot"])
+        if baseline.get("extraction_settings"):
+            snapshot["execution"]["extraction"] = deepcopy(
+                baseline["extraction_settings"]
+            )
+        if baseline.get("source_schemas"):
+            snapshot.setdefault("source_schemas", {}).update(baseline["source_schemas"])
         db.execute("DELETE FROM process_drafts WHERE process_id=%s", (pid,))
         db.execute("UPDATE processes SET active_version_id=NULL WHERE id=%s", (pid,))
         db.execute("DELETE FROM process_versions WHERE process_id=%s", (pid,))
@@ -242,7 +248,7 @@ def export_seed(db, ids, invoice_pack, norm_workbook):
 
 
 def validate_seed(seed):
-    if seed.get("version") != 3 or not seed.get("examples"):
+    if seed.get("version") not in {3, 4} or not seed.get("examples"):
         raise ValueError("A versioned, nonempty example fixture is required")
     baselines = seed.get("rule_baselines", [])
     if not baselines or len({b["process_id"] for b in baselines}) != len(baselines):
@@ -279,8 +285,125 @@ def validate_seed(seed):
             raise ValueError("Duplicate example content")
         seen.add(key)
         counts[item["process_id"]] = counts.get(item["process_id"], 0) + 1
-    if any(count != 6 for count in counts.values()):
+    if seed["version"] == 3 and any(count != 6 for count in counts.values()):
         raise ValueError("Exactly six examples per configured process are required")
+    if seed["version"] == 4:
+        batches = seed["batches"]
+        if len(batches) != 2 or [b["count"] for b in batches] != [500, 40]:
+            raise ValueError("The challenge requires batches of 500 and 40 PDFs")
+        if len({b["process_id"] for b in batches}) != 2:
+            raise ValueError("Each batch requires its own process and ERP")
+        for batch in batches:
+            pid = batch["process_id"]
+            if counts.get(pid) != batch["count"]:
+                raise ValueError("Incomplete challenge batch")
+            actual = {
+                e["name"]: e["hash"] for e in seed["examples"] if e["process_id"] == pid
+            }
+            if len(actual) != batch["count"] or actual != batch["documents"]:
+                raise ValueError(
+                    "Challenge names and PDF hashes must match the manifest"
+                )
+            tables = batch["sources"]
+            if set(tables) != {"suppliers", "orders", "erp", "parameters"}:
+                raise ValueError("Missing challenge reference sources")
+            if len(tables["erp"]) != batch["erp_count"]:
+                raise ValueError("Wrong ERP snapshot for challenge batch")
+        if [b["erp_count"] for b in batches] != [516, 556]:
+            raise ValueError("Expected original and updated ERP snapshots")
+        if not re.fullmatch(r"[0-9a-f]{40}", seed["challenge_commit"]):
+            raise ValueError("A pinned challenge commit is required")
+        for item in seed["reference_files"]:
+            if (
+                hashlib.sha256(
+                    base64.b64decode(item["content"], validate=True)
+                ).hexdigest()
+                != item["hash"]
+            ):
+                raise ValueError("Reference file checksum mismatch")
+
+
+def prepare_challenge(db, seed):
+    """Resolve the named batch-2 clone inside the reset transaction; IDs stay monotonic."""
+    if seed["version"] != 4:
+        return seed
+    seed = deepcopy(seed)
+    for batch in seed["batches"]:
+        if "clone_from" not in batch:
+            continue
+        old_id = batch["process_id"]
+        process = db.execute(
+            "SELECT id FROM processes WHERE name=%s", (batch["process_name"],)
+        ).fetchone()
+        if process is None:
+            pid = db.execute(
+                """INSERT INTO processes (name,use_case_id,decision_review)
+                   SELECT %s,use_case_id,decision_review FROM processes WHERE id=%s RETURNING id""",
+                (batch["process_name"], batch["clone_from"]),
+            ).fetchone()["id"]
+            for table, columns in (
+                ("symbols", "name,type,description,required,extraction"),
+                ("decision_types", "name,priority,is_default,requires_human"),
+            ):
+                db.execute(
+                    sql.SQL(
+                        "INSERT INTO {} (process_id,{}) SELECT %s,{} FROM {} WHERE process_id=%s"
+                    ).format(
+                        sql.Identifier(table),
+                        sql.SQL(columns),
+                        sql.SQL(columns),
+                        sql.Identifier(table),
+                    ),
+                    (pid, batch["clone_from"]),
+                )
+            original = db.execute(
+                "SELECT v.snapshot FROM processes p JOIN process_versions v ON v.id=p.active_version_id WHERE p.id=%s",
+                (batch["clone_from"],),
+            ).fetchone()["snapshot"]
+            original["process"].update(id=pid, name=batch["process_name"])
+            original["process"].pop("gathering_email", None)
+            vid = db.execute(
+                """INSERT INTO process_versions(process_id,number,snapshot,validation,content_hash,author,reason)
+                   VALUES (%s,1,%s,%s,%s,'demo-seed','Create isolated challenge batch') RETURNING id""",
+                (
+                    pid,
+                    Jsonb(original),
+                    Jsonb({"valid": True}),
+                    hashlib.sha256(
+                        json.dumps(original, sort_keys=True).encode()
+                    ).hexdigest(),
+                ),
+            ).fetchone()["id"]
+            db.execute(
+                "UPDATE processes SET active_version_id=%s WHERE id=%s", (vid, pid)
+            )
+        else:
+            pid = process["id"]
+        for item in [*seed["examples"], *seed["rule_baselines"], *seed["batches"]]:
+            if item["process_id"] == old_id:
+                item["process_id"] = pid
+    return seed
+
+
+def restore_challenge_sources(db, seed):
+    if seed["version"] != 4:
+        return
+    for item in seed["reference_files"]:
+        db.execute(
+            "INSERT INTO files(hash,name,content,text) VALUES (%s,%s,%s,'') ON CONFLICT(hash) DO NOTHING",
+            (item["hash"], item["name"], base64.b64decode(item["content"])),
+        )
+    for batch in seed["batches"]:
+        for name, rows in batch["sources"].items():
+            db.execute(
+                "INSERT INTO sources(process_id,name,origin,rows) VALUES (%s,%s,%s,%s)",
+                (
+                    batch["process_id"],
+                    name,
+                    f"challenge:{seed['challenge_commit']}:batch{batch['number']}:{name}",
+                    Jsonb(rows),
+                ),
+            )
 
 
 def reset(db, seed, data_dir):
@@ -316,6 +439,7 @@ def reset(db, seed, data_dir):
                             sql.Identifier(table)
                         )
                     )
+                seed = prepare_challenge(db, seed)
                 for item in seed["examples"]:
                     process = db.execute(
                         "SELECT name FROM processes WHERE id=%s", (item["process_id"],)
@@ -334,6 +458,7 @@ def reset(db, seed, data_dir):
                 # Keep original reference workbooks and every file explicitly used by a source.
                 db.execute("""DELETE FROM files WHERE hash NOT IN (SELECT origin FROM sources)
                               AND name NOT ILIKE '%%.xlsx' AND name NOT ILIKE '%%.xls'""")
+                restore_challenge_sources(db, seed)
                 for item in seed["examples"]:
                     db.execute(
                         """INSERT INTO files (hash,name,content,text) VALUES (%s,%s,%s,%s)
@@ -357,7 +482,13 @@ def reset(db, seed, data_dir):
                     ).fetchone()["id"]
                     # Reuse the sample's persisted reading, explicitly identified as a seed.
                     # It is not a new OCR/provider call; runtime traces from tests are gone.
-                    evidence = {**item["evidence"], "created": True, "demo_seed": True}
+                    evidence = {
+                        **item["evidence"],
+                        "created": True,
+                        "demo_seed": True,
+                        "seed_provenance": item.get("provenance"),
+                        "provider_calls": 0,
+                    }
                     db.execute(
                         """INSERT INTO events (trace_id,span_id,step,status,started_at,
                            duration_ms,data,instance_id,process_id)
@@ -370,6 +501,37 @@ def reset(db, seed, data_dir):
                             item["process_id"],
                         ),
                     )
+                    # Keep the original provider/render/queue tree, clearly marked as cached.
+                    traces, spans = {}, {}
+                    for event in item.get("trace_events", []):
+                        traces.setdefault(event["trace_id"], uuid.uuid4().hex)
+                        spans.setdefault(event["span_id"], uuid.uuid4().hex[:16])
+                    for event in item.get("trace_events", []):
+                        data = {
+                            **(event.get("data") or {}),
+                            "demo_seed": True,
+                            "cached_replay": True,
+                            "source_event_id": event["id"],
+                            "source_trace_id": event["trace_id"],
+                            "provider_calls_this_deployment": 0,
+                        }
+                        db.execute(
+                            """INSERT INTO events(trace_id,span_id,parent_id,step,status,started_at,
+                               duration_ms,data,instance_id,process_id)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (
+                                traces[event["trace_id"]],
+                                spans[event["span_id"]],
+                                spans.get(event["parent_id"]),
+                                event["step"],
+                                event["status"],
+                                event["started_at"],
+                                event["duration_ms"],
+                                Jsonb(data),
+                                instance,
+                                item["process_id"],
+                            ),
+                        )
                 # Never reset initial_uid/next_uid, account identity, credentials or halt state.
                 db.execute(
                     "UPDATE mail_accounts SET heartbeat_at=NULL,worker_phase=NULL"
@@ -392,6 +554,7 @@ def reset(db, seed, data_dir):
         "examples": len(seed["examples"]),
         "mail_cursor_preserved": True,
         "sources_preserved": True,
+        "challenge_source_snapshots_restored": seed["version"] == 4,
         "initial_rules": rule_counts,
     }
 
