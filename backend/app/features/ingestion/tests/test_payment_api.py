@@ -351,9 +351,9 @@ async def test_same_source_rows_reuse_evidence_but_changed_schema_refreshes(paym
         symbol["origin"] == f"document:{generic_data['extraction']['id']}"
         for symbol in symbols.values()
     )
-    assert generic_data["extraction"]["data"]["extraction_plan"]["fingerprint"] == plan[
-        "fingerprint"
-    ]
+    assert (
+        generic_data["extraction"]["data"]["extraction_plan"]["fingerprint"] == plan["fingerprint"]
+    )
     async with session_factory() as session:
         instance = await session.get(Instance, first["instance_id"])
         assert instance.symbols == symbols
