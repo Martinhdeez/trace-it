@@ -22,7 +22,7 @@ def document_format(content):
         return "png"
     if content.startswith(b"\xff\xd8\xff"):
         return "jpeg"
-    if b"%PDF-" in content[:1024]:
+    if content.startswith(b"%PDF") or b"%PDF-" in content[:1024]:
         return "pdf"
     return "html"
 
