@@ -194,7 +194,7 @@ test('upload a scan and run', async ({ request }) => {
 
 test('the queue shows the escalated invoices', async () => {
   await page.goto(`/processes/${processId}/review`)
-  await expect(page.getByRole('heading', { name: 'ESCALAR' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^ESCALAR \d+$/ })).toBeVisible()
   for (const name of [...ESCALATED, SCAN]) {
     await expect(page.getByRole('button', { name })).toBeVisible()
   }
