@@ -177,8 +177,11 @@ async def resolve_instance(
     "/processes/{process_id}/export",
     operation_id="exportOutcomes",
     summary="outcomes.jsonl, one line per instance",
-    description="`trace=true` adds a `trace_url` per line: the console screen with that "
-    "case's trace.",
+    description="`file_id` and `result` come first on every line. `trace=true` adds a "
+    "`trace_url`: the console screen with that case's trace. `full=true` writes the whole "
+    "trace inline (`reason_code`, `reason`, `decided_by`, `decided_at`, `process_version`, "
+    "`rules_hash`, `rules_fired`, `evidence`, `sources_read`, `trace_id`, `trace_url`), "
+    "leaving out what has no data; a person's later resolution is then the exported one.",
     response_class=PlainTextResponse,
     responses={
         200: {
@@ -195,9 +198,9 @@ async def resolve_instance(
     },
 )
 async def export_outcomes(
-    process_id: int, session: Session, trace: bool = False
+    process_id: int, session: Session, trace: bool = False, full: bool = False
 ) -> PlainTextResponse:
-    body, duplicates = await service.export(session, process_id, trace=trace)
+    body, duplicates = await service.export(session, process_id, trace=trace, full=full)
     # JSON in ASCII: a header value cannot carry every character a file name can.
     headers = {"X-Duplicate-Names": json.dumps(duplicates)} if duplicates else None
     return PlainTextResponse(body, media_type="application/x-ndjson", headers=headers)

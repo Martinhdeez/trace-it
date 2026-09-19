@@ -41,7 +41,7 @@ export function CaseList({
   onSelect: (id: number) => void
 }) {
   return (
-    <ul className="space-y-1.5">
+    <ul className="space-y-3">
       <AnimatePresence initial={false}>
         {cases.map((entry, index) => {
           const level = severity(entry.flags)
@@ -60,17 +60,17 @@ export function CaseList({
                 type="button"
                 onClick={() => onSelect(entry.item.id)}
                 className={cn(
-                  'flex w-full items-center gap-4 rounded-[16px] bg-surface px-4 py-3.5 text-left ring-1 transition-shadow',
+                  'flex w-full flex-wrap items-center gap-x-4 gap-y-2 rounded-[16px] bg-surface px-4 py-5 text-left ring-1 transition-shadow sm:px-5',
                   active ? 'shadow-float ring-ink/20' : 'ring-line hover:shadow-lift',
                   isFresh && 'ring-2 ring-focus/60',
                 )}
               >
                 <DueTile entry={entry} level={level} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-medium tracking-[-0.015em] text-ink">
+                <span className="min-w-0 flex-[1_1_160px]">
+                  <span className="block truncate text-[16px] font-medium tracking-[-0.015em] text-ink">
                     {entry.party ?? entry.item.name}
                   </span>
-                  <span className="mt-0.5 block truncate text-[12.5px] text-muted">
+                  <span className="mt-1 line-clamp-2 text-[14px] leading-5 text-muted">
                     {plainReason(entry.item, decisionTypes).title}
                     {entry.flags
                       .filter((flag) => EXTRA.includes(flag))
@@ -91,11 +91,11 @@ export function CaseList({
                     </motion.span>
                   ) : null}
                 </span>
-                <span className="shrink-0 text-right">
-                  <span className="block font-mono text-[14px] tabular-nums text-ink">
+                <span className="ml-auto shrink-0 text-right">
+                  <span className="block font-mono text-[16px] tabular-nums text-ink">
                     {formatAmount(entry.amount)}
                   </span>
-                  <span className="mt-0.5 block text-[11.5px] text-faint">vence {formatDay(entry.due)}</span>
+                  <span className="mt-1 block text-[12.5px] text-faint">vence {formatDay(entry.due)}</span>
                 </span>
               </button>
             </motion.li>
@@ -112,7 +112,7 @@ function DueTile({ entry, level }: { entry: Triage; level: keyof typeof TILE }) 
   return (
     <span
       className={cn(
-        'flex h-12 w-14 shrink-0 flex-col items-center justify-center rounded-[12px]',
+        'flex h-14 w-16 shrink-0 flex-col items-center justify-center rounded-[12px]',
         TILE[level],
       )}
     >
@@ -120,10 +120,10 @@ function DueTile({ entry, level }: { entry: Triage; level: keyof typeof TILE }) 
         <span className="text-[11px]">—</span>
       ) : (
         <>
-          <span className="font-mono text-[16px] font-medium leading-none tabular-nums">
+          <span className="font-mono text-[18px] font-medium leading-none tabular-nums">
             {Math.abs(days)}
           </span>
-          <span className="mt-1 text-[9.5px] leading-none">
+          <span className="mt-1 text-[11px] leading-none">
             {days < 0 ? 'días tarde' : days === 0 ? 'hoy' : 'días'}
           </span>
         </>

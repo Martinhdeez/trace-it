@@ -44,6 +44,7 @@ import type {
   VersionDraft,
   VersionOut,
   WorkbookUpload,
+  UsageBreakdown,
   SpanNode,
 } from './contracts'
 import { BASE, del, get, getText, post, put, query, upload } from './http'
@@ -116,6 +117,9 @@ export const liveClient: ApiClient = {
   planeMetrics: <P extends Plane>(processId: number, plane: P) =>
     get<PlaneMetrics[P]>(`/processes/${processId}/metrics/${plane}`),
   processMetrics: (processId) => get<ProcessMetrics>(`/processes/${processId}/metrics`),
+  usageBreakdown: (processId, filters) =>
+    get<UsageBreakdown>(`/processes/${processId}/metrics/breakdown${query(filters)}`),
+  traceSpans: (traceId) => get<SpanNode[]>(`/traces/${encodeURIComponent(traceId)}`),
   planesHealth: () => get<PlaneHealth[]>('/health/planes'),
   getDraft: (processId) => get<VersionDraft>(`/processes/${processId}/draft`),
   validateDraft: (processId) => post<VersionDraft>(`/processes/${processId}/draft/validate`),

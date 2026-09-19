@@ -4,7 +4,7 @@
 
 ## The requirement
 
-The frontend shows traceability as **three separate dashboards**, one for each monitoring plane. It never shows a single mixed total. Each dashboard shows its own activity, quality, token spend and cost, and every number drills down to the spans behind it.
+The frontend shows traceability as **three separate dashboards**, one for each monitoring plane. The Metrics overview also shows a combined recorded total, immediately split by plane in a Sankey diagram. Each dashboard shows its own activity, quality, token spend and cost, and every number drills down to the spans behind it.
 
 | Plane | What it covers | The question it answers |
 |---|---|---|
@@ -22,7 +22,7 @@ One live demo run on v1.0 (process 9, 500 invoices, OCR forced) spent **214,734 
 | Agents | 162,339 (76%) | Compiler 87,777, tester 68,220, normalizer 6,342 | Once per norm version, and only for new or changed rules |
 | Execution | **0** | The engine never calls an LLM (ADR 0002) | Never |
 
-Deciding 500 invoices cost 0 tokens. The AI cost is in reading scans and in writing the rules. A mixed total hides exactly that, so the dashboards must not mix the planes.
+Deciding 500 invoices cost 0 tokens. The AI cost is in reading scans and in writing the rules. A total without its decomposition hides exactly that, so every combined overview must keep the planes visible.
 
 ## Data sources (already in the backend)
 
@@ -77,7 +77,7 @@ Deciding 500 invoices cost 0 tokens. The AI cost is in reading scans and in writ
 
 ## Rules for all three dashboards
 
-1. **Never add up tokens or cost across planes into one number.** Any global view is a bar stacked by plane.
+1. **Keep the planes visible.** The usage explorer can show a combined total when its Sankey immediately decomposes it by plane and then by task or model.
 2. **Every number drills down** to the spans behind it. Traceability means a person can go from a total to the exact call.
 3. **Each dashboard header shows its plane's health** from `/health/planes`.
 4. **Filters:** process, process version and time window. The default is the current process and its latest run.
@@ -90,3 +90,69 @@ Deciding 500 invoices cost 0 tokens. The AI cost is in reading scans and in writ
 - The agents plane reports tokens but no cost: the Helmcode/DeepSeek price is not configured, so `cost` is `null` in every `llm_run`. Add model prices to the agent configuration and expose `known_cost_usd` and `unpriced_requests` in `/metrics/agents`, as ingestion already does.
 - The compiler never hits the prompt cache (`cached_tokens = 0`), because the examples change for every rule. Reducing this is tracked separately. The dashboard only has to show the cache rate.
 - `/metrics/{plane}` responses are untyped. Add response schemas so the typed client (phase 0) covers them.
+
+## Usage explorer
+
+The Metrics screen uses `GET /processes/{id}/metrics/breakdown`. Its overview starts with a Sankey: recorded total → plane → task or model.
+`flow` contains the complete plane/module/provider/model aggregates in the same snapshot.
+Switching tasks/models uses the shared segmented control. A model shared by multiple tasks
+merges into one node; selecting it exposes the contributing tasks. Ribbon widths conserve
+the selected cost, token or active-time measure, including very small values. Zero and
+unpriced amounts never receive fabricated flow widths or a zero-percent label. A note
+explains when only one branch has priced usage; token and time views also show activity
+without a tariff. Scope is the current process, not
+a cross-process product total. Infrastructure spending is not recorded; the cost total is
+explicitly labelled as API spend and excludes hardware/deployment until a source is available.
+The existing plane cards, distribution and history charts remain under **Detail and evolution**. Selecting a plane shows modules; selecting a module shows its
+models/providers and individual operations, with access to each full trace. The shared
+segmented control switches cost, tokens and active time. Detailed tables and accounting
+notes are collapsed initially so the distribution and history charts remain prominent.
+
+When more than seven task/model branches exist, the six largest remain visible and the
+rest are combined into an inspectable node per area. Tasks stay together in source-area
+order, with descending amounts within each area. Shared models remain merged and are
+positioned between their contributing areas using weighted source positions, reducing
+connection crossings. All contributing modules and amounts remain available.
+
+Modules are the recorded agent name (falling back to role) for `llm_run`, the provider's
+operation for `provider_call`, and the step name for local work. No fixed list of agents or
+providers is needed. Existing records work without a migration or another model call.
+
+Accounting rules:
+
+- Cost is the recorded USD amount on priced/included model calls. Requests without a
+  tariff remain explicit, including when a total contains both priced and unpriced work.
+  No exchange rate or infrastructure cost is inferred.
+- Only `llm_run` and network-attempted `provider_call` records contribute tokens or cost.
+  Journal replays retain their operation/time but contribute no new model usage. Cached
+  input tokens are part of input, not a third amount to add to input plus output.
+- Active time (`self_ms`) subtracts the union of direct child intervals from each timed
+  span, clipped to the parent's interval. Children in another plane or outside the filter
+  still consume parent time. Concurrent operations accumulate work, so this is not
+  wall-clock elapsed time. Untimed point events remain unknown rather than measured zero.
+  p50/p95 describe inclusive operation durations and are not additive.
+- Evolution attributes the whole operation to its start time in UTC buckets. The API
+  returns hourly buckets for windows up to 24 hours, daily buckets thereafter and wider
+  buckets for histories longer than 90 days. The chart fills inactive intervals with zero.
+  An interval can be selected to inspect the operations contributing to it.
+- Filters use `since <= started_at < until`, with explicit timezones. The console offers
+  the current calendar month (default, in the browser timezone), 24 hours, 7 days, 30 days and all history. It freezes `until` and the last event ID (`through_id`) while drilling down and
+  paginating, so late-finishing operations cannot shift the pages; Refresh takes a new snapshot. Scope and metric selection persist in the URL.
+
+Tests: `backend/app/features/traces/tests/test_breakdown.py` verifies reconciliation,
+concurrent timing, cross-plane/time-boundary children, pricing, replay, filters and
+pagination against PostgreSQL. `frontend/e2e/metrics.spec.ts` covers browser navigation,
+trace details, history selection, metric switching, mobile layout and empty/error states
+with deterministic API fixtures.
+
+
+### Example data
+
+`frontend/src/components/metrics/demo.ts` contains `HARDCODED_METRICS` (currently `true`).
+Set it to `false` to default to the real API. The existing segmented control also switches
+Example/Live; `?hardcoded=true|false` persists the selection, including reload and drill-down.
+The example includes explicitly fictional API, compute and storage budgets. Its notice
+stays visible at every level, and it never writes records or requests real metrics/traces.
+Dated deterministic samples feed the Sankey, history, modules, models, pagination and
+synthetic trace details. Switching sources resets scope and snapshot IDs so sample data
+cannot mix with live totals. All real spending limitations still apply in Live mode.

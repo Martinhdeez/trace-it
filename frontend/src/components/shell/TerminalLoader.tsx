@@ -11,18 +11,21 @@ const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '
 export function TerminalLoader({
   verbs,
   className,
+  paused = false,
 }: {
   /** Shown in turn, a few seconds each; the last one stays. */
   verbs: readonly string[]
   className?: string
+  paused?: boolean
 }) {
   const reduceMotion = useReducedMotion()
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
+    if (paused) return
     const timer = window.setInterval(() => setTick((value) => value + 1), 80)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [paused])
 
   const seconds = Math.floor((tick * 80) / 1000)
   const verb = verbs[Math.min(Math.floor(seconds / 4), verbs.length - 1)] ?? ''

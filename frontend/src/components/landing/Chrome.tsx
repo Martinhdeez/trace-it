@@ -1,6 +1,8 @@
 import { type ReactNode } from 'react'
 import { Link } from 'react-router'
-import mark from '../../assets/trace-mark-clear.png'
+import hackspain from '../../assets/hackspain.svg'
+import maisa from '../../assets/maisa.svg'
+import { TraceMark } from '../shell/TraceMark'
 import { cn } from '../../lib/cn'
 import { paths } from '../../lib/paths'
 
@@ -46,12 +48,7 @@ export function Masthead() {
       <Sheet>
         <div className="flex h-14 items-center justify-between gap-6">
           <Link to={paths.landing} className="flex items-center gap-2">
-            <img
-              src={mark}
-              alt=""
-              className="h-7 w-7 object-contain"
-              draggable={false}
-            />
+            <TraceMark className="h-7 w-7" />
             <Wordmark className="text-[14px]" />
           </Link>
           <PrimaryAction to={paths.processes} className="px-3.5 py-1.5 text-[13px]">
@@ -66,8 +63,18 @@ export function Masthead() {
 export function Colophon() {
   return (
     <footer className="border-t border-hairline">
-      <Sheet className="py-6">
-        <Wordmark className="text-[15px]" />
+      <Sheet className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-6">
+        <Link to={paths.landing} className="flex items-center gap-2">
+          <TraceMark className="h-7 w-7" />
+          <Wordmark className="text-[15px]" />
+        </Link>
+        <div className="flex items-center gap-2.5 text-[11px] text-muted sm:gap-3">
+          <img src={hackspain} alt="HackSpain" width={928} height={306} className="h-7 w-auto" />
+          <span aria-hidden className="text-faint">
+            ×
+          </span>
+          <img src={maisa} alt="Maisa" width={842} height={247} className="h-6 w-auto [html[data-theme=dark]_&]:invert" />
+        </div>
       </Sheet>
     </footer>
   )

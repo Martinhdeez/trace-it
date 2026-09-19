@@ -1,10 +1,11 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.core.database import Session
 from app.features.traces import service
+from app.features.traces.breakdown import breakdown
 from app.features.traces.schemas import (
     AgentsMetrics,
     ExecutionMetrics,
@@ -16,9 +17,44 @@ from app.features.traces.schemas import (
     RuleTrace,
     SpanNode,
     SpanOut,
+    UsageBreakdown,
 )
 
 router = APIRouter(tags=["traces"])
+
+
+@router.get(
+    "/processes/{process_id}/metrics/breakdown",
+    operation_id="getUsageBreakdown",
+    summary="Usage by plane, module and model, with history and individual operations",
+    description="Drill down with plane, then module. Tokens and USD count llm_run and "
+    "network provider_call spans only; journal replays never count as new usage. self_ms "
+    "subtracts the union of direct child intervals, including cross-plane children. "
+    "It measures cumulative work, not wall-clock elapsed time. p50/p95 are inclusive "
+    "operation durations. Timeline buckets attribute each operation to its start time. "
+    "Reuse the returned until and through_id values for stable pagination, even when "
+    "in-flight operations finish after the snapshot.",
+)
+async def get_usage_breakdown(
+    process_id: int,
+    session: Session,
+    plane: Plane | None = None,
+    module: str | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+    through_id: int | None = Query(None, ge=0),
+) -> UsageBreakdown:
+    if module is not None and plane is None:
+        raise HTTPException(422, "module requires plane")
+    if any(value is not None and value.tzinfo is None for value in (since, until)):
+        raise HTTPException(422, "Time filters must include a timezone")
+    if since is not None and until is not None and since >= until:
+        raise HTTPException(422, "since must be before until")
+    return await breakdown(
+        session, process_id, plane, module, since, until, offset, limit, through_id
+    )
 
 
 @router.get(
