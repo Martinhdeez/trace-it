@@ -6,7 +6,14 @@ from app.core.database import Session
 from app.features.users.dependencies import CurrentUser
 from app.features.versions import execution, service
 from app.features.versions.model import ProcessVersion
-from app.features.versions.schemas import DraftIn, DraftOut, PublishIn, VersionOut
+from app.features.versions.schemas import (
+    DraftIn,
+    ExecutionOut,
+    PublishIn,
+    ReplayOut,
+    VersionDraftOut,
+    VersionOut,
+)
 
 router = APIRouter(tags=["process versions"])
 
@@ -20,7 +27,7 @@ def out(schema, row):
     return schema.model_validate(row, from_attributes=True)
 
 
-@router.get("/processes/{process_id}/versions")
+@router.get("/processes/{process_id}/versions", operation_id="listProcessVersions")
 async def versions(process_id: int, session: Session) -> list[VersionOut]:
     await service.active(session, process_id, required=False)
     return [
@@ -33,7 +40,7 @@ async def versions(process_id: int, session: Session) -> list[VersionOut]:
     ]
 
 
-@router.get("/process-versions/{version_id}")
+@router.get("/process-versions/{version_id}", operation_id="getProcessVersion")
 async def version(version_id: int, session: Session) -> VersionOut:
     row = await session.get(ProcessVersion, version_id)
     if row is None:
@@ -41,25 +48,29 @@ async def version(version_id: int, session: Session) -> VersionOut:
     return out(VersionOut, row)
 
 
-@router.get("/processes/{process_id}/draft")
-async def draft(process_id: int, session: Session, user: CurrentUser) -> DraftOut:
+@router.get("/processes/{process_id}/draft", operation_id="getProcessDraft")
+async def draft(process_id: int, session: Session, user: CurrentUser) -> VersionDraftOut:
     manager(user)
-    return out(DraftOut, await service.get_draft(session, process_id))
+    return out(VersionDraftOut, await service.get_draft(session, process_id))
 
 
-@router.put("/processes/{process_id}/draft")
-async def edit(process_id: int, body: DraftIn, session: Session, user: CurrentUser) -> DraftOut:
+@router.put("/processes/{process_id}/draft", operation_id="editProcessDraft")
+async def edit(
+    process_id: int, body: DraftIn, session: Session, user: CurrentUser
+) -> VersionDraftOut:
     manager(user)
-    return out(DraftOut, await service.edit(session, process_id, body, user.name))
+    return out(VersionDraftOut, await service.edit(session, process_id, body, user.name))
 
 
-@router.post("/processes/{process_id}/draft/validate")
-async def validate(process_id: int, session: Session, user: CurrentUser) -> DraftOut:
+@router.post("/processes/{process_id}/draft/validate", operation_id="validateProcessDraft")
+async def validate(process_id: int, session: Session, user: CurrentUser) -> VersionDraftOut:
     manager(user)
-    return out(DraftOut, await service.validate(session, process_id))
+    return out(VersionDraftOut, await service.validate(session, process_id))
 
 
-@router.post("/processes/{process_id}/draft/publish", status_code=201)
+@router.post(
+    "/processes/{process_id}/draft/publish", status_code=201, operation_id="publishProcessDraft"
+)
 async def publish(
     process_id: int, body: PublishIn, session: Session, user: CurrentUser
 ) -> VersionOut:
@@ -72,13 +83,13 @@ async def publish(
     )
 
 
-@router.post("/decisions/{decision_id}/replay")
-async def replay(decision_id: int, session: Session, user: CurrentUser) -> dict:
+@router.post("/decisions/{decision_id}/replay", operation_id="replayDecision")
+async def replay(decision_id: int, session: Session, user: CurrentUser) -> ReplayOut:
     manager(user)
     return await execution.replay(session, decision_id)
 
 
-@router.delete("/processes/{process_id}/draft", status_code=204)
+@router.delete("/processes/{process_id}/draft", status_code=204, operation_id="discardProcessDraft")
 async def discard(process_id: int, revision: int, session: Session, user: CurrentUser):
     from app.common.exceptions import ConflictError
 
@@ -91,8 +102,8 @@ async def discard(process_id: int, revision: int, session: Session, user: Curren
     await session.commit()
 
 
-@router.get("/processes/{process_id}/execution")
-async def execution_settings(process_id: int, session: Session, user: CurrentUser) -> dict:
+@router.get("/processes/{process_id}/execution", operation_id="getExecutionSettings")
+async def execution_settings(process_id: int, session: Session, user: CurrentUser) -> ExecutionOut:
     """Editable values and preset previews; reading never creates a draft."""
     from app.features.processes import execution as choices
     from app.features.versions import configuration

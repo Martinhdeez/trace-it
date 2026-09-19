@@ -42,7 +42,8 @@ app = FastAPI(
     description=(
         "Deterministic decision processes with rules compiled to code by agents.\n\n"
         "Identify with the `X-User-Id` header (see `POST /login`). Errors are "
-        '`{"code", "message"}`.'
+        '`{"code", "message"}`, except request validation (422), which keeps FastAPI\'s '
+        '`{"detail": [...]}`.'
     ),
 )
 

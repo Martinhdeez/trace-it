@@ -1,6 +1,5 @@
-import { useSyncExternalStore } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, apiTrace, mode } from '../api/client'
+import { api, mode } from '../api/client'
 import { keys } from '../api/queries'
 import { Button, Input, Segmented } from '../components/shell/Controls'
 import { Empty, ErrorNotice } from '../components/shell/Notice'
@@ -140,12 +139,8 @@ function Appearance() {
   )
 }
 
-/** Which calls the real backend answered and which ones the mock covered. */
+/** Where the console gets its data: the real backend, or the simulator when asked for. */
 function ApiStatus() {
-  useSyncExternalStore(apiTrace.subscribe, apiTrace.snapshot)
-  const entries = apiTrace.entries()
-  const live = entries.filter(([, source]) => source === 'live').length
-
   return (
     <NestedCard label="api">
       <div className="space-y-2 px-3.5 py-3">
@@ -156,30 +151,10 @@ function ApiStatus() {
           </span>
         </div>
         <p className="text-[12px] text-muted">
-          En <span className="font-mono">auto</span> cada llamada intenta el backend real y cae al
-          simulador si el endpoint responde 501, 502 o no existe. {live} de {entries.length}{' '}
-          llamadas de esta sesión salieron del backend.
+          Por defecto todo sale del backend real y sus errores se muestran tal cual. Con{' '}
+          <span className="font-mono">VITE_API_MODE=mock</span> la consola usa el simulador y lo
+          indica con la etiqueta MOCK DATA.
         </p>
-        {entries.length === 0 ? (
-          <Empty>Todavía no se ha llamado a nada.</Empty>
-        ) : (
-          <ul className="grid gap-x-6 gap-y-0.5 sm:grid-cols-2">
-            {entries.map(([method, source]) => (
-              <li key={method} className="flex items-baseline justify-between gap-2">
-                <span className="truncate font-mono text-[11.5px] text-muted">{method}</span>
-                <span
-                  className={
-                    source === 'live'
-                      ? 'font-mono text-[10px] text-pagar'
-                      : 'font-mono text-[10px] text-faint'
-                  }
-                >
-                  {source}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
     </NestedCard>
   )
