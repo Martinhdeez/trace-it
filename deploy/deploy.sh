@@ -114,6 +114,8 @@ if [[ -f DEMO_RESET_ENABLED ]]; then
     -v /opt/trace-it/demo-seed.json:/srv/demo-seed.json:ro \
     backend python /srv/reset-demo.py reset --seed /srv/demo-seed.json --confirm-demo-reset \
     > "$backup/demo-reset.json"
+  "${compose[@]}" run --rm --no-deps -T -e TRACE_DATABASE_URL \
+    backend python -m app.features.decisions.demo_seed > "$backup/demo-seed-run.json"
 fi
 unset TRACE_DATABASE_URL
 if [[ ! -f INITIALIZED ]]; then

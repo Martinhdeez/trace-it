@@ -13,6 +13,7 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./
+COPY backend/tests/golden/batch1_expected.jsonl /reference/invoice-expected.jsonl
 COPY processes /processes
 COPY tools/hiring_demo.py /srv/hiring_demo.py
 COPY deploy/backend-start.sh /srv/backend-start.sh

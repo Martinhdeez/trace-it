@@ -206,9 +206,13 @@ other installations retain the original behavior. ERP-only releases do not reset
 After stopping frontend, backend and the active mail worker, deployment verifies a database
 dump and ingestion archive, runs migrations, then invokes the installed `reset-demo.py`.
 A reviewed private `/opt/trace-it/demo-seed.json` contains six extracted invoices and six
-CVs, with their original PDF bytes and checksums. Examples are recreated as pending cases
-with new monotonic IDs, without provider calls. Their original extraction evidence is
-retained as explicitly marked seed events so PDF fields and evidence views remain usable. Runtime decisions, runs, proposals,
+CVs, with their original PDF bytes and checksums. The reset recreates them with new monotonic
+IDs, without extraction provider calls, then runs both processes through the normal decision
+service. The deployment compares every decision with the committed invoice and hiring JSONL
+references and stops on a missing or different result. Each example ends as decided with its
+normal execution, rule-evaluation, decision and process-run traces. Original extraction
+evidence is retained as explicitly marked seed events so PDF fields and evidence views remain
+usable. Runtime decisions, runs, proposals,
 learning results, alerts, traces, mail receipts and uploaded documents are removed.
 The complete extraction directory is cleared, including SQLite jobs and OCR/provider caches.
 
@@ -239,9 +243,11 @@ roll back the SQL transaction and restore quarantined cache files. A leftover
 `.demo-reset-trash` directory means an interrupted reset and requires recovery from the
 recorded backup before another reset. Application rollback never automatically restores the
 old database. Backups remain under `/opt/trace-it/backups`; this reset does not delete them.
+The same release backup stores `demo-reset.json` and `demo-seed-run.json`; the latter lists
+the twelve verified results and the trace counts for an operator to review.
 
 Validation: `pytest deploy/test_demo_deploy.py deploy/erp/test_app_rollback.py` exercises
-successful deployment and backup/reset/mail-check failures. `deploy/test_reset_demo.py`
+successful deployment and backup/reset/seed-run/mail-check failures. `deploy/test_reset_demo.py`
 uses `DEMO_RESET_TEST_DATABASE_URL` (database must be `trace_demo_reset_test`) and
 `DEMO_RESET_TEST_SEED` against an isolated restored copy to verify deletion, repeatability,
 configuration/cursor preservation, rule restoration, foreign-key failure and filesystem rollback.

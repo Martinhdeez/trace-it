@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.parametrize("failure", ["none", "backup", "reset", "mail-check"])
+@pytest.mark.parametrize(
+    "failure", ["none", "backup", "reset", "seed-run", "mail-check"]
+)
 def test_demo_deployment_order_and_failure(tmp_path, failure):
     root = tmp_path / "app"
     (root / "secrets").mkdir(parents=True)
@@ -43,6 +45,7 @@ elif cmd == "docker":
     if any("tarfile.open" in a for a in args):
         with tarfile.open(fileobj=sys.stdout.buffer, mode="w|gz"): pass
     if "--confirm-demo-reset" in args and failure == "reset": sys.exit(1)
+    if "app.features.decisions.demo_seed" in args and failure == "seed-run": sys.exit(1)
     if "check" in args and failure == "mail-check": sys.exit(1)
 """)
     fake.chmod(0o755)
@@ -77,6 +80,9 @@ elif cmd == "docker":
     calls = [json.loads(line) for line in (tmp_path / "calls").read_text().splitlines()]
     args = [call[1] for call in calls]
     resets = [i for i, a in enumerate(args) if "--confirm-demo-reset" in a]
+    seed_runs = [
+        i for i, a in enumerate(args) if "app.features.decisions.demo_seed" in a
+    ]
     if failure == "backup":
         assert not resets
     else:
@@ -87,6 +93,11 @@ elif cmd == "docker":
             next(i for i, a in enumerate(args) if "stop" in a and "frontend" in a)
             < resets[0]
         )
+    if failure in {"backup", "reset"}:
+        assert not seed_runs
+    else:
+        assert len(seed_runs) == 1
+        assert resets[0] < seed_runs[0]
     assert not any("initialize" in a for a in args)
     if failure == "none":
         assert result.returncode == 0, result.stderr
