@@ -11,6 +11,7 @@ from app.features.processes import draft_compilation
 from app.features.processes.draft_schemas import DraftPlan
 
 ROOT = Path(__file__).resolve().parents[3]
+
 DEMO = runpy.run_path(str(ROOT / "tools" / "hiring_demo.py"))
 
 PLAN = {
@@ -201,3 +202,50 @@ async def test_http_errors_are_logged_verbatim_and_raised(tmp_path, status):
     assert report.friction and str(status) in report.friction[0] and "boom" in report.friction[0]
     report.write(["# t"])
     assert "boom" in (tmp_path / "report.md").read_text()
+
+
+async def test_a_recoverable_agent_failure_is_resent_not_fatal(tmp_path):
+    """A 502 llm_error means the model's output failed its validators; the backend wrote
+    nothing and kept the draft's revision, so the same request can be sent again. Observed
+    when one such answer threw away twenty minutes of discovery."""
+    seen = []
+
+    def respond(request):
+        seen.append(request.url.path)
+        if len(seen) < 3:
+            return httpx.Response(502, json={"code": "llm_error", "message": "output retries"})
+        return httpx.Response(200, json={"revision": 3})
+
+    report = DEMO["Report"](tmp_path / "r.md")
+    api = DEMO["Api"]("http://test", report, attempts=3, pause=0)
+    api.http = httpx.AsyncClient(transport=httpx.MockTransport(respond), base_url="http://test")
+    assert await api.call("POST", "/process-drafts/5/messages", json={}) == {"revision": 3}
+    assert len(seen) == 3
+    assert len(report.friction) == 2, "every attempt is reported, not silently swallowed"
+    assert "resending" in report.friction[0]
+
+
+async def test_the_last_attempt_still_fails_and_other_statuses_never_retry(tmp_path):
+    calls = []
+
+    def always_502(request):
+        calls.append(1)
+        return httpx.Response(502, json={"code": "llm_error", "message": "boom"})
+
+    report = DEMO["Report"](tmp_path / "r.md")
+    api = DEMO["Api"]("http://test", report, attempts=2, pause=0)
+    api.http = httpx.AsyncClient(transport=httpx.MockTransport(always_502), base_url="http://test")
+    with pytest.raises(DEMO["ApiError"]):
+        await api.call("POST", "/x", json={})
+    assert len(calls) == 2
+
+    conflicts = []
+
+    def conflict(request):
+        conflicts.append(1)
+        return httpx.Response(409, json={"code": "conflict", "message": "stale"})
+
+    api.http = httpx.AsyncClient(transport=httpx.MockTransport(conflict), base_url="http://test")
+    with pytest.raises(DEMO["ApiError"]):
+        await api.call("POST", "/y", json={})
+    assert len(conflicts) == 1, "a conflict is the manager's problem, not a transient one"
