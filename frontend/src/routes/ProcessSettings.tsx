@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import { keys } from '../api/queries'
 import { ProcessExecutionSettings } from '../components/process/ExecutionSettings'
 import { ProcessScreen } from '../components/process/ProcessScreen'
+import { MailGathering } from '../components/process/MailGathering'
 import { paths } from '../lib/paths'
 
 export function ProcessSettings() {
@@ -26,7 +27,7 @@ export function ProcessSettings() {
         <header className="mb-6">
           <p className="text-[13px] text-muted">Ajustes del proceso</p>
           <h1 className="mt-1 text-[32px] font-medium leading-[1.1] tracking-[-0.045em]">
-            Modelos y esfuerzo de ejecución
+            Ajustes del proceso
           </h1>
           <p className="mt-2 max-w-2xl text-[14.5px] leading-6 text-muted">
             Elige un perfil o ajusta OCR, modelos, reintentos y revisión. Los cambios se
@@ -34,6 +35,7 @@ export function ProcessSettings() {
           </p>
         </header>
         <div className="max-w-3xl">
+          <MailGathering processId={processId} />
           <ProcessExecutionSettings processId={processId} />
         </div>
       </div>

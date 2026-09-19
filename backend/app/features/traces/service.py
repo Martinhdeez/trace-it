@@ -83,6 +83,8 @@ PLANES: dict[str, Plane] = {
     "provider_call": _INGESTION,
     "focused_read": _INGESTION,
     "ingest_document": _INGESTION,
+    "configure_mail_gathering": _INGESTION,
+    "mail_operator": _INGESTION,
     "reextract_document": _INGESTION,
     "extract_document": _INGESTION,
     "upload_workbook": _INGESTION,

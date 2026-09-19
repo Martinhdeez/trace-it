@@ -7,6 +7,7 @@ from app.features.database_api.model import DatabaseApiChange
 from app.features.decisions.model import Decision, DecisionReview, Finding
 from app.features.ingestion.model import File, Instance
 from app.features.learning.model import Adoption, Analysis, Proposal, Validation
+from app.features.mail_ingestion.model import MailAccount, MailAttachment, MailMessage, RunOperation
 from app.features.processes.model import (
     DecisionType,
     DiscoveryRevision,
@@ -23,6 +24,10 @@ from app.features.versions.model import Execution, ProcessDraft, ProcessVersion
 
 __all__ = [
     "DatabaseApiChange",
+    "MailAccount",
+    "MailAttachment",
+    "MailMessage",
+    "RunOperation",
     "Alert",
     "ManagerProposal",
     "Execution",
