@@ -19,6 +19,15 @@ export const es = {
     signIn: 'Entrar',
     anonymous: 'sin identificar',
   },
+  health: {
+    ok: 'Bien',
+    degraded: 'Degradado',
+    down: 'Caído',
+  },
+  instanceStatus: {
+    PENDING: 'Pendiente',
+    DECIDED: 'Decidida',
+  },
   roles: {
     manager: 'Responsable',
     operator: 'Operador',

@@ -87,7 +87,7 @@ test('process panel shows the real process', async () => {
   await realAndClean()
 })
 
-test.fixme('pkg 2: process panel shows the published version', async () => {
+test('pkg 2: process panel shows the published version', async () => {
   await expect(page.getByText(/v1\b|versión 1/)).toBeVisible()
   await realAndClean()
 })
