@@ -13,6 +13,8 @@ down is not run; the case escalates unless the other rules already decide it (AD
 
 import hashlib
 from collections.abc import Callable, Collection, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import dataclass
 from typing import Any
 
@@ -201,6 +203,7 @@ def decide(
     run_dataset: RunDataset,
     scans: Mapping[int, Collection[str]] | None = None,
     down: Mapping[int, Sequence[str]] | None = None,
+    rule_workers: int = 1,
 ) -> list[Verdict]:
     """Apply every rule to every instance. Each rule's code runs once, over all the instances
     together; the shared sources and population cross to the sandbox once per rule.
@@ -209,10 +212,19 @@ def decide(
     caller finds them, the engine only honours them (ADR 0028)."""
     if not instances:
         return []
-    by_rule = [
-        _run_rule(rule, instances, sources, population, run_dataset, (down or {}).get(rule.id, ()))
-        for rule in rules
-    ]
+    workers = max(1, min(max(1, rule_workers), len(rules)))
+
+    def run_rule(rule: Rule) -> list[RuleResult]:
+        return _run_rule(
+            rule, instances, sources, population, run_dataset, (down or {}).get(rule.id, ())
+        )
+
+    if workers == 1:
+        by_rule = [run_rule(rule) for rule in rules]
+    else:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="decision-rule") as pool:
+            futures = [pool.submit(copy_context().run, run_rule, rule) for rule in rules]
+            by_rule = [future.result() for future in futures]
     rules_hash = hash_rules(rules)
     return [
         _combine(

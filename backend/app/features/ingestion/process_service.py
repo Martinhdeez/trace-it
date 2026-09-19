@@ -22,9 +22,6 @@ async def require_process(session, process_id):
 
 async def existing_document(session, process_id, item, service, options):
     """Serialize duplicate uploads, then inspect immutable or reusable evidence."""
-    from app.features.versions.service import lock
-
-    await lock(session, process_id)
     identity = f"{process_id}\0{item['file_id']}\0{item['sha256']}".encode()
     lock_key = int.from_bytes(hashlib.sha256(identity).digest()[:8], "big", signed=True)
     await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})

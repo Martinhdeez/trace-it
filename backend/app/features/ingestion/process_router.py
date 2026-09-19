@@ -92,9 +92,6 @@ async def upload_document(
     mode: Annotated[Literal["local", "api", "hybrid"] | None, Form()] = None,
 ):
     try:
-        from app.features.versions.service import lock
-
-        await lock(session, process_id)
         with events.span("upload_document", process_id=process_id, file=file.filename) as span:
             try:
                 with events.span("store_file"):
