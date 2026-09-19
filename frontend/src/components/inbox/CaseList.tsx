@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
+import type { DecisionType } from '../../api/contracts'
 import { cn } from '../../lib/cn'
 import {
   flagLabel,
@@ -27,11 +28,13 @@ const EXTRA: Flag[] = ['large', 'reviewer', 'unread']
  */
 export function CaseList({
   cases,
+  decisionTypes,
   selectedId,
   fresh,
   onSelect,
 }: {
   cases: Triage[]
+  decisionTypes: DecisionType[]
   selectedId: number | undefined
   /** Cases that just arrived from a drop: highlighted, with why they sit where they do. */
   fresh: Set<number>
@@ -68,7 +71,7 @@ export function CaseList({
                     {entry.party ?? entry.item.name}
                   </span>
                   <span className="mt-0.5 block truncate text-[12.5px] text-muted">
-                    {plainReason(entry.item.reason).title}
+                    {plainReason(entry.item, decisionTypes).title}
                     {entry.flags
                       .filter((flag) => EXTRA.includes(flag))
                       .map((flag) => (

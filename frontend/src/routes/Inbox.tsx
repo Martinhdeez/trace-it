@@ -186,6 +186,7 @@ export function Inbox() {
               ) : (
                 <CaseList
                   cases={visible}
+                  decisionTypes={process.data?.decision_types ?? []}
                   selectedId={selectedId}
                   fresh={drop.fresh}
                   onSelect={(id) => update({ i: String(id) })}
@@ -711,7 +712,7 @@ function History({
                     <StatusBadge value={entry.item.decision!} decisionTypes={process?.decision_types} />
                   </td>
                   <td className="hidden max-w-[320px] truncate px-4 py-2.5 text-muted md:table-cell">
-                    {plainReason(entry.item.reason).title}
+                    {plainReason(entry.item, process?.decision_types ?? []).title}
                   </td>
                   <td className="whitespace-nowrap px-4 py-2.5 text-[12px] text-muted">
                     {entry.item.author === 'engine' ? 'Proceso' : entry.item.author}

@@ -59,7 +59,7 @@ export function CaseDetail({
   const waiting = process.decision_types.some(
     (type) => type.name === item.decision && type.requires_human,
   ) || item.review_pending
-  const reason = plainReason(item.reason)
+  const reason = plainReason(item, process.decision_types)
   const results = (instance.data?.decisions.at(-1)?.results ?? []) as RuleResult[]
   const fired = results.filter((result) => result.fires === true)
   const review = instance.data?.reviews.at(-1)

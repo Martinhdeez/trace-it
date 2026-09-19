@@ -1,4 +1,4 @@
-import type { InstanceOut } from '../api/contracts'
+import type { DecisionType, InstanceOut } from '../api/contracts'
 
 /**
  * Why a case waiting on the manager goes first. The inbox sorts by what a person would
@@ -143,9 +143,23 @@ const CAUSES: Record<string, string> = {
   SOURCE_UNAVAILABLE: 'Una fuente de datos no respondió',
 }
 
-/** The engine's reason in one plain sentence, and the raw detail after it. */
-export function plainReason(reason: string | null | undefined): { title: string; detail: string | null } {
-  if (!reason) return { title: 'El proceso no pudo decidir solo', detail: null }
+/** A decision's reason in one plain sentence, and the raw detail after it. */
+export function plainReason(
+  item: Pick<InstanceOut, 'decision' | 'author' | 'reason'>,
+  decisionTypes: Pick<DecisionType, 'name' | 'is_default'>[],
+): { title: string; detail: string | null } {
+  const reason = item.reason?.trim()
+  if (!reason) {
+    const automaticDefault =
+      item.author === 'engine' &&
+      decisionTypes.some((type) => type.name === item.decision && type.is_default)
+    return {
+      title: automaticDefault
+        ? 'Todas las comprobaciones del proceso han pasado'
+        : 'Decisión registrada sin motivo',
+      detail: null,
+    }
+  }
   const match = reason.match(/^([A-Z_]+):\s*(.*)$/s)
   if (match && CAUSES[match[1]]) return { title: CAUSES[match[1]], detail: match[2] || null }
   return { title: reason, detail: null }
