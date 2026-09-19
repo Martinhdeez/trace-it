@@ -1,0 +1,2 @@
+NO_PAGAR Martín
+[{'author': 'Martín', 'before': 'ESCALAR', 'reason': 'Missing supplier, IBAN and order: hold the payment.', 'decision': 'NO_PAGAR', 'proposal_id': 1, 'previous_author': 'engine'}]

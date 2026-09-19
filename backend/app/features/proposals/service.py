@@ -111,7 +111,8 @@ async def propose_decision(session: AsyncSession, instance_id: int) -> ManagerPr
 
 
 def _content(item: dict | None) -> dict:
-    return {k: v for k, v in (item or {}).items() if k != "evidence"}
+    """What a change changes: a restated evidence or explanation alone is no proposal."""
+    return {k: v for k, v in (item or {}).items() if k not in {"evidence", "explanation"}}
 
 
 # Channel 2: a process-chat revision. Called before the revision is saved, same commit.
