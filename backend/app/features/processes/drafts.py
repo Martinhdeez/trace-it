@@ -15,10 +15,12 @@ from app.features.ingestion.model import File
 from app.features.processes import draft_compilation as compilation
 from app.features.processes import service
 from app.features.processes.draft_schemas import (
+    AcceptanceExample,
     DraftOut,
     DraftPlan,
     DraftStart,
     Evidence,
+    GuidanceProposal,
     RuleProposal,
     SourceProposal,
 )
@@ -92,7 +94,17 @@ async def output(session, draft_id):
         ],
         connectors=list(await connectors(session, draft)),
         preview=data.get("preview"),
+        changes=changes(data),
     )
+
+
+def changes(data):
+    before = data.get("base_plan", {})
+    return [
+        {"field": key, "before": before.get(key), "after": value}
+        for key, value in data["plan"].items()
+        if key not in {"summary", "questions"} and value != before.get(key)
+    ]
 
 
 async def save(session, draft_id, revision, data, user, step):
@@ -129,12 +141,23 @@ async def start(session, body: DraftStart, user):
     base = None
     if body.process_id is not None:
         await versions.lock(session, body.process_id)
-        if await session.get(ProcessDraft, body.process_id):
-            raise ConflictError("Publish or discard the existing process draft before discovery")
         current = await service.get(session, body.process_id)
         base = copy.deepcopy((await versions.active(session, body.process_id)).snapshot)
         body.use_case_id = current.use_case_id
         plan = DraftPlan(**current.model_dump(exclude={"id", "use_case_id"}))
+        ref = f"version:{current.active_version_id}"
+        base_references.append(ref)
+        plan.guidance = [
+            GuidanceProposal(
+                name=key,
+                text=text,
+                evidence=[Evidence(reference=ref, explanation="Published reviewer guidance")],
+            )
+            for key, text in base["guidance"].items()
+        ]
+        plan.examples = [
+            AcceptanceExample.model_validate(e) for e in base.get("acceptance_examples", [])
+        ]
         for rule in await decisions.active_rules(session, body.process_id):
             ref = f"rule:{rule.id}"
             base_references.append(ref)
@@ -170,12 +193,14 @@ async def start(session, body: DraftStart, user):
     await session.flush()
     data = {
         "plan": plan.model_dump(),
+        "base_plan": plan.model_dump(),
         "reviews": {},
         "messages": [],
         "documents": {},
         "snapshots": snapshots,
         "base_references": base_references,
         "base_configuration": base,
+        "base_sources": {name: copy.deepcopy(source["rows"]) for name, source in snapshots.items()},
         "preview": None,
         "base_fingerprint": await fingerprint(session, body.process_id),
     }
@@ -189,11 +214,44 @@ def invalidate(data):
     data["preview"] = None
 
 
+async def conversation_context(session, draft, data):
+    if not draft.process_id:
+        return
+    from app.features.learning import evidence
+
+    snapshot = await evidence.capture(session, draft.process_id)
+    if any(i["symbols"] is not None for i in snapshot["instances"]) and snapshot["decisions"]:
+        data["case_context"] = await evidence.context(session, snapshot, 30)
+    else:
+        data["case_context"] = {"evidence": {}, "sampling": {"selected": 0}}
+    data["case_context"]["active_version_id"] = snapshot["version_id"]
+    data["case_context"]["published_configuration"] = snapshot["process"]
+    current = await session.get(ProcessDraft, draft.process_id, populate_existing=True)
+    data["version_draft"] = (
+        {"revision": current.revision, "snapshot": current.snapshot} if current else None
+    )
+
+
 async def message(session, draft_id, body, user):
     manager(user)
     draft, data = await read(session, draft_id, body.revision)
-    data["messages"].append({"role": "user", "text": body.message, "author": user.name})
+    data["messages"].append(
+        {"role": "user", "text": body.message, "author": user.name, "mode": body.mode}
+    )
+    await conversation_context(session, draft, data)
     setups = await use_cases.setups(session, draft.use_case_id) if draft.use_case_id else {}
+    if body.mode == "discuss":
+        with events.span("discuss_process", process_id=draft.process_id, draft_id=draft_id):
+            answer = await discovery.discuss(data, setups.get("discovery"))
+        data["messages"].append(
+            {
+                "role": "assistant",
+                "text": answer.message,
+                "evidence": answer.evidence,
+                "questions": answer.questions,
+            }
+        )
+        return await save(session, draft_id, body.revision, data, user, "discuss_process")
     with events.span("discover_process", draft_id=draft_id, author=user.name):
         plan = await discovery.discover(data, setups.get("discovery"))
     data["plan"] = plan.model_dump()
@@ -286,19 +344,10 @@ async def check_base(session, draft, data, plan):
         ):
             raise ConflictError("Wait for the process's existing rule compilations to finish")
         current = await service.get(session, draft.process_id)
-        for field in ("name", "description", "decision_types", "symbols"):
-            before = current.model_dump()[field]
-            after = plan.model_dump()[field]
-            if isinstance(before, list):
-                before, after = (
-                    sorted(before, key=lambda x: x["name"]),
-                    sorted(after, key=lambda x: x["name"]),
-                )
-            if before != after:
-                raise ConflictError(
-                    f"This import revises rules and sources; keep existing {field}. "
-                    "New processes can define their own setup"
-                )
+        if current.name != plan.name:
+            raise ConflictError(
+                "Keep the existing process name; this conversation revises its configuration"
+            )
 
 
 async def prepare(session, draft_id, revision, user):
@@ -310,10 +359,15 @@ async def prepare(session, draft_id, revision, user):
     tables = workbooks.materialize(plan, data)
     setups = await use_cases.setups(session, draft.use_case_id) if draft.use_case_id else {}
     with events.span("compile_process_draft", draft_id=draft_id, author=user.name):
-        compiled = await compilation.compile_plan(plan, tables, setups)
+        compiled = await compilation.compile_plan(
+            plan, tables, setups, data["base_configuration"], data.get("base_sources")
+        )
         data["preview"] = await compilation.preview(
             session, draft.process_id, plan, tables, compiled, data["base_configuration"]
         )
+    if draft.process_id:
+        await versions.lock(session, draft.process_id)
+    await check_base(session, draft, data, plan)
     return await save(session, draft_id, revision, data, user, "preview_process_draft")
 
 
@@ -365,12 +419,22 @@ async def publish(session, draft_id, revision, user):
     old = await decisions.active_rules(session, process.id) if draft.process_id else []
     published = []
     norms = {}
+    new_proposals = {
+        item["proposal"]
+        for item in data["preview"]["compilations"]
+        if item.get("existing_rule_id") is None
+    }
     for number, proposal in enumerate(plan.rules, 1):
+        if proposal.name not in new_proposals:
+            continue
         norm = NormRule(process_id=process.id, number=number, text=proposal.text, policies=[])
         session.add(norm)
         await session.flush()
         norms[proposal.name] = norm.id
     for item in data["preview"]["compilations"]:
+        if item.get("existing_rule_id") is not None:
+            published.append(await session.get(Rule, item["existing_rule_id"]))
+            continue
         rule = Rule(
             process_id=process.id,
             norm_rule_id=norms[item["proposal"]],
@@ -416,6 +480,7 @@ async def publish(session, draft_id, revision, user):
             "discovery_id": draft.id,
             "revision": revision,
             "examples": data["preview"]["examples"],
+            "review": data["preview"].get("review"),
         },
     )
     data["published_version_id"] = version.id
@@ -431,7 +496,7 @@ async def publish(session, draft_id, revision, user):
         for name in previous_names | tables.keys()
     )
     data["published_rule_ids"] = [r.id for r in published]
-    data["retired_rule_ids"] = [r.id for r in old]
+    data["retired_rule_ids"] = [r.id for r in old if r.id not in data["published_rule_ids"]]
     draft.published_process_id = process.id
     draft.revision += 1
     session.add(

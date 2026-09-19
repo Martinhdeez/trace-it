@@ -132,7 +132,8 @@ async def get_plane_metrics(
     description="Over the last `TRACE_HEALTH_WINDOW_MINUTES`: `down` from "
     "`TRACE_HEALTH_DOWN_ERROR_RATE` of spans in error, `degraded` from "
     "`TRACE_HEALTH_DEGRADED_ERROR_RATE` or when the plane's p95 span duration passes "
-    "`TRACE_HEALTH_P95_MS[plane]`. No spans in the window is `ok`.",
+    "`TRACE_HEALTH_P95_MS[plane]`. No spans in the window, or fewer than "
+    "`TRACE_HEALTH_MIN_SPANS` (reason `not enough data`), is `ok`.",
 )
 async def get_planes_health(session: Session) -> list[PlaneHealth]:
     return await service.health(session)

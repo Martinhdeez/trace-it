@@ -1,8 +1,8 @@
 """Read an invoice's symbols from the PDF text layer. No model involved.
 
 Stand-in for symbol extraction over `features/ingestion`'s readings (ADR 0010). This
-exists so the process can be run end to end today, and it is a useful baseline to hold that against: it reads all 471 text-layer invoices of the
-challenge and none of the 29 scans.
+exists so the process can be run end to end today, and it is a useful baseline to hold that
+against: it reads all 471 text-layer invoices of the challenge and none of the 29 scans.
 
 Suppliers label things differently (`BASE IMPONIBLE....`, `Importe base:`, `Cuota IVA (21%)`,
 `Total factura:`, `I.V.A. (21%)`), so rather than matching whole lines it finds a label and

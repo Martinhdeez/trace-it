@@ -136,7 +136,7 @@ TRACEPAY_OCR_CUDA=0
 
 The OCR adapter specifically reads `GEMINI_API_KEY`; setting only
 `GOOGLE_API_KEY` does not enable it. Jev never sees pixels and is not another
-visual verifier. `load --activate` uses the supplied hand-written rules without
+visual verifier. `load --activate --manager-id 1` uses the supplied hand-written rules without
 calling rule agents. Agent settings in `processes/invoice-payment/use-case.json`
 are separate from `TRACEPAY_*`; changing the compiler model does not change OCR.
 
@@ -168,11 +168,14 @@ From the root, in PowerShell or a POSIX shell:
 
 ```text
 docker compose up -d --build --wait
-docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json --activate
+docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json --activate --manager-id 1
 ```
 
-The container runs database migrations at startup. Record the process ID printed
-by `load`; do not assume it is 1 in an existing database. The API is at
+The container runs database migrations at startup. `--activate` publishes the pack's
+hand-written rules as a process version and needs a manager's user id: on a fresh
+database the seeded manager is 1 (`curl -s localhost:8000/users`). `make setup` then
+`make activate MANAGER_ID=1` does the same. Record the process ID printed by `load`; do
+not assume it is 1 in an existing database. The API is at
 `http://127.0.0.1:8000/docs`. `BACKEND_PORT` in `.env` changes its host port.
 
 Check configuration inside the container without revealing keys:
@@ -192,7 +195,8 @@ uv run --project backend --locked python .context/500-sombras-de-alberto/alberto
 ```
 
 Leave it running on port 8009. Compose points the backend at
-`http://host.docker.internal:8009`. Docker Desktop supplies that hostname. On
+`http://host.docker.internal:8009` (`ERP_PORT=<port>` for both `make erp` and `make setup`
+if 8009 is taken). Docker Desktop supplies that hostname. On
 Linux Docker Engine, add `extra_hosts: ["host.docker.internal:host-gateway"]` to
 the backend in a local Compose override if the name does not resolve. Allow the
 container to reach the host ERP. The challenge credentials in `.env.example`
@@ -258,7 +262,8 @@ and ERP. From the repository root, after steps 1-4:
 make demo
 ```
 
-It activates the hand-written rules, logs in as the seeded manager, uploads the
+It needs the published rules of step 4 (`make activate MANAGER_ID=1`); without them the
+run answers 409. It logs in as the seeded manager, uploads the
 workbook, syncs the ERP, uploads PDFs with `ocr=true`, runs pending decisions and
 writes `output/outcomes.jsonl` and `output/detail.json`. For a small local-only
 check, run `make demo DEMO_ARGS="--limit 5 --local-only"`. This disables

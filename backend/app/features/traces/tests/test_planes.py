@@ -205,6 +205,7 @@ async def test_plane_health_follows_the_thresholds(monkeypatch: pytest.MonkeyPat
         with events.span(step):
             pass
     async with client() as api:
+        monkeypatch.setattr(settings, "health_min_spans", 1)
         monkeypatch.setattr(settings, "health_down_error_rate", 2.0)
         monkeypatch.setattr(settings, "health_degraded_error_rate", 2.0)
         monkeypatch.setattr(settings, "health_p95_ms", {p: 10**9 for p in Plane})
@@ -222,6 +223,18 @@ async def test_plane_health_follows_the_thresholds(monkeypatch: pytest.MonkeyPat
     assert all(h["spans"] >= 1 for h in healthy)
     assert {h["status"] for h in slow} == {"degraded"} and "p95" in slow[0]["reason"]
     assert {h["status"] for h in down_} == {"down"}
+
+
+async def test_a_plane_with_too_few_spans_is_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    with events.span("run_process") as run:
+        run.status = "error"
+    monkeypatch.setattr(settings, "health_down_error_rate", 0.0)
+    monkeypatch.setattr(settings, "health_min_spans", 10**9)
+    async with client() as api:
+        planes = (await api.get("/health/planes")).json()
+    execution = next(h for h in planes if h["plane"] == "execution")
+    assert execution["status"] == "ok" and execution["errors"] >= 1
+    assert execution["reason"].startswith("not enough data")
 
 
 async def test_the_stream_sends_new_spans_of_one_plane(monkeypatch: pytest.MonkeyPatch) -> None:

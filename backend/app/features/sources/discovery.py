@@ -57,6 +57,11 @@ def evidence_references(data: dict) -> set[str]:
     references = {f"chat:{i + 1}" for i in range(len(data["messages"]))}
     references.update(f"snapshot:{name}" for name in data["snapshots"])
     references.update(data.get("base_references", []))
+    references.update((data.get("case_context") or {}).get("evidence", {}))
+    sampling = (data.get("case_context") or {}).get("sampling", {})
+    references.update(
+        f"sampling.{key}" for key in ("outcome_counts", "author_counts") if key in sampling
+    )
     for digest, document in data["documents"].items():
         for sheet in document["workbook"]["sheets"]:
             for row in sheet["rows"]:

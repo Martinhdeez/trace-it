@@ -3,7 +3,23 @@
 Configurable decision processes with compiled rules, document evidence and an audit trail.
 Built for the MAISA track of the "500 Sombras de Alberto" hackathon (ETSIT UPM, 18-20
 September 2026): 500 supplier invoices, a chaotic workbook and a 2009 ERP, decided as
-`PAGAR`, `NO_PAGAR` or `ESCALAR`.
+`PAGAR`, `NO_PAGAR` or `ESCALAR`. No LLM ever decides: agents write the rules' code, a
+deterministic engine runs it, and every decision keeps its evidence, rule versions and
+latency.
+
+**Run the demo** (Docker, [uv](https://docs.astral.sh/uv/), OCR keys in `.env`; see
+[Run it](#run-it)):
+
+```bash
+make setup                             # Postgres + API in Docker, invoice pack loaded
+make activate MANAGER_ID=1             # publish the hand-written rules (1: seeded manager)
+make erp                               # the challenge ERP, in another terminal
+make demo                              # 500 invoices -> output/outcomes.jsonl
+make trace-decision FILE=scan_002.pdf  # follow one decision: evidence, versions, latency
+```
+
+**Why it is built this way**: [architecture decisions](docs/adr/README.md). **Demo script
+for the jury**: [docs/defense.md](docs/defense.md).
 
 ## How it works
 
@@ -15,8 +31,9 @@ September 2026): 500 supplier invoices, a chaotic workbook and a 2009 ERP, decid
    read through a fault-tolerant HTTP connector into versioned snapshots.
 3. **Rules become Python** through two agents: a tester writes tests from the rule text
    alone, and a coder iterates until its code passes them (disputes are settled by the
-   tester from the text). A valid rule activates by itself if it barely changes history.
-   The invoice rules also ship hand-written, so the process runs without any model.
+   tester from the text). A manager publishes rule changes as a new process version,
+   after they are replayed over past decisions. The invoice rules also ship hand-written,
+   so the process runs without any model.
 4. The **engine** runs every active rule in a sandbox; the highest-priority decision type
    that fired wins, the default applies when none does, and a rule that cannot be evaluated
    escalates the case to a person with the reason. Every instance ends with a decision.
@@ -36,16 +53,19 @@ Windows/Linux/macOS commands and the production API corpus run), start with the
 the workbook and all PDFs through that production API, so scans run through OCR.
 
 ```bash
-make setup                      # Postgres + API in Docker, invoice pack loaded
+make setup                      # OCR weights + check, Postgres + API in Docker, pack loaded
+make activate MANAGER_ID=1      # publish the rules; before it, runs answer 409
 make erp                        # the challenge ERP bridge, in another terminal
 make demo                       # 500 invoices -> output/outcomes.jsonl (+ detail.json)
 ```
 
-`make setup` does not download OCR weights; follow the setup guide before running
-the demo. API docs at <http://localhost:8000/docs>; identify with `POST /login`
+`make setup` downloads the pinned OCR weights and checks the `verified` OCR profile
+(`make ocr-check`: it needs the Gemini/Jev keys in `.env`). Ports taken?
+`DB_PORT=5442 BACKEND_PORT=8030 ERP_PORT=8031 make setup`, then `ERP_PORT=8031 make erp`
+and `BACKEND_PORT=8030 make demo`. API docs at <http://localhost:8000/docs>; identify with `POST /login`
 and the `X-User-Id` header. A local smoke run with no Gemini or Jev calls is
-`make demo DEMO_ARGS="--limit 5 --local-only"`; it still needs the local OCR
-weights for scanned files. For local development without Docker, from `backend/`:
+`make demo DEMO_ARGS="--limit 5 --local-only"`, with `TRACEPAY_OCR_PROFILE=experimental`
+in `.env`; it still needs the local OCR weights for scanned files. For local development without Docker, from `backend/`:
 
 ```bash
 uv sync --locked

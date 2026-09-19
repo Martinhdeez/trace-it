@@ -90,6 +90,7 @@ PLANES: dict[str, Plane] = {
     "norm": _AGENTS,
     "normalize_norm": _AGENTS,
     "discover_process": _AGENTS,
+    "discuss_process": _AGENTS,
     "compile_process_draft": _AGENTS,
     "publish_process_draft": _AGENTS,
     "compile_rules": _AGENTS,
@@ -764,7 +765,9 @@ async def health(session: AsyncSession) -> list[PlaneHealth]:
         rate = errors / spans if spans else None
         limit = settings.health_p95_ms.get(p)
         status, reason = "ok", None
-        if rate is not None and rate >= settings.health_down_error_rate:
+        if 0 < spans < settings.health_min_spans:
+            reason = f"not enough data: {spans} spans, {settings.health_min_spans} needed"
+        elif rate is not None and rate >= settings.health_down_error_rate:
             status, reason = "down", f"{errors}/{spans} spans failed"
         elif rate is not None and rate >= settings.health_degraded_error_rate:
             status, reason = "degraded", f"{errors}/{spans} spans failed"
