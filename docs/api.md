@@ -37,6 +37,8 @@ activating rules, document extraction and source uploads need it. CORS is open.
 | Sync the ERP | `POST /processes/{id}/sources/{name}/sync`, `GET .../diff` | |
 | Audit trail | `GET /processes/{id}/events?step=&instance_id=&limit=` | newest first. Steps: `decision`, `resolution`, `ingest_document`, `compile_rule`, `normalize_norm`, `suggest_escalation`, `sync_source`, `sync_source_failed` |
 | Findings | `GET /processes/{id}/findings` | past decisions a later rule says were wrong |
+| Alerts | `GET /processes/{id}/alerts?status=open\|acknowledged\|resolved` | past decisions that newer data or rules would decide otherwise (ADR 0026): `before`, `after`, `trigger` (`source_sync` with the rows involved, or `rule_change` with rule ids), `evidence` (reason codes before and after), `acknowledged_by`, `resolved_by_decision_id`. Raised after a sync that changes rows and after a version is published |
+| Acknowledge | `POST /alerts/{id}/ack` `{note?}` | needs `X-User-Id`; 409 if already acknowledged. Act with Resolve or Reprocess; the later decision marks the alert `resolved` |
 | Run | `POST /processes/{id}/run` | decides every PENDING instance with symbols; 409 while a rule is `compiling` or when no rule is `active`/`blocked` |
 | Reprocess | `POST /processes/{id}/reprocess?dry_run=` (optional `{"names": [...]}`) | decides the DECIDED instances again with the current rules and sources; appends a new engine decision only where it changes; an instance a person decided last is never touched and comes back in `conflicts`. Same 409 as Run |
 | Export | `GET /processes/{id}/export` | `outcomes.jsonl`; 409 while anything is undecided or awaiting reviewer-requested approval. One batch only: `make export-batch` (`docs/runbook-batch2.md`) |
@@ -47,7 +49,7 @@ activating rules, document extraction and source uploads need it. CORS is open.
 | Metrics | `GET /processes/{id}/metrics?since=` | runs, step durations, LLM tokens by model and role, outcomes (unchanged) |
 | Monitoring: ingestion | `GET /processes/{id}/metrics/ingestion?since=`, `GET /metrics/ingestion` (all processes) | `files`, `files_per_second`, `pages`, `ocr_calls`, `vision_calls`, `judge_calls`, `focused_reads`, `cache_hits`, `abstentions`, `abstentions_by_field`, `steps[]` |
 | Monitoring: agents | `GET /processes/{id}/metrics/agents?since=`, `GET /metrics/agents` | tokens in/out/cached, requests, retries, fallbacks, truncations `by_model`, `by_role`, `by_rule`, `by_norm_rule`, `by_use_case`; `per_hour[]`; `compile` (success rate, attempts); `norms[]` (tokens, `seconds_to_active`) |
-| Monitoring: execution | `GET /processes/{id}/metrics/execution?since=`, `GET /metrics/execution` | `runs`, `instances_per_second`, `rules[]` (p50/p95 per rule), `decisions_by_outcome`, `failures`, `escalated`, `pending`, `resolutions_by_author`, `resolution_p50_s`/`p95_s` |
+| Monitoring: execution | `GET /processes/{id}/metrics/execution?since=`, `GET /metrics/execution` | `runs`, `instances_per_second`, `rules[]` (p50/p95 per rule), `decisions_by_outcome`, `failures`, `escalated`, `pending`, `resolutions_by_author`, `resolution_p50_s`/`p95_s`, `open_alerts` |
 | Plane health | `GET /health/planes` | per plane `status` `ok`/`degraded`/`down`, `error_rate`, `p95_ms`, `reason` (thresholds `TRACE_HEALTH_*`) |
 | Live feed | `GET /events/stream?plane=&process_id=&after=` | server-sent events: `event` = plane, `id` = span id, `data` = a span as in `GET /traces`; `: ping` every idle second. Use `EventSource` |
 

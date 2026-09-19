@@ -33,6 +33,7 @@ wins over any other document. Superseded plans live in `.artifacts/archive/`.
 | [0023](0023-fal-visual-fallback-evaluation.md) | Evaluate fal.ai visual readers before selecting a production fallback | proposed | Compare Moondream and a fixed OpenRouter model; bounded opt-in queue/journal adapter only after measured evaluation |
 | [0024](0024-discover-processes-through-documents-and-conversation.md) | Build process drafts through documents and conversation before approval | accepted | Create or revise through workbook discovery and chat; review proposals, compile and backtest, then publish under the same process identity |
 | [0025](0025-scan-decision-policy.md) | Decide scans only on confirmed data, and escalate a scan the rules would reject | accepted | A scan (no native text) with a required value its readers did not confirm escalates `UNVERIFIED_DATA`; one the rules would reject escalates `SCAN_REVIEW: <rule>`; text PDFs unaffected |
+| [0026](0026-stale-decision-alerts.md) | Flag stale decisions to the manager; never rewrite them silently | accepted | After a source sync that changes rows or a version publication, a dry run; each decision that would change is an alert (trigger, reason codes before/after) the manager acknowledges and acts on; about 1 s per 500 invoices |
 
 | [0022](0022-publish-approved-process-versions.md) | Require manager publication of complete process versions | accepted | One draft, validated approval, atomic publication and deterministic replay; replaces automatic rule activation |
 

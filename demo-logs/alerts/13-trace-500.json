@@ -1,0 +1,428 @@
+[
+    {
+        "id": 3090,
+        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+        "span_id": "04ff098ec0d2d0d5",
+        "parent_id": null,
+        "step": "sync_source",
+        "status": "ok",
+        "started_at": "2026-09-19T09:44:05.616478Z",
+        "duration_ms": 5013,
+        "data": {
+            "diff": {
+                "added": 0,
+                "changed": 1,
+                "removed": 0
+            },
+            "rows": 516,
+            "pages": 26,
+            "logins": 1,
+            "origin": "erp:2026-09-19T09:44:05+00:00|http://127.0.0.1:8042",
+            "source": "erp",
+            "status": {
+                "entries": "516",
+                "update_loaded": "SI"
+            },
+            "retries": 2,
+            "requests": 30,
+            "timeouts": 0,
+            "rows_hash": "064bd6f447eb3b4082e40ea7d273bed9a66b03dd01790d88cd214fb4538f055b",
+            "source_id": 6,
+            "duration_ms": 4999,
+            "rate_limited": 0,
+            "invalid_values": 0,
+            "transient_errors": {
+                "ORA-00600": 2
+            },
+            "invalid_responses": 0
+        },
+        "instance_id": null,
+        "process_id": 1,
+        "rule_id": null,
+        "norm_rule_id": null,
+        "children": []
+    },
+    {
+        "id": 3108,
+        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+        "span_id": "0ab6e212497fe08c",
+        "parent_id": null,
+        "step": "detect_stale_decisions",
+        "status": "ok",
+        "started_at": "2026-09-19T09:44:10.641721Z",
+        "duration_ms": 982,
+        "data": {
+            "trigger": {
+                "kind": "source_sync",
+                "sources": [
+                    {
+                        "name": "erp",
+                        "source_id": 6,
+                        "rows_added": 1,
+                        "previous_id": 5,
+                        "rows_removed": 1
+                    }
+                ]
+            },
+            "alert_ids": [
+                2
+            ],
+            "instances": 500,
+            "would_change": 2,
+            "alerts_created": 1
+        },
+        "instance_id": null,
+        "process_id": 1,
+        "rule_id": null,
+        "norm_rule_id": null,
+        "children": [
+            {
+                "id": 3107,
+                "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                "span_id": "c070ef5a1178ba2e",
+                "parent_id": "0ab6e212497fe08c",
+                "step": "reprocess",
+                "status": "ok",
+                "started_at": "2026-09-19T09:44:10.647713Z",
+                "duration_ms": 963,
+                "data": {
+                    "rules": 16,
+                    "changed": 2,
+                    "dry_run": true,
+                    "failures": {
+                        "MISSING_DATA": 29
+                    },
+                    "conflicts": 0,
+                    "instances": 500,
+                    "unchanged": 498
+                },
+                "instance_id": null,
+                "process_id": 1,
+                "rule_id": null,
+                "norm_rule_id": null,
+                "children": [
+                    {
+                        "id": 3091,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "ed22f68177b35853",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:10.707206Z",
+                        "duration_ms": 43,
+                        "data": {
+                            "fired": 29,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 1,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3092,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "88de8f718c32aade",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:10.751280Z",
+                        "duration_ms": 40,
+                        "data": {
+                            "fired": 3,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 2,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3093,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "9c0e96358e413868",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:10.792756Z",
+                        "duration_ms": 39,
+                        "data": {
+                            "fired": 8,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 3,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3094,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "198a317c42c1a719",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:10.832877Z",
+                        "duration_ms": 39,
+                        "data": {
+                            "fired": 0,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 4,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3095,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "2fbfce7599c06a1e",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:10.872906Z",
+                        "duration_ms": 52,
+                        "data": {
+                            "fired": 3,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 5,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3096,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "16ac3df23d2afacd",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:10.926333Z",
+                        "duration_ms": 71,
+                        "data": {
+                            "fired": 2,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 6,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3097,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "999d6b1a88e7a9f4",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:10.998286Z",
+                        "duration_ms": 68,
+                        "data": {
+                            "fired": 13,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 7,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3098,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "de7cb55812a9557a",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:11.067604Z",
+                        "duration_ms": 39,
+                        "data": {
+                            "fired": 6,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 8,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3099,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "6e69df419128e21c",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:11.108122Z",
+                        "duration_ms": 43,
+                        "data": {
+                            "fired": 0,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 9,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3100,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "8e84c6a61492072d",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:11.152660Z",
+                        "duration_ms": 41,
+                        "data": {
+                            "fired": 2,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 10,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3101,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "509b32a7087882ad",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:11.195059Z",
+                        "duration_ms": 39,
+                        "data": {
+                            "fired": 3,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 11,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3102,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "73b9e47bb2bda532",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:11.234927Z",
+                        "duration_ms": 39,
+                        "data": {
+                            "fired": 0,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 12,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3103,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "d7f819279ae8925e",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:11.275064Z",
+                        "duration_ms": 86,
+                        "data": {
+                            "fired": 0,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 13,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3104,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "66c857c7cea819cd",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:11.362602Z",
+                        "duration_ms": 101,
+                        "data": {
+                            "fired": 0,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 14,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3105,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "f4dde3b63e2ea6a7",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:11.465062Z",
+                        "duration_ms": 68,
+                        "data": {
+                            "fired": 8,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 15,
+                        "norm_rule_id": null,
+                        "children": []
+                    },
+                    {
+                        "id": 3106,
+                        "trace_id": "01a0b90d34e698af022b201d4945bbea",
+                        "span_id": "4dbaca13625666ab",
+                        "parent_id": "c070ef5a1178ba2e",
+                        "step": "evaluate_rule",
+                        "status": "ok",
+                        "started_at": "2026-09-19T09:44:11.534687Z",
+                        "duration_ms": 71,
+                        "data": {
+                            "fired": 2,
+                            "errors": 0,
+                            "instances": 500
+                        },
+                        "instance_id": null,
+                        "process_id": 1,
+                        "rule_id": 16,
+                        "norm_rule_id": null,
+                        "children": []
+                    }
+                ]
+            }
+        ]
+    }
+]

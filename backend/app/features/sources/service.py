@@ -241,6 +241,10 @@ async def sync(
             **stats,
         )
         await session.commit()
+    if diff.added or diff.removed or diff.changed:
+        from app.features.alerts.service import after_source_load
+
+        await after_source_load(process_id, [name])
     return SyncResult(
         source_id=source.id,
         origin=origin,

@@ -1,0 +1,42 @@
+[
+    {
+        "id": 1,
+        "name": "2026-01-08_P001.pdf",
+        "status": "DECIDED",
+        "decision": "PAGAR",
+        "author": "engine",
+        "reason": null,
+        "decided_at": "2026-09-19T09:42:19.240488Z",
+        "review_pending": false
+    },
+    {
+        "id": 2,
+        "name": "2026-01-11_P007.pdf",
+        "status": "DECIDED",
+        "decision": "PAGAR",
+        "author": "engine",
+        "reason": null,
+        "decided_at": "2026-09-19T09:42:19.240488Z",
+        "review_pending": false
+    },
+    {
+        "id": 3,
+        "name": "2026-03-28_P002.pdf",
+        "status": "DECIDED",
+        "decision": "NO_PAGAR",
+        "author": "engine",
+        "reason": "The ERP says PAGADA",
+        "decided_at": "2026-09-19T09:42:19.240488Z",
+        "review_pending": false
+    },
+    {
+        "id": 4,
+        "name": "2026-05-28_P003.pdf",
+        "status": "DECIDED",
+        "decision": "NO_PAGAR",
+        "author": "engine",
+        "reason": "The ERP says PAGADA",
+        "decided_at": "2026-09-19T09:42:19.240488Z",
+        "review_pending": false
+    }
+]

@@ -104,6 +104,32 @@ applies to batch 1 too: step 5 again after step 6, with `names` = batch 1.
    duplicate-order check sees batch 2 (the rehearsal flipped 36 batch-1 invoices this way).
 4. Steps 10, 10b, 11.
 
+## Stale decision alerts (ADR 0026)
+
+Every sync that changes rows (step 4b, Sunday's datum) and every published version (norm
+v4) decides the past again in dry run and opens an alert for each decision that would
+change. Nothing is rewritten: the manager reads, acknowledges and acts. A PAGAR whose
+order the ERP now marks PAGADA is our own payment: no alert. On the evening, step 4b's sync
+and 6e's publication raise them; read `GET $API/processes/$P/alerts?status=open` after each.
+Demo, on a scratch database and your own ERP only (outputs of a live run in
+`demo-logs/alerts/`):
+
+```bash
+# 1. One ERP datum changes: restart the ERP with a one-line update, then sync.
+printf 'asiento_id,fecha_registro,proveedor_id,nif,pedido,importe_esperado,estado\nAS-00476,2026-03-28,P002,A41220987,PO-2026-0476,2551.64,PENDIENTE\n' > /tmp/erp_change.csv
+python3 .context/500-sombras-de-alberto/alberto_erp.py --lote2 /tmp/erp_change.csv   # other terminal
+curl -s -X POST $API/processes/$P/sources/erp/sync | python3 -m json.tool      # diff: AS-00476 PAGADA -> PENDIENTE
+# 2. The open alerts: 2026-03-28_P002.pdf NO_PAGAR -> PAGAR, with the ERP row before and after.
+curl -s "$API/processes/$P/alerts?status=open" | python3 -m json.tool
+curl -s $API/processes/$P/metrics/execution | python3 -c 'import json,sys; print(json.load(sys.stdin)["open_alerts"])'
+# 3. The manager acknowledges it, then acts (reprocess or resolve); the alert becomes resolved.
+curl -s -X POST $API/alerts/1/ack -H "$MANAGER" -H 'Content-Type: application/json' -d '{"note": "AS-00476 was never paid"}'
+curl -s -X POST $API/processes/$P/reprocess -H 'Content-Type: application/json' -d '{"names": ["2026-03-28_P002.pdf"]}'
+curl -s "$API/processes/$P/alerts?status=resolved"
+```
+
+Cost: one dry run per change, 982 ms for 500 invoices and 16 rules (440 ms for 4).
+
 ## Rollback
 
 - **A rule** (v4 or a fallback) was wrong: `POST /rules/{id}/retire -H "$MANAGER"` stages its
