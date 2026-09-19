@@ -76,7 +76,11 @@ async def test_chat_reads_past_cases_and_separate_draft_without_changing_them(ap
                 "discovery": [
                     {
                         "message": "The case had amount 50; there is also a pending context edit.",
-                        "evidence": [f"case:{iid}"],
+                        "evidence": [
+                            f"case:{iid}",
+                            "sampling.outcome_counts",
+                            "sampling.author_counts",
+                        ],
                         "questions": [
                             "Do you want to discuss the published configuration or pending edit?"
                         ],
@@ -90,6 +94,8 @@ async def test_chat_reads_past_cases_and_separate_draft_without_changing_them(ap
     context = user_json(seen["discovery"][0])
     assert f"case:{iid}" in context["past_cases"]["evidence"]
     assert context["past_cases"]["sampling"]["selected"] == 1
+    assert context["past_cases"]["sampling"]["outcome_counts"] == {"PAY": 1}
+    assert context["past_cases"]["sampling"]["author_counts"] == {"engine": 1}
     assert context["editable_version_draft"]["snapshot"]["process"]["description"] == "Pending edit"
     assert result["plan"] == draft["plan"]
     assert (await api.get(f"/processes/{pid}/draft")).json() == staged

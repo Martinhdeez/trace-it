@@ -78,3 +78,7 @@ makes approval stale. Start a fresh conversation to review the new baseline.
 New-process discovery remains available through its existing endpoints. Conversational
 connector generation, arbitrary backend operations and model-setting edits are outside
 this extension.
+
+A [live challenge evaluation](evaluations/process-chat-2026-09-19.md) records the tested
+scenarios, model findings, fixes and coverage limits. Discussion uses computed sample
+counts and treats authoring guidance as background, separate from published policy.

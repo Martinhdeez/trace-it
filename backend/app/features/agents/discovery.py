@@ -101,10 +101,14 @@ def valid_discussion(ctx: RunContext[Deps], result: Discussion) -> Discussion:
 
 
 async def discuss(data: dict, setup: llm.Setup | None) -> Discussion:
+    discussion_context = context(data)
+    if setup:
+        discussion_context["authoring_guidance"] = setup.settings.instructions
+        setup = llm.Setup(setup.settings.model_copy(update={"instructions": ""}), setup.config_id)
     result, _ = await llm.run(
         discussion,
         "discovery",
-        json.dumps(context(data), ensure_ascii=False, default=str),
+        json.dumps(discussion_context, ensure_ascii=False, default=str),
         instructions=llm.prompt("process_chat"),
         setup=setup,
         deps=Deps(deepcopy(data)),
