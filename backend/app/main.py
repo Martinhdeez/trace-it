@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.common.exceptions import TraceError
-from app.core.events import configure_observability
+from app.core.events import configure_observability, unhandled_error
 from app.features.agents.router import router as agents_router
 from app.features.alerts.router import router as alerts_router
 from app.features.decisions.router import router as decisions_router
@@ -58,6 +58,9 @@ async def trace_error(_: Request, error: TraceError) -> JSONResponse:
     return JSONResponse(
         status_code=error.status_code, content={"code": error.code, "message": error.message}
     )
+
+
+app.add_exception_handler(Exception, unhandled_error)
 
 
 @app.get("/health", tags=["system"], operation_id="health")

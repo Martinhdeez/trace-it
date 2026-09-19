@@ -27,6 +27,10 @@ Paths: `FE:` is `frontend/src/`. `BE:` is `backend/app/`.
   - A new screen design.
 - If a feature cannot fit an existing component, stop and ask Martín before building anything.
 
+**Traceability is shown by plane.**
+- Metrics, tokens and cost are shown in three separate dashboards: Ingestion (data and OCR), Agents (norm → code) and Execution (published rules on cases). They are never mixed into one total.
+- The spec is [`observability-dashboards.md`](observability-dashboards.md). Build the dashboards with the existing `Metrics`, `DataTable`, `CountChip` and `StatusBadge` components. If a dashboard does not fit them, ask Martín.
+
 **One user: the manager.**
 - The person using the app is a manager, and a manager only handles escalations.
 - Every write needs the manager's id in `X-User-Id`. `http.ts` already adds it to every request once `setUserId` has run, so the only work is to make sure a user is signed in (package 1).

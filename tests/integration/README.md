@@ -14,7 +14,7 @@ What it does:
 - Downloads the OCR weights once (`make ocr-models`, 98 MB) and installs Chromium for Playwright.
 - `playwright.config.ts` starts the challenge ERP, the API and the console (`npm run dev`) on
   three free ports, with the mock off, and stops them when the run ends.
-- No LLM key: every model call goes to a closed port and fails as 502 `llm_error`. The
+- No LLM key: every model call fails before it is made, as 502 `llm_error`. The
   assistant's proposal is not part of the path (D4). The OCR runs locally.
 
 The path (`demo-path.spec.ts`), with a MOCK DATA badge and an `ErrorNotice` failing every step:

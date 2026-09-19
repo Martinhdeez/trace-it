@@ -1,5 +1,14 @@
 import type {
   ApiClient,
+  DraftIn,
+  ExecutionMetrics,
+  ExecutionOut,
+  PlaneHealth,
+  ProcessMetrics,
+  ProcessSummary,
+  PublishIn,
+  VersionDraft,
+  VersionOut,
   DocumentEvidence,
   IngestedFile,
   Instance,
@@ -309,6 +318,19 @@ export const liveClient: ApiClient = {
   },
   activateRule: async (id) => ruleDetail(await post<RawRuleDetail>(`/rules/${id}/activate`)),
   retireRule: async (id) => ruleDetail(await post<RawRuleDetail>(`/rules/${id}/retire`)),
+
+  summary: (processId) => get<ProcessSummary>(`/processes/${processId}/summary`),
+  planeMetrics: (processId, plane) =>
+    get<ExecutionMetrics>(`/processes/${processId}/metrics/${plane}`),
+  processMetrics: (processId) => get<ProcessMetrics>(`/processes/${processId}/metrics`),
+  planesHealth: () => get<PlaneHealth[]>('/health/planes'),
+  getDraft: (processId) => get<VersionDraft>(`/processes/${processId}/draft`),
+  validateDraft: (processId) => post<VersionDraft>(`/processes/${processId}/draft/validate`),
+  publishDraft: (processId, body: PublishIn) =>
+    post<VersionOut>(`/processes/${processId}/draft/publish`, body),
+  listVersions: (processId) => get<VersionOut[]>(`/processes/${processId}/versions`),
+  getExecution: (processId) => get<ExecutionOut>(`/processes/${processId}/execution`),
+  saveDraft: (processId, body: DraftIn) => put<VersionDraft>(`/processes/${processId}/draft`, body),
 
   run: async (processId) => {
     const raw = await post<{ decided: number; by_decision: Record<string, number> }>(

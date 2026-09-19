@@ -1,4 +1,4 @@
-import type { ValidationReport } from '../../api/execution'
+import type { ValidationReport } from '../../api/contracts'
 import { Notice } from '../shell/Notice'
 
 export function HistoricalCoverage({ validation }: { validation: ValidationReport }) {
