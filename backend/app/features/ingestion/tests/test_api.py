@@ -181,3 +181,10 @@ def test_recovery_of_interrupted_job(settings):
                 break
             time.sleep(0.02)
         assert batch["counts"]["COMPLETED"] == 1
+
+
+def test_decomposed_file_name_is_stored_composed(settings):
+    """A macOS drop names the file in NFD; it must match the same invoice uploaded before."""
+    service = ExtractionService(settings, NoOCR(), NoVLM())
+    item = service.ingest(io.BytesIO(pdf_bytes("")), "FA-1_ofimática.pdf")
+    assert item["file_id"] == "FA-1_ofimática.pdf"

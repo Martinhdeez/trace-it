@@ -1,10 +1,6 @@
 name: CI
 
 on:
-  pull_request:
-    branches: [dev]
-  push:
-    branches: [dev, main]
   workflow_dispatch:
 
 permissions:
@@ -12,7 +8,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   backend:
@@ -52,55 +48,8 @@ jobs:
       - name: ERP subpath, original faults and guarded bootstrap
         run: uv run --project backend pytest deploy/erp -q
 
-  # Synthetic loopback mail through the real API, PostgreSQL, engine and console.
-  mail-integration:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    services:
-      db:
-        image: postgres:16
-        env:
-          POSTGRES_USER: trace
-          POSTGRES_PASSWORD: trace
-          POSTGRES_DB: trace
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U trace"
-          --health-interval 2s
-          --health-retries 20
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
-        with:
-          version: '0.10.10'
-          python-version: '3.12'
-          enable-cache: true
-          cache-dependency-glob: backend/uv.lock
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            tests/integration/package-lock.json
-      - name: Install
-        run: |
-          (cd backend && uv sync --locked)
-          (cd frontend && npm ci)
-          (cd tests/integration && npm ci && npx playwright install --with-deps chromium)
-      - name: Local IMAP, worker, API, PostgreSQL and browser
-        run: make e2e-mail
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: failure()
-        with:
-          name: mail-playwright-report
-          path: tests/integration/test-results
-
   # The demo path through the real console and API in Chromium (tests/integration/README.md).
   e2e-integration:
-    # Every PR into dev and every push to dev and main; the deploy needs it green.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -187,7 +136,7 @@ jobs:
         run: npx playwright test
       - name: Publish the exact tested images (main only)
         id: publish
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_ACTOR: ${{ github.actor }}
@@ -217,11 +166,40 @@ jobs:
         if: always()
         run: bash deploy/ci-stack.sh down
 
+  erp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build and probe every versioned ERP scenario
+        env:
+          REVISION: ${{ github.sha }}
+        run: bash deploy/erp/ci.sh
+      - name: Publish the tested active ERP (main only)
+        id: publish
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_ACTOR: ${{ github.actor }}
+          REVISION: ${{ github.sha }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          image="ghcr.io/martinhdeez/trace-it/erp:$REVISION"
+          docker tag trace-it-erp:ci "$image"
+          docker push "$image"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image")
+          echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+
   deploy:
-    needs: [backend, mail-integration, production-stack, e2e-integration]
+    needs: [backend, production-stack, e2e-integration, erp]
     # The independent kill switch stays unset until root bootstrap and app integration pass.
     if: >-
-      github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' &&
       vars.TRACE_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -253,6 +231,7 @@ jobs:
           REVISION: ${{ github.sha }}
           BACKEND_DIGEST: ${{ needs.production-stack.outputs.backend_digest }}
           FRONTEND_DIGEST: ${{ needs.production-stack.outputs.frontend_digest }}
+          ERP_DIGEST: ${{ needs.erp.outputs.digest }}
         run: |
           current=$(gh api repos/Martinhdeez/trace-it/git/ref/heads/main --jq '.object.sha')
           if [ "$current" != "$REVISION" ]; then
@@ -263,6 +242,10 @@ jobs:
             -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
             kripta@gex-dashboard.hopto.org \
             "deploy $REVISION $BACKEND_DIGEST $FRONTEND_DIGEST $GH_ACTOR"
+          printf '%s' "$GH_TOKEN" | ssh -T -i ~/.ssh/trace-it \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            kripta@gex-dashboard.hopto.org \
+            "deploy-erp $REVISION $ERP_DIGEST $GH_ACTOR"
       - name: Remove the temporary SSH identity
         if: always()
         run: rm -f ~/.ssh/trace-it

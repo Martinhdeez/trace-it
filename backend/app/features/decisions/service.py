@@ -31,7 +31,7 @@ from app.features.decisions.schemas import (
     SourceSummary,
 )
 from app.features.ingestion.model import Instance
-from app.features.ingestion.symbols import flatten_symbols, scan
+from app.features.ingestion.symbols import flatten_symbols, scan, unverified
 from app.features.processes.service import get as get_process
 from app.features.proposals.model import ManagerProposal
 from app.features.proposals.service import settle, supersede
@@ -151,6 +151,7 @@ async def decide_all(
         scans,
         None,
         settings.decision_workers,
+        {i.id: unverified(i.symbols) for i in selected},
     )
 
 
@@ -195,6 +196,7 @@ def _out(
         reason=decision.reason if decision else None,
         decided_at=decision.created_at if decision else None,
         review_pending=bool(review and review.requires_human),
+        values=flatten_symbols(instance.symbols) if instance.symbols is not None else None,
     )
 
 

@@ -1,6 +1,7 @@
 """Real HTTP tests of the subpath adapter and safe source bootstrap."""
 
 import http.client
+import importlib.util
 import sys
 import threading
 from pathlib import Path
@@ -15,13 +16,27 @@ sys.path.insert(0, str(HERE))
 
 import server
 from bootstrap_sources import bootstrap
+from release import prepare
 
 
-@pytest.fixture
-def api():
-    server.erp.ESTADO = server.erp.EstadoERP(
-        server.erp._cargar_asientos_embebidos(), latencia=0
+@pytest.fixture(params=["initial", "lote2"])
+def api(request, tmp_path, monkeypatch):
+    bundle = tmp_path / "bundle"
+    prepare(bundle, request.param)
+    spec = importlib.util.spec_from_file_location(
+        "versioned_erp", bundle / "alberto_erp.py"
     )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setitem(sys.modules, "alberto_erp", module)
+    adapter_spec = importlib.util.spec_from_file_location(
+        "versioned_adapter", bundle / "server.py"
+    )
+    adapter = importlib.util.module_from_spec(adapter_spec)
+    adapter_spec.loader.exec_module(adapter)
+    monkeypatch.setitem(globals(), "server", adapter)
+    server.initialize(bundle)
+    server.erp.ESTADO.latencia = 0
     httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
     worker = threading.Thread(target=httpd.serve_forever, daemon=True)
     worker.start()
@@ -144,3 +159,18 @@ def test_bootstrap_refuses_partial_existing_references():
     with pytest.raises(SystemExit, match="Partial"):
         bootstrap(request, 1, "reference.xlsx", "2026-09-18")
     assert len(calls) == 1
+
+
+def test_release_health_and_row_counts(api):
+    import json
+
+    status, _, body = api("/nexia/erp/healthz")
+    assert status == 200
+    manifest = json.loads(body)
+    assert manifest["rows"] == {"initial": 516, "lote2": 556}[manifest["id"]]
+    assert manifest["rows"] == manifest["expected_rows"]
+    # Operational health does not consume the challenge rate limit or bypass its API faults.
+    server.erp.ESTADO.ventana.clear()
+    for _ in range(20):
+        assert api("/healthz", reset_rate=False)[0] == 200
+    assert not server.erp.ESTADO.ventana

@@ -24,8 +24,9 @@ async def list_alerts(
     process_id: int,
     session: Session,
     status: Literal["open", "acknowledged", "resolved"] | None = None,
+    instance_id: int | None = None,
 ) -> list[AlertOut]:
-    return await service.list_alerts(session, process_id, status)
+    return await service.list_alerts(session, process_id, status, instance_id)
 
 
 @router.post(

@@ -56,14 +56,19 @@ async def test_an_erp_change_behind_a_no_pagar_raises_one_alert() -> None:
         process_id, _ = await create_process(api, "manager")
         ids = await decided(api, process_id)
 
-        # PO-0474 is unpaid after all (FA-1016 NO_PAGAR -> PAGAR); PO-0008 is now paid, by
-        # us: factura_1217's PAGAR was right, so no alert for it.
+        # A sync carries no evidence of who paid PO-0008. Flag both transitions;
+        # do not silently assume a newly paid entry was our own payment.
         created = await load_erp(
             process_id, erp(**{"PO-2026-0474": "PENDIENTE", "PO-2026-0008": "PAGADA"})
         )
-        assert len(created) == 1
+        assert len(created) == 2
 
-        [alert] = (await api.get(f"/processes/{process_id}/alerts?status=open")).json()
+        listed = (await api.get(f"/processes/{process_id}/alerts?status=open")).json()
+        assert sorted((a["name"], a["before"], a["after"]) for a in listed) == [
+            ("FA-1016_papelería.pdf", "NO_PAGAR", "PAGAR"),
+            ("factura_1217.pdf", "PAGAR", "NO_PAGAR"),
+        ]
+        alert = next(a for a in listed if a["name"] == "FA-1016_papelería.pdf")
         assert (alert["name"], alert["before"], alert["after"], alert["status"]) == (
             "FA-1016_papelería.pdf",
             "NO_PAGAR",
@@ -92,7 +97,7 @@ async def test_an_erp_change_behind_a_no_pagar_raises_one_alert() -> None:
         assert detail["decisions"][0]["id"] == alert["decision_id"]
 
         metrics = (await api.get(f"/processes/{process_id}/metrics/execution")).json()
-        assert metrics["open_alerts"] == 1
+        assert metrics["open_alerts"] == 2
 
     async with session_factory() as session:
         span = await session.scalar(
@@ -101,7 +106,7 @@ async def test_an_erp_change_behind_a_no_pagar_raises_one_alert() -> None:
             )
         )
     assert span.data["trigger"]["kind"] == "source_sync"
-    assert (span.data["instances"], span.data["alerts_created"]) == (3, 1)
+    assert (span.data["instances"], span.data["alerts_created"]) == (3, 2)
 
 
 async def test_a_sync_with_no_relevant_change_raises_nothing() -> None:

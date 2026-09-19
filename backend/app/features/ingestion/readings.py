@@ -106,6 +106,16 @@ def field_readings(fields, data, *, require_verified=False):
             confidence=selected.evidence.confidence if selected else None,
             candidates=field.candidates,
         )
+        if name in data.get("blocked_fields", {}):
+            readings[name].value = None
+            blocked_reason = data["blocked_fields"][name]
+            readings[name].verification = (
+                "ambiguous" if blocked_reason == "visible_amendment" else "unverified"
+            )
+            readings[name].verification_reason = blocked_reason
+            readings[name].selected_by = None
+            readings[name].agreeing_readers = []
+            readings[name].confidence = None
     return readings
 
 

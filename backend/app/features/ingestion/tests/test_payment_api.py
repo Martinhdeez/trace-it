@@ -142,7 +142,7 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
     fed = {name: field["symbol"] for name, field in document["fields"].items()}
     assert fed["supplier_tax_id"] == "issuer_nif" and fed["payment_iban"] == "iban"
     assert fed["issued_on"] == "date" and fed["gross_amount"] == "total"
-    assert fed["currency"] is None  # read, but no symbol of this process takes it
+    assert fed["currency"] == "currency"
     locations = (await client.get(f"/instances/{instance_id}/document/locations")).json()
     assert locations["symbol_fields"]["total"] == "gross_amount"
     assert locations["symbol_fields"]["issuer_nif"] == "supplier_tax_id"
@@ -184,7 +184,7 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
     }
     detail = (await client.get(f"/instances/{instance_id}")).json()
     assert len(detail["decisions"]) == 1
-    assert len(detail["decisions"][0]["results"]) == 17
+    assert len(detail["decisions"][0]["results"]) == 18
     summary = (await client.get(f"/processes/{process_id}/summary")).json()
     assert summary["instances"] == 1 and summary["by_decision"] == {"PAGAR": 1}
     assert (await client.post(f"/instances/{instance_id}/extract", json={})).status_code == 409

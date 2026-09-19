@@ -118,7 +118,7 @@ export function Rule() {
       }
     >
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
         {rule.isError ? <ErrorNotice error={rule.error} /> : null}
 
         <PageIntro
@@ -160,7 +160,7 @@ export function Rule() {
               title="Queda en el borrador. Publica una versión para que se aplique"
               action={
                 <Link
-                  to={`${paths.process(processId)}?publicar=1`}
+                  to={`${paths.panel(processId)}?publicar=1`}
                   className="text-[12px] text-muted hover:text-ink"
                 >
                   Publicar

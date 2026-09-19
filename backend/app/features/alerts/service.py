@@ -127,11 +127,9 @@ async def _detect(session: AsyncSession, process_id: int, trigger: dict, span) -
     if await versions.active(session, process_id, required=False) is None:
         return []
     dry = await decisions.reprocess(session, process_id, None, dry_run=True)
-    default = (await decisions.outcomes(session, process_id)).default
     source_sync = trigger["kind"] == "source_sync"
-    # New data behind a decision to pay usually records that payment (the ERP now says
-    # PAGADA): the decision was right. Held back or escalated ones are what new data unlocks.
-    flips = [c for c in [*dry.changes, *dry.conflicts] if not (source_sync and c.before == default)]
+    # A decision to pay is not evidence of an executed payment. Surface external changes.
+    flips = [*dry.changes, *dry.conflicts]
     instances = {
         i.id: i
         for i in await session.scalars(
@@ -203,7 +201,10 @@ def _out(alert: Alert, name: str, resolved_by: int | None) -> AlertOut:
 
 
 async def list_alerts(
-    session: AsyncSession, process_id: int, status: str | None = None
+    session: AsyncSession,
+    process_id: int,
+    status: str | None = None,
+    instance_id: int | None = None,
 ) -> list[AlertOut]:
     from app.features.processes.service import get as get_process
 
@@ -211,7 +212,10 @@ async def list_alerts(
     rows = await session.execute(
         select(Alert, Instance.name, _resolved_by)
         .join(Instance, Instance.id == Alert.instance_id)
-        .where(Alert.process_id == process_id)
+        .where(
+            Alert.process_id == process_id,
+            *([Alert.instance_id == instance_id] if instance_id is not None else []),
+        )
         .order_by(Alert.id)
     )
     out = [_out(*row) for row in rows]

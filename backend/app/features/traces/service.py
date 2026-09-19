@@ -40,6 +40,8 @@ from app.features.traces.schemas import (
     InstanceTrace,
     LlmStats,
     NormStats,
+    Pending,
+    PendingItem,
     Plane,
     PlaneHealth,
     ProcessMetrics,
@@ -55,7 +57,9 @@ from app.features.traces.schemas import (
     StepStats,
     TokenBucket,
     TokenStats,
+    VersionRef,
 )
+from app.features.versions.model import ProcessVersion
 
 FAILURES = (
     "MISSING_DATA",
@@ -102,6 +106,13 @@ PLANES: dict[str, Plane] = {
     "normalize_norm": _AGENTS,
     "discover_process": _AGENTS,
     "discuss_process": _AGENTS,
+    "revise_process_draft": _AGENTS,  # a discovery draft's revisions, each a point in time
+    "upload_evidence_asset": _AGENTS,
+    "load_draft_source": _AGENTS,
+    "review_draft_proposal": _AGENTS,
+    "preview_process_draft": _AGENTS,
+    "configure_discovery_execution": _AGENTS,
+    "validate_process_draft": _AGENTS,  # a version draft replayed on past cases
     "compile_process_draft": _AGENTS,
     "publish_process_draft": _AGENTS,
     "compile_rules": _AGENTS,
@@ -134,6 +145,7 @@ PLANES: dict[str, Plane] = {
     "export_outcomes": _EXECUTION,
     "detect_stale_decisions": _EXECUTION,  # ADR 0026
     "ack_alert": _EXECUTION,
+    "unhandled_error": _EXECUTION,  # a 500 of any endpoint
 }
 STREAM_POLL_S = 1.0
 
@@ -244,6 +256,8 @@ async def instance_trace(session: AsyncSession, instance_id: int) -> InstanceTra
     automatic = engine[-1] if engine else None
     human = next((d for d in reversed(history) if d.author != ENGINE), None)
     exported = automatic or human
+    pending = await _pending(session, instance, history[-1] if history else None)
+    version = await session.get(ProcessVersion, history[-1].version_id) if history else None
     if automatic:
         review = (await decision_reviewer.for_decisions(session, [automatic])).get(automatic.id)
         if review:
@@ -296,6 +310,8 @@ async def instance_trace(session: AsyncSession, instance_id: int) -> InstanceTra
         ],
         exported_decision=exported.decision if exported else None,
         spans=_roots(_nodes(rows)),
+        pending=pending,
+        version=VersionRef.model_validate(version, from_attributes=True) if version else None,
         sources_read=[
             SourceRead(
                 source=e.data["source"],
@@ -306,6 +322,29 @@ async def instance_trace(session: AsyncSession, instance_id: int) -> InstanceTra
                 **{k: e.data.get(k) or 0 for k in SYNC_STATS},
             )
             for e in read
+        ],
+    )
+
+
+async def _pending(session: AsyncSession, instance: Instance, latest: Decision | None) -> Pending:
+    from app.features.proposals import service as proposals
+
+    waiting = review_pending = False
+    if latest is not None:
+        human = await decisions.historical_human_types(session, instance.process_id, [latest])
+        review = (await decision_reviewer.for_decisions(session, [latest])).get(latest.id)
+        review_pending = bool(review and review.requires_human)
+        waiting = latest.decision in human[latest.id] or review_pending
+    return Pending(
+        waiting_for_person=waiting,
+        review_pending=review_pending,
+        proposals=[
+            PendingItem(id=p.id, kind=p.kind, created_at=p.created_at)
+            for p in await proposals.list_for(session, instance.process_id, "open", instance.id)
+        ],
+        alerts=[
+            PendingItem(id=a.id, kind=a.trigger.get("kind", "alert"), created_at=a.created_at)
+            for a in await alerts.list_alerts(session, instance.process_id, "open", instance.id)
         ],
     )
 
@@ -472,18 +511,25 @@ def _token_stats(rows: list[tuple], link) -> list[TokenStats]:
 
 
 async def _runs(session: AsyncSession, where: list) -> tuple[int, int, float | None]:
-    """Completed runs, the instances they decided, and instances per second of run time."""
+    """Completed runs, the instances they decided, and instances per second of run time
+    without the pre-run source syncs (network time, not the engine's)."""
+    done = [*where, Event.step == "run_process", Event.status == "ok"]
     runs, instances, run_ms = (
         await session.execute(
             select(
                 func.count(),
                 func.sum(Event.data["instances"].as_integer()),
                 func.sum(Event.duration_ms),
-            ).where(*where, Event.step == "run_process", Event.status == "ok")
+            ).where(*done)
         )
     ).one()
-    instances, run_ms = instances or 0, run_ms or 0
-    return runs, instances, round(instances / run_ms * 1000, 1) if run_ms else None
+    sync_ms = await session.scalar(
+        select(func.coalesce(func.sum(Event.duration_ms), 0)).where(
+            Event.step == "sync_source", Event.parent_id.in_(select(Event.span_id).where(*done))
+        )
+    )
+    instances, run_ms = instances or 0, (run_ms or 0) - sync_ms
+    return runs, instances, round(instances / run_ms * 1000, 1) if run_ms > 0 else None
 
 
 async def _providers(session: AsyncSession, where: list, scope: dict) -> list[ProviderStats]:
@@ -925,7 +971,14 @@ async def _execution(session: AsyncSession, where: list, base: dict) -> Executio
             _p(0.5),
             _p(0.95),
         )
-        .where(*where, Event.step == "evaluate_rule")
+        .where(
+            *where,
+            Event.step == "evaluate_rule",
+            # Only a real run's: a draft validation replays rules too, and is not execution.
+            Event.parent_id.in_(
+                select(Event.span_id).where(Event.step.in_(("run_process", "reprocess")))
+            ),
+        )
         .group_by(Event.rule_id)
         .order_by(Event.rule_id)
     )
@@ -1005,6 +1058,15 @@ async def health(session: AsyncSession) -> list[PlaneHealth]:
             .group_by(plane)
         )
     }
+    failing: dict[str, tuple[str, int, int]] = {}
+    for p, step, n, e in await session.execute(
+        select(plane, Event.step, func.count(), _ERRORS)
+        .where(Event.started_at >= since, Event.step.in_(list(PLANES)))
+        .group_by(plane, Event.step)
+        .order_by(Event.step)
+    ):
+        if n >= settings.health_min_spans and e / n >= settings.health_degraded_error_rate:
+            failing.setdefault(p, (step, n, e))
     out = []
     for p in Plane:
         spans, errors, p95 = rows.get(p.value, (0, 0, None))
@@ -1019,6 +1081,10 @@ async def health(session: AsyncSession) -> list[PlaneHealth]:
             status, reason = "degraded", f"{errors}/{spans} spans failed"
         elif p95 is not None and limit is not None and p95 > limit:
             status, reason = "degraded", f"p95 {p95:.0f} ms over {limit} ms"
+        # One step failing throughout (every OCR call, say) is hidden by a busy plane's
+        # average: judge each step with enough spans on its own.
+        if status == "ok" and (step := failing.get(p.value)):
+            status, reason = "degraded", f"{step[0]}: {step[2]}/{step[1]} spans failed"
         # A known outage needs no sample size (ADR 0028).
         if (
             status == "ok"

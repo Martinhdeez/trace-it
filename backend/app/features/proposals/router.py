@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks
 
 from app.core.database import Session
 from app.features.proposals import service
-from app.features.proposals.schemas import ManagerProposalOut, SettleIn
+from app.features.proposals.schemas import AcceptIn, ManagerProposalOut, SettleIn
 from app.features.users.dependencies import Manager
 
 router = APIRouter(tags=["proposals"])
@@ -64,8 +64,9 @@ async def list_proposals(
     session: Session,
     user: Manager,
     status: Literal["open", "accepted", "rejected", "superseded"] | None = None,
+    instance_id: int | None = None,
 ) -> list[ManagerProposalOut]:
-    return await service.list_for(session, process_id, status)
+    return await service.list_for(session, process_id, status, instance_id)
 
 
 @router.post(
@@ -75,6 +76,8 @@ async def list_proposals(
     description="decision: resolves the instance with the proposed decision. Escalation "
     "rule: creates the amended rule in the process draft, retires `replaces` there and "
     "compiles it in the background; `outcome` is `{rule_id, retired, draft_revision}`. "
+    "An optional `text` replaces the suggested rule text (the manager's edit); `outcome` "
+    "then adds `edited: true` and `original_text`. "
     "Chat: accepts "
     "the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and "
     "`/publish`). Learning rule: adopts the norm's latest valid validation "
@@ -87,9 +90,16 @@ async def accept(
     session: Session,
     user: Manager,
     background: BackgroundTasks,
-    body: SettleIn | None = None,
+    body: AcceptIn | None = None,
 ) -> ManagerProposalOut:
-    return await service.accept(session, proposal_id, body.reason if body else "", user, background)
+    return await service.accept(
+        session,
+        proposal_id,
+        body.reason if body else "",
+        user,
+        background,
+        text=body.text if body else None,
+    )
 
 
 @router.post(

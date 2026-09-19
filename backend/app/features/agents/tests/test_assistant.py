@@ -19,7 +19,7 @@ from app.features.processes.model import DecisionType
 from app.features.rules.model import Rule
 from app.main import app
 from tests.support import rows
-from tests.support.models import per_role, user_json
+from tests.support.models import per_role, retry_prompts, user_json
 
 
 def _db_available() -> bool:
@@ -38,12 +38,28 @@ SUGGESTION = {
     "reasoning": "amount=5000 (text) exceeds the limit of the rule 'amount > 1000'",
     "why": ["The invoice is over 1000, and amounts above it need a person."],
     "options": [
-        {"decision": "PAGAR", "consequence": "The invoice is paid."},
-        {"decision": "NO_PAGAR", "consequence": "The invoice is not paid."},
+        {
+            "decision": "PAGAR",
+            "consequence": "Se paga si se añade la regla: hasta 4000 no escala.",
+            "rule": "Amend rule 1: amount > 1000, unless amount <= 4000.",
+        },
+        {
+            "decision": "NO_PAGAR",
+            "consequence": "No se paga por la regla nueva: ACME no factura por encima de 4000.",
+            "rule": "If amount (invoice text) > 4000 and supplier (Excel) = 'ACME', do not pay",
+        },
     ],
     "evidence": ["symbol:amount", "file"],
     "proposed_rule": "If amount (invoice text) > 4000 and supplier (Excel) = 'ACME', do not pay",
     "proposed_type": "prohibition",
+}
+# "No rule" is an answer too: a person must always look at cases like this one.
+NO_RULE = {
+    **SUGGESTION,
+    "options": [{**o, "rule": None} for o in SUGGESTION["options"]],
+    "proposed_rule": None,
+    "proposed_type": None,
+    "no_rule_reason": "Falta un dato que ninguna regla puede suplir: una persona debe pedirlo.",
 }
 
 
@@ -129,7 +145,11 @@ async def test_suggests_and_records_an_event(case, monkeypatch) -> None:
     assert context["case"]["file_text"] == "Total: 5000 EUR"
 
     async with session_factory() as s:
-        event = await s.scalar(select(Event).where(Event.instance_id == case["escalated"]))
+        event = await s.scalar(
+            select(Event).where(
+                Event.instance_id == case["escalated"], Event.step == "suggest_escalation"
+            )
+        )
     assert event.step == "suggest_escalation"
     assert event.data["model"] == "fake/model"
     assert event.data["decision"] == "NO_PAGAR"
@@ -154,7 +174,11 @@ async def test_invalid_decision_retries_once(case, monkeypatch) -> None:
     assert suggestion.decision == "NO_PAGAR"
     assert len(calls) == 2
     async with session_factory() as s:
-        event = await s.scalar(select(Event).where(Event.instance_id == case["escalated"]))
+        event = await s.scalar(
+            select(Event).where(
+                Event.instance_id == case["escalated"], Event.step == "suggest_escalation"
+            )
+        )
         run = await s.scalar(
             select(Event).where(Event.trace_id == event.trace_id, Event.step == "llm_run")
         )
@@ -164,8 +188,8 @@ async def test_invalid_decision_retries_once(case, monkeypatch) -> None:
     assert "REJECT" in retry and run.data["output"]["decision"] == "NO_PAGAR"
 
 
-async def test_two_invalid_decisions_give_502(case, monkeypatch) -> None:
-    script(monkeypatch, [{**SUGGESTION, "decision": "REJECT"}] * 2)
+async def test_three_invalid_decisions_give_502(case, monkeypatch) -> None:
+    script(monkeypatch, [{**SUGGESTION, "decision": "REJECT"}] * 3)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
         r = await api.get(f"/instances/{case['escalated']}/suggestion")
     assert r.status_code == 502, r.text
@@ -190,3 +214,42 @@ async def test_not_escalated_gives_409(case, monkeypatch) -> None:
         assert r.json()["code"] == "conflict"
         r = await api.get("/instances/0/suggestion")
         assert r.status_code == 404, r.text
+
+
+async def test_a_long_answer_is_sent_back(case, monkeypatch) -> None:
+    """Concise by contract: over the character caps (schema) or the sentence limits
+    (validator), the model is asked again."""
+    essay = {
+        **SUGGESTION,
+        "why": ["Se escaló por el importe. Además hay otras cosas que contar aquí."],
+        "reasoning": "x" * 400,
+    }
+    calls = script(monkeypatch, [essay, {**essay, "reasoning": "Corto."}, SUGGESTION])
+    async with session_factory() as s:
+        suggestion = await assistant.suggest(s, case["escalated"])
+    assert suggestion == assistant.Suggestion(**SUGGESTION)
+    first, second = retry_prompts(calls[-1])
+    assert "at most 320 characters" in first
+    assert "Be concise: why[0] must be one line and one sentence" in second
+
+
+async def test_every_option_carries_its_rule(case, monkeypatch) -> None:
+    bare = {**SUGGESTION, "options": [{**SUGGESTION["options"][0], "rule": None}]}
+    bare["options"].append(SUGGESTION["options"][1])
+    calls = script(monkeypatch, [bare, SUGGESTION])
+    async with session_factory() as s:
+        suggestion = await assistant.suggest(s, case["escalated"])
+    assert all(o.rule for o in suggestion.options)
+    [retry] = retry_prompts(calls[-1])
+    assert "every option needs the rule that justifies it: ['PAGAR']" in retry
+
+
+async def test_no_rule_is_a_valid_answer(case, monkeypatch) -> None:
+    half = {**NO_RULE, "proposed_rule": "Pay it."}  # no rule and a rule at once
+    calls = script(monkeypatch, [half, {**NO_RULE, "no_rule_reason": None}, NO_RULE])
+    async with session_factory() as s:
+        suggestion = await assistant.suggest(s, case["escalated"])
+    assert suggestion.proposed_rule is None and suggestion.no_rule_reason.startswith("Falta")
+    assert suggestion.decision == "NO_PAGAR"  # still a final decision
+    first, second = retry_prompts(calls[-1])
+    assert "proposed_rule must be null" in first and "or no_rule_reason" in second

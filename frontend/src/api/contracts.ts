@@ -52,10 +52,45 @@ export type ProposalStatus = Proposal['status']
 export type DecisionProposalPayload = {
   proposed: string
   why?: string[]
-  options?: { decision: string; consequence: string }[]
+  /** `rule`: the English rule that justifies the option, null on a "no rule" answer. */
+  options?: { decision: string; consequence: string; rule?: string | null }[]
   escalation_reason?: string | null
   fired_rules?: number[]
-  proposed_rule?: { text: string; type: RuleIn['type'] }
+  proposed_rule?: { text: string; type: RuleIn['type'] } | null
+  /** Spanish: why no rule should decide cases like this one (a person always looks). */
+  no_rule_reason?: string | null
+}
+/**
+ * `payload` of a reviewer-agent rule suggestion (`channel: escalation`, `kind: rule`).
+ * reviewer-agent FE-3 (docs/reviewer-agent.md): the amended escalation rule; `text` is the
+ * English rule that compiles, `replaces` the rule it retires on accept.
+ */
+export type RuleProposalPayload = {
+  decision_id: number
+  engine_decision_id: number
+  replaces: number
+  text: string
+  summary: string
+  type: RuleIn['type']
+  decision: string
+  resolved_as: string
+  version_id: number
+  /**
+   * A "no rule" answer: `text` is empty and this Spanish reason is also the `rationale`.
+   * The manager rejects it, or writes a rule in the textarea and accepts that.
+   */
+  no_rule_reason?: string | null
+}
+/** `outcome` of a settled proposal: accepted rule suggestion, rejection or expiry. */
+export type ProposalOutcome = {
+  reason?: string
+  rule_id?: number
+  retired?: number | null
+  draft_revision?: number
+  cause?: 'ignored' | 'version_published' | 'case_changed' | 'superseded'
+  /** The manager edited the rule text before accepting; `original_text` is the agent's. */
+  edited?: boolean
+  original_text?: string
 }
 export type UseCaseOut = Schemas['UseCaseOut']
 export type UseCaseDetail = Schemas['UseCaseDetail']
@@ -116,6 +151,7 @@ export type ValidationReport = {
   coverage?: HistoricalCoverage
   not_evaluable?: HistoricalCaseWithoutCoverage[]
   conflicts?: ValidationChange[]
+  resolved_by_person?: ResolvedByPerson[]
   errors?: { instance_id: number; name?: string; reason?: string }[]
   error?: string
   [key: string]: unknown
@@ -129,6 +165,10 @@ export type ValidationChange = {
   after: string
   reason?: string
 }
+
+// reviewer-agent FE-4 (docs/reviewer-agent.md): the manager's own cases in the validation report.
+// If merging a newer version from Carlos, keep his types and preserve: `after` vs `resolution`.
+export type ResolvedByPerson = ValidationChange & { resolution: string; resolved_by: string }
 
 export type ProcessOut = Schemas['ProcessOut']
 /** A process as the API returns it: decision types and symbols in the pack's shape. */
@@ -270,9 +310,15 @@ export interface ApiClient {
   resolve(instanceId: number, body: ResolveIn): Promise<InstanceDetail>
   /** The assistant proposes a decision for an escalated case; a new one supersedes the open one. */
   proposeDecision(instanceId: number): Promise<Proposal>
+  /**
+   * reviewer-agent FE-6: after a person resolved the case, the reviewer agent amends the
+   * escalation rule that fired. 409 with the Spanish reason when no rule can learn it.
+   */
+  proposeRule(instanceId: number): Promise<Proposal>
   listProposals(processId: number, status?: ProposalStatus): Promise<Proposal[]>
   /** Applies it through its channel: a decision resolves the case; chat and learning stage it. */
-  acceptProposal(id: number, reason?: string): Promise<Proposal>
+  /** `text`: the manager's edit of an escalation rule suggestion (reviewer-agent FE-3). */
+  acceptProposal(id: number, reason?: string, text?: string): Promise<Proposal>
   rejectProposal(id: number, reason: string): Promise<Proposal>
 
   listFindings(processId: number): Promise<Finding[]>

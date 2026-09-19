@@ -17,6 +17,7 @@ from app.features.processes import execution as execution_choices
 from app.features.processes import service
 from app.features.processes.draft_schemas import (
     AcceptanceExample,
+    ConnectorProposal,
     DiscoveryDraftOut,
     DraftPlan,
     DraftStart,
@@ -35,7 +36,12 @@ from app.features.processes.model import (
 from app.features.rules.model import NormRule, Rule
 from app.features.sources import discovery as evidence_assets
 from app.features.sources import service as sources
-from app.features.sources.http_connector import HttpConnector, SourcesFile, SyncError
+from app.features.sources.http_connector import (
+    HttpConnector,
+    HttpSourceConfig,
+    SourcesFile,
+    SyncError,
+)
 from app.features.sources.model import Source
 from app.features.use_cases import service as use_cases
 from app.features.use_cases.model import AgentConfig, UseCase
@@ -66,16 +72,25 @@ async def read(session, draft_id, revision=None, *, lock=False):
 
 
 async def connectors(session, draft):
-    if draft.use_case_id is None:
-        return {}
-    use_case = await session.get(UseCase, draft.use_case_id)
-    try:
-        path = sources.pack_sources_file(sources.find_pack(use_case.name))
-    except NotFoundError:
-        return {}
-    if not path.exists():
-        return {}
-    return SourcesFile.model_validate_json(path.read_text()).sources
+    configured = {}
+    if draft.process_id:
+        version = await versions.active(session, draft.process_id, required=False)
+        configured.update(
+            {
+                name: HttpSourceConfig.model_validate(row)
+                for name, row in (version.snapshot.get("connectors", {}) if version else {}).items()
+            }
+        )
+    if draft.use_case_id is not None:
+        use_case = await session.get(UseCase, draft.use_case_id)
+        try:
+            path = sources.pack_sources_file(sources.find_pack(use_case.name))
+        except NotFoundError:
+            path = None
+        if path and path.exists():
+            packaged = SourcesFile.model_validate_json(path.read_text()).sources
+            configured = {**packaged, **configured}
+    return configured
 
 
 async def output(session, draft_id):
@@ -116,12 +131,11 @@ async def save(session, draft_id, revision, data, user, step):
     session.add(
         DiscoveryRevision(draft_id=draft.id, number=draft.revision, author_id=user.id, data=data)
     )
-    events.record(
-        session,
-        step,
-        process_id=draft.process_id,
-        data={"draft_id": draft.id, "revision": draft.revision, "author": user.name},
-    )
+    point = {"draft_id": draft.id, "revision": draft.revision, "author": user.name}
+    if (current := events.current()) and current.step == step:
+        current.set(**point)  # the step's own span says it: one span, never counted twice
+    else:
+        events.record(session, step, process_id=draft.process_id, data=point)
     await session.commit()
     return await output(session, draft.id)
 
@@ -191,6 +205,24 @@ async def start(session, body: DraftStart, user):
                     ],
                 )
             )
+        for name, connector in base.get("connectors", {}).items():
+            schema = base.get("source_schemas", {}).get(name, {})
+            plan.connectors.append(
+                ConnectorProposal(
+                    name=name,
+                    explanation="Existing published connector",
+                    evidence=[
+                        ProposalEvidence(
+                            reference=f"version:{current.active_version_id}",
+                            explanation="Published connector",
+                        )
+                    ],
+                    config=connector,
+                    required=schema.get("required", list(connector.get("fields", {}))),
+                    optional=schema.get("optional", []),
+                    sync_before_run=schema.get("sync_before_run", True),
+                )
+            )
     if body.use_case_id and await session.get(UseCase, body.use_case_id) is None:
         raise NotFoundError("Use case does not exist")
     draft = DiscoverySession(process_id=body.process_id, use_case_id=body.use_case_id, revision=1)
@@ -256,15 +288,15 @@ async def message(session, draft_id, body, user):
         with events.span("discuss_process", process_id=draft.process_id, draft_id=draft_id) as span:
             data["trace_id"] = span.trace_id
             answer = await discovery.discuss(data, setups.get("discovery"))
-        data["messages"].append(
-            {
-                "role": "assistant",
-                "text": answer.message,
-                "evidence": answer.evidence,
-                "questions": answer.questions,
-            }
-        )
-        return await save(session, draft_id, body.revision, data, user, "discuss_process")
+            data["messages"].append(
+                {
+                    "role": "assistant",
+                    "text": answer.message,
+                    "evidence": answer.evidence,
+                    "questions": answer.questions,
+                }
+            )
+            return await save(session, draft_id, body.revision, data, user, "discuss_process")
     with events.span("discover_process", draft_id=draft_id, author=user.name) as span:
         data["trace_id"] = span.trace_id
         plan = await discovery.discover(data, setups.get("discovery"))
@@ -311,10 +343,15 @@ async def upload(session, draft_id, revision, name, content, user):
 async def sync(session, draft_id, revision, name, user):
     manager(user)
     draft, data = await read(session, draft_id, revision)
+    plan = DraftPlan.model_validate(data["plan"])
+    proposed = next((row for row in plan.connectors if row.name == name), None)
+    if proposed and data["reviews"].get(f"connector:{name}") != "accepted":
+        raise ConflictError("Review and accept the connector before it contacts the source")
     configs = await connectors(session, draft)
-    if name not in configs:
+    config_row = proposed.config if proposed else configs.get(name)
+    if config_row is None:
         raise NotFoundError("This source is not a configured connector for the draft")
-    connector = HttpConnector(configs[name])
+    connector = HttpConnector(config_row)
     with events.span("discover_source", draft_id=draft_id, source=name, author=user.name) as span:
         try:
             rows = await connector.download()
@@ -397,6 +434,7 @@ async def prepare(session, draft_id, revision, user):
         data["preview"] = await compilation.preview(
             session, draft.process_id, plan, tables, compiled, preview_base
         )
+        data["preview"]["source_mutations"] = evidence_assets.mutation_summary(plan, data, tables)
     if draft.process_id:
         await versions.lock(session, draft.process_id)
     await check_base(session, draft, data, plan)

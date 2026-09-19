@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.core.database import session_factory
+from app.core.events import Event
 from app.features.agents import llm
 from app.features.decisions.model import Decision, DecisionReview
 from app.features.processes.tests.test_drafts import (
@@ -99,6 +100,12 @@ async def test_chat_reads_past_cases_and_separate_draft_without_changing_them(ap
     assert context["editable_version_draft"]["snapshot"]["process"]["description"] == "Pending edit"
     assert result["plan"] == draft["plan"]
     assert (await api.get(f"/processes/{pid}/draft")).json() == staged
+    # One span per discussion, carrying the revision it saved: never a second point.
+    async with session_factory() as session:
+        [span] = await session.scalars(
+            select(Event).where(Event.step == "discuss_process", Event.process_id == pid)
+        )
+    assert span.data["revision"] == result["revision"] and span.data["author"]
 
 
 async def test_discussion_failure_leaves_conversation_unchanged(api, monkeypatch):

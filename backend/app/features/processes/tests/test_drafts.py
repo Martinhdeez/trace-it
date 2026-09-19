@@ -456,6 +456,57 @@ async def test_erp_sync_is_complete_and_failed_sync_preserves_draft(api, monkeyp
     assert after["snapshots"] == draft["snapshots"]
 
 
+async def test_chat_proposed_connector_requires_review_before_sync(api, monkeypatch):
+    from app.features.processes import drafts
+    from app.features.processes.tests.test_connector_proposals import connector_plan
+    from app.features.sources import service as sources
+    from app.features.sources.http_connector import Stats
+
+    proposal = connector_plan().model_dump(mode="json")
+    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [proposal]}))
+    draft = (await api.post("/process-drafts", json={"name": proposal["name"]})).json()
+    draft = await post(
+        api,
+        draft,
+        "messages",
+        message="Connect the criminal-records registry described above.",
+    )
+    blocked = await api.post(
+        f"/process-drafts/{draft['id']}/sources/criminal_records/sync",
+        json={"revision": draft["revision"]},
+    )
+    assert blocked.status_code == 409
+
+    registry_rows = [{"record_id": "CR-1", "full_name": "Ana Molina", "status": "ACTIVE"}]
+
+    class Registry:
+        base_url = "http://registry"
+        stats = Stats(pages=1, requests=2, logins=1)
+
+        def __init__(self, config):
+            assert config.pagination.path == "/criminal/records"
+
+        async def download(self):
+            return registry_rows
+
+    monkeypatch.setattr(drafts, "HttpConnector", Registry)
+    draft = await post(
+        api,
+        draft,
+        "reviews",
+        proposal="connector:criminal_records",
+        disposition="accepted",
+    )
+    draft = await post(api, draft, "sources/criminal_records/sync")
+    assert draft["snapshots"] == [
+        {
+            "name": "criminal_records",
+            "origin": f"discovery:criminal_records:{sources.rows_hash(registry_rows)}",
+            "rows": 1,
+        }
+    ]
+
+
 async def test_existing_setup_changes_require_review_and_publication(api, monkeypatch):
     original = await post(api, await prepare_new(api, monkeypatch), "publish")
     draft = (

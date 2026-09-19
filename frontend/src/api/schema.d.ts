@@ -1946,7 +1946,7 @@ export interface paths {
         put?: never;
         /**
          * The manager accepts a proposal; its channel's own workflow applies it
-         * @description decision: resolves the instance with the proposed decision. Escalation rule: creates the amended rule in the process draft, retires `replaces` there and compiles it in the background; `outcome` is `{rule_id, retired, draft_revision}`. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.
+         * @description decision: resolves the instance with the proposed decision. Escalation rule: creates the amended rule in the process draft, retires `replaces` there and compiles it in the background; `outcome` is `{rule_id, retired, draft_revision}`. An optional `text` replaces the suggested rule text (the manager's edit); `outcome` then adds `edited: true` and `original_text`. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.
          */
         post: operations["acceptProposal"];
         delete?: never;
@@ -2061,6 +2061,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptIn */
+        AcceptIn: {
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Text */
+            text?: string | null;
+        };
         /** AcceptanceExample */
         AcceptanceExample: {
             /** Name */
@@ -2337,6 +2347,50 @@ export interface components {
             /** Decision */
             decision?: string | null;
         };
+        /** AuthConfig */
+        AuthConfig: {
+            /**
+             * Type
+             * @default form_token
+             * @constant
+             */
+            type: "form_token";
+            /** Login Path */
+            login_path: string;
+            /** Credentials */
+            credentials: {
+                [key: string]: string;
+            };
+            /** Token Path */
+            token_path: string;
+            /** Token Header */
+            token_header: string;
+            /** Lifetime Seconds */
+            lifetime_seconds: number;
+            /** Max Uses */
+            max_uses: number;
+            /** Lifetime Path */
+            lifetime_path?: string | null;
+            /** Max Uses Path */
+            max_uses_path?: string | null;
+            /**
+             * Renew Margin Seconds
+             * @default 60
+             */
+            renew_margin_seconds: number;
+            /**
+             * Renew Margin Uses
+             * @default 10
+             */
+            renew_margin_uses: number;
+            /**
+             * Expired Codes
+             * @default [
+             *       "SES-401"
+             *     ]
+             */
+            expired_codes: string[];
+        };
         /** Body_extractDocument */
         Body_extractDocument: {
             /**
@@ -2565,6 +2619,28 @@ export interface components {
             attempts_per_compilation: number | null;
             /** Max Attempts */
             max_attempts: number;
+        };
+        /** ConnectorProposal */
+        ConnectorProposal: {
+            /** Name */
+            name: string;
+            /** Explanation */
+            explanation: string;
+            /** Evidence */
+            evidence: components["schemas"]["ProposalEvidence"][];
+            config: components["schemas"]["HttpSourceConfig"];
+            /** Required */
+            required: string[];
+            /**
+             * Optional
+             * @default []
+             */
+            optional: string[];
+            /**
+             * Sync Before Run
+             * @default true
+             */
+            sync_before_run: boolean;
         };
         /** CreatedCheck */
         CreatedCheck: {
@@ -3101,6 +3177,11 @@ export interface components {
              */
             symbols: components["schemas"]["SymbolIO"][];
             /**
+             * Connectors
+             * @default []
+             */
+            connectors: components["schemas"]["ConnectorProposal"][];
+            /**
              * Sources
              * @default []
              */
@@ -3144,6 +3225,16 @@ export interface components {
              * @default
              */
             name: string;
+        };
+        /**
+         * EnvValue
+         * @description A value read from an environment variable (or `.env`) at sync time.
+         */
+        EnvValue: {
+            /** Env */
+            env: string;
+            /** Default */
+            default?: string | null;
         };
         /** EventOut */
         EventOut: {
@@ -3505,6 +3596,17 @@ export interface components {
              */
             judge_max_tokens: number;
         };
+        /** FieldConfig */
+        FieldConfig: {
+            /** Source */
+            source: string;
+            /**
+             * Convert
+             * @default text
+             * @enum {string}
+             */
+            convert: "text" | "decimal_comma" | "date_dmy";
+        };
         /** FieldReading */
         FieldReading: {
             /** Value */
@@ -3565,6 +3667,25 @@ export interface components {
              */
             created_at: string;
         };
+        /** FormatConfig */
+        FormatConfig: {
+            /**
+             * Type
+             * @default xml
+             * @constant
+             */
+            type: "xml";
+            /**
+             * Encoding
+             * @default utf-8
+             */
+            encoding: string;
+            /**
+             * Error Code Path
+             * @default codigo
+             */
+            error_code_path: string;
+        };
         /** GatheringSettings */
         GatheringSettings: {
             /** Email */
@@ -3583,6 +3704,57 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HttpSourceConfig */
+        HttpSourceConfig: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "http";
+            base_url: components["schemas"]["EnvValue"];
+            format: components["schemas"]["FormatConfig"];
+            /** Auth */
+            auth: components["schemas"]["AuthConfig"] | components["schemas"]["NoAuthConfig"];
+            pagination: components["schemas"]["PaginationConfig"];
+            /** Key */
+            key: string;
+            /** Fields */
+            fields: {
+                [key: string]: components["schemas"]["FieldConfig"];
+            };
+            /**
+             * @default {
+             *       "max_attempts": 6,
+             *       "retry_statuses": [
+             *         500,
+             *         502,
+             *         503,
+             *         504
+             *       ],
+             *       "transient_codes": [
+             *         "ORA-00600"
+             *       ],
+             *       "backoff_seconds": 0.2,
+             *       "backoff_max_seconds": 5
+             *     }
+             */
+            retry: components["schemas"]["RetryConfig"];
+            /**
+             * @default {
+             *       "requests_per_second": 6,
+             *       "max_retry_after_seconds": 30
+             *     }
+             */
+            rate_limit: components["schemas"]["RateLimitConfig"];
+            /**
+             * @default {
+             *       "connect_seconds": 3,
+             *       "read_seconds": 15
+             *     }
+             */
+            timeouts: components["schemas"]["TimeoutConfig"];
+            status?: components["schemas"]["StatusConfig"] | null;
         };
         /**
          * ImpactOut
@@ -3676,6 +3848,10 @@ export interface components {
              * @default false
              */
             review_pending: boolean;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
             /** File Hash */
             file_hash: string;
             /** Symbols */
@@ -3716,6 +3892,10 @@ export interface components {
              * @default false
              */
             review_pending: boolean;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * InstanceTrace
@@ -3747,6 +3927,8 @@ export interface components {
              * @default []
              */
             sources_read: components["schemas"]["SourceRead"][];
+            pending: components["schemas"]["Pending"];
+            version: components["schemas"]["VersionRef"] | null;
         };
         /** LlmStats */
         LlmStats: {
@@ -4000,6 +4182,14 @@ export interface components {
              */
             attachments: components["schemas"]["AttachmentOut"][];
         };
+        /** NoAuthConfig */
+        NoAuthConfig: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "none";
+        };
         /** NormIn */
         NormIn: {
             /** Text */
@@ -4087,6 +4277,28 @@ export interface components {
             decision: string;
             /** Consequence */
             consequence: string;
+            /** Rule */
+            rule?: string | null;
+        };
+        /** PaginationConfig */
+        PaginationConfig: {
+            /** Path */
+            path: string;
+            /** Page Param */
+            page_param: string;
+            /**
+             * First Page
+             * @default 1
+             */
+            first_page: number;
+            /** Page Size */
+            page_size: number;
+            /** Records Path */
+            records_path: string;
+            /** Total Path */
+            total_path: string;
+            /** Pages Path */
+            pages_path: string;
         };
         /** PartIn */
         PartIn: {
@@ -4098,6 +4310,39 @@ export interface components {
             encoding: string;
             /** Advertised Size */
             advertised_size: number;
+        };
+        /**
+         * Pending
+         * @description What this instance still waits for: a person, or a manager settling its proposals and
+         *     alerts (`GET /processes/{id}/proposals?instance_id=`, `/alerts?instance_id=`).
+         */
+        Pending: {
+            /** Waiting For Person */
+            waiting_for_person: boolean;
+            /** Review Pending */
+            review_pending: boolean;
+            /** Proposals */
+            proposals: components["schemas"]["PendingItem"][];
+            /** Alerts */
+            alerts: components["schemas"]["PendingItem"][];
+        };
+        /** PendingItem */
+        PendingItem: {
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @example decision
+             * @example rule
+             * @example source_sync
+             * @example rule_change
+             */
+            kind: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /**
          * Plane
@@ -4395,6 +4640,19 @@ export interface components {
              */
             reason: string;
         };
+        /** RateLimitConfig */
+        RateLimitConfig: {
+            /**
+             * Requests Per Second
+             * @default 6
+             */
+            requests_per_second: number;
+            /**
+             * Max Retry After Seconds
+             * @default 30
+             */
+            max_retry_after_seconds: number;
+        };
         /** ReadingLocation */
         ReadingLocation: {
             /** Candidate */
@@ -4482,6 +4740,41 @@ export interface components {
             reason: string;
             /** Proposal Id */
             proposal_id?: number | null;
+        };
+        /** RetryConfig */
+        RetryConfig: {
+            /**
+             * Max Attempts
+             * @default 6
+             */
+            max_attempts: number;
+            /**
+             * Retry Statuses
+             * @default [
+             *       500,
+             *       502,
+             *       503,
+             *       504
+             *     ]
+             */
+            retry_statuses: number[];
+            /**
+             * Transient Codes
+             * @default [
+             *       "ORA-00600"
+             *     ]
+             */
+            transient_codes: string[];
+            /**
+             * Backoff Seconds
+             * @default 0.2
+             */
+            backoff_seconds: number;
+            /**
+             * Backoff Max Seconds
+             * @default 5
+             */
+            backoff_max_seconds: number;
         };
         /** ReviewIn */
         ReviewIn: {
@@ -5041,6 +5334,14 @@ export interface components {
             rows: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Operation
+             * @default replace
+             * @enum {string}
+             */
+            operation: "replace" | "append" | "upsert" | "delete";
+            /** Key */
+            key?: string[];
         };
         /**
          * SourceRead
@@ -5211,6 +5512,19 @@ export interface components {
             /** Norm Rule Id */
             norm_rule_id: number | null;
         };
+        /**
+         * StatusConfig
+         * @description An unauthenticated health resource whose fields are recorded with the snapshot, e.g.
+         *     whether the batch 2 update is loaded.
+         */
+        StatusConfig: {
+            /** Path */
+            path: string;
+            /** Fields */
+            fields: {
+                [key: string]: string;
+            };
+        };
         /** StepStats */
         StepStats: {
             /** Step */
@@ -5239,12 +5553,11 @@ export interface components {
             /** Evidence */
             evidence: string[];
             /** Proposed Rule */
-            proposed_rule: string;
-            /**
-             * Proposed Type
-             * @enum {string}
-             */
-            proposed_type: "requirement" | "prohibition";
+            proposed_rule?: string | null;
+            /** Proposed Type */
+            proposed_type?: ("requirement" | "prohibition") | null;
+            /** No Rule Reason */
+            no_rule_reason?: string | null;
         };
         /**
          * SymbolExtraction
@@ -5326,6 +5639,19 @@ export interface components {
                 [key: string]: unknown;
             };
             diff: components["schemas"]["Diff"];
+        };
+        /** TimeoutConfig */
+        TimeoutConfig: {
+            /**
+             * Connect Seconds
+             * @default 3
+             */
+            connect_seconds: number;
+            /**
+             * Read Seconds
+             * @default 15
+             */
+            read_seconds: number;
         };
         /** TokenBucket */
         TokenBucket: {
@@ -5505,6 +5831,23 @@ export interface components {
             author: string;
             /** Reason */
             reason: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * VersionRef
+         * @description The published process version that took the latest decision.
+         */
+        VersionRef: {
+            /** Id */
+            id: number;
+            /** Number */
+            number: number;
+            /** Author */
+            author: string;
             /**
              * Created At
              * Format: date-time
@@ -9378,6 +9721,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: ("open" | "acknowledged" | "resolved") | null;
+                instance_id?: number | null;
             };
             header?: never;
             path: {
@@ -9549,6 +9893,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: ("open" | "accepted" | "rejected" | "superseded") | null;
+                instance_id?: number | null;
             };
             header?: {
                 "x-user-id"?: number | null;
@@ -9593,7 +9938,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["SettleIn"] | null;
+                "application/json": components["schemas"]["AcceptIn"] | null;
             };
         };
         responses: {

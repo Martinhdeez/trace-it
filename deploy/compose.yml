@@ -27,6 +27,7 @@ services:
     env_file: ["${TRACE_ENV_FILE:-./.env.runtime}"]
     environment:
       TRACE_DATABASE_URL: postgresql+psycopg://${TRACE_DATABASE_USER:-trace}:${TRACE_DATABASE_PASSWORD:-${POSTGRES_PASSWORD}}@db:5432/trace
+      TRACE_CRIMINAL_RECORDS_URL: http://criminal-records:8010
       TRACE_PROCESSES_DIR: /processes
       TRACEPAY_DATA_DIR: /srv/.data
       TRACEPAY_MODEL_DIR: /srv/.models
@@ -55,6 +56,24 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 12
+
+  criminal-records:
+    image: ${TRACE_BACKEND_IMAGE:?Set TRACE_BACKEND_IMAGE}
+    command: [python, /processes/hiring-screening/criminal_records_erp.py, --host, 0.0.0.0, --port, "8010"]
+    ports: ["127.0.0.1:${TRACE_CRIMINAL_RECORDS_PORT:-18010}:8010"]
+    restart: unless-stopped
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 64m
+    cpus: 0.1
+    pids_limit: 32
+    logging: *logging
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/criminal/status', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
   frontend:
     image: ${TRACE_FRONTEND_IMAGE:?Set TRACE_FRONTEND_IMAGE}

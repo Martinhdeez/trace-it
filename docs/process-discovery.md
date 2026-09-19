@@ -36,9 +36,10 @@ rejected outputs, tokens and latency (ADR 0018). It is null until the first agen
   object of named lists. All formats receive stable sheet and cell references. Excel formula
   cells cannot silently become authoritative source values. The old `/workbooks` path remains
   as a deprecated compatibility alias.
-- `POST /process-drafts/{id}/sources/{name}/sync`: `{ "revision": 2 }`. Uses only a
-  configured connector listed in the draft. The ERP is read through the existing client;
-  only a complete download replaces the draft snapshot. No live process source changes.
+- `POST /process-drafts/{id}/sources/{name}/sync`: `{ "revision": 2 }`. Uses a connector
+  already published for the process or a connector proposal the manager accepted in this
+  draft. The source is read through the existing client; only a complete download replaces
+  the draft snapshot. No live process source changes.
 - `POST /process-drafts/{id}/messages`: `{ "revision": 3, "mode": "revise", "message": "Read the workbook
   and ask me about unclear rules. Escalate incorrect VAT rather than rejecting it." }`.
   Revision mode runs discovery and returns the complete proposed plan and outstanding
@@ -52,6 +53,10 @@ User instructions can override a document, with the conflict retained for review
 For a new draft with unresolved policy or authority questions, discovery proposes sources
 and asks the manager first. Rules and examples can remain empty until those answers arrive.
 Answering a question revises the proposal; it does not approve it or publish live rules.
+
+Every source mapping declares `replace`, `append`, `upsert` or `delete`. Upsert and delete
+require canonical key fields; append may name keys to reject collisions. Preparation rejects
+duplicate or missing keys and shows the operation, key and before/after row counts.
 
 ## Review and test
 
@@ -107,8 +112,10 @@ All configurations remain subject to the existing engine contract.
 Tabular evidence currently means XLSX, CSV or JSON plus text pasted in the conversation.
 Other unstructured readers can be added behind the same evidence interface. ERP access uses
 configured connections and snapshot search, not arbitrary websites or generated connectors.
-New processes receive copied agent settings; their ERP snapshot is imported, but ongoing
-connector configuration still uses the existing process-pack mechanism.
+For the supported legacy HTTP shape, discovery can propose ongoing connector configuration:
+XML responses, form-token authentication and numbered pages with reported totals. The manager
+must accept the connector before the draft contacts it. Publication stores the connector and
+canonical schema in the immutable process version. Other protocols still need adapter code.
 
 The invoice pack supplies a discovery role with the agreed anomaly/escalation guidance.
 Loading the pack adds that role's configuration under the existing configuration rules.

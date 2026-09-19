@@ -77,9 +77,9 @@ and leaves past decisions intact. Changed configuration, source snapshots or cas
 makes approval stale. Start a fresh conversation to review the new baseline.
 
 The same draft supports new-process discovery when it is started without `process_id`.
-Conversational
-connector generation, arbitrary backend operations and model-setting edits are outside
-this extension.
+Connector proposals for the supported legacy HTTP shape follow the same review, snapshot,
+preview and publication flow. Arbitrary backend operations and model-setting edits remain
+outside this extension.
 
 A [live challenge evaluation](evaluations/process-chat-2026-09-19.md) records the tested
 scenarios, model findings, fixes and coverage limits. Discussion uses computed sample

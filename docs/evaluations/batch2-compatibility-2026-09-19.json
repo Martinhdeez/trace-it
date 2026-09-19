@@ -1,0 +1,196 @@
+{
+  "counts": {
+    "before_original": {
+      "PAGAR": 444,
+      "ESCALAR": 20,
+      "NO_PAGAR": 36
+    },
+    "before_source_update": {
+      "PAGAR": 443,
+      "ESCALAR": 20,
+      "NO_PAGAR": 37
+    },
+    "before_updated": {
+      "PAGAR": 463,
+      "ESCALAR": 37,
+      "NO_PAGAR": 40
+    },
+    "after_original": {
+      "PAGAR": 444,
+      "ESCALAR": 20,
+      "NO_PAGAR": 36
+    },
+    "after_source_update": {
+      "PAGAR": 443,
+      "ESCALAR": 20,
+      "NO_PAGAR": 37
+    },
+    "after_updated": {
+      "PAGAR": 466,
+      "ESCALAR": 33,
+      "NO_PAGAR": 41
+    }
+  },
+  "changes": {
+    "original": [],
+    "source_update": [],
+    "updated": [
+      {
+        "file": "facturas_primin\\e01_P001.pdf.json",
+        "before": "ESCALAR",
+        "after": "PAGAR",
+        "reason": ""
+      },
+      {
+        "file": "facturas_primin\\e03_P002.pdf.json",
+        "before": "ESCALAR",
+        "after": "PAGAR",
+        "reason": ""
+      },
+      {
+        "file": "facturas_primin\\e04_P003.pdf.json",
+        "before": "ESCALAR",
+        "after": "PAGAR",
+        "reason": ""
+      },
+      {
+        "file": "facturas_primin\\e05_P004.pdf.json",
+        "before": "ESCALAR",
+        "after": "NO_PAGAR",
+        "reason": "IBAN ES4414650100951704302211 is not the master's | The order belongs to B98120774, not B90233808"
+      },
+      {
+        "file": "facturas_primin\\e06_P013.pdf.json",
+        "before": "ESCALAR",
+        "after": "NO_PAGAR",
+        "reason": "IBAN FR7630006000011234567890189 is not the master's"
+      },
+      {
+        "file": "facturas_primin\\e07_P006.pdf.json",
+        "before": "ESCALAR",
+        "after": "PAGAR",
+        "reason": ""
+      },
+      {
+        "file": "facturas_primin\\e08_P012.pdf.json",
+        "before": "ESCALAR",
+        "after": "PAGAR",
+        "reason": ""
+      },
+      {
+        "file": "facturas_primin\\e10_P006.pdf.json",
+        "before": "NO_PAGAR",
+        "after": "ESCALAR",
+        "reason": "CURRENCY_POLICY_REQUIRED: USD"
+      },
+      {
+        "file": "facturas_primin\\e16_P011.pdf.json",
+        "before": "PAGAR",
+        "after": "ESCALAR",
+        "reason": "UNVERIFIED_DATA: date"
+      },
+      {
+        "file": "facturas_primin\\e18_P001.pdf.json",
+        "before": "PAGAR",
+        "after": "ESCALAR",
+        "reason": "UNVERIFIED_DATA: base, total"
+      }
+    ]
+  },
+  "fields": {
+    "before_facturas": {
+      "total": 282,
+      "correct": 275,
+      "verified_correct": 236,
+      "missing": 5,
+      "wrong": 2,
+      "errors": [
+        {
+          "file": "scan_010.pdf",
+          "field": "vat_amount",
+          "expected": "46.53",
+          "value": "48.53",
+          "verification": "ambiguous"
+        },
+        {
+          "file": "fax_2026_0411.pdf",
+          "field": "issued_on",
+          "expected": "2026-04-11",
+          "value": "2026-04-17",
+          "verification": "unverified"
+        }
+      ]
+    },
+    "after_facturas": {
+      "total": 282,
+      "correct": 275,
+      "verified_correct": 236,
+      "missing": 5,
+      "wrong": 2,
+      "errors": [
+        {
+          "file": "scan_010.pdf",
+          "field": "vat_amount",
+          "expected": "46.53",
+          "value": "48.53",
+          "verification": "ambiguous"
+        },
+        {
+          "file": "fax_2026_0411.pdf",
+          "field": "issued_on",
+          "expected": "2026-04-11",
+          "value": "2026-04-17",
+          "verification": "unverified"
+        }
+      ]
+    },
+    "before_facturas_primin": {
+      "total": 135,
+      "correct": 72,
+      "verified_correct": 72,
+      "missing": 61,
+      "wrong": 2,
+      "errors": [
+        {
+          "file": "e13_P014.pdf",
+          "field": "supplier_tax_id",
+          "expected": "12345678/000195",
+          "value": "A58231074",
+          "verification": "verified"
+        },
+        {
+          "file": "e13_P014.pdf",
+          "field": "payment_iban",
+          "expected": "BR9700360305000010009795493C1",
+          "value": "BR9700360305000010009795493",
+          "verification": "verified"
+        }
+      ]
+    },
+    "after_facturas_primin": {
+      "total": 135,
+      "correct": 135,
+      "verified_correct": 135,
+      "missing": 0,
+      "errors": []
+    }
+  },
+  "golden_mismatches": [],
+  "source_only_changes": [
+    {
+      "file": "facturas\\factura_4635.pdf.json",
+      "before": "PAGAR",
+      "after": "NO_PAGAR",
+      "reason": "The ERP says PAGADA"
+    }
+  ],
+  "gates": {
+    "original_labels_unchanged": true,
+    "original_reasons_unchanged": true,
+    "original_golden_matches": true,
+    "international_fields_all_correct": true,
+    "no_verified_field_errors": true,
+    "scan_correct_fields_preserved": true,
+    "scan_verified_fields_preserved": true
+  }
+}
