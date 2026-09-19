@@ -127,4 +127,14 @@ export const es = {
     download: 'Descargar',
     retry: 'Reintentar',
   },
+  // reviewer-agent FE-4/5
+  reviewerAgent: {
+    yourDecisions: 'Tus decisiones',
+    agree: 'coinciden',
+    contradict: 'contradicen',
+    contradicting: 'Tus decisiones que la nueva versión contradice',
+    compiling: 'Hay reglas compilando. Valida y publica cuando terminen.',
+    ruleSuggestions: 'reglas sugeridas esperan tu decisión',
+    ruleSuggestion: 'regla sugerida espera tu decisión',
+  },
 } as const

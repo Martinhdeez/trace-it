@@ -134,6 +134,16 @@ typed contract is already regenerated (`frontend/openapi.json`, `src/api/schema.
 - Proposals with `channel === 'escalation'` link to `review?i={instance_id}`; count open
   rule suggestions (`kind === 'rule'`).
 
+### FE-4/FE-5 merge notes
+Done in `feat/reviewer-agent-publish-impact`, functionality only, in Carlos's existing UI:
+`components/process/ValidationImpact.tsx`, `components/process/PublishDraft.tsx`,
+`routes/Process.tsx` (Panel alerts), `api/contracts.ts` (`ResolvedByPerson`),
+`lib/paths.ts` (`reviewCase`), `i18n/es.ts` (`reviewerAgent` block). Each changed block has a
+`reviewer-agent FE-n` comment. When merging a newer version, keep his UI and preserve:
+- publish is blocked while a rule compiles (Validar and Publicar disabled, reason shown);
+- the manager sees agree/contradict counts before publishing (`after === resolution`);
+- escalation proposals link to their case (`review?i=<instance_id>`).
+
 ### FE-6. Client
 - `api/contracts.ts` + `api/live.ts`: add
   `proposeRule(instanceId: number): Promise<Proposal>` →
