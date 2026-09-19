@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="es" data-theme="light">
+<html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>albertitos_plan — trace-it</title>
+<title>Arquitectura trace-it</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400&display=swap">
 <style>
 :root{
@@ -82,7 +82,7 @@ svg .ph{font-weight:600}
 svg .fail{fill:var(--gap-bg);stroke:var(--gap);stroke-width:1.6}
 svg .fl{font-size:12.5px}
 @media print{
-  @page{size:A4 portrait;margin:8mm}
+  @page{size:A4 landscape;margin:8mm}
   :root,:root[data-theme="dark"],:root:not([data-theme="light"]){
     --bg:#ffffff; --panel:#ffffff; --ink:#18212c; --muted:#5b6674; --line:#8a95a3;
     --box:#ffffff; --box-b:#3d4a5a;
@@ -94,54 +94,12 @@ svg .fl{font-size:12.5px}
     --pl-l:#0e7490; --pl-a:#be185d; --pl-e:#4338ca;
   }
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  body{padding:0;background:#fff}
-  .wrap{max-width:none;gap:4px;break-before:auto;page-break-before:auto}
-  header{gap:3px!important}
-  header h1{font-size:14px}
-  .legend,.meta,.people{font-size:9.5px}
+  body{padding:0}
+  .wrap{max-width:none;gap:6px}
+  header h1{font-size:18px}
   .diagram{overflow:visible;border:none;padding:0}
-  .diagram svg{min-width:0;width:100%;height:auto;max-height:252mm;break-inside:avoid;page-break-inside:avoid}
-}
-.adrs-page{font:12px/1.35 "IBM Plex Sans",system-ui,sans-serif;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px 20px}
-.adrs-page h2{font-size:18px;font-weight:600;margin:0 0 4px;padding-bottom:4px;border-bottom:1px solid var(--ink)}
-.adrs-page .sub{color:var(--muted);font-size:12px;margin:0 0 10px}
-.facts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:0 0 10px}
-.fact{background:#f4f6f8;border-radius:8px;padding:10px 12px}
-.fact b{display:block;font-size:20px;letter-spacing:-.03em}
-.fact em{display:block;font-style:normal;font-size:12px;color:var(--muted);margin-top:3px}
-.fact.ok b{color:var(--hum)}
-.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px}
-.blurb{background:#f4f6f8;border-radius:8px;padding:10px 12px;font-size:12.5px}
-.blurb strong{display:block;font-size:13.5px;margin-bottom:2px}
-.adrs{display:flex;flex-direction:column;gap:8px}
-.adr{border:1px solid #d8dee6;border-radius:8px;padding:8px 12px;break-inside:avoid}
-.adr-top{display:flex;align-items:baseline;gap:8px;margin:0 0 2px}
-.adr .n{font-size:15px;font-weight:600;color:var(--core)}
-.adr h3{font-size:15px;font-weight:600;margin:0}
-.hook{font-size:12.5px;color:var(--muted);margin:0 0 6px}
-.grid{display:grid;grid-template-columns:1.05fr 1.2fr 1fr 1.15fr;gap:6px 12px}
-.cell .k{display:block;font-size:10.5px;font-weight:600;color:var(--muted);margin-bottom:1px}
-.cell p{margin:0;font-size:12.5px}
-.cell.win .k{color:var(--hum)}
-.cell.win p{font-weight:600}
-@media print{
-  .adrs-page{break-before:page;page-break-before:always;border:none;background:#fff;padding:0;border-radius:0;font-size:10px;line-height:1.28}
-  .adrs-page h2{font-size:15px;margin:0 0 3px;padding-bottom:3px}
-  .adrs-page .sub{font-size:10.5px;margin:0 0 7px}
-  .facts{gap:6px;margin:0 0 7px}
-  .fact{padding:7px 8px}
-  .fact b{font-size:16px}
-  .fact em{font-size:10px;margin-top:2px}
-  .pair{gap:6px;margin:0 0 8px}
-  .blurb{padding:7px 8px;font-size:10.5px}
-  .blurb strong{font-size:11.5px}
-  .adrs{display:flex;flex-direction:column;gap:6px}
-  .adr{padding:6px 8px}
-  .adr .n,.adr h3{font-size:12.5px}
-  .hook{font-size:10.5px;margin:0 0 4px}
-  .grid{gap:3px 8px}
-  .cell .k{font-size:8.5px}
-  .cell p{font-size:10.5px}
+  .diagram svg{min-width:0;width:100%;max-height:150mm}
+  .diagram svg.p2{break-before:page;max-height:185mm}
 }
 </style>
 </head>
@@ -168,7 +126,7 @@ svg .fl{font-size:12.5px}
     <p class="people">Las personas deciden: publicar, resolver escalados, aceptar reglas.</p>
   </header>
   <div class="diagram">
-<svg class="full" viewBox="0 0 1400 1378" role="img" aria-label="Arquitectura trace-it"><defs>
+<svg class="p1" viewBox="0 0 1400 660" role="img" aria-label="Ingesta y agentes que escriben código"><defs>
 <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
 <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahg" d="M0,0 L10,5 L0,10 z"/></marker>
 </defs>
@@ -256,79 +214,95 @@ svg .fl{font-size:12.5px}
 <text class="fl" x="716" y="1334"><tspan class="wn">⚠7</tspan> Datos o versión cambian → alertas de decisiones desfasadas y reprocesar sin borrar</text>
 <text class="fl" x="716" y="1353"><tspan class="wn">⚠8</tspan> Caída del servidor → sin duplicados al reiniciar; backup antes de cada deploy</text>
 </svg>
-
+<svg class="p2" viewBox="0 660 1400 718" role="img" aria-label="Núcleo determinista, trazabilidad y recuperación de fallos"><defs>
+<marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="ahg2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahg" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="c ci" x="20" y="20" width="560" height="420" rx="10"/><text class="ct ci" x="36" y="46">Ingesta</text>
+<rect class="c ca" x="610" y="20" width="770" height="620" rx="10"/><text class="ct ca" x="626" y="46">Agentes que escriben código</text>
+<rect class="c cn" x="20" y="680" width="1360" height="440" rx="10"/><text class="ct cn" x="190" y="706">Núcleo determinista</text>
+<rect class="b " x="50" y="60" width="220" height="72" rx="6"/><text class="t" x="160.0" y="91" text-anchor="middle">Documentos</text><text class="s" x="160.0" y="109" text-anchor="middle">PDF, escaneos, correo</text><circle class="pl lectura" cx="270" cy="60" r="9"/><text class="plt" x="270" y="63.5" text-anchor="middle">L</text>
+<rect class="b llm" x="50" y="180" width="220" height="72" rx="6"/><text class="t" x="160.0" y="206" text-anchor="middle">Lectura</text><text class="s" x="160.0" y="224" text-anchor="middle">OCR y visión, fijado por versión</text><text class="m" x="160.0" y="241" text-anchor="middle">lector configurable · respaldo</text><circle class="pl lectura" cx="270" cy="180" r="9"/><text class="plt" x="270" y="183.5" text-anchor="middle">L</text>
+<rect class="b " x="50" y="300" width="220" height="72" rx="6"/><text class="t" x="160.0" y="331" text-anchor="middle">Instancias</text><text class="s" x="160.0" y="349" text-anchor="middle">+ símbolos y evidencia</text><circle class="pl lectura" cx="270" cy="300" r="9"/><text class="plt" x="270" y="303.5" text-anchor="middle">L</text>
+<rect class="b " x="330" y="60" width="220" height="72" rx="6"/><text class="t" x="440.0" y="91" text-anchor="middle">Fuentes</text><text class="s" x="440.0" y="109" text-anchor="middle">Excel, API / ERP</text>
+<rect class="b " x="330" y="180" width="220" height="72" rx="6"/><text class="t" x="440.0" y="211" text-anchor="middle">Conector / lector</text><text class="s" x="440.0" y="229" text-anchor="middle">sync antes de cada ejecución</text><circle class="pl lectura" cx="550" cy="180" r="9"/><text class="plt" x="550" y="183.5" text-anchor="middle">L</text>
+<rect class="b " x="330" y="300" width="220" height="72" rx="6"/><text class="t" x="440.0" y="331" text-anchor="middle">Fuentes</text><text class="s" x="440.0" y="349" text-anchor="middle">fotos de cada sync</text>
+<path class="a " d="M160,132 V178" marker-end="url(#ah2)"/>
+<path class="a " d="M160,252 V298" marker-end="url(#ah2)"/>
+<path class="a " d="M440,132 V178" marker-end="url(#ah2)"/>
+<path class="a " d="M440,252 V298" marker-end="url(#ah2)"/>
+<text class="w" x="170" y="280" text-anchor="start"><tspan class="wn">⚠3</tspan> → siguiente lector o escala</text>
+<text class="w" x="450" y="160" text-anchor="start"><tspan class="wn">⚠2</tspan> 429 → reintentos</text>
+<text class="w" x="450" y="280" text-anchor="start"><tspan class="wn">⚠1</tspan> caída → escala</text>
+<rect class="pill" x="452" y="384" width="118" height="44" rx="9"/><text class="pt" x="462" y="403">estado: inmutable</text><text class="pt" x="462" y="418">y versionada</text>
+<rect class="b hum" x="640" y="60" width="220" height="72" rx="6"/><text class="t" x="750.0" y="91" text-anchor="middle">Gestor</text><text class="s" x="750.0" y="109" text-anchor="middle">reglas en lenguaje natural</text>
+<rect class="b llm" x="920" y="60" width="220" height="72" rx="6"/><text class="t" x="1030.0" y="86" text-anchor="middle">Asistente de definición</text><text class="s" x="1030.0" y="104" text-anchor="middle">redacta y propone cambios</text><text class="m" x="1030.0" y="121" text-anchor="middle">modelo configurable · respaldo</text><circle class="pl agentes" cx="1140" cy="60" r="9"/><text class="plt" x="1140" y="63.5" text-anchor="middle">A</text>
+<rect class="b " x="640" y="180" width="220" height="72" rx="6"/><text class="t" x="750.0" y="211" text-anchor="middle">Paquete del proceso</text><text class="s" x="750.0" y="229" text-anchor="middle">norma, símbolos, fuentes</text>
+<rect class="b llm" x="640" y="300" width="220" height="72" rx="6"/><text class="t" x="750.0" y="326" text-anchor="middle">Normalizador</text><text class="s" x="750.0" y="344" text-anchor="middle">norma → comprobaciones</text><text class="m" x="750.0" y="361" text-anchor="middle">modelo configurable · respaldo</text><circle class="pl agentes" cx="860" cy="300" r="9"/><text class="plt" x="860" y="303.5" text-anchor="middle">A</text>
+<rect class="b llm" x="640" y="420" width="220" height="72" rx="6"/><text class="t" x="750.0" y="446" text-anchor="middle">Tester + Programador</text><text class="s" x="750.0" y="464" text-anchor="middle">tests a ciegas → código</text><text class="m" x="750.0" y="481" text-anchor="middle">modelo configurable · respaldo</text><circle class="pl agentes" cx="860" cy="420" r="9"/><text class="plt" x="860" y="423.5" text-anchor="middle">A</text>
+<rect class="b " x="920" y="420" width="220" height="72" rx="6"/><text class="t" x="1030.0" y="451" text-anchor="middle">Sandbox</text><text class="s" x="1030.0" y="469" text-anchor="middle">prueba el código</text><circle class="pl agentes" cx="1140" cy="420" r="9"/><text class="plt" x="1140" y="423.5" text-anchor="middle">A</text>
+<rect class="b " x="920" y="540" width="220" height="72" rx="6"/><text class="t" x="1030.0" y="571" text-anchor="middle">Validación</text><text class="s" x="1030.0" y="589" text-anchor="middle">contra el historial</text><circle class="pl agentes" cx="1140" cy="540" r="9"/><text class="plt" x="1140" y="543.5" text-anchor="middle">A</text>
+<rect class="b hum" x="640" y="540" width="220" height="72" rx="6"/><text class="t" x="750.0" y="571" text-anchor="middle">Versión publicada</text><text class="s" x="750.0" y="589" text-anchor="middle">la publica el gestor</text><circle class="pl agentes" cx="860" cy="540" r="9"/><text class="plt" x="860" y="543.5" text-anchor="middle">A</text>
+<path class="a " d="M862,96 H918" marker-end="url(#ah2)" marker-start="url(#ah2)"/>
+<path class="a " d="M750,132 V178" marker-end="url(#ah2)"/>
+<text class="lbl" x="760" y="160" text-anchor="start">reglas · datos · fuentes</text>
+<path class="a " d="M750,252 V298" marker-end="url(#ah2)"/>
+<path class="a " d="M750,372 V418" marker-end="url(#ah2)"/>
+<text class="w" x="760" y="400" text-anchor="start"><tspan class="wn">⚠4</tspan> LLM caído → timeout + respaldo</text>
+<path class="a " d="M860,456 H918" marker-end="url(#ah2)"/>
+<path class="a " d="M1030,492 V538" marker-end="url(#ah2)"/>
+<text class="w" x="1040" y="520" text-anchor="start"><tspan class="wn">⚠6</tspan> no compila → bloqueada</text>
+<path class="a " d="M920,576 H862" marker-end="url(#ah2)"/>
+<rect class="pill" x="1160" y="428" width="205" height="44" rx="9"/><text class="pt" x="1170" y="447">regla: compilando →</text><text class="pt" x="1170" y="462">lista / bloqueada</text>
+<rect class="pill" x="1160" y="548" width="205" height="59" rx="9"/><text class="pt" x="1170" y="567">versión: borrador →</text><text class="pt" x="1170" y="582">validada → publicada</text><text class="pt" x="1170" y="597">(inmutable)</text>
+<rect class="b core" x="380" y="720" width="220" height="72" rx="6"/><text class="t" x="490.0" y="746" text-anchor="middle">MOTOR</text><text class="s" x="490.0" y="764" text-anchor="middle">sin LLM, determinista</text><text class="m" x="490.0" y="781" text-anchor="middle">0 tokens por caso</text><circle class="pl ejecución" cx="600" cy="720" r="9"/><text class="plt" x="600" y="723.5" text-anchor="middle">E</text>
+<rect class="b " x="330" y="840" width="320" height="72" rx="6"/><text class="t" x="490.0" y="871" text-anchor="middle">Decisiones + traza</text><text class="s" x="490.0" y="889" text-anchor="middle">decisión 1 · decisión 2 · … · decisión N</text><circle class="pl ejecución" cx="650" cy="840" r="9"/><text class="plt" x="650" y="843.5" text-anchor="middle">E</text>
+<rect class="b " x="90" y="990" width="220" height="72" rx="6"/><text class="t" x="200.0" y="1021" text-anchor="middle">Export</text><text class="s" x="200.0" y="1039" text-anchor="middle">decisión final de cada caso</text><circle class="pl ejecución" cx="310" cy="990" r="9"/><text class="plt" x="310" y="993.5" text-anchor="middle">E</text>
+<rect class="b hum" x="490" y="990" width="220" height="72" rx="6"/><text class="t" x="600.0" y="1021" text-anchor="middle">Revisión / Responsable</text><text class="s" x="600.0" y="1039" text-anchor="middle">decide y justifica</text><circle class="pl ejecución" cx="710" cy="990" r="9"/><text class="plt" x="710" y="993.5" text-anchor="middle">E</text>
+<rect class="b llm" x="1000" y="860" width="220" height="72" rx="6"/><text class="t" x="1110.0" y="886" text-anchor="middle">Agente revisor</text><text class="s" x="1110.0" y="904" text-anchor="middle">propone regla</text><text class="m" x="1110.0" y="921" text-anchor="middle">modelo configurable · respaldo</text><circle class="pl agentes" cx="1220" cy="860" r="9"/><text class="plt" x="1220" y="863.5" text-anchor="middle">A</text>
+<rect class="b llm" x="1000" y="990" width="220" height="72" rx="6"/><text class="t" x="1110.0" y="1016" text-anchor="middle">Asistente de decisiones</text><text class="s" x="1110.0" y="1034" text-anchor="middle">sugiere</text><text class="m" x="1110.0" y="1051" text-anchor="middle">modelo configurable · respaldo</text><circle class="pl agentes" cx="1220" cy="990" r="9"/><text class="plt" x="1220" y="993.5" text-anchor="middle">A</text>
+<path class="a " d="M160,372 V756 H378" marker-end="url(#ah2)"/>
+<path class="a " d="M440,372 V718" marker-end="url(#ah2)"/>
+<path class="a " d="M750,612 V756 H602" marker-end="url(#ah2)"/>
+<text class="lbl" x="758" y="700" text-anchor="start">versión activa</text>
+<path class="a " d="M490,792 V838" marker-end="url(#ah2)"/>
+<path class="a " d="M420,912 V950 H200 V988" marker-end="url(#ah2)"/>
+<text class="lbl" x="210" y="942" text-anchor="start">decisión final</text>
+<path class="a " d="M560,912 V950 H600 V988" marker-end="url(#ah2)"/>
+<text class="lbl" x="550" y="942" text-anchor="end">requiere persona</text>
+<path class="a " d="M1000,1026 H712" marker-end="url(#ah2)"/>
+<path class="a " d="M680,990 V896 H998" marker-end="url(#ah2)"/>
+<path class="a g" d="M1110,860 V616" marker-end="url(#ahg2)"/>
+<text class="lbl lg" x="1100" y="700" text-anchor="end">aprende:</text>
+<text class="lbl lg" x="1100" y="716" text-anchor="end">nuevo borrador → validar</text>
+<text class="w" x="610" y="820" text-anchor="start"><tspan class="wn">⚠5</tspan> regla falla → escala</text>
+<text class="w" x="370" y="820" text-anchor="end"><tspan class="wn">⚠7</tspan> datos o versión cambian →</text>
+<text class="w" x="370" y="836" text-anchor="end">alertas + reprocesar</text>
+<text class="w" x="90" y="1098" text-anchor="start"><tspan class="wn">⚠8</tspan> reinicio → sin duplicados</text>
+<rect class="pill" x="770" y="784" width="265" height="44" rx="9"/><text class="pt" x="780" y="803">caso: decidido → en revisión →</text><text class="pt" x="780" y="818">resuelto (fila nueva, nunca se edita)</text>
+<rect class="pill" x="1232" y="860" width="142" height="59" rx="9"/><text class="pt" x="1242" y="879">propuesta:</text><text class="pt" x="1242" y="894">abierta → aceptada</text><text class="pt" x="1242" y="909">/ rechazada / ignorada</text>
+<rect class="pill" x="330" y="1074" width="250" height="29" rx="9"/><text class="pt" x="340" y="1093">historial solo crece (append-only)</text>
+<text class="ct tr" x="20" y="1142">Trazabilidad</text>
+<rect class="b trc" x="20" y="1150" width="325" height="66" rx="8"/><text class="t" x="182" y="1174" text-anchor="middle">Spans en Postgres</text>
+<text class="s" x="182" y="1192" text-anchor="middle">3 planos: lectura · agentes · ejecución</text>
+<rect class="b trc" x="365" y="1150" width="325" height="66" rx="8"/><text class="t" x="527" y="1174" text-anchor="middle">Traza por caso</text>
+<text class="s" x="527" y="1192" text-anchor="middle">estado, evidencia, versión, latencia,</text>
+<text class="s" x="527" y="1207" text-anchor="middle">errores, reintentos, pendiente</text>
+<rect class="b trc" x="710" y="1150" width="325" height="66" rx="8"/><text class="t" x="872" y="1174" text-anchor="middle">Métricas y salud</text>
+<text class="s" x="872" y="1192" text-anchor="middle">por plano</text>
+<rect class="b trc" x="1055" y="1150" width="325" height="66" rx="8"/><text class="t" x="1217" y="1174" text-anchor="middle">Espejo OpenTelemetry</text>
+<text class="s" x="1217" y="1192" text-anchor="middle">copia de los spans</text>
+<rect class="fail" x="20" y="1250" width="1360" height="118" rx="8"/><text class="ct wct" x="36" y="1274">Si falla…</text>
+<text class="fl" x="36" y="1296"><tspan class="wn">⚠1</tspan> Fuente caída o sin cargar → el caso escala, nunca se decide a ciegas</text>
+<text class="fl" x="36" y="1315"><tspan class="wn">⚠2</tspan> ERP lento o 429 → reintentos con backoff</text>
+<text class="fl" x="36" y="1334"><tspan class="wn">⚠3</tspan> OCR o proveedor falla → siguiente lector; si no se confirma, escala</text>
+<text class="fl" x="36" y="1353"><tspan class="wn">⚠4</tspan> LLM caído o lento → timeout y modelo de respaldo; el motor sigue sin LLM</text>
+<text class="fl" x="716" y="1296"><tspan class="wn">⚠5</tspan> Regla falla en el sandbox → el caso escala</text>
+<text class="fl" x="716" y="1315"><tspan class="wn">⚠6</tspan> Regla no compila → bloqueada, no se puede publicar</text>
+<text class="fl" x="716" y="1334"><tspan class="wn">⚠7</tspan> Datos o versión cambian → alertas de decisiones desfasadas y reprocesar sin borrar</text>
+<text class="fl" x="716" y="1353"><tspan class="wn">⚠8</tspan> Caída del servidor → sin duplicados al reiniciar; backup antes de cada deploy</text>
+</svg>
   </div>
 </div>
-<section class="adrs-page">
-  <h2>ADRs / trade-offs</h2>
-  <p class="sub">Cinco decisiones. Contexto, alternativas, decisión, consecuencias aceptadas y evidencia.</p>
-  <div class="facts">
-    <div class="fact"><b>443 / 36 / 21</b><em>Lote 1 · 500 · 471/471 en PDF con texto</em></div>
-    <div class="fact"><b>25 / 14 / 1</b><em>Lote 2 · 40 · el ESCALAR es un pedido duplicado</em></div>
-    <div class="fact ok"><b>0 tokens / caso</b><em>500 casos en 0,85 s · ~12k / regla con deepseek-v4-flash</em></div>
-  </div>
-  <div class="pair">
-    <div class="blurb">
-      <strong>Quién hace qué</strong>
-      Tester y coder escriben. Asistente y revisor proponen. Alberto publica y resuelve. El motor no llama a ningún modelo. Cada agente usa el modelo que se configure, con respaldo.
-    </div>
-    <div class="blurb">
-      <strong>Si algo cae</strong>
-      El ERP se baja a una foto. La regla nueva queda en borrador. Las activas siguen. Falta un dato o hay duda: escala. No decide a ciegas.
-    </div>
-  </div>
-  <div class="adrs">
-    <article class="adr">
-      <div class="adr-top"><span class="n">01</span><h3>El modelo escribe. El programa decide.</h3></div>
-      <p class="hook"><strong>Contexto.</strong> Un result mal descalifica. Un modelo se deja llevar por el PDF.</p>
-      <div class="grid">
-        <div class="cell"><span class="k">Alternativas</span><p>Que el modelo dicte. Que elija qué reglas corren.</p></div>
-        <div class="cell win"><span class="k">Decisión</span><p>Tester ciego + motor. 0 tokens por caso.</p></div>
-        <div class="cell"><span class="k">Consecuencias</span><p>Lo no cubierto cae al default.</p></div>
-        <div class="cell"><span class="k">Evidencia</span><p>471/471 · 500 en 0,85 s · factura_1936 no mueve el motor.</p></div>
-      </div>
-    </article>
-    <article class="adr">
-      <div class="adr-top"><span class="n">02</span><h3>Una norma nueva enseña su efecto.</h3></div>
-      <p class="hook"><strong>Contexto.</strong> Cambias una regla. Quieres saber qué habría pasado en las decisiones ya tomadas, sin reescribirlas.</p>
-      <div class="grid">
-        <div class="cell"><span class="k">Alternativas</span><p>Pisar la fila antigua. O no mirar el pasado.</p></div>
-        <div class="cell win"><span class="k">Decisión</span><p>Se versiona. Se reejecuta sobre el histórico: esta lista habría cambiado, esta no. Lo ya decidido se queda.</p></div>
-        <div class="cell"><span class="k">Consecuencias</span><p>Adoptar es un acto aparte. Ver el impacto no corrige el pasado.</p></div>
-        <div class="cell"><span class="k">Evidencia</span><p>Tres reglas válidas se quedaron en borrador: habrían movido 27 de 500.</p></div>
-      </div>
-    </article>
-    <article class="adr">
-      <div class="adr-top"><span class="n">03</span><h3>Ante la duda, escala.</h3></div>
-      <p class="hook"><strong>Contexto.</strong> Se cae el ERP, falta un dato, falla un modelo. El sistema tiene menos contexto.</p>
-      <div class="grid">
-        <div class="cell"><span class="k">Alternativas</span><p>Decidir igual, con lo que quede. O parar del todo.</p></div>
-        <div class="cell win"><span class="k">Decisión</span><p>Si no está seguro, escala. No toma la acción a la ligera.</p></div>
-        <div class="cell"><span class="k">Consecuencias</span><p>Habrá más casos en persona cuando falte contexto. No fabrica un veredicto a ciegas.</p></div>
-        <div class="cell"><span class="k">Evidencia</span><p>Fuente caída, regla que peta o dato vacío: escala. Las reglas activas siguen.</p></div>
-      </div>
-    </article>
-    <article class="adr">
-      <div class="adr-top"><span class="n">04</span><h3>Alberto elige cómo corre.</h3></div>
-      <p class="hook"><strong>Contexto.</strong> Unos tienen GPU. Otros quieren velocidad, o calidad.</p>
-      <div class="grid">
-        <div class="cell"><span class="k">Alternativas</span><p>Un solo proveedor. Un solo perfil.</p></div>
-        <div class="cell win"><span class="k">Decisión</span><p>Local o remoto. Rápido o calidad. El motor no cambia.</p></div>
-        <div class="cell"><span class="k">Consecuencias</span><p>Un modelo chico escribe peores reglas.</p></div>
-        <div class="cell"><span class="k">Evidencia</span><p>Ajustes: 4 perfiles. OCR local, API o híbrido.</p></div>
-      </div>
-    </article>
-    <article class="adr">
-      <div class="adr-top"><span class="n">05</span><h3>El mismo motor sirve otro proceso.</h3></div>
-      <p class="hook"><strong>Contexto.</strong> Esto nació con facturas. El núcleo no puede saber qué es una factura.</p>
-      <div class="grid">
-        <div class="cell"><span class="k">Alternativas</span><p>Un producto de facturas. O reescribir el motor para cada dominio.</p></div>
-        <div class="cell win"><span class="k">Decisión</span><p>El motor solo combina reglas deterministas. Tipos, símbolos y normas los pone el proceso.</p></div>
-        <div class="cell"><span class="k">Consecuencias</span><p>Hay que declarar el proceso. El motor no trae el dominio de serie.</p></div>
-        <div class="cell"><span class="k">Evidencia</span><p>Gastos de viaje: mismo motor; otras acciones (escalar / rechazar / aprobar).</p></div>
-      </div>
-    </article>
-  </div>
-</section>
 </body>
 </html>
