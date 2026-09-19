@@ -157,6 +157,17 @@ def test_trace_tables_name_the_model_the_fallback_and_the_failed_steps(tmp_path)
     assert "`upload_document` | 1 | 10 | 1" in text
 
 
+def test_a_verdict_is_compared_by_name_not_by_spelling():
+    """The answer key writes INTERVIEW; the engine answers with the type's own key.
+
+    Comparing the two verbatim reported 0 of 44 on a run where every category was right.
+    """
+    same = DEMO["same"]
+    assert same("INTERVIEW", "interview") and same("REVIEW", "REVIEW")
+    assert not same("INTERVIEW", "review")
+    assert not same("INTERVIEW", None)
+
+
 def test_plain_symbols_accept_both_stored_and_flat_shapes():
     plain = DEMO["plain"]
     assert plain({"email": {"value": "a@b", "origin": "document:1"}, "n": "5"}) == {
