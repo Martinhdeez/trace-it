@@ -18,9 +18,10 @@ What it does:
   assistant's proposal is not part of the path (D4). The OCR runs locally.
 
 The path (`demo-path.spec.ts`), with a MOCK DATA badge and an `ErrorNotice` failing every step:
+0. Before any step, as `make demo` does: load the client's workbook with `cut_off_date` 2026-09-18 and sync the ERP. A source a rule reads but that was never loaded would escalate `SOURCE_UNAVAILABLE` (B11).
 1. Sign in as the manager.
 2. The process panel shows the frozen process.
-3. Upload two text PDFs on the same order and run: both end ESCALAR (`DUPLICATE_PO` in the golden).
+3. Upload two text PDFs on the same order and run: both end ESCALAR with "Same order as: <the other>" (`DUPLICATE_PO` in the golden).
 4. Upload a scan and run: it ends ESCALAR with `MISSING_DATA`.
 5. The review queue lists the three.
 6. Open one, and resolve it as PAGAR as the manager.
@@ -31,5 +32,5 @@ turns it on.
 
 Debug a failure: `cd tests/integration && npx playwright show-trace test-results/<test>/trace.zip`.
 
-CI runs it on every PR into `integration` (`e2e-integration` job in `.github/workflows/ci.yml`),
+CI runs it on every PR into `integration` and on every push to it (`e2e-integration` job in `.github/workflows/ci.yml`),
 with the OCR weights cached.

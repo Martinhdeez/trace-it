@@ -55,7 +55,11 @@ async def _runs(session: AsyncSession, executions: list[Execution]) -> list[RunO
         )
     }
     written = Counter(
-        await session.scalars(select(Decision.execution_id).where(Decision.execution_id.in_(ids)))
+        await session.scalars(
+            select(Decision.execution_id).where(
+                Decision.execution_id.in_(ids), Decision.author == ENGINE
+            )
+        )
     )
     versions = {
         v.id: v
@@ -125,7 +129,7 @@ async def get_run(session: AsyncSession, run_id: int) -> RunDetail:
     rows = await session.execute(
         select(Decision, Instance.name)
         .join(Instance, Decision.instance_id == Instance.id)
-        .where(Decision.execution_id == run_id)
+        .where(Decision.execution_id == run_id, Decision.author == ENGINE)
         .order_by(Decision.instance_id, Decision.id)
     )
     return RunDetail(

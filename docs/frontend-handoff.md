@@ -41,7 +41,7 @@ Paths: `FE:` is `frontend/src/`. `BE:` is `backend/app/`.
   - PR #93's proposal endpoints are all manager-only too.
 - Until #92 merges, most writes accept any user. A missing header returns **422** (`loc: ["header","x-user-id"]`), and an unknown id returns 404 on `/me`.
 - The UI handles them like this:
-  - 401, or a 422 on `x-user-id`: sign out and go to Login.
+  - 401, or a 422 on `x-user-id`: ask for the default manager identity again (package 1). There is no Login screen.
   - 403: show `ErrorNotice` with the backend's message.
 
 **Vocabulary.**
@@ -157,7 +157,7 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
   - ProcessTabs: in place of the counts.
 - If `ErrorNotice` is too large for the Sidebar or the palette, use `Empty` with `error.message`. Both exist, so there is no new styling.
 - Keep TanStack's default retry (one retry for errors other than 4xx), and do not add polling.
-- A 401 goes to Login through the `http.ts` callback from package 1, so these components never handle auth themselves.
+- A 401 goes to the `http.ts` identity callback from package 1, so these components never handle auth themselves.
 
 **Vocabulary:** –
 
@@ -173,56 +173,39 @@ VITE_API_MODE=mock npm run dev                      # offline only; a "MOCK DATA
 
 ---
 
-## 1. Login and identity
+## 1. Identity: no login screen, automatic manager
 
-**Story:** As the manager, I sign in with my email, and every action I take carries my identity.
+**Decision (Martín, 2026-09-19):** there is no login screen. The console is local, and a login screen adds nothing to the demo. The console acts as the manager automatically, and every action still carries that identity, so the trace keeps its author.
 
-**Today:**
-- There is no login screen. `session.tsx` `signIn` exists, but nothing calls it.
-- A user is picked from a list in `routes/Settings.tsx`, and nothing is sent when none is picked. That gives 422s on upload and resolve (row 2).
-- `isManager` compares with the Spanish `rol === 'responsable'`.
+**Story:** As the manager, I open the console and work. Every action I take carries my identity, with no sign-in step.
+
+**Today:** #97 merged a Login screen, which predates the decision. It also sets `X-User-Id` in a `useEffect`, after child queries have fired, so a hard reload of a deep link sends its first reads without the header (see [integration-status.md](integration-status.md)). #113 replaces it.
 
 **Endpoints:**
 
 | Method, path (operationId) | Headers | Body | Response fields used | Errors |
 |---|---|---|---|---|
 | `POST /login` (`login`) | – | `LoginIn {email}` | `UserOut {id, name, email, role}` | 404 unknown email, 422 |
-| `GET /me` (`me`) | `X-User-Id` | – | `UserOut` | 404 stale id (for example after a database reset); later 401 |
+| `GET /me` (`me`) | `X-User-Id` | – | `UserOut` | 401 unknown id (for example after a database reset) |
 
 **Changes:**
-- `FE:api/live.ts`:
-  - `login` returns `UserOut` as it is.
-  - Add `me()`.
-  - Drop the `user()` mapper.
 - `FE:state/session.tsx`:
-  - Store `UserOut`.
+  - On start, call `POST /login` with `VITE_DEFAULT_USER_EMAIL` (default `martin@trace-it.local`) and keep the returned `UserOut`. No localStorage.
+  - Render nothing under the console until the identity is known, so no request leaves without `X-User-Id`. If `POST /login` fails, show `ErrorNotice`.
   - `isManager = user?.role === 'manager'`.
-  - On boot, when a user is stored, call `me()`. On 404 or 401, run `signOut()`.
-  - Keep the `trace.usuario` key. It only holds identity.
-- `FE:api/http.ts`: after `fail()`, when the status is 401, or 422 with `x-user-id` in `detail[].loc`, call a registered `onUnauthenticated` callback. `session.tsx` sets it to `signOut` plus a redirect to `/login`.
-- A new `FE:routes/Login.tsx`:
-  - `PageIntro`, a `Field` with an `Input type="email"`, and a primary `Button` "Entrar", which calls `signIn`, then navigates to `/processes`.
-  - Errors go through `ErrorNotice`.
-  - Copy the layout wrapper from an existing simple route, such as `Processes.tsx`. Do not create new styles.
-- `FE:App.tsx`:
-  - Add `/login`.
-  - The `Console` wrapper redirects to `/login` when there is no user.
-  - `/` (Landing) stays public.
-- `FE:routes/Settings.tsx`: the user picker stays as "Cambiar de usuario" and uses `signIn(email)`.
-- Only a manager uses the app. Once 403s arrive, an operator who signs in still sees read-only screens. Do not build per-role layouts.
+- `FE:api/http.ts`: send `X-User-Id` on every request. On 401, or a 422 on `x-user-id`, call a registered callback that asks for the default identity again (one request at a time). The caller still gets its `ApiError`.
+- Delete `FE:routes/Login.tsx`. `/login` redirects to Procesos.
+- `FE:routes/Settings.tsx`: the user picker stays as "Cambiar de usuario". There is no "Salir".
+- Only a manager uses the app. Do not build per-role layouts.
 
 **Vocabulary:** `manager` → Responsable, `operator` → Operador (`es.ts`, `roles`).
 
-**Depends on:**
-- Available now: `/login` and `/me`.
-- 401 and 403 enforcement is pending: PR #92 (`feat/integration-backend-runs-auth`). Code for them now, because the 422 path covers today.
+**Depends on:** available now (`/login`, `/me`, 401/403 since #92).
 
 **Done check (mock off):**
-1. Clear site data and open http://127.0.0.1:5173/processes. You land on Login.
-2. Enter `martin@trace-it.local`. You see Procesos.
-3. In devtools, every `/api` request carries `X-User-Id`.
-4. Reset the database, then reload the app. You are sent back to Login, with no crash.
-5. `nobody@x.y` shows the backend's 404 message.
+1. Clear site data and open http://127.0.0.1:5173/processes/{id}. You see the process as the manager, with no login screen.
+2. In devtools, every `/api` request carries `X-User-Id`, the first one included.
+3. Reset the database, then reload the app. It picks up the new manager id, with no crash.
 
 **Estimate:** S.
 
@@ -527,7 +510,7 @@ Every step is manager-only: 401 without `X-User-Id`, 403 for an operator. The pu
   - The event list renders the span tree through the existing `Block` component, one level per `children`.
 - The evidence join:
   - Symbols are keyed `issuer_nif`, `iban` and `purchase_order`. Extraction fields are keyed `supplier_tax_id`, `payment_iban` and `purchase_order_ref` (row 30).
-  - Until the backend adds `FieldReading.symbol`, keep a three-entry map in `DocumentPane.tsx`, marked `// remove when FieldReading.symbol lands`. The other fields already share the symbol's name.
+  - Join on `FieldReading.symbol` (B1, #100): the backend names the symbol each reading supports. Do not keep a local field map such as `FIELD_SYMBOL` in `lib/symbols.ts`.
 - Delete `FE:data/documents.generated.ts`, and `api/types.ts` `InvoiceDocument` once nothing imports it.
 
 **Vocabulary:**
@@ -536,7 +519,7 @@ Every step is manager-only: 401 without `X-User-Id`, 403 for an operator. The pu
 
 **Depends on:**
 - Available now: `/trace`, `/file` and `/document`.
-- Pending: `FieldReading.symbol`, which is integration-plan task 0.5 and is **not** in #91. The workaround above unblocks you.
+- Available now: `FieldReading.symbol` (B1, #100).
 
 **Done check (mock off):**
 1. Ejecuciones → select any decided case. The real PDF renders in the paper area.
@@ -663,7 +646,7 @@ Every step is manager-only: 401 without `X-User-Id`, 403 for an operator. The pu
 
 **Today:**
 - **Dangerous:** Contexto → Guardar and Inputs add or remove call `loadDefinition` or `replaceSymbols`. They re-post the whole process to `POST /processes/definition`, which stages a draft with `rules=[]` and resets `required` and `decision_review` (rows 8 and 9). Until this package lands, nobody clicks them on the demo database.
-- The symbol type is a free `Input` (`texto`/`numero`/`booleano`) (row 10).
+- The symbol type is a free `Input` (`texto`/`numero`/`booleano`) (row 10). Since B2 (#100) the backend answers 422 to anything but `text`/`number`/`date`/`boolean`.
 - The invoice template and the chat chips use Spanish symbol names (row 11).
 - The JSON import only accepts the Spanish shape, and the repo's own `processes/*.json` throw a TypeError (row 17).
 - `Rule.tsx` shows fake A/B compiler fields and `autor: 'tester'` (row 12), and "Activar" reads as if it takes effect (row 13).
@@ -685,15 +668,16 @@ Every step is manager-only: 401 without `X-User-Id`, 403 for an operator. The pu
 
 **Changes:**
 - `live.ts`:
-  - Add `getDraft` (shared with package 2) and `editDraft(processId, body)`.
-  - `loadDefinition(body: Definition)` posts the object as it is. Delete `definitionBody()`, `replaceSymbols` and `createProcess`'s Spanish mapper.
+  - Add `getDraft` (shared with package 2) and `editDraft(processId, body)`, which is `PUT /processes/{id}/draft`.
+  - `loadDefinition(body: Definition)` posts the object as it is, and only for a new process. Delete `definitionBody()`, `replaceSymbols` and `createProcess`'s Spanish mapper.
+  - Never send Spanish symbol types: `texto`/`numero`/`booleano` get a 422 (B2).
 - `Definition.tsx` `ContextPane`:
-  - Save = `getDraft` (404 means no draft yet, so omit `expected_revision`), then `editDraft({expected_revision, description})`.
+  - Guardar = `getDraft` (404 means no draft yet, so omit `expected_revision`), then `PUT /processes/{id}/draft` with `{expected_revision, description}`. Never a re-post to `POST /processes/definition`.
   - On 409, show `ErrorNotice` with "Recarga: alguien cambió el borrador".
   - The textarea shows the draft's description when a draft exists.
 - `InputsPane`:
   - Add or remove = `editDraft({expected_revision, symbols})`, where `symbols` is the **full** current `SymbolIO` list with `required` and `extraction` kept.
-  - The type `Input` becomes the existing `Select` with `text`/`number`/`date`, labelled Texto/Número/Fecha.
+  - The type `Input` becomes the existing `Select` with `text`/`number`/`date`/`boolean`, labelled Texto/Número/Fecha/Booleano. These English values are the only ones the backend accepts (B2, 422 otherwise).
   - The placeholder becomes `issuer_nif`.
 - `Definition.tsx` `Definition()`:
   - `saveContext` and `addSymbol` use the same `editDraft` path.
@@ -716,14 +700,14 @@ Every step is manager-only: 401 without `X-User-Id`, 403 for an operator. The pu
   - After either one, show a `Notice` that links to the Panel's publish item.
 
 **Vocabulary:**
-- Symbol type `text`/`number`/`date` → Texto/Número/Fecha.
+- Symbol type `text`/`number`/`date`/`boolean` → Texto/Número/Fecha/Booleano.
 - Rule status `compiling`/`draft`/`active`/`blocked`/`retired` → Compilando/Borrador/Activa/Bloqueada/Retirada.
 - Symbol labels as in [integration.md §2](integration.md#2-the-contract-shared-vocabulary).
 
 **Depends on:**
 - Available now: the draft edits, the import, rules, norm, and discuss-mode chat.
 - Pending: PR #93, for the chat's proposals (package 8). With #93, every revise-mode message on an existing process becomes proposals, one per changed kind, and a new revision supersedes the open ones.
-- Pending, integration-plan row 10: the backend rejecting `booleano` (not started). The `Select` already prevents it.
+- Available now: the symbol type enum (B2, #100). Any other value is a 422.
 
 **Done check (mock off):**
 1. Contexto: edit one word and click Guardar. `GET /processes/{id}/draft` → `snapshot.description` changed, the `rule_ids` are identical, and every symbol keeps `required`.
@@ -840,12 +824,41 @@ Every step is manager-only: 401 without `X-User-Id`, 403 for an operator. The pu
 
 **Vocabulary:** –
 
-**Depends on:** packages 1-11.
+**Depends on:** packages 1-11 and 13.
 
 **Done check (mock off, it is the only mode):**
 1. `grep -rn "nombre\|tipos_decision\|mockClient\|VITE_API_MODE" frontend/src` finds only `es.ts` labels.
 2. `npm run build && npm run lint` pass.
 3. Repeat the done checks of packages 1-10 on a fresh database.
+
+**Estimate:** M.
+
+---
+
+## 13. The three plane dashboards
+
+**Story:** As the manager, I see traceability as three dashboards, one per plane (ingestion, agents, execution), never as one mixed total. Every number drills down to its spans.
+
+**Requirement:** [observability-dashboards.md](observability-dashboards.md) (required, Martín). It lists the panels, the numbers and the drill-down for each plane.
+
+**Endpoints (backend data from B10, #115):**
+
+| Method, path (operationId) | Headers | Body | Response fields used | Errors |
+|---|---|---|---|---|
+| `GET /processes/{id}/metrics/ingestion` (`getProcessIngestionMetrics`) | – | – | the ingestion plane: activity, providers, `known_cost_usd`, `unpriced_requests`, drill-down links | 404 |
+| `GET /processes/{id}/metrics/agents` (`getProcessAgentsMetrics`) | – | – | `AgentsMetrics`: per role, tokens, `known_cost_usd`, `unpriced_requests`, drill-down links | 404 |
+| `GET /processes/{id}/metrics/execution` (`getProcessExecutionMetrics`) | – | – | decisions, escalations, latency, drill-down links | 404 |
+| `GET /health/planes` (`getPlanesHealth`) | – | – | the health of each plane | – |
+| `GET /traces` (`listSpans`) | – | – | the spans behind a number, with the B10 filters | 422 |
+
+**Changes:**
+- One dashboard per plane, built from the existing cards, tables and span view (`Block`). No new styles.
+- Every number links to `GET /traces` with the filters its row carries.
+- Where the dashboards live is Martín's call; ask before adding a route.
+
+**Depends on:** available now (B10, #115).
+
+**Done check (mock off):** each dashboard matches its endpoint's numbers, and a click on any number lists the spans behind it.
 
 **Estimate:** M.
 
@@ -857,18 +870,19 @@ Every step is manager-only: 401 without `X-User-Id`, 403 for an operator. The pu
 |---|---|---|---|---|
 | 0 | Setup | #91 (merged) | Can start | S |
 | 0b | Error states where there are none | available now | Can start | S |
-| 1 | Login and identity | available now (401/403: PR #92) | Can start | S |
+| 1 | Identity: no login screen, automatic manager | available now | Can start | S |
 | 2 | Panel and publish with version | available now | Can start | M |
 | 3 | Upload, run and sources | available now | Can start | M |
 | 4 | Queue and tabs (`review_pending`) | available now | Can start | S |
 | 5 | Escalation detail and resolve | available now; explained options and accept/reject: PR #93 | Can start | M |
-| 6 | Trace view with the real document | available now; `FieldReading.symbol` (plan 0.5) has a workaround | Can start | M |
+| 6 | Trace view with the real document | available now, `FieldReading.symbol` included (B1) | Can start | M |
 | 7 | Run history timeline | PR #92 | Waits | S |
 | 8 | Proposals inbox | PR #93 | Waits | M |
 | 9 | Definition editing and chat | available now; chat proposals: PR #93 | Can start | L |
 | 10 | Alerts with ack | available now | Can start | S |
 | 11 | Settings to the backend | available now | Can start | S |
-| 12 | Mock removal | 0b-11 | Last | M |
+| 12 | Mock removal | 0b-11, 13 | Last | M |
+| 13 | The three plane dashboards | available now (B10) | Can start | M |
 
 Demo path if time runs short: 0 → 0b → 1 → 2 → 3 → 4 → 5 → 6.
 Until package 9 lands, nobody clicks Contexto → Guardar or edits Inputs on the demo database.
@@ -880,8 +894,9 @@ Until package 9 lands, nobody clicks Contexto → Guardar or edits Inputs on the
 | Contract, typed client, mock opt-in | PR #91 | Proxy to `:8000` and `VITE_API_TARGET`; the mock only with `VITE_API_MODE=mock`; `npm run gen:api` and `schema.d.ts`; clean operation ids; typed `ExecutionOut` and `ReplayOut` | 0, and every typed package | **Available now** (merged at b9534a7) |
 | Manager auth, run history, required cut-off | PR #92 `feat/integration-backend-runs-auth` | 401 `unauthenticated` with no or an unknown `X-User-Id`; 403 for a non-manager on run, reprocess, sync, definition, resolve, ack and `POST /users`; `GET /processes/{id}/runs` and `GET /runs/{id}`; `cut_off_date` required on the workbook upload (422 without it) | 7; hardens 1, 3, 5, 10 | Draft, in progress |
 | Unified proposals | PR #93 `feat/integration-proposals` | `POST /instances/{id}/proposal`, `GET /processes/{id}/proposals?status=`, `POST /proposals/{id}/accept` and `/reject`, `ResolveIn.proposal_id`; the chat and learning channels create proposals | 8; the rest of 5 and 9 | Draft, in progress |
-| `FieldReading.symbol` | none yet (integration-plan task 0.5) | Evidence joined to its symbol with no frontend map | Removes the workaround in 6 | Not started |
-| Symbol type enum | none yet (row 10) | `symbols[].type` rejects anything but `text`/`number`/`date` | Nothing (the `Select` covers it) | Not started |
+| `FieldReading.symbol` | B1, #100 | Evidence joined to its symbol with no frontend map | 6 | **Available now** |
+| Symbol type enum | B2, #100 | `symbols[].type` rejects anything but `text`/`number`/`date`/`boolean` with a 422 | 9 (the `Select` must send English values) | **Available now** |
+| Plane metrics | B10, #115 | One typed response per plane, agent cost, drill-down links, `/traces` filters | 13 | **Available now** |
 | `Last-Event-ID` on `/events/stream` | later (row 35) | Live updates without polling | Post-demo | Later |
 
 After each backend PR merges into `integration`, pull. The regenerated `schema.d.ts` is in the PR, and the provisional shapes in packages 7 and 8 must be checked against it.
