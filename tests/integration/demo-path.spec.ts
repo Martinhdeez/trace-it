@@ -8,13 +8,18 @@
  * A step waiting for one of Carlos's packages is `test.fixme('pkg n')`, and goes live in
  * the PR that lands package n (docs/frontend-handoff.md).
  */
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 
 const API = `http://127.0.0.1:${process.env.E2E_PORTS!.split(',')[1]}`
 const MANAGER = { email: 'martin@trace-it.local', name: 'Martín' }
 const PROCESS = 'Invoice payment - frozen 2026-09-19'
-const INVOICES = resolve(import.meta.dirname, '../../.context/500-sombras-de-alberto/facturas')
+const CHALLENGE = resolve(import.meta.dirname, '../../.context/500-sombras-de-alberto')
+const INVOICES = resolve(CHALLENGE, 'facturas')
+// The client's workbook and the day batch 1 arrived, as `make demo` loads them.
+const WORKBOOK = 'FINAL_v7_DEFINITIVO_ahorasi.xlsx'
+const CUT_OFF = '2026-09-18'
 // Two text PDFs on the same order: the golden says both end ESCALAR (DUPLICATE_PO).
 const ESCALATED = ['2026-0233-A_catering.pdf', 'factura_41082.pdf']
 // An image-only scan, read by the local OCR weights (`make ocr-models`).
@@ -34,6 +39,24 @@ const ASSISTANT = /^502 (GET|POST) .*\/(suggestion|proposal)$/
 test.beforeAll(async ({ browser, request }) => {
   const processes: { id: number; name: string }[] = await (await request.get(`${API}/processes`)).json()
   processId = processes.find((item) => item.name === PROCESS)!.id
+  // The sources, as the real demo loads them before any invoice: a rule reading a source
+  // that was never loaded escalates SOURCE_UNAVAILABLE (B11), which is not the demo.
+  const manager = await (await request.post(`${API}/login`, { data: { email: MANAGER.email } })).json()
+  const headers = { 'X-User-Id': String(manager.id) }
+  const book = await request.post(`${API}/processes/${processId}/sources/workbook`, {
+    headers,
+    multipart: {
+      file: {
+        name: WORKBOOK,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        buffer: readFileSync(resolve(CHALLENGE, WORKBOOK)),
+      },
+      cut_off_date: CUT_OFF,
+    },
+  })
+  expect(book.status(), await book.text()).toBe(201)
+  const erp = await request.post(`${API}/processes/${processId}/sources/erp/sync`, { headers })
+  expect(erp.ok(), await erp.text()).toBe(true)
   page = await browser.newPage()
   page.on('response', (response) => {
     if (response.url().includes('/api/') && response.status() >= 400) {
@@ -96,18 +119,23 @@ test('upload two text PDFs and run', async ({ request }) => {
     .setInputFiles(ESCALATED.map((name) => resolve(INVOICES, name)))
   await page.getByRole('button', { name: `Ejecutar ${ESCALATED.length}` }).click()
   await expect(page.getByText('Lote completado')).toBeVisible({ timeout: 120_000 })
+  // The golden: both escalate because they share a purchase order (DUPLICATE_PO).
   for (const name of ESCALATED) {
-    expect((await instanceByName(request, name)).decision).toBe('ESCALAR')
+    const instance = await instanceByName(request, name)
+    const other = ESCALATED.find((item) => item !== name)
+    expect([instance.decision, instance.reason]).toEqual(['ESCALAR', `Same order as: ${other}`])
   }
-  await page.getByRole('button', { name: 'Cerrar' }).click()
   await realAndClean()
 })
 
+// The run dialog is still open. Exact text: the run-history row reads "2 ESCALAR · Martín".
 test.fixme('pkg 3: the run shows real progress and `by_decision`', async () => {
-  // The bar goes 1/n ... n/n with each file name, then the split by decision.
+  await expect(page.getByText('100%', { exact: true })).toBeVisible()
+  await expect(page.getByText(`${ESCALATED.length} ESCALAR`, { exact: true })).toBeVisible()
 })
 
 test('upload a scan and run', async ({ request }) => {
+  await page.getByRole('button', { name: 'Cerrar' }).click()
   await page.getByRole('button', { name: 'Ejecutar', exact: true }).click()
   await page.locator('input[type=file][multiple]').setInputFiles(resolve(INVOICES, SCAN))
   await page.getByRole('button', { name: 'Ejecutar 1' }).click()
@@ -139,7 +167,8 @@ test('open the escalation detail', async () => {
 test.fixme('pkg 5: the detail says why it escalated, as the API does', async ({ request }) => {
   const instance = await instanceByName(request, RESOLVED)
   await expect(page.getByText('Por qué se escaló')).toBeVisible()
-  await expect(page.getByText(instance.reason)).toBeVisible()
+  // Exact: the rule result below also quotes the reason.
+  await expect(page.getByText(instance.reason, { exact: true })).toBeVisible()
   await realAndClean(['llm_error'])
 })
 

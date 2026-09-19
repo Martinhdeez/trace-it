@@ -83,6 +83,32 @@ async def test_a_rerun_with_better_data_shows_fewer_escalations() -> None:
     assert (await anonymous("GET", "/processes/999999999/runs")).status_code == 404
 
 
+async def test_a_resolution_is_not_a_run_decision() -> None:
+    """A resolve reuses the run's execution_id; the run still shows only the engine's cases."""
+    async with client() as api:
+        process_id, headers = await create_process(api, "manager")
+        assert (await api.post(f"/processes/{process_id}/run")).status_code == 200
+        instances = (await api.get(f"/processes/{process_id}/instances")).json()
+        escalated = next(i["id"] for i in instances if i["name"] == "FA-5044_mensajería2.pdf")
+        r = await api.post(
+            f"/instances/{escalated}/resolve",
+            json={"decision": "PAGAR", "reason": "IBAN confirmed by phone"},
+            headers=headers,
+        )
+        assert r.status_code == 200, r.text
+
+        [run] = (await api.get(f"/processes/{process_id}/runs")).json()
+        assert (run["decided"], run["by_decision"]) == (
+            3,
+            {"PAGAR": 1, "NO_PAGAR": 1, "ESCALAR": 1},
+        )
+        detail = (await api.get(f"/runs/{run['id']}")).json()
+        assert sorted(d["name"] for d in detail["decisions"]) == sorted(
+            ["factura_1217.pdf", "FA-1016_papelería.pdf", "FA-5044_mensajería2.pdf"]
+        )
+        assert detail["decided"] == 3
+
+
 PUBLISH = {"revision": 1, "validation_hash": "x", "reason": "x"}
 MUTATIONS = [
     ("POST", "/processes/{pid}/run", None),

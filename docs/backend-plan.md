@@ -48,7 +48,11 @@ The (a) and (c) rows, and who covers them:
 | B6 | The 4 ingestion errors in the last demo | none (the fix may need #93) | investigation: yes | M |
 | B7 | Batch-2 rehearsal with manager auth and step 1d | #92 (done), B8 | yes | M |
 | B8 | Verify `tools/` and `make demo` after #92 | #92 (done) | yes | S |
+| B9 | Provider concurrency limit and 429/503 backoff in ingestion (PR #107, open) | none | yes | S |
 | B10 | Plane metrics for the three dashboards ([observability-dashboards.md](observability-dashboards.md)): one typed response per plane, agent `known_cost_usd`/`unpriced_requests` priced like ingestion, a `traces` drill-down link on every row, new `/traces` filters | none | yes | S |
+| B11 | A source a rule reads but that was never loaded escalates `SOURCE_UNAVAILABLE`, not an empty table (done, #118) | none | yes | S |
+| B12 | Publish past already-escalated scans; rule writes are manager-only (done, #120) | none | yes | S |
+| B13 | Activate and publish in one call (not built; see the end of this file) | none | yes | S |
 
 ### B0. Automated frontend-backend check
 
@@ -142,11 +146,11 @@ A first pass, done while writing this plan:
 | 2 | Counts, latency, cost, publish, version | `/summary`, `/metrics/execution`, `/metrics` (`providers[].known_cost_usd`), draft, publish and `/versions` exist |
 | 3 | Upload, run, `down_sources`, cut-off | Exists; the cut-off becomes required in #92 |
 | 4 | Queue with `review_pending` | Exists |
-| 5 | Proposal, then accept or resolve | `/suggestion` exists; accept and reject in #93 |
+| 5 | Proposal, then accept or resolve | `/suggestion` exists; proposal, accept and reject exist since #93 |
 | 6 | PDF, evidence by symbol, spans, file size | `/file`, `/trace` (`size_bytes`) and `/document` exist; `symbol` is **B1** |
 | 7 | Run history | #92 |
-| 8 | Proposals inbox | #93 |
-| 9 | Draft edits, import, chat | Draft endpoints exist; the type enum is **B2**; chat proposals in #93 |
+| 8 | Proposals inbox | Exists since #93 |
+| 9 | Draft edits, import, chat | Draft endpoints exist; the type enum is **B2** (done); chat proposals exist since #93 |
 | 10 | Alerts, ack, resolved when the case is resolved | Exists: `resolved_by_decision_id` gives `resolved` |
 | 11 | OCR mode, reviewer and models in the backend | Exists, no new endpoint: `GET /processes/{id}/execution`, `PUT /processes/{id}/draft {execution \| decision_review}`, `GET /use-cases/{id}`, `PUT /use-cases/{id}/agents/{role}`. The handoff's OCR values (`local`/`gemini`/`got`) map to the backend's `local`/`api`/`hybrid` in the frontend |
 | 12 | Mock removal | Nothing on the backend |
@@ -242,20 +246,20 @@ Every endpoint row of packages 1-11 was checked, by method, path, request fields
 | 3 | `uploadProcessDocument`, `extractInstanceDocument`, `runProcess` (`down_sources`), `uploadProcessWorkbook` (`cut_off_date` required), `listSources`, `getSource`, `syncSource` | All present |
 | 4 | `getQueue` (`type`), `listInstances` (`status`, `decision`, `q`), `getInstance` (`reviews[]`) | All present, `review_pending` included |
 | 5 | `getInstance`, `getSuggestion`, `resolveInstance`, `createRule` | Present |
-| 5 | `POST /instances/{id}/proposal`, `ResolveIn.proposal_id`, `POST /proposals/{id}/accept` and `/reject` | Missing, known: #93 |
-| 6 | `getInstance`, `getInstanceTrace` (`file.size_bytes`, `rule_results[].rule_text`, `exported_decision`, `spans[]` tree), `getInstanceFile`, `getInstanceDocument` | Present. `FieldReading.symbol` is missing, known: **B1** |
+| 5 | `POST /instances/{id}/proposal`, `ResolveIn.proposal_id`, `POST /proposals/{id}/accept` and `/reject` | Present since #93 (`proposeDecision`, `acceptProposal`, `rejectProposal`) |
+| 6 | `getInstance`, `getInstanceTrace` (`file.size_bytes`, `rule_results[].rule_text`, `exported_decision`, `spans[]` tree), `getInstanceFile`, `getInstanceDocument` | Present, `FieldReading.symbol` included (**B1**, #100) |
 | 7 | `listRuns`, `getRun` | Present. The handoff said `execution_id` and `escalations`; the API names them `id` and `escalation_reasons`. Fixed in the handoff, no backend change |
 | 8 | `analyzeProcessCases`, `getNormProposal` | Present |
-| 8 | `GET /processes/{id}/proposals`, accept and reject | Missing, known: #93 |
-| 9 | `editProcessDraft` (`description`, `symbols`), `loadDefinition`, rule create, compile, get, impact, activate and retire, `normalizeNorm`, the four `process-drafts` operations | Present. `SymbolIO.type` is a free string, known: **B2** |
+| 8 | `GET /processes/{id}/proposals`, accept and reject | Present since #93 (`listProposals`) |
+| 9 | `editProcessDraft` (`description`, `symbols`), `loadDefinition`, rule create, compile, get, impact, activate and retire, `normalizeNorm`, the four `process-drafts` operations | Present. `SymbolIO.type` is `text`/`number`/`date`/`boolean` (**B2**, #100) |
 | 10 | `listAlerts` (`status`), `ackAlert` | Present, `resolved_by_decision_id` included |
 | 11 | `getExecutionSettings`, `editProcessDraft` (`execution`, `decision_review`), `getUseCase`, `configureAgent` | All present |
 
-**Missing endpoints:** none new. Every miss is already #93, B1 or B2. Run this check again after #93 merges.
+**Missing endpoints:** none. Re-checked after #93, B1 and B2 merged (integration at 3f7bcc2, [integration-status.md](integration-status.md)): every endpoint the handoff needs is in `openapi.json`.
 
 **Package 2 was missing a sequence, now documented.** In a live demo on v1.0, a process whose rules came from a compiled norm returned 409 on every run. It needs `POST /rules/{id}/activate` for each rule, then `draft/validate`, then `draft/publish`, all as the manager. The handoff's package 2 now lists these steps with their endpoints and errors.
 
-**New item B9, not built: activate and publish in one call.** Today it takes 2 + n calls, and the client must carry `revision` and `validation.hash` from validate to publish.
+**New item B13, not built: activate and publish in one call.** (First written as B9; PR #107 took that id.) Today it takes 2 + n calls, and the client must carry `revision` and `validation.hash` from validate to publish.
 - **What:** `POST /processes/{id}/draft/publish` with `{rule_ids?, reason}` and no `validation_hash`. It stages the rules, validates, and publishes only if the validation is valid, all under the process lock. It answers 409 with the validation report when it is not valid.
 - The two-step flow stays for the Panel, where the manager reviews the coverage before publishing.
 - **Why:** the demo's 409, and one call for the tools and the runbook.

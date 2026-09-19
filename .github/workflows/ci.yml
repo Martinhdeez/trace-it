@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [dev, main, integration]
   push:
-    branches: [dev]
+    branches: [dev, integration]
 
 jobs:
   backend:
@@ -40,7 +40,8 @@ jobs:
 
   # The demo path through the real console and API in Chromium (tests/integration/README.md).
   e2e-integration:
-    if: github.base_ref == 'integration'
+    # PRs into integration, and every push to it (a merge), so "integration is green" holds.
+    if: github.base_ref == 'integration' || github.ref == 'refs/heads/integration'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
