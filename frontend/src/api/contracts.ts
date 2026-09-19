@@ -80,6 +80,9 @@ export type ProposalOutcome = {
   retired?: number | null
   draft_revision?: number
   cause?: 'ignored' | 'version_published' | 'case_changed' | 'superseded'
+  /** The manager edited the rule text before accepting; `original_text` is the agent's. */
+  edited?: boolean
+  original_text?: string
 }
 export type UseCaseOut = Schemas['UseCaseOut']
 export type UseCaseDetail = Schemas['UseCaseDetail']
@@ -306,7 +309,8 @@ export interface ApiClient {
   proposeRule(instanceId: number): Promise<Proposal>
   listProposals(processId: number, status?: ProposalStatus): Promise<Proposal[]>
   /** Applies it through its channel: a decision resolves the case; chat and learning stage it. */
-  acceptProposal(id: number, reason?: string): Promise<Proposal>
+  /** `text`: the manager's edit of an escalation rule suggestion (reviewer-agent FE-3). */
+  acceptProposal(id: number, reason?: string, text?: string): Promise<Proposal>
   rejectProposal(id: number, reason: string): Promise<Proposal>
 
   listFindings(processId: number): Promise<Finding[]>

@@ -207,8 +207,9 @@ export function Queue() {
  * asistente", hidden when a source was down. Only final decision types can be chosen (no
  * ESCALAR). Once a person resolved the case, it shows `SuggestRule` instead of the form.
  * Built on Carlos's patterns from #159; if you are merging a newer version from Carlos, keep
- * his UI and make sure it still does: no POST /proposal when a case opens; options are
- * clickable only while the proposal is `open`; resolving never waits on a rule suggestion.
+ * his UI and make sure it still does: no POST /proposal when a case opens; the decision
+ * proposal's Aceptar / Rechazar stays as on main; options are clickable only while the
+ * proposal is `open`; resolving never waits on a rule suggestion.
  */
 function Resolve({
   process,
@@ -636,13 +637,17 @@ function Suggested({
  * then accept" and the Definition inbox's "Rechazar needs a reason". Built on Carlos's
  * patterns from #159; if you are merging a newer version from Carlos, keep his UI and make
  * sure it still does: resolving never waits on this; a 409 shows the backend's Spanish
- * `message` as is; Aceptar stages the rule in the draft and never publishes; `rejected`
- * (the manager's no) reads apart from `superseded` with its `outcome.cause`.
+ * `message` as is; the manager can edit the rule before accepting (the textarea, as main's
+ * "Regla que entra con esta decisión"; the edit goes as `text` to accept); Aceptar stages
+ * the rule in the draft and never publishes; `rejected` (the manager's no) reads apart from
+ * `superseded` with its `outcome.cause`. The decision proposal's accept/reject stays.
  */
 function SuggestRule({ process, instance }: { process: ProcessDetail; instance: InstanceDetail }) {
   const queryClient = useQueryClient()
   const [rejecting, setRejecting] = useState(false)
   const [reason, setReason] = useState('')
+  // The manager's edit of the suggested rule, for the suggestion it was made on.
+  const [edit, setEdit] = useState<{ id: number; text: string } | null>(null)
   const resolution = instance.decisions.at(-1)
 
   // The case's latest rule suggestion (newest first), whatever its status: a settled one
@@ -663,9 +668,14 @@ function SuggestRule({ process, instance }: { process: ProcessDetail; instance: 
     },
   })
   const proposal = latest.data ?? undefined
+  const payload = proposal?.payload as RuleProposalPayload | undefined
+  const ruleText = edit && edit.id === proposal?.id ? edit.text : (payload?.text ?? '')
+  const edited = ruleText.trim() !== payload?.text ? ruleText.trim() : undefined
   const settle = useMutation({
     mutationFn: (accept: boolean) =>
-      accept ? api.acceptProposal(proposal!.id) : api.rejectProposal(proposal!.id, reason.trim()),
+      accept
+        ? api.acceptProposal(proposal!.id, undefined, edited)
+        : api.rejectProposal(proposal!.id, reason.trim()),
     onSuccess: (settled) => {
       queryClient.setQueryData(keys.caseRuleProposal(instance.id), settled)
       for (const name of [...families.proposals, ...families.rules]) {
@@ -674,7 +684,6 @@ function SuggestRule({ process, instance }: { process: ProcessDetail; instance: 
     },
   })
 
-  const payload = proposal?.payload as RuleProposalPayload | undefined
   const outcome = (proposal?.outcome ?? {}) as ProposalOutcome
   const open = proposal?.status === 'open'
   // The new rule compiles in the background: follow it until it leaves `compiling`.
@@ -756,7 +765,27 @@ function SuggestRule({ process, instance }: { process: ProcessDetail; instance: 
           {proposal.rationale ? (
             <p className="mt-1 text-[12px] leading-5 text-muted">{proposal.rationale}</p>
           ) : null}
-          <p className="mt-2 text-[12px] leading-5 text-ink">{payload.text}</p>
+          {open ? (
+            <Field
+              label="Regla que entra con esta decisión"
+              hint="Puedes editarla antes de aceptar. Así el proceso resuelve solo los casos parecidos."
+              className="mt-2"
+            >
+              <Textarea
+                rows={2}
+                value={ruleText}
+                onChange={(event) => setEdit({ id: proposal.id, text: event.target.value })}
+                className="mt-1"
+              />
+            </Field>
+          ) : (
+            <p className="mt-2 text-[12px] leading-5 text-ink">{rule.data?.text ?? payload.text}</p>
+          )}
+          {outcome.edited && outcome.original_text ? (
+            <p className="mt-1 text-[12px] leading-5 text-faint">
+              Editada por ti. El agente proponía: {outcome.original_text}
+            </p>
+          ) : null}
           <Link
             to={paths.rule(process.id, payload.replaces)}
             className="mt-1 inline-block text-[12px] text-muted hover:text-ink"
@@ -788,7 +817,11 @@ function SuggestRule({ process, instance }: { process: ProcessDetail; instance: 
                 >
                   Rechazar
                 </Button>
-                <Button tone="primary" disabled={settle.isPending} onClick={() => settle.mutate(true)}>
+                <Button
+                  tone="primary"
+                  disabled={settle.isPending || !ruleText.trim()}
+                  onClick={() => settle.mutate(true)}
+                >
                   {settle.isPending ? 'Guardando…' : 'Aceptar'}
                 </Button>
               </div>

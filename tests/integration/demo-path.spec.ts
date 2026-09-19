@@ -10,7 +10,8 @@
  *
  * reviewer-agent FE-1..3 (docs/reviewer-agent.md): opening a case sends no POST /proposal;
  * a resolved case offers "Sugerir regla"; a case no rule can learn answers 409 in Spanish;
- * a stored rule suggestion is shown, rejected with a reason, and reads `Rechazada`.
+ * a stored rule suggestion is shown, rejected with a reason, and reads `Rechazada`; another
+ * is edited before Aceptar, and the created rule carries the edit (`outcome.edited`).
  */
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -35,6 +36,8 @@ const LEARNED = 'Cargar el maestro de proveedores actualizado'
 // The reviewer agent's amended rule, stored as it would with no LLM key (D4).
 const AMENDED = 'The invoice shares its order with another invoice whose total exceeds the order.'
 const REJECTION = 'Un pedido duplicado siempre lo mira una persona'
+// The manager's edit of a second suggestion, before Aceptar.
+const EDITED = 'The invoice shares its order with another invoice and together they exceed the order total.'
 const DATABASE =
   process.env.E2E_DATABASE_URL ?? 'postgresql+psycopg://trace:trace@localhost:5432/trace_e2e_test'
 
@@ -334,4 +337,27 @@ test('pkg 7: run history lists the run', async () => {
   await page.goBack()
   await expect(page).toHaveURL(new RegExp(`/processes/${processId}$`))
   await realAndClean()
+})
+
+// Last: accepting stages a rule in the draft, which the earlier screens do not expect.
+test('reviewer agent: the manager edits the suggested rule, then accepts it', async ({ request }) => {
+  const resolved = await instanceByName(request, RESOLVED)
+  const id = storeProposal('rule', resolved.id, AMENDED)
+  await page.goto(`/processes/${processId}/review?i=${resolved.id}`)
+  const text = page.getByRole('textbox', { name: /^Regla que entra con esta decisión/ })
+  await expect(text).toHaveValue(AMENDED)
+  await text.fill(EDITED)
+  await page.getByRole('button', { name: 'Aceptar' }).click()
+  await expect(page.getByText('Aceptada', { exact: true })).toBeVisible()
+  await expect(page.getByText(`Editada por ti. El agente proponía: ${AMENDED}`)).toBeVisible()
+  // Staged in the draft, not published.
+  await expect(page.getByRole('link', { name: 'Panel → Publicar' })).toBeVisible()
+  const accepted: { id: number; outcome: { edited?: boolean; original_text?: string; rule_id: number } }[] =
+    await (await request.get(`${API}/processes/${processId}/proposals?status=accepted`, { headers })).json()
+  const outcome = accepted.find((item) => item.id === id)!.outcome
+  expect(outcome).toMatchObject({ edited: true, original_text: AMENDED })
+  const rule = await (await request.get(`${API}/rules/${outcome.rule_id}`)).json()
+  expect(rule.text).toBe(EDITED)
+  expect(proposalCalls).toEqual([])
+  await realAndClean(['llm_error'])
 })
