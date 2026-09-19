@@ -15,6 +15,7 @@ Start with the [root README](../README.md) for what the system does, then:
 | [scale-and-cost.md](scale-and-cost.md) | Measured throughput and capacity limits (engine to 50k invoices, OCR, storage), rate limits, the cost formula (tokens, infrastructure, people), four deployment scenarios and the scaling plan with triggers |
 | [runbook-batch2.md](runbook-batch2.md) | Saturday's batch 2, ERP update and norm v4, step by step, with rehearsal timings |
 | [mentor-questions.md](mentor-questions.md) | Open doubts about the reference outcomes, how we handle each and what flips it |
+| [feature-ideas.md](feature-ideas.md) | Features other solutions to the challenge build, how, and what each suggests for trace-it |
 | [sources-http.md](sources-http.md) | The HTTP source connector (the ERP): configuration and guarantees |
 | [process-discovery.md](process-discovery.md) | Backend workflow for discovering sources and rules through workbooks, chat and manager review |
 | [ingestion/README.md](ingestion/README.md) | Document ingestion: PDF, OCR, workbook |
