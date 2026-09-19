@@ -129,7 +129,11 @@ async def test_suggests_and_records_an_event(case, monkeypatch) -> None:
     assert context["case"]["file_text"] == "Total: 5000 EUR"
 
     async with session_factory() as s:
-        event = await s.scalar(select(Event).where(Event.instance_id == case["escalated"]))
+        event = await s.scalar(
+            select(Event).where(
+                Event.instance_id == case["escalated"], Event.step == "suggest_escalation"
+            )
+        )
     assert event.step == "suggest_escalation"
     assert event.data["model"] == "fake/model"
     assert event.data["decision"] == "NO_PAGAR"
@@ -154,7 +158,11 @@ async def test_invalid_decision_retries_once(case, monkeypatch) -> None:
     assert suggestion.decision == "NO_PAGAR"
     assert len(calls) == 2
     async with session_factory() as s:
-        event = await s.scalar(select(Event).where(Event.instance_id == case["escalated"]))
+        event = await s.scalar(
+            select(Event).where(
+                Event.instance_id == case["escalated"], Event.step == "suggest_escalation"
+            )
+        )
         run = await s.scalar(
             select(Event).where(Event.trace_id == event.trace_id, Event.step == "llm_run")
         )

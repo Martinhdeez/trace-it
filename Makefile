@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync sources up backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down hiring-data hiring-demo check down reset-db
+.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync sources up backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down hiring-data hiring-demo reviewer-demo-pdfs check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 DEMO_ARGS ?=
@@ -125,6 +125,9 @@ hiring-demo:
 
 hiring-data:  # regenerate processes/hiring-screening/data (deterministic; committed)
 	uv run --project backend --locked python tools/hiring_mock.py
+
+reviewer-demo-pdfs:  # OUT=<folder>: the reviewer agent's demo invoices (docs/reviewer-agent.md)
+	uv run --project backend --locked python tools/reviewer_demo_pdfs.py $(or $(OUT),output/reviewer-demo)
 
 check:
 	cd backend && uv run ruff check . && uv run ruff format --check .

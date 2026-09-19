@@ -65,7 +65,8 @@
       "timeout_seconds": 120,
       "model_settings": {
         "temperature": 0,
-        "max_tokens": 4000
+        "max_tokens": 1500,
+        "openai_reasoning_effort": "none"
       }
     },
     "normalizer": {
