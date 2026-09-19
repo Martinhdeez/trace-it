@@ -68,6 +68,24 @@ export const es = {
     acknowledged: 'Vista',
     resolved: 'Resuelta',
   },
+  proposalKind: {
+    decision: 'Decisión',
+    rule: 'Regla',
+    context: 'Contexto',
+    input: 'Input',
+    source: 'Fuente',
+  },
+  proposalChannel: {
+    escalation: 'Asistente',
+    chat: 'Chat',
+    learning: 'Aprendizaje',
+  },
+  proposalStatus: {
+    open: 'Abierta',
+    accepted: 'Aceptada',
+    rejected: 'Rechazada',
+    superseded: 'Sustituida',
+  },
   alertTrigger: {
     source_sync: 'Cambio en la fuente',
     rule_change: 'Cambio de reglas',

@@ -98,6 +98,11 @@ export function Process() {
     queryFn: () => api.listAlerts(processId, 'open'),
     refetchInterval: 10_000,
   })
+  const proposals = useQuery({
+    queryKey: keys.proposals(processId, 'open'),
+    queryFn: () => api.listProposals(processId, 'open'),
+    enabled: isManager,
+  })
   const findings = useQuery({
     queryKey: keys.findings(processId),
     queryFn: () => api.listFindings(processId),
@@ -285,6 +290,7 @@ export function Process() {
           findings={findings.data?.length ?? 0}
           draftVersion={hasDraft && draft.data ? nextVersion : undefined}
           alerts={alerts.data?.length ?? 0}
+          proposals={proposals.data?.length ?? 0}
         />
 
         <Metrics summary={summary.data} plane={plane.data} providers={providers.data} />
@@ -326,6 +332,7 @@ function Alerts({
   findings,
   draftVersion,
   alerts,
+  proposals,
 }: {
   processId: number
   waiting: number
@@ -333,6 +340,7 @@ function Alerts({
   findings: number
   draftVersion: number | undefined
   alerts: number
+  proposals: number
 }) {
   const items = [
     waiting > 0
@@ -345,6 +353,12 @@ function Alerts({
       ? {
           to: paths.definition(processId),
           text: `${compiling} regla${compiling === 1 ? '' : 's'} compilando. El motor no arranca hasta que terminen.`,
+        }
+      : null,
+    proposals > 0
+      ? {
+          to: paths.definition(processId),
+          text: `${proposals} propuesta${proposals === 1 ? ' espera' : 's esperan'} tu decisión`,
         }
       : null,
     alerts > 0
