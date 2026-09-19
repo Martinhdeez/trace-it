@@ -131,7 +131,10 @@ test('upload two text PDFs and run', async ({ request }) => {
 // The run dialog is still open. Exact text: the run-history row reads "2 ESCALAR · Martín".
 test.fixme('pkg 3: the run shows real progress and `by_decision`', async () => {
   await expect(page.getByText('100%', { exact: true })).toBeVisible()
-  await expect(page.getByText(`${ESCALATED.length} ESCALAR`, { exact: true })).toBeVisible()
+  // The run-history row behind the dialog can read "2 ESCALAR" too: look inside the run panel.
+  const done = page.getByRole('heading', { name: 'Lote completado' })
+  const panel = page.locator('section').filter({ has: done })
+  await expect(panel.getByText(`${ESCALATED.length} ESCALAR`, { exact: true })).toBeVisible()
 })
 
 test('upload a scan and run', async ({ request }) => {
