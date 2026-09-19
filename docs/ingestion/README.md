@@ -8,6 +8,8 @@ The API returns as many field readings as it can from PDF and XLSX. Missing or c
 fields retain available text and alternatives, without document review states.
 NIF, IBAN and purchase order separate verified transcriptions from proposals;
 see [focused verification and measured tradeoffs](focused-verification.md).
+For cache dependencies, pending-document refresh and the difficult scans, see
+[OCR reuse and quality](cache-and-quality.md).
 
 Use the main API, `uv run uvicorn app.main:app --env-file ../.env --workers 1`, from
 `backend/`. Follow the [team setup](../team-guide.md) for PostgreSQL and users.

@@ -7,8 +7,12 @@ import time
 
 from filelock import FileLock
 
+from app.features.ingestion.cache import count_reader
 
-def recorded_call(directory, identity, call):
+
+def recorded_call(directory, identity, call, *, reader=None):
+    if reader:
+        count_reader(reader + "_journal_calls")
     directory.mkdir(parents=True, exist_ok=True)
     fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     path = directory / f"{fingerprint}.json"
@@ -17,11 +21,15 @@ def recorded_call(directory, identity, call):
             record = json.loads(path.read_text(encoding="utf-8"))
             if record["state"] != "complete":
                 raise RuntimeError("Provider delivery uncertain; inspect the request journal")
+            if reader:
+                count_reader(reader + "_cache_hits")
             return record["response"]
         record = {"identity": identity, "state": "started", "started_at": time.time()}
         path.write_text(json.dumps(record), encoding="utf-8")
         started = time.perf_counter()
         try:
+            if reader:
+                count_reader(reader + "_requests")
             record["response"] = call()
             record["state"] = "complete"
         except Exception as exc:

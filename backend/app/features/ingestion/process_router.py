@@ -85,12 +85,28 @@ async def upload_document(
                     raise InvalidDocumentError(
                         "Process documents must be PDF; use /v1/extractions to inspect a workbook"
                     )
+                options = ExtractOptions(
+                    ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or []
+                )
+                instance, stored = await process_service.existing_document(
+                    session, process_id, item, service, options
+                )
+                if stored is not None:
+                    upload = process_service.stored_upload(instance, stored)
+                    span.set(instance_id=instance.id, created=False)
+                    return upload
+                if instance is not None:
+                    upload = await reextract_document(
+                        session, instance.id, user.id, service, options
+                    )
+                    span.set(instance_id=instance.id, created=False)
+                    return upload
                 result, symbols, context = await read_document(
                     session,
                     process_id,
                     service,
                     item,
-                    ExtractOptions(ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or []),
+                    options,
                 )
             except (ValueError, pymupdf.FileDataError) as exc:
                 raise InvalidDocumentError("Invalid or unsupported PDF document") from exc

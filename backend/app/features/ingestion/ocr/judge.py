@@ -22,9 +22,19 @@ class TextJudge:
     def configured(self):
         return bool(self.settings.jev_api_key and self.settings.jev_model)
 
+    def signature(self):
+        return {
+            "endpoint": URL,
+            "model": self.settings.jev_model,
+            "instructions": INSTRUCTIONS,
+            "configured": self.configured,
+        }
+
     def select(self, readers, fields):
         questions = {}
         for name, field in fields.items():
+            if field.status == "OBSERVED":
+                continue
             values = sorted({c.value for c in field.candidates if c.value and not c.error})
             if values:
                 questions[name] = {
@@ -75,6 +85,7 @@ class TextJudge:
             self.settings.data_dir / "provider-journal" / "jev",
             {"endpoint": URL, "payload": payload},
             call,
+            reader="jev",
         )
         return {
             "role": "textual_recommendation_only",

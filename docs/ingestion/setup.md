@@ -235,7 +235,8 @@ reproduce the full committee's results.
 Use a fresh process/database for a comparable run. Uploading a previously
 decided instance does not replace its symbols or decision. The demo compares
 filename and SHA-256 against existing instances: matching `DECIDED` files skip
-OCR and retain stored symbols; matching `PENDING` files are re-extracted. Its
+OCR and retain stored symbols; matching `PENDING` files check extraction, source and schema
+freshness and refresh only when necessary. Its
 `output/extractions.jsonl` records each selected PDF, with `reused: true`
 and stored symbols for a skipped decided file. First load and
 activate the pack as above, then load sources, upload **all** PDFs, and only
