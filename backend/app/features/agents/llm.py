@@ -120,6 +120,12 @@ def resolve(model: Model | str, local_endpoint: str | None = None) -> Model | st
             base_url=settings.helmcode_base_url, api_key=os.environ.get("HELMCODE_API_KEY")
         )
         return OpenAIChatModel(model.removeprefix("helmcode:"), provider=provider)
+    if isinstance(model, str) and model.startswith("vercel:"):
+        provider = OpenAIProvider(
+            base_url=settings.ai_gateway_base_url,
+            api_key=os.environ.get("AI_GATEWAY_API_KEY"),
+        )
+        return OpenAIChatModel(model.removeprefix("vercel:"), provider=provider)
     return model
 
 

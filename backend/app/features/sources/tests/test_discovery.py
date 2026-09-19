@@ -1,6 +1,7 @@
 import hashlib
 
 import pytest
+from pydantic import ValidationError
 
 from app.common.exceptions import ConflictError
 from app.features.processes.draft_schemas import DraftPlan, SourceProposal
@@ -39,8 +40,6 @@ def test_formula_is_not_silently_a_source_of_truth():
 
 
 def test_reversed_model_column_mapping_is_rejected():
-    from pydantic import ValidationError
-
     plan, _ = mapping_data()
     proposed = plan.model_dump()
     proposed["sources"][0]["columns"] = {"A": "supplier_id", "B": "maximum"}
@@ -112,6 +111,60 @@ def test_csv_and_json_assets_use_the_reviewed_mapping_path(name, content, sheet)
 def test_unsupported_evidence_format_is_rejected():
     with pytest.raises(ConflictError, match="Supported evidence formats"):
         discovery.read_asset("policy.pdf", b"not a table")
+
+
+@pytest.mark.parametrize(
+    ("operation", "incoming", "expected"),
+    [
+        ("append", [{"id": "C", "value": 3}], ["A", "B", "C"]),
+        ("upsert", [{"id": "B", "value": 20}, {"id": "C", "value": 3}], ["A", "B", "C"]),
+        ("delete", [{"id": "B"}], ["A"]),
+        ("replace", [{"id": "C", "value": 3}], ["C"]),
+    ],
+)
+def test_typed_source_mutations(operation, incoming, expected):
+    source = SourceProposal(
+        name="reference",
+        kind="constant",
+        explanation="Manager supplied update",
+        rows=incoming,
+        operation=operation,
+        key=["id"] if operation != "replace" else [],
+        evidence=[{"reference": "chat:1", "explanation": "Explicit update"}],
+    )
+    data = {
+        "documents": {},
+        "snapshots": {},
+        "messages": [{}],
+        "base_sources": {"reference": [{"id": "A", "value": 1}, {"id": "B", "value": 2}]},
+    }
+    rows = discovery.materialize(DraftPlan(sources=[source]), data)["reference"]
+    assert [row["id"] for row in rows] == expected
+    if operation == "upsert":
+        assert rows[1] == {"id": "B", "value": 20}
+
+
+def test_source_mutations_reject_duplicate_and_missing_keys():
+    source = SourceProposal(
+        name="reference",
+        kind="constant",
+        explanation="Manager supplied update",
+        rows=[{"id": "A"}],
+        operation="append",
+        key=["id"],
+        evidence=[{"reference": "chat:1", "explanation": "Explicit update"}],
+    )
+    data = {
+        "base_sources": {"reference": [{"id": "A"}]},
+        "documents": {},
+        "snapshots": {},
+        "messages": [{}],
+    }
+    with pytest.raises(ConflictError, match="duplicate mutation key"):
+        discovery.materialize(DraftPlan(sources=[source]), data)
+    source.rows = [{"other": "A"}]
+    with pytest.raises(ValidationError, match="Source key fields are not mapped"):
+        DraftPlan(sources=[source])
 
 
 def test_real_invoice_workbook_inventory_and_mapping():

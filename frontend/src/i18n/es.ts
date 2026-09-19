@@ -135,6 +135,22 @@ export const es = {
     case_changed: 'el caso cambió de decisión',
     superseded: 'hay una sugerencia más nueva',
   },
+  // traceability-gaps (fix/traceability-gaps): the trace pane's sources read, pending work and version.
+  // If merging a newer version from Carlos, keep his UI and preserve: these keys.
+  trace: {
+    sourcesRead: 'fuentes leídas',
+    requests: 'peticiones',
+    retries: 'reintentos',
+    rateLimited: '429',
+    timeouts: 'timeouts',
+    pending: 'pendiente',
+    nothingPending: 'Nada pendiente para este caso.',
+    waitingForPerson: 'Espera a una persona',
+    reviewPending: 'El revisor pide revisarlo',
+    openProposals: 'Propuestas abiertas',
+    openAlerts: 'Alertas abiertas',
+    version: 'Versión',
+  },
   common: {
     loading: 'Cargando…',
     empty: 'Nada por aquí todavía.',

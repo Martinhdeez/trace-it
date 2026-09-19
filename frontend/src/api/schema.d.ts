@@ -3919,6 +3919,8 @@ export interface components {
              * @default []
              */
             sources_read: components["schemas"]["SourceRead"][];
+            pending: components["schemas"]["Pending"];
+            version: components["schemas"]["VersionRef"] | null;
         };
         /** LlmStats */
         LlmStats: {
@@ -4298,6 +4300,39 @@ export interface components {
             encoding: string;
             /** Advertised Size */
             advertised_size: number;
+        };
+        /**
+         * Pending
+         * @description What this instance still waits for: a person, or a manager settling its proposals and
+         *     alerts (`GET /processes/{id}/proposals?instance_id=`, `/alerts?instance_id=`).
+         */
+        Pending: {
+            /** Waiting For Person */
+            waiting_for_person: boolean;
+            /** Review Pending */
+            review_pending: boolean;
+            /** Proposals */
+            proposals: components["schemas"]["PendingItem"][];
+            /** Alerts */
+            alerts: components["schemas"]["PendingItem"][];
+        };
+        /** PendingItem */
+        PendingItem: {
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @example decision
+             * @example rule
+             * @example source_sync
+             * @example rule_change
+             */
+            kind: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /**
          * Plane
@@ -5779,6 +5814,23 @@ export interface components {
             author: string;
             /** Reason */
             reason: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * VersionRef
+         * @description The published process version that took the latest decision.
+         */
+        VersionRef: {
+            /** Id */
+            id: number;
+            /** Number */
+            number: number;
+            /** Author */
+            author: string;
             /**
              * Created At
              * Format: date-time
@@ -9652,6 +9704,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: ("open" | "acknowledged" | "resolved") | null;
+                instance_id?: number | null;
             };
             header?: never;
             path: {
@@ -9823,6 +9876,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: ("open" | "accepted" | "rejected" | "superseded") | null;
+                instance_id?: number | null;
             };
             header?: {
                 "x-user-id"?: number | null;

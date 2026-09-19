@@ -131,12 +131,11 @@ async def save(session, draft_id, revision, data, user, step):
     session.add(
         DiscoveryRevision(draft_id=draft.id, number=draft.revision, author_id=user.id, data=data)
     )
-    events.record(
-        session,
-        step,
-        process_id=draft.process_id,
-        data={"draft_id": draft.id, "revision": draft.revision, "author": user.name},
-    )
+    point = {"draft_id": draft.id, "revision": draft.revision, "author": user.name}
+    if (current := events.current()) and current.step == step:
+        current.set(**point)  # the step's own span says it: one span, never counted twice
+    else:
+        events.record(session, step, process_id=draft.process_id, data=point)
     await session.commit()
     return await output(session, draft.id)
 
@@ -289,15 +288,15 @@ async def message(session, draft_id, body, user):
         with events.span("discuss_process", process_id=draft.process_id, draft_id=draft_id) as span:
             data["trace_id"] = span.trace_id
             answer = await discovery.discuss(data, setups.get("discovery"))
-        data["messages"].append(
-            {
-                "role": "assistant",
-                "text": answer.message,
-                "evidence": answer.evidence,
-                "questions": answer.questions,
-            }
-        )
-        return await save(session, draft_id, body.revision, data, user, "discuss_process")
+            data["messages"].append(
+                {
+                    "role": "assistant",
+                    "text": answer.message,
+                    "evidence": answer.evidence,
+                    "questions": answer.questions,
+                }
+            )
+            return await save(session, draft_id, body.revision, data, user, "discuss_process")
     with events.span("discover_process", draft_id=draft_id, author=user.name) as span:
         data["trace_id"] = span.trace_id
         plan = await discovery.discover(data, setups.get("discovery"))
@@ -435,6 +434,7 @@ async def prepare(session, draft_id, revision, user):
         data["preview"] = await compilation.preview(
             session, draft.process_id, plan, tables, compiled, preview_base
         )
+        data["preview"]["source_mutations"] = evidence_assets.mutation_summary(plan, data, tables)
     if draft.process_id:
         await versions.lock(session, draft.process_id)
     await check_base(session, draft, data, plan)
