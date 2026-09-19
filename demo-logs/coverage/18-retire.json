@@ -1,0 +1,19 @@
+{
+  "id": 16,
+  "process_id": 1,
+  "norm_rule_id": null,
+  "text": "There is at least one instance in `others` with the same normalised `purchase_order`. Each instance in `others` is identified by its `_instance` key (its file name). Reason: the `_instance` values with that purchase order.",
+  "type": "prohibition",
+  "decision": "ESCALAR",
+  "status": "retired",
+  "hash": "f46e28ccb59a217c680dbe87997e5467bf641b9ec1e291d8d707d5a62cf9ce27",
+  "report": {
+    "file": "rules-v3/r16-duplicate-order.py",
+    "valid": true,
+    "origin": "hand-written"
+  },
+  "created_at": "2026-09-19T07:24:01.537090Z",
+  "activated_at": "2026-09-19T07:24:01.696683Z",
+  "code": "from decimal import Decimal, ROUND_HALF_UP\nfrom datetime import date\n\n\ndef text(value):\n    \"\"\"Anything a source or an extractor gives us, as a comparable string.\"\"\"\n    return \"\" if value is None else str(value).strip()\n\n\ndef empty(value):\n    return text(value) == \"\"\n\n\ndef key(value):\n    \"\"\"NIF, IBAN and order references all compare uppercase without separators.\"\"\"\n    return text(value).upper().replace(\" \", \"\").replace(\"-\", \"\").replace(\".\", \"\")\n\n\ndef iban(value):\n    return text(value).upper().replace(\" \", \"\")\n\n\ndef cents(value):\n    return int((Decimal(str(value)) * 100).quantize(Decimal(\"1\"), rounding=ROUND_HALF_UP))\n\n\ndef matches(one, other):\n    \"\"\"The tolerance of the norm: one cent.\"\"\"\n    return abs(cents(one) - cents(other)) <= 1\n\n\ndef rows(sources, name):\n    return sources.get(name) or []\n\n\ndef date_of(value):\n    \"\"\"The printed date as a real date, or None if no such day exists.\"\"\"\n    parts = text(value).split(\"-\")\n    if len(parts) != 3:\n        return None\n    try:\n        return date(int(parts[0]), int(parts[1]), int(parts[2]))\n    except ValueError:\n        return None\n\n\ndef fires(reason):\n    return {\"fires\": True, \"reason\": reason}\n\n\ndef passes():\n    return {\"fires\": False, \"reason\": \"\"}\n\ndef evaluate(instance, sources, others):\n    \"\"\"Another invoice in this process claims the same order.\"\"\"\n    order = key(instance.get(\"purchase_order\"))\n    if not order:\n        return passes()\n    twins = [\n        text(other.get(\"_instance\"))\n        for other in others\n        if key(other.get(\"purchase_order\")) == order\n    ]\n    if twins:\n        return fires(\"Same order as: \" + \", \".join(sorted(twins)))\n    return passes()\n",
+  "tests": null
+}

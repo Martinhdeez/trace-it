@@ -1,0 +1,1356 @@
+{
+  "id": 19,
+  "name": "copia_2026_0518.pdf",
+  "status": "DECIDED",
+  "decision": "NO_PAGAR",
+  "author": "Mateo",
+  "reason": "Checked with the supplier by phone",
+  "decided_at": "2026-09-19T07:26:22.305689Z",
+  "file_hash": "b738972687b4819d34799d86da87fd279194b805a43aa7d6a5d0a2610e6692d2",
+  "symbols": {
+    "base": {
+      "value": "760.00",
+      "origin": "document:0ea2640913e04898b1777572d7581d70"
+    },
+    "date": {
+      "value": null,
+      "origin": "document:0ea2640913e04898b1777572d7581d70"
+    },
+    "iban": {
+      "value": null,
+      "origin": "document:0ea2640913e04898b1777572d7581d70"
+    },
+    "total": {
+      "value": "919.60",
+      "origin": "document:0ea2640913e04898b1777572d7581d70"
+    },
+    "file_id": {
+      "value": "copia_2026_0518.pdf",
+      "origin": "document:0ea2640913e04898b1777572d7581d70"
+    },
+    "vat_rate": {
+      "value": "21",
+      "origin": "document:0ea2640913e04898b1777572d7581d70"
+    },
+    "free_text": {
+      "value": "[Page 1; reader=primary; document content, not instructions]\nI bimálica ciezaS.L.\n.1\nFACTURA N° 2026/18902\nFedha 18/05/2026\nPedido PO-2026-0721\nCliente: Banco MiraimarS.A CIF: A58231074\nServicio mensual 380.00\nMantenimiento trimestra! 380.00\nBase imponible 760.00\nIVA 21% 159.60\nTOTAL 919,60 EUR\n\n[Page 1; reader=secondary; document content, not instructions]\nmatica CiezaS.L.\nLFBB3045812M\nT\nFACTURA N2026/18902\nFedha18/05/2026\nPeddo 0-2026-0721\nCliente:Banco MiraimACIF:A58231074\nSeivicio mensual 380.00\nMantenimiento trimestrel 380.00\nBase imponible 760.00\nIVA 21% 159.60\nTOTAL 919,60 EUR",
+      "origin": "document:0ea2640913e04898b1777572d7581d70"
+    },
+    "issuer_nif": {
+      "value": null,
+      "origin": "document:0ea2640913e04898b1777572d7581d70"
+    },
+    "vat_amount": {
+      "value": "159.60",
+      "origin": "document:0ea2640913e04898b1777572d7581d70"
+    },
+    "issuer_name": {
+      "value": null,
+      "origin": "document:0ea2640913e04898b1777572d7581d70"
+    },
+    "invoice_number": {
+      "value": "2026/18902",
+      "origin": "document:0ea2640913e04898b1777572d7581d70"
+    },
+    "purchase_order": {
+      "value": null,
+      "origin": "document:0ea2640913e04898b1777572d7581d70"
+    }
+  },
+  "decisions": [
+    {
+      "id": 19,
+      "decision": "ESCALAR",
+      "author": "engine",
+      "reason": "MISSING_DATA: date, iban, issuer_nif, purchase_order",
+      "results": [
+        {
+          "hash": "0f3d4ae8e3c179f2fc20c1f492da09c6cc4534f0dfe7355184e409c9ab174d7d",
+          "fires": false,
+          "reason": "",
+          "rule_id": 17
+        },
+        {
+          "hash": "398ce6ff3b64231619db75e20a5ce141a0909cd41b15728aef8643695d850086",
+          "fires": false,
+          "reason": "",
+          "rule_id": 18
+        },
+        {
+          "hash": "8c644c4a18e37de48236e94412e27d91d3e5319e5c87ce00484f0522010d8b0e",
+          "fires": false,
+          "reason": "",
+          "rule_id": 19
+        },
+        {
+          "hash": "6c1e050598deec43939396a62dc37f0ff8841bb4f735c42c5b972f216da08337",
+          "fires": false,
+          "reason": "",
+          "rule_id": 20
+        },
+        {
+          "hash": "ba9561a63ed5c1cb18f14365e5b4d3fdd32752df36c4ba7062f2b5c3e6f38cdd",
+          "fires": false,
+          "reason": "",
+          "rule_id": 21
+        },
+        {
+          "hash": "66d797c1630f2b3d8b192ca58ca963d29041d558c124dcab41d68a3a80488ddd",
+          "fires": false,
+          "reason": "",
+          "rule_id": 22
+        },
+        {
+          "hash": "09a9864f7139f8d1a9d4af29d023ff67e35c0459105c969f09c23d95582dcb43",
+          "fires": false,
+          "reason": "",
+          "rule_id": 23
+        },
+        {
+          "hash": "f59b47c69d5bb68041770d78d3f891e68a08b045684349a562d7979e30962d54",
+          "fires": false,
+          "reason": "",
+          "rule_id": 24
+        },
+        {
+          "hash": "16b3f7d6bed9a7b2edd3baa315de26d0b23011eaa6b6707a26f142eb63ed282c",
+          "fires": false,
+          "reason": "",
+          "rule_id": 25
+        },
+        {
+          "hash": "c7875ec52ebb115c98ad742cd7480c62e70a1706fb98a2d6df84bdc2ee9b19e7",
+          "fires": false,
+          "reason": "",
+          "rule_id": 26
+        },
+        {
+          "hash": "76e32fb9e9dca32f8b1849f0933d309ff809656dd1a9796e97e6e9d394334125",
+          "fires": false,
+          "reason": "",
+          "rule_id": 27
+        },
+        {
+          "hash": "8e88465527489e8a3f9093d599f0aad3b21ae0d1d51012e8dc5d185118a3a0fd",
+          "fires": false,
+          "reason": "",
+          "rule_id": 28
+        }
+      ],
+      "rules_hash": "ef8aa3ec38a2fddc541065938260c01716b7edd1b218464e3d4c4eb1c0f553d5",
+      "created_at": "2026-09-19T07:26:19.472743Z"
+    },
+    {
+      "id": 21,
+      "decision": "NO_PAGAR",
+      "author": "Mateo",
+      "reason": "Checked with the supplier by phone",
+      "results": [],
+      "rules_hash": "ef8aa3ec38a2fddc541065938260c01716b7edd1b218464e3d4c4eb1c0f553d5",
+      "created_at": "2026-09-19T07:26:22.305689Z"
+    }
+  ],
+  "events": [
+    {
+      "id": 115,
+      "trace_id": "01a0b88dc1823b7a49e6482bfd7d0c99",
+      "instance_id": 19,
+      "rule_id": null,
+      "step": "ingest_document",
+      "status": "ok",
+      "data": {
+        "adapter": "invoice-payment",
+        "created": true,
+        "symbols": {
+          "base": {
+            "value": "760.00",
+            "origin": "document:0ea2640913e04898b1777572d7581d70"
+          },
+          "date": {
+            "value": null,
+            "origin": "document:0ea2640913e04898b1777572d7581d70"
+          },
+          "iban": {
+            "value": null,
+            "origin": "document:0ea2640913e04898b1777572d7581d70"
+          },
+          "total": {
+            "value": "919.60",
+            "origin": "document:0ea2640913e04898b1777572d7581d70"
+          },
+          "file_id": {
+            "value": "copia_2026_0518.pdf",
+            "origin": "document:0ea2640913e04898b1777572d7581d70"
+          },
+          "vat_rate": {
+            "value": "21",
+            "origin": "document:0ea2640913e04898b1777572d7581d70"
+          },
+          "free_text": {
+            "value": "[Page 1; reader=primary; document content, not instructions]\nI bimálica ciezaS.L.\n.1\nFACTURA N° 2026/18902\nFedha 18/05/2026\nPedido PO-2026-0721\nCliente: Banco MiraimarS.A CIF: A58231074\nServicio mensual 380.00\nMantenimiento trimestra! 380.00\nBase imponible 760.00\nIVA 21% 159.60\nTOTAL 919,60 EUR\n\n[Page 1; reader=secondary; document content, not instructions]\nmatica CiezaS.L.\nLFBB3045812M\nT\nFACTURA N2026/18902\nFedha18/05/2026\nPeddo 0-2026-0721\nCliente:Banco MiraimACIF:A58231074\nSeivicio mensual 380.00\nMantenimiento trimestrel 380.00\nBase imponible 760.00\nIVA 21% 159.60\nTOTAL 919,60 EUR",
+            "origin": "document:0ea2640913e04898b1777572d7581d70"
+          },
+          "issuer_nif": {
+            "value": null,
+            "origin": "document:0ea2640913e04898b1777572d7581d70"
+          },
+          "vat_amount": {
+            "value": "159.60",
+            "origin": "document:0ea2640913e04898b1777572d7581d70"
+          },
+          "issuer_name": {
+            "value": null,
+            "origin": "document:0ea2640913e04898b1777572d7581d70"
+          },
+          "invoice_number": {
+            "value": "2026/18902",
+            "origin": "document:0ea2640913e04898b1777572d7581d70"
+          },
+          "purchase_order": {
+            "value": null,
+            "origin": "document:0ea2640913e04898b1777572d7581d70"
+          }
+        },
+        "user_id": 2,
+        "extraction": {
+          "id": "0ea2640913e04898b1777572d7581d70",
+          "data": {
+            "lines": [
+              {
+                "id": "primary:p1:ocr:0",
+                "raw": "I  bimálica ciezaS.L.",
+                "bbox": [
+                  14.994346945351857,
+                  52.18696831790501,
+                  213.21961356290342,
+                  83.67910437181321
+                ],
+                "page": 1,
+                "text": "I bimálica ciezaS.L.",
+                "method": "ocr",
+                "confidence": 0.76273,
+                "preprocessing": []
+              },
+              {
+                "id": "primary:p1:ocr:1",
+                "raw": " .1",
+                "bbox": [
+                  62.9762571704778,
+                  72.88180058190183,
+                  225.81486499699898,
+                  106.47341237273724
+                ],
+                "page": 1,
+                "text": ".1",
+                "method": "ocr",
+                "confidence": 0.58584,
+                "preprocessing": []
+              },
+              {
+                "id": "primary:p1:ocr:2",
+                "raw": "FACTURA N° 2026/18902",
+                "bbox": [
+                  76.47116942129448,
+                  127.46816974200938,
+                  203.02345764006415,
+                  145.16375095325304
+                ],
+                "page": 1,
+                "text": "FACTURA N° 2026/18902",
+                "method": "ocr",
+                "confidence": 0.97684,
+                "preprocessing": []
+              },
+              {
+                "id": "primary:p1:ocr:3",
+                "raw": "Fedha 18/05/2026",
+                "bbox": [
+                  76.17128248238744,
+                  146.06352626907898,
+                  155.64132129275228,
+                  160.45993132229415
+                ],
+                "page": 1,
+                "text": "Fedha 18/05/2026",
+                "method": "ocr",
+                "confidence": 0.97585,
+                "preprocessing": []
+              },
+              {
+                "id": "primary:p1:ocr:4",
+                "raw": "Pedido PO-2026-0721",
+                "bbox": [
+                  74.07207391003818,
+                  162.55940705922137,
+                  171.53532905482527,
+                  181.15476358629098
+                ],
+                "page": 1,
+                "text": "Pedido PO-2026-0721",
+                "method": "ocr",
+                "confidence": 0.88939,
+                "preprocessing": []
+              },
+              {
+                "id": "primary:p1:ocr:5",
+                "raw": "Cliente: Banco MiraimarS.A  CIF: A58231074",
+                "bbox": [
+                  72.87252615441002,
+                  187.4531907970726,
+                  278.89485318354457,
+                  212.04704942964855
+                ],
+                "page": 1,
+                "text": "Cliente: Banco MiraimarS.A CIF: A58231074",
+                "method": "ocr",
+                "confidence": 0.90532,
+                "preprocessing": []
+              },
+              {
+                "id": "primary:p1:ocr:6",
+                "raw": "Servicio mensual   380.00",
+                "bbox": [
+                  73.77218697113113,
+                  221.64465279845865,
+                  239.90955112562972,
+                  239.94008422025294
+                ],
+                "page": 1,
+                "text": "Servicio mensual 380.00",
+                "method": "ocr",
+                "confidence": 0.9401,
+                "preprocessing": []
+              },
+              {
+                "id": "primary:p1:ocr:7",
+                "raw": "Mantenimiento trimestra!   380.00",
+                "bbox": [
+                  73.17241309331706,
+                  240.24000932552826,
+                  249.20604623174788,
+                  259.13529095787317
+                ],
+                "page": 1,
+                "text": "Mantenimiento trimestra! 380.00",
+                "method": "ocr",
+                "confidence": 0.97915,
+                "preprocessing": []
+              },
+              {
+                "id": "primary:p1:ocr:8",
+                "raw": "Base imponible   760.00",
+                "bbox": [
+                  71.97286533768892,
+                  270.83237006361054,
+                  215.91859601306675,
+                  288.52795127485416
+                ],
+                "page": 1,
+                "text": "Base imponible 760.00",
+                "method": "ocr",
+                "confidence": 0.98121,
+                "preprocessing": []
+              },
+              {
+                "id": "primary:p1:ocr:9",
+                "raw": "IVA 21%   159.60",
+                "bbox": [
+                  71.37309145987484,
+                  288.52795127485416,
+                  207.2218747847627,
+                  305.9236073808225
+                ],
+                "page": 1,
+                "text": "IVA 21% 159.60",
+                "method": "ocr",
+                "confidence": 0.99366,
+                "preprocessing": []
+              },
+              {
+                "id": "primary:p1:ocr:10",
+                "raw": "TOTAL   919,60 EUR",
+                "bbox": [
+                  69.57376982643262,
+                  306.22353248609784,
+                  243.50819439251418,
+                  328.1180651711959
+                ],
+                "page": 1,
+                "text": "TOTAL 919,60 EUR",
+                "method": "ocr",
+                "confidence": 0.97676,
+                "preprocessing": []
+              },
+              {
+                "id": "secondary:p1:ocr-verify:0",
+                "raw": "matica CiezaS.L.",
+                "bbox": [
+                  14.994346945351857,
+                  52.18696831790501,
+                  213.21961356290342,
+                  83.67910437181321
+                ],
+                "page": 1,
+                "text": "matica CiezaS.L.",
+                "method": "ocr",
+                "confidence": 0.87709,
+                "preprocessing": []
+              },
+              {
+                "id": "secondary:p1:ocr-verify:1",
+                "raw": "LFBB3045812M",
+                "bbox": [
+                  62.9762571704778,
+                  72.88180058190183,
+                  225.81486499699898,
+                  106.47341237273724
+                ],
+                "page": 1,
+                "text": "LFBB3045812M",
+                "method": "ocr",
+                "confidence": 0.71879,
+                "preprocessing": []
+              },
+              {
+                "id": "secondary:p1:ocr-verify:2",
+                "raw": "T",
+                "bbox": [
+                  82.16902126052818,
+                  108.27296300438914,
+                  160.73939925417193,
+                  130.46742079476255
+                ],
+                "page": 1,
+                "text": "T",
+                "method": "ocr",
+                "confidence": 0.56067,
+                "preprocessing": []
+              },
+              {
+                "id": "secondary:p1:ocr-verify:3",
+                "raw": "FACTURA N2026/18902",
+                "bbox": [
+                  76.47116942129448,
+                  127.46816974200938,
+                  203.02345764006415,
+                  145.16375095325304
+                ],
+                "page": 1,
+                "text": "FACTURA N2026/18902",
+                "method": "ocr",
+                "confidence": 0.96368,
+                "preprocessing": []
+              },
+              {
+                "id": "secondary:p1:ocr-verify:4",
+                "raw": "Fedha18/05/2026",
+                "bbox": [
+                  76.17128248238744,
+                  146.06352626907898,
+                  155.64132129275228,
+                  160.45993132229415
+                ],
+                "page": 1,
+                "text": "Fedha18/05/2026",
+                "method": "ocr",
+                "confidence": 0.92012,
+                "preprocessing": []
+              },
+              {
+                "id": "secondary:p1:ocr-verify:5",
+                "raw": "Peddo 0-2026-0721",
+                "bbox": [
+                  74.07207391003818,
+                  162.55940705922137,
+                  171.53532905482527,
+                  181.15476358629098
+                ],
+                "page": 1,
+                "text": "Peddo 0-2026-0721",
+                "method": "ocr",
+                "confidence": 0.86944,
+                "preprocessing": []
+              },
+              {
+                "id": "secondary:p1:ocr-verify:6",
+                "raw": "Cliente:Banco MiraimACIF:A58231074",
+                "bbox": [
+                  72.87252615441002,
+                  187.4531907970726,
+                  278.89485318354457,
+                  212.04704942964855
+                ],
+                "page": 1,
+                "text": "Cliente:Banco MiraimACIF:A58231074",
+                "method": "ocr",
+                "confidence": 0.88546,
+                "preprocessing": []
+              },
+              {
+                "id": "secondary:p1:ocr-verify:7",
+                "raw": "Seivicio mensual   380.00",
+                "bbox": [
+                  73.77218697113113,
+                  221.64465279845865,
+                  239.90955112562972,
+                  239.94008422025294
+                ],
+                "page": 1,
+                "text": "Seivicio mensual 380.00",
+                "method": "ocr",
+                "confidence": 0.95252,
+                "preprocessing": []
+              },
+              {
+                "id": "secondary:p1:ocr-verify:8",
+                "raw": "Mantenimiento trimestrel   380.00",
+                "bbox": [
+                  73.17241309331706,
+                  240.24000932552826,
+                  249.20604623174788,
+                  259.13529095787317
+                ],
+                "page": 1,
+                "text": "Mantenimiento trimestrel 380.00",
+                "method": "ocr",
+                "confidence": 0.92274,
+                "preprocessing": []
+              },
+              {
+                "id": "secondary:p1:ocr-verify:9",
+                "raw": "Base imponible   760.00",
+                "bbox": [
+                  71.97286533768892,
+                  270.83237006361054,
+                  215.91859601306675,
+                  288.52795127485416
+                ],
+                "page": 1,
+                "text": "Base imponible 760.00",
+                "method": "ocr",
+                "confidence": 0.91648,
+                "preprocessing": []
+              },
+              {
+                "id": "secondary:p1:ocr-verify:10",
+                "raw": "IVA 21%   159.60",
+                "bbox": [
+                  71.37309145987484,
+                  288.52795127485416,
+                  207.2218747847627,
+                  305.9236073808225
+                ],
+                "page": 1,
+                "text": "IVA 21% 159.60",
+                "method": "ocr",
+                "confidence": 0.92157,
+                "preprocessing": []
+              },
+              {
+                "id": "secondary:p1:ocr-verify:11",
+                "raw": "TOTAL   919,60 EUR",
+                "bbox": [
+                  69.57376982643262,
+                  306.22353248609784,
+                  243.50819439251418,
+                  328.1180651711959
+                ],
+                "page": 1,
+                "text": "TOTAL 919,60 EUR",
+                "method": "ocr",
+                "confidence": 0.96649,
+                "preprocessing": []
+              }
+            ],
+            "committee": {
+              "fields": {
+                "currency": {
+                  "reason": "corroborated",
+                  "support": {
+                    "EUR": [
+                      "primary",
+                      "secondary"
+                    ]
+                  }
+                },
+                "vat_rate": {
+                  "reason": "corroborated",
+                  "support": {
+                    "21": [
+                      "primary",
+                      "secondary"
+                    ]
+                  }
+                },
+                "issued_on": {
+                  "reason": "no_candidate",
+                  "support": {}
+                },
+                "net_amount": {
+                  "reason": "corroborated",
+                  "support": {
+                    "760.00": [
+                      "primary",
+                      "secondary"
+                    ]
+                  }
+                },
+                "vat_amount": {
+                  "reason": "corroborated",
+                  "support": {
+                    "159.60": [
+                      "primary",
+                      "secondary"
+                    ]
+                  }
+                },
+                "gross_amount": {
+                  "reason": "corroborated",
+                  "support": {
+                    "919.60": [
+                      "primary",
+                      "secondary"
+                    ]
+                  }
+                },
+                "payment_iban": {
+                  "reason": "no_candidate",
+                  "support": {}
+                },
+                "invoice_number": {
+                  "reason": "conflicting_evidence",
+                  "support": {
+                    "2026/18902": [
+                      "primary"
+                    ],
+                    "N2026/18902": [
+                      "secondary"
+                    ]
+                  }
+                },
+                "supplier_tax_id": {
+                  "reason": "no_candidate",
+                  "support": {}
+                },
+                "purchase_order_ref": {
+                  "reason": "insufficient_independent_support",
+                  "support": {}
+                }
+              },
+              "policy": "committee-v1",
+              "readers": [
+                "native",
+                "primary",
+                "secondary"
+              ],
+              "text_judge": {}
+            },
+            "provenance": {
+              "ocr_dpi": 240,
+              "options": {
+                "jev": null,
+                "ocr": true,
+                "vlm": null,
+                "verify_fields": []
+              },
+              "ocr_models": {
+                "det": {
+                  "repo": "PaddlePaddle/PP-OCRv5_mobile_det_onnx",
+                  "sha256": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
+                  "revision": "df0bd9dee2bc627e80a2a1798ccab35a332e22d6"
+                },
+                "rec": {
+                  "repo": "PaddlePaddle/latin_PP-OCRv5_mobile_rec_onnx",
+                  "sha256": "7888113072263cb471b93f66dd5e2ad70548dc526fa1ace760d0d973dd121498",
+                  "revision": "89d3a50e2c27e2e7cceeab0e944c25c807d5db4f"
+                },
+                "keys_sha256": "ccbcc45730b3fbbd9050c5bc74db6a99067141ef1035e3d14889a84a6b9b1aff",
+                "verification": {
+                  "det": {
+                    "repo": "PaddlePaddle/PP-OCRv5_mobile_det_onnx",
+                    "sha256": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
+                    "revision": "df0bd9dee2bc627e80a2a1798ccab35a332e22d6"
+                  },
+                  "rec": {
+                    "repo": "PaddlePaddle/PP-OCRv5_server_rec_onnx",
+                    "sha256": "d9dc333c9c7b042c6dffb8e33d72b6f65c9c1d463d0a3c2f78174fea55e94752",
+                    "revision": "b70df217f4fd99d14f970bad092cebe7d74cc4d1"
+                  },
+                  "keys_sha256": "d1979e9f794c464c0d2e0b70a7fe14dd978e9dc644c0e71f14158cdf8342af1b"
+                }
+              },
+              "visual_model": null,
+              "pipeline_version": "invoice-v2.1.4+xlsx-v1.3",
+              "text_judge_model": null
+            },
+            "ocr_verification": {
+              "currency": {
+                "agrees": true,
+                "candidates": [
+                  {
+                    "raw": "EUR",
+                    "error": null,
+                    "value": "EUR",
+                    "evidence": {
+                      "bbox": [
+                        69.57376982643262,
+                        306.22353248609784,
+                        243.50819439251418,
+                        328.1180651711959
+                      ],
+                      "page": 1,
+                      "text": "TOTAL   919,60 EUR",
+                      "method": "ocr",
+                      "locator": "secondary:p1:ocr-verify:11",
+                      "confidence": 0.96649,
+                      "preprocessing": []
+                    }
+                  }
+                ]
+              },
+              "vat_rate": {
+                "agrees": true,
+                "candidates": [
+                  {
+                    "raw": "21",
+                    "error": null,
+                    "value": "21",
+                    "evidence": {
+                      "bbox": [
+                        71.37309145987484,
+                        288.52795127485416,
+                        207.2218747847627,
+                        305.9236073808225
+                      ],
+                      "page": 1,
+                      "text": "IVA 21%   159.60",
+                      "method": "ocr",
+                      "locator": "secondary:p1:ocr-verify:10",
+                      "confidence": 0.92157,
+                      "preprocessing": []
+                    }
+                  }
+                ]
+              },
+              "issued_on": {
+                "agrees": false,
+                "candidates": []
+              },
+              "net_amount": {
+                "agrees": true,
+                "candidates": [
+                  {
+                    "raw": "760.00",
+                    "error": null,
+                    "value": "760.00",
+                    "evidence": {
+                      "bbox": [
+                        71.97286533768892,
+                        270.83237006361054,
+                        215.91859601306675,
+                        288.52795127485416
+                      ],
+                      "page": 1,
+                      "text": "Base imponible   760.00",
+                      "method": "ocr",
+                      "locator": "secondary:p1:ocr-verify:9",
+                      "confidence": 0.91648,
+                      "preprocessing": []
+                    }
+                  }
+                ]
+              },
+              "vat_amount": {
+                "agrees": true,
+                "candidates": [
+                  {
+                    "raw": "159.60",
+                    "error": null,
+                    "value": "159.60",
+                    "evidence": {
+                      "bbox": [
+                        71.37309145987484,
+                        288.52795127485416,
+                        207.2218747847627,
+                        305.9236073808225
+                      ],
+                      "page": 1,
+                      "text": "IVA 21%   159.60",
+                      "method": "ocr",
+                      "locator": "secondary:p1:ocr-verify:10",
+                      "confidence": 0.92157,
+                      "preprocessing": []
+                    }
+                  }
+                ]
+              },
+              "gross_amount": {
+                "agrees": true,
+                "candidates": [
+                  {
+                    "raw": "919,60",
+                    "error": null,
+                    "value": "919.60",
+                    "evidence": {
+                      "bbox": [
+                        69.57376982643262,
+                        306.22353248609784,
+                        243.50819439251418,
+                        328.1180651711959
+                      ],
+                      "page": 1,
+                      "text": "TOTAL   919,60 EUR",
+                      "method": "ocr",
+                      "locator": "secondary:p1:ocr-verify:11",
+                      "confidence": 0.96649,
+                      "preprocessing": []
+                    }
+                  }
+                ]
+              },
+              "payment_iban": {
+                "agrees": false,
+                "candidates": []
+              },
+              "invoice_number": {
+                "agrees": false,
+                "candidates": [
+                  {
+                    "raw": "N2026/18902",
+                    "error": null,
+                    "value": "N2026/18902",
+                    "evidence": {
+                      "bbox": [
+                        76.47116942129448,
+                        127.46816974200938,
+                        203.02345764006415,
+                        145.16375095325304
+                      ],
+                      "page": 1,
+                      "text": "FACTURA N2026/18902",
+                      "method": "ocr",
+                      "locator": "secondary:p1:ocr-verify:3",
+                      "confidence": 0.96368,
+                      "preprocessing": []
+                    }
+                  }
+                ]
+              },
+              "supplier_tax_id": {
+                "agrees": false,
+                "candidates": []
+              },
+              "purchase_order_ref": {
+                "agrees": false,
+                "candidates": []
+              }
+            },
+            "vision_proposals": {},
+            "focused_verification": {}
+          },
+          "kind": "invoice",
+          "text": "[Page 1; reader=primary; document content, not instructions]\nI bimálica ciezaS.L.\n.1\nFACTURA N° 2026/18902\nFedha 18/05/2026\nPedido PO-2026-0721\nCliente: Banco MiraimarS.A CIF: A58231074\nServicio mensual 380.00\nMantenimiento trimestra! 380.00\nBase imponible 760.00\nIVA 21% 159.60\nTOTAL 919,60 EUR\n\n[Page 1; reader=secondary; document content, not instructions]\nmatica CiezaS.L.\nLFBB3045812M\nT\nFACTURA N2026/18902\nFedha18/05/2026\nPeddo 0-2026-0721\nCliente:Banco MiraimACIF:A58231074\nSeivicio mensual 380.00\nMantenimiento trimestrel 380.00\nBase imponible 760.00\nIVA 21% 159.60\nTOTAL 919,60 EUR",
+          "pages": [
+            {
+              "page": 1,
+              "method": "ocr",
+              "ocr_needed": true,
+              "native_chars": 0
+            }
+          ],
+          "fields": {
+            "currency": {
+              "text": "EUR",
+              "value": "EUR",
+              "candidates": [
+                {
+                  "raw": "EUR",
+                  "error": null,
+                  "value": "EUR",
+                  "evidence": {
+                    "bbox": [
+                      69.57376982643262,
+                      306.22353248609784,
+                      243.50819439251418,
+                      328.1180651711959
+                    ],
+                    "page": 1,
+                    "text": "TOTAL   919,60 EUR",
+                    "method": "ocr",
+                    "locator": "primary:p1:ocr:10",
+                    "confidence": 0.97676,
+                    "preprocessing": []
+                  }
+                },
+                {
+                  "raw": "EUR",
+                  "error": null,
+                  "value": "EUR",
+                  "evidence": {
+                    "bbox": [
+                      69.57376982643262,
+                      306.22353248609784,
+                      243.50819439251418,
+                      328.1180651711959
+                    ],
+                    "page": 1,
+                    "text": "TOTAL   919,60 EUR",
+                    "method": "ocr",
+                    "locator": "secondary:p1:ocr-verify:11",
+                    "confidence": 0.96649,
+                    "preprocessing": []
+                  }
+                }
+              ],
+              "confidence": 0.97676,
+              "proposed_by": "reader_agreement",
+              "selected_by": "reader_agreement",
+              "verification": "verified",
+              "proposed_value": "EUR",
+              "agreeing_readers": [
+                "primary",
+                "secondary"
+              ],
+              "verification_reason": "corroborated"
+            },
+            "vat_rate": {
+              "text": "21",
+              "value": "21",
+              "candidates": [
+                {
+                  "raw": "21",
+                  "error": null,
+                  "value": "21",
+                  "evidence": {
+                    "bbox": [
+                      71.37309145987484,
+                      288.52795127485416,
+                      207.2218747847627,
+                      305.9236073808225
+                    ],
+                    "page": 1,
+                    "text": "IVA 21%   159.60",
+                    "method": "ocr",
+                    "locator": "primary:p1:ocr:9",
+                    "confidence": 0.99366,
+                    "preprocessing": []
+                  }
+                },
+                {
+                  "raw": "21",
+                  "error": null,
+                  "value": "21",
+                  "evidence": {
+                    "bbox": [
+                      71.37309145987484,
+                      288.52795127485416,
+                      207.2218747847627,
+                      305.9236073808225
+                    ],
+                    "page": 1,
+                    "text": "IVA 21%   159.60",
+                    "method": "ocr",
+                    "locator": "secondary:p1:ocr-verify:10",
+                    "confidence": 0.92157,
+                    "preprocessing": []
+                  }
+                }
+              ],
+              "confidence": 0.99366,
+              "proposed_by": "reader_agreement",
+              "selected_by": "reader_agreement",
+              "verification": "verified",
+              "proposed_value": "21",
+              "agreeing_readers": [
+                "primary",
+                "secondary"
+              ],
+              "verification_reason": "corroborated"
+            },
+            "issued_on": {
+              "text": null,
+              "value": null,
+              "candidates": [],
+              "confidence": null,
+              "proposed_by": null,
+              "selected_by": null,
+              "verification": "missing",
+              "proposed_value": null,
+              "agreeing_readers": [],
+              "verification_reason": "no_candidate"
+            },
+            "net_amount": {
+              "text": "760.00",
+              "value": "760.00",
+              "candidates": [
+                {
+                  "raw": "760.00",
+                  "error": null,
+                  "value": "760.00",
+                  "evidence": {
+                    "bbox": [
+                      71.97286533768892,
+                      270.83237006361054,
+                      215.91859601306675,
+                      288.52795127485416
+                    ],
+                    "page": 1,
+                    "text": "Base imponible   760.00",
+                    "method": "ocr",
+                    "locator": "primary:p1:ocr:8",
+                    "confidence": 0.98121,
+                    "preprocessing": []
+                  }
+                },
+                {
+                  "raw": "760.00",
+                  "error": null,
+                  "value": "760.00",
+                  "evidence": {
+                    "bbox": [
+                      71.97286533768892,
+                      270.83237006361054,
+                      215.91859601306675,
+                      288.52795127485416
+                    ],
+                    "page": 1,
+                    "text": "Base imponible   760.00",
+                    "method": "ocr",
+                    "locator": "secondary:p1:ocr-verify:9",
+                    "confidence": 0.91648,
+                    "preprocessing": []
+                  }
+                }
+              ],
+              "confidence": 0.98121,
+              "proposed_by": "reader_agreement",
+              "selected_by": "reader_agreement",
+              "verification": "verified",
+              "proposed_value": "760.00",
+              "agreeing_readers": [
+                "primary",
+                "secondary"
+              ],
+              "verification_reason": "corroborated"
+            },
+            "vat_amount": {
+              "text": "159.60",
+              "value": "159.60",
+              "candidates": [
+                {
+                  "raw": "159.60",
+                  "error": null,
+                  "value": "159.60",
+                  "evidence": {
+                    "bbox": [
+                      71.37309145987484,
+                      288.52795127485416,
+                      207.2218747847627,
+                      305.9236073808225
+                    ],
+                    "page": 1,
+                    "text": "IVA 21%   159.60",
+                    "method": "ocr",
+                    "locator": "primary:p1:ocr:9",
+                    "confidence": 0.99366,
+                    "preprocessing": []
+                  }
+                },
+                {
+                  "raw": "159.60",
+                  "error": null,
+                  "value": "159.60",
+                  "evidence": {
+                    "bbox": [
+                      71.37309145987484,
+                      288.52795127485416,
+                      207.2218747847627,
+                      305.9236073808225
+                    ],
+                    "page": 1,
+                    "text": "IVA 21%   159.60",
+                    "method": "ocr",
+                    "locator": "secondary:p1:ocr-verify:10",
+                    "confidence": 0.92157,
+                    "preprocessing": []
+                  }
+                }
+              ],
+              "confidence": 0.99366,
+              "proposed_by": "reader_agreement",
+              "selected_by": "reader_agreement",
+              "verification": "verified",
+              "proposed_value": "159.60",
+              "agreeing_readers": [
+                "primary",
+                "secondary"
+              ],
+              "verification_reason": "corroborated"
+            },
+            "gross_amount": {
+              "text": "919,60",
+              "value": "919.60",
+              "candidates": [
+                {
+                  "raw": "919,60",
+                  "error": null,
+                  "value": "919.60",
+                  "evidence": {
+                    "bbox": [
+                      69.57376982643262,
+                      306.22353248609784,
+                      243.50819439251418,
+                      328.1180651711959
+                    ],
+                    "page": 1,
+                    "text": "TOTAL   919,60 EUR",
+                    "method": "ocr",
+                    "locator": "primary:p1:ocr:10",
+                    "confidence": 0.97676,
+                    "preprocessing": []
+                  }
+                },
+                {
+                  "raw": "919,60",
+                  "error": null,
+                  "value": "919.60",
+                  "evidence": {
+                    "bbox": [
+                      69.57376982643262,
+                      306.22353248609784,
+                      243.50819439251418,
+                      328.1180651711959
+                    ],
+                    "page": 1,
+                    "text": "TOTAL   919,60 EUR",
+                    "method": "ocr",
+                    "locator": "secondary:p1:ocr-verify:11",
+                    "confidence": 0.96649,
+                    "preprocessing": []
+                  }
+                }
+              ],
+              "confidence": 0.97676,
+              "proposed_by": "reader_agreement",
+              "selected_by": "reader_agreement",
+              "verification": "verified",
+              "proposed_value": "919.60",
+              "agreeing_readers": [
+                "primary",
+                "secondary"
+              ],
+              "verification_reason": "corroborated"
+            },
+            "payment_iban": {
+              "text": null,
+              "value": null,
+              "candidates": [],
+              "confidence": null,
+              "proposed_by": null,
+              "selected_by": null,
+              "verification": "unverified",
+              "proposed_value": null,
+              "agreeing_readers": [],
+              "verification_reason": "no_candidate"
+            },
+            "invoice_number": {
+              "text": "2026/18902",
+              "value": "2026/18902",
+              "candidates": [
+                {
+                  "raw": "2026/18902",
+                  "error": null,
+                  "value": "2026/18902",
+                  "evidence": {
+                    "bbox": [
+                      76.47116942129448,
+                      127.46816974200938,
+                      203.02345764006415,
+                      145.16375095325304
+                    ],
+                    "page": 1,
+                    "text": "FACTURA N° 2026/18902",
+                    "method": "ocr",
+                    "locator": "primary:p1:ocr:2",
+                    "confidence": 0.97684,
+                    "preprocessing": []
+                  }
+                },
+                {
+                  "raw": "N2026/18902",
+                  "error": null,
+                  "value": "N2026/18902",
+                  "evidence": {
+                    "bbox": [
+                      76.47116942129448,
+                      127.46816974200938,
+                      203.02345764006415,
+                      145.16375095325304
+                    ],
+                    "page": 1,
+                    "text": "FACTURA N2026/18902",
+                    "method": "ocr",
+                    "locator": "secondary:p1:ocr-verify:3",
+                    "confidence": 0.96368,
+                    "preprocessing": []
+                  }
+                }
+              ],
+              "confidence": 0.97684,
+              "proposed_by": "primary",
+              "selected_by": "primary",
+              "verification": "ambiguous",
+              "proposed_value": "2026/18902",
+              "agreeing_readers": [
+                "primary"
+              ],
+              "verification_reason": "conflicting_evidence"
+            },
+            "supplier_tax_id": {
+              "text": null,
+              "value": null,
+              "candidates": [],
+              "confidence": null,
+              "proposed_by": null,
+              "selected_by": null,
+              "verification": "unverified",
+              "proposed_value": null,
+              "agreeing_readers": [],
+              "verification_reason": "no_candidate"
+            },
+            "purchase_order_ref": {
+              "text": "PO-2026-0721",
+              "value": null,
+              "candidates": [
+                {
+                  "raw": "PO-2026-0721",
+                  "error": null,
+                  "value": "PO-2026-0721",
+                  "evidence": {
+                    "bbox": [
+                      74.07207391003818,
+                      162.55940705922137,
+                      171.53532905482527,
+                      181.15476358629098
+                    ],
+                    "page": 1,
+                    "text": "Pedido PO-2026-0721",
+                    "method": "ocr",
+                    "locator": "primary:p1:ocr:4",
+                    "confidence": 0.88939,
+                    "preprocessing": []
+                  }
+                }
+              ],
+              "confidence": null,
+              "proposed_by": "primary",
+              "selected_by": null,
+              "verification": "unverified",
+              "proposed_value": "PO-2026-0721",
+              "agreeing_readers": [],
+              "verification_reason": "insufficient_independent_support"
+            }
+          },
+          "sha256": "b738972687b4819d34799d86da87fd279194b805a43aa7d6a5d0a2610e6692d2",
+          "file_id": "copia_2026_0518.pdf",
+          "metrics": {
+            "bytes": 69586,
+            "jev_calls": 0,
+            "ocr_calls": 2,
+            "vlm_calls": 0,
+            "request_ms": 3479.57,
+            "native_pages": 0,
+            "extraction_ms": 3479.57,
+            "jev_calls_this_request": 0,
+            "ocr_calls_this_request": 2,
+            "ocr_verification_calls": 1,
+            "vlm_calls_this_request": 0
+          },
+          "warnings": [
+            {
+              "code": "FIELD_AMBIGUOUS",
+              "field": "invoice_number"
+            },
+            {
+              "code": "FIELD_UNVERIFIED",
+              "field": "purchase_order_ref"
+            }
+          ],
+          "cache_hit": false,
+          "pipeline_version": "invoice-v2.1.4+xlsx-v1.3"
+        },
+        "source_ids": {
+          "erp": 4,
+          "orders": 2,
+          "suppliers": 1,
+          "parameters": 3
+        },
+        "rechecked_fields": [],
+        "initial_extraction_id": "0ea2640913e04898b1777572d7581d70"
+      },
+      "duration_ms": 3480,
+      "created_at": "2026-09-19T07:24:52.996325Z"
+    },
+    {
+      "id": 121,
+      "trace_id": "01a0b88dc1823b7a49e6482bfd7d0c99",
+      "instance_id": 19,
+      "rule_id": null,
+      "step": "upload_document",
+      "status": "ok",
+      "data": {
+        "file": "copia_2026_0518.pdf",
+        "created": true
+      },
+      "duration_ms": 3501,
+      "created_at": "2026-09-19T07:24:56.500857Z"
+    },
+    {
+      "id": 235,
+      "trace_id": "01a0b88f1351532d80ec2ffc2b53e763",
+      "instance_id": 19,
+      "rule_id": null,
+      "step": "decision",
+      "status": "ok",
+      "data": {
+        "fired": [],
+        "reason": "MISSING_DATA: date, iban, issuer_nif, purchase_order",
+        "decision": "ESCALAR",
+        "rules_hash": "ef8aa3ec38a2fddc541065938260c01716b7edd1b218464e3d4c4eb1c0f553d5"
+      },
+      "duration_ms": null,
+      "created_at": "2026-09-19T07:26:19.472743Z"
+    },
+    {
+      "id": 251,
+      "trace_id": "01a0b88f14a48783add31f963c3cee00",
+      "instance_id": 19,
+      "rule_id": null,
+      "step": "suggest_escalation",
+      "status": "ok",
+      "data": {
+        "model": "deepseek/deepseek-v4.1-flash",
+        "decision": "ESCALAR"
+      },
+      "duration_ms": 2479,
+      "created_at": "2026-09-19T07:26:22.296453Z"
+    },
+    {
+      "id": 252,
+      "trace_id": "823721f3bf3fd46d8a033535364f0a02",
+      "instance_id": 19,
+      "rule_id": null,
+      "step": "resolution",
+      "status": "ok",
+      "data": {
+        "author": "Mateo",
+        "before": "ESCALAR",
+        "reason": "Checked with the supplier by phone",
+        "decision": "NO_PAGAR",
+        "previous_author": "engine"
+      },
+      "duration_ms": null,
+      "created_at": "2026-09-19T07:26:22.305689Z"
+    }
+  ]
+}

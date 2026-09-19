@@ -2,7 +2,7 @@
 
 from app.core.database import Base
 from app.core.events import Event
-from app.features.decisions.model import Decision, Finding
+from app.features.decisions.model import Decision, DecisionReview, Finding
 from app.features.ingestion.model import File, Instance
 from app.features.processes.model import DecisionType, Process, Symbol
 from app.features.rules.model import NormRule, Rule
@@ -14,6 +14,7 @@ __all__ = [
     "AgentConfig",
     "Base",
     "Decision",
+    "DecisionReview",
     "DecisionType",
     "Event",
     "File",

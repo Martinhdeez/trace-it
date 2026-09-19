@@ -1,4 +1,7 @@
+from typing import Any
+
 from sqlalchemy import ForeignKey, String, false
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base, created_at
@@ -14,6 +17,7 @@ class Process(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
     use_case_id: Mapped[int] = mapped_column(ForeignKey("use_cases.id"), index=True)
+    decision_review: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[created_at]
 
 

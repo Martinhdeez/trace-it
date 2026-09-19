@@ -1,0 +1,399 @@
+[
+  {
+    "id": 282,
+    "trace_id": "01a0b88f3a09059c2499e938b944561e",
+    "instance_id": null,
+    "rule_id": 16,
+    "step": "retire_rule",
+    "status": "ok",
+    "data": {
+      "after": "retired",
+      "author": "Martín",
+      "before": "active",
+      "findings": 0,
+      "rule_hash": "f46e28ccb59a217c680dbe87997e5467bf641b9ec1e291d8d707d5a62cf9ce27"
+    },
+    "duration_ms": 6,
+    "created_at": "2026-09-19T07:26:29.394610Z"
+  },
+  {
+    "id": 254,
+    "trace_id": "01a0b88f1e9ee482acbf03cbcdca2362",
+    "instance_id": null,
+    "rule_id": null,
+    "step": "activate_agent_config",
+    "status": "ok",
+    "data": {
+      "role": "assistant",
+      "author": "Martín",
+      "config_id": 3,
+      "use_case_id": 1,
+      "after_version": 1,
+      "before_version": 2
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:26:22.372942Z"
+  },
+  {
+    "id": 253,
+    "trace_id": "01a0b88f1e8b62ce5f5ef61d59b5d2a1",
+    "instance_id": null,
+    "rule_id": null,
+    "step": "configure_agent",
+    "status": "ok",
+    "data": {
+      "note": "cite rule ids",
+      "role": "assistant",
+      "author": "Martín",
+      "config": {
+        "model": "helmcode:deepseek-v4-flash",
+        "limits": {},
+        "examples": [],
+        "instructions": "\nAlways cite the rule id.",
+        "model_settings": {
+          "max_tokens": 4000,
+          "temperature": 0
+        },
+        "fallback_models": [
+          "helmcode:glm5.3",
+          "helmcode:qwen3.6"
+        ],
+        "timeout_seconds": 120.0,
+        "failed_check_decision": null
+      },
+      "config_id": 5,
+      "use_case_id": 1,
+      "after_version": 2,
+      "before_version": 1
+    },
+    "duration_ms": 9,
+    "created_at": "2026-09-19T07:26:22.361343Z"
+  },
+  {
+    "id": 18,
+    "trace_id": "01a0b88cf91e66b9c069ebf389125f84",
+    "instance_id": null,
+    "rule_id": 16,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "f46e28ccb59a217c680dbe87997e5467bf641b9ec1e291d8d707d5a62cf9ce27"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.696388Z"
+  },
+  {
+    "id": 17,
+    "trace_id": "01a0b88cf91986128b7c9690a51acaa5",
+    "instance_id": null,
+    "rule_id": 15,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "b00cebaed49ebe24e669bfa9a7d2bff682a5de8477a1879fdea66427bdfd8e46"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.691738Z"
+  },
+  {
+    "id": 16,
+    "trace_id": "01a0b88cf914cb267458af16c8d4bcca",
+    "instance_id": null,
+    "rule_id": 14,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "01123a95795272c7a42bae50d2fed9b9e6fa539e1a9920a1d25ea080cfc86b05"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.687000Z"
+  },
+  {
+    "id": 15,
+    "trace_id": "01a0b88cf90fdb1e84ec4cde694401f6",
+    "instance_id": null,
+    "rule_id": 13,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "b5604c63154728fbd8e1140b68150c4991bc4b15b1602fef1e5fc70d4d1b531a"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.682313Z"
+  },
+  {
+    "id": 14,
+    "trace_id": "01a0b88cf90b6ba03222aeb1f9b7fe58",
+    "instance_id": null,
+    "rule_id": 12,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "0ca42ffd41628f0925eac61731106d15624fffb78708a494887a1b5335fe1958"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.677356Z"
+  },
+  {
+    "id": 13,
+    "trace_id": "01a0b88cf906b3cd15e1e1be10899238",
+    "instance_id": null,
+    "rule_id": 11,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "d99982f941c8815315b5ddbb0fcb0ec27c7725ad9e4cb9b5f849aba73b494e65"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.672441Z"
+  },
+  {
+    "id": 12,
+    "trace_id": "01a0b88cf901a167aeb6414c1a699ce7",
+    "instance_id": null,
+    "rule_id": 10,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "4edd807584cdd8a698f079d6f79cda2a0e5b0d73fa53f4680e3992e7e762afff"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.667601Z"
+  },
+  {
+    "id": 11,
+    "trace_id": "01a0b88cf8fc27d6be1c8f3d93f16112",
+    "instance_id": null,
+    "rule_id": 9,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "2142b5fbaf71ec402ef3349fea76e766ef2780224e54555541fb67b8c7a03b5b"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.662534Z"
+  },
+  {
+    "id": 10,
+    "trace_id": "01a0b88cf8f7d9029d0775d6b187e6f0",
+    "instance_id": null,
+    "rule_id": 8,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "a067916ca50edddf86c17a5b1e9ea90588c23f684f2013986bf905dd72c7b3b6"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.657770Z"
+  },
+  {
+    "id": 9,
+    "trace_id": "01a0b88cf8f2cb89537a128179a19bd7",
+    "instance_id": null,
+    "rule_id": 7,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "8902a6ffc627b5277f5a2fab6e9cf1fc6885bc06cd1d68ed2fcc1014b091320f"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.652792Z"
+  },
+  {
+    "id": 8,
+    "trace_id": "01a0b88cf8ec89cd28053878dea145bc",
+    "instance_id": null,
+    "rule_id": 6,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "d6cd982e9d2583d439a597ebd7e6c1ee1439e0f2c676307baed966c23b2b1c40"
+    },
+    "duration_ms": 4,
+    "created_at": "2026-09-19T07:24:01.647407Z"
+  },
+  {
+    "id": 7,
+    "trace_id": "01a0b88cf8e668d63d8d03ed2f516db4",
+    "instance_id": null,
+    "rule_id": 5,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "59cae63d8fc3f2d79ad867d40512a3c5db9f89ef5a1b6be63cf93e8bd4bf10a9"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.641435Z"
+  },
+  {
+    "id": 6,
+    "trace_id": "01a0b88cf8e18b17785382d3833cf64b",
+    "instance_id": null,
+    "rule_id": 4,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "169f28e832a8bbc4ee8072dbd260e2374b23535ea5c9b4432bb9e75f6d42fbac"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.636208Z"
+  },
+  {
+    "id": 5,
+    "trace_id": "01a0b88cf8dcdae8a5214d4abd4753b7",
+    "instance_id": null,
+    "rule_id": 3,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "a86a11228e55753b220a9f7323425549881e324ecfa919cfb064b2559efb49de"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.631260Z"
+  },
+  {
+    "id": 4,
+    "trace_id": "01a0b88cf8d6a0f8648d9a3ae3236c91",
+    "instance_id": null,
+    "rule_id": 2,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "429df9b1ea3373c8334a8e695a6b1d02f200bdeccc833d7364bd84c4e1999010"
+    },
+    "duration_ms": 3,
+    "created_at": "2026-09-19T07:24:01.625793Z"
+  },
+  {
+    "id": 3,
+    "trace_id": "01a0b88cf8ce8f0ee0c9cffc0ae03a75",
+    "instance_id": null,
+    "rule_id": 1,
+    "step": "activate_rule",
+    "status": "ok",
+    "data": {
+      "after": "active",
+      "author": "cli",
+      "before": "draft",
+      "findings": 0,
+      "rule_hash": "144f2c803bef03dfb8ce13f0f361d3726bdb324a45c05d17cf5a08923575f355"
+    },
+    "duration_ms": 5,
+    "created_at": "2026-09-19T07:24:01.619790Z"
+  },
+  {
+    "id": 2,
+    "trace_id": "01a0b88cf8a7af2875ffbccde4d666a0",
+    "instance_id": null,
+    "rule_id": null,
+    "step": "load_definition",
+    "status": "ok",
+    "data": {
+      "name": "Invoice payment",
+      "symbols": 12,
+      "new_rules": 16,
+      "new_users": 5,
+      "use_case_id": 1,
+      "decision_types": 3
+    },
+    "duration_ms": 35,
+    "created_at": "2026-09-19T07:24:01.609739Z"
+  },
+  {
+    "id": 1,
+    "trace_id": "01a0b88cf86a046ecfcbc97d8fac5e75",
+    "instance_id": null,
+    "rule_id": null,
+    "step": "load_use_case",
+    "status": "ok",
+    "data": {
+      "name": "Invoice payment",
+      "added": [
+        {
+          "role": "compiler",
+          "active": true,
+          "version": 1
+        },
+        {
+          "role": "tester",
+          "active": true,
+          "version": 1
+        },
+        {
+          "role": "assistant",
+          "active": true,
+          "version": 1
+        },
+        {
+          "role": "normalizer",
+          "active": true,
+          "version": 1
+        }
+      ],
+      "author": "pack",
+      "use_case_id": 1
+    },
+    "duration_ms": 45,
+    "created_at": "2026-09-19T07:24:01.571149Z"
+  }
+]

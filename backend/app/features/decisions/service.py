@@ -10,12 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
 from app.core.events import Event
-from app.features.agents import sandbox
+from app.features.agents import decision_reviewer, sandbox
 from app.features.decisions.engine import Outcomes, RunDataset, Verdict, decide
-from app.features.decisions.model import ENGINE, Decision, Finding
+from app.features.decisions.model import ENGINE, Decision, DecisionReview, Finding
 from app.features.decisions.schemas import (
     ChangeOut,
     DecisionOut,
+    DecisionReviewOut,
     EventOut,
     FindingOut,
     InstanceDetail,
@@ -33,6 +34,7 @@ from app.features.processes.model import DecisionType, Symbol
 from app.features.processes.service import get as get_process
 from app.features.rules.model import ENFORCED, Rule
 from app.features.sources import service as sources
+from app.features.sources.model import Source
 from app.features.users.model import User
 
 log = logging.getLogger(__name__)
@@ -123,14 +125,22 @@ async def ready_rules(session: AsyncSession, process_id: int) -> list[Rule]:
 
 
 async def decide_all(
-    session: AsyncSession, process_id: int, rules: list[Rule], selected: list[Instance]
+    session: AsyncSession,
+    process_id: int,
+    rules: list[Rule],
+    selected: list[Instance],
+    source_loads: list[Source] | None = None,
 ) -> list[Verdict]:
     """`selected` instances under `rules`, with the current sources and the whole population
     of the process as `others`. Each population entry carries `_instance`, its name, so a
     rule can name the duplicate it found; the sandbox leaves an instance out of its own
     `others`. Rule code gets symbols as plain values (ADR 0008)."""
     out = await outcomes(session, process_id)
-    sources = await current_sources(session, process_id)
+    sources = (
+        {s.name: s.rows for s in source_loads}
+        if source_loads is not None
+        else await current_sources(session, process_id)
+    )
     population = [
         (i.id, {**flatten_symbols(i.symbols), "_instance": i.name})
         for i in await instances_of(session, process_id)
@@ -168,7 +178,10 @@ def _causes(verdicts: list[Verdict]) -> dict[str, dict[str, int]]:
     return {"failures": dict(causes)}
 
 
-def _out(instance: Instance, decision: Decision | None) -> InstanceOut:
+def _out(
+    instance: Instance, decision: Decision | None, reviews: dict[int, DecisionReview] | None = None
+) -> InstanceOut:
+    review = (reviews or {}).get(decision.id) if decision else None
     return InstanceOut(
         id=instance.id,
         name=instance.name,
@@ -177,6 +190,7 @@ def _out(instance: Instance, decision: Decision | None) -> InstanceOut:
         author=decision.author if decision else None,
         reason=decision.reason if decision else None,
         decided_at=decision.created_at if decision else None,
+        review_pending=bool(review and review.requires_human),
     )
 
 
@@ -187,7 +201,7 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
     reads the clock: anything like a cut-off date is a row in a source of truth. An
     instance without symbols is not run and stays PENDING until extraction fills them.
     """
-    await get_process(session, process_id)
+    process = await get_process(session, process_id)
     with events.span("run_process", process_id=process_id) as span:
         rules = await ready_rules(session, process_id)
         pending = [
@@ -203,11 +217,17 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
             )
             if i.symbols is not None
         ]
-        verdicts = await decide_all(session, process_id, rules, pending)
+        source_loads = list(await sources.current_loads(session, process_id))
+        verdicts = await decide_all(session, process_id, rules, pending, source_loads)
 
         count: Counter[str] = Counter()
         for instance, verdict in zip(pending, verdicts, strict=True):
-            _append(session, process_id, instance, verdict)
+            decision = _append(session, process_id, instance, verdict)
+            if process.decision_review is not None:
+                await session.flush()
+                await decision_reviewer.assess(
+                    session, process, instance, decision, rules, source_loads
+                )
             count[verdict.decision] += 1
 
         await session.commit()
@@ -217,18 +237,17 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
 
 def _append(
     session: AsyncSession, process_id: int, instance: Instance, verdict: Verdict, **trace
-) -> None:
+) -> Decision:
     """A new engine decision: a row added to the history, never an edit (ADR 0008)."""
-    session.add(
-        Decision(
-            instance_id=instance.id,
-            decision=verdict.decision,
-            results=[asdict(r) for r in verdict.results],
-            rules_hash=verdict.rules_hash,
-            author=ENGINE,
-            reason=verdict.reason or None,
-        )
+    decision = Decision(
+        instance_id=instance.id,
+        decision=verdict.decision,
+        results=[asdict(r) for r in verdict.results],
+        rules_hash=verdict.rules_hash,
+        author=ENGINE,
+        reason=verdict.reason or None,
     )
+    session.add(decision)
     instance.status = "DECIDED"
     events.record(
         session,
@@ -243,6 +262,7 @@ def _append(
             **trace,
         },
     )
+    return decision
 
 
 async def reprocess(
@@ -252,12 +272,12 @@ async def reprocess(
 
     For a source resync, a corrected datum or a rule adopted after the fact. Only a
     decision that changes is written, as a new engine row: the old one stays in the
-    history. An instance whose latest decision is a person's is never re-decided: where
-    the engine would now say otherwise it is reported as a conflict, as in the audit.
+    history. A person's decision or an engine decision awaiting review is never replaced:
+    where the engine would now say otherwise it is reported as a conflict.
     `names` limits it to those instance names (all decided instances if None); `dry_run`
-    answers the same without writing anything.
+    compares engine outcomes without writing or calling the optional reviewer.
     """
-    await get_process(session, process_id)
+    process = await get_process(session, process_id)
     with events.span("reprocess", process_id=process_id, dry_run=dry_run) as span:
         rules = await ready_rules(session, process_id)
         query = (
@@ -270,13 +290,16 @@ async def reprocess(
             query = query.where(Instance.name.in_(names))
         selected = [i for i in await session.scalars(query) if i.symbols is not None]
         latest = await latest_decisions(session, selected)
-        verdicts = await decide_all(session, process_id, rules, selected)
+        reviews = await decision_reviewer.for_decisions(session, list(latest.values()))
+        source_loads = list(await sources.current_loads(session, process_id))
+        verdicts = await decide_all(session, process_id, rules, selected, source_loads)
 
         unchanged = 0
         changed: list[ChangeOut] = []
         conflicts: list[ChangeOut] = []
         for instance, verdict in zip(selected, verdicts, strict=True):
             previous = latest[instance.id]
+            review = reviews.get(previous.id)
             if verdict.decision == previous.decision:
                 unchanged += 1
                 continue
@@ -288,14 +311,19 @@ async def reprocess(
                 previous_author=previous.author,
                 reason=verdict.reason,
             )
-            if previous.author != ENGINE:
+            if previous.author != ENGINE or (review and review.requires_human):
                 conflicts.append(change)
                 continue
             changed.append(change)
             if not dry_run:
-                _append(
+                decision = _append(
                     session, process_id, instance, verdict, reprocess=True, previous=previous.id
                 )
+                if process.decision_review is not None:
+                    await session.flush()
+                    await decision_reviewer.assess(
+                        session, process, instance, decision, rules, source_loads
+                    )
         await (session.rollback() if dry_run else session.commit())
         span.set(
             instances=len(selected),
@@ -320,7 +348,8 @@ async def list_instances(
     await get_process(session, process_id)
     instances = await instances_of(session, process_id)
     latest = await latest_decisions(session, instances)
-    rows = [_out(i, latest.get(i.id)) for i in instances]
+    reviews = await decision_reviewer.for_decisions(session, list(latest.values()))
+    rows = [_out(i, latest.get(i.id), reviews) for i in instances]
     if status is not None:
         rows = [r for r in rows if r.status == status]
     if decision is not None:
@@ -341,7 +370,12 @@ async def summary(session: AsyncSession, process_id: int) -> ProcessSummary:
 
     by_status = Counter(i.status for i in instances)
     by_decision = Counter(d.decision for d in latest.values())
-    queue = sum(1 for d in latest.values() if d.decision in human)
+    reviews = await decision_reviewer.for_decisions(session, list(latest.values()))
+    queue = sum(
+        1
+        for d in latest.values()
+        if d.decision in human or (d.id in reviews and reviews[d.id].requires_human)
+    )
     resolved = sum(1 for d in latest.values() if d.author != ENGINE)
 
     # The rule results live in the engine's latest row per instance.
@@ -419,15 +453,24 @@ async def list_events(
 
 
 async def queue(session: AsyncSession, process_id: int, type: str | None) -> list[InstanceOut]:
-    """Everything waiting for a person: by default, every outcome marked `requires_human`."""
+    """Human outcomes and pending reviews. An explicit type filters the current outcome."""
     await get_process(session, process_id)
     wanted = {type} if type else set(await human_types(session, process_id))
     instances = await instances_of(session, process_id)
     latest = await latest_decisions(session, instances)
+    reviews = await decision_reviewer.for_decisions(session, list(latest.values()))
     return [
-        _out(i, latest[i.id])
+        _out(i, latest[i.id], reviews)
         for i in instances
-        if i.id in latest and latest[i.id].decision in wanted
+        if i.id in latest
+        and (
+            latest[i.id].decision in wanted
+            or (
+                type is None
+                and latest[i.id].id in reviews
+                and reviews[latest[i.id].id].requires_human
+            )
+        )
     ]
 
 
@@ -441,12 +484,16 @@ async def get_instance(session: AsyncSession, instance_id: int) -> InstanceDetai
     rows = await session.scalars(
         select(Event).where(Event.instance_id == instance_id).order_by(Event.id)
     )
+    reviews = await decision_reviewer.for_decisions(session, decisions)
     return InstanceDetail(
-        **_out(instance, decisions[-1] if decisions else None).model_dump(),
+        **_out(instance, decisions[-1] if decisions else None, reviews).model_dump(),
         file_hash=instance.file_hash,
         symbols=instance.symbols,
         decisions=[DecisionOut.model_validate(d, from_attributes=True) for d in decisions],
         events=[EventOut.model_validate(e, from_attributes=True) for e in rows],
+        reviews=[
+            DecisionReviewOut.model_validate(r, from_attributes=True) for r in reviews.values()
+        ],
     )
 
 
@@ -455,6 +502,7 @@ async def resolve(
 ) -> InstanceDetail:
     """A person's decision is a new row, never an edit of the engine's (ADR 0008)."""
     instance = await _instance(session, instance_id)
+    await session.refresh(instance, with_for_update=True)
     out = await outcomes(session, instance.process_id)
     if data.decision not in out.priorities:
         raise ConflictError(f"{data.decision!r} is not a decision type of this process")
@@ -494,10 +542,10 @@ async def export(
     """`outcomes.jsonl` for the challenge: one line per instance name, nothing else.
 
     Returns the body and the names shared by several instances. `file_id` is the filename
-    exactly as it was supplied, accents included. What is exported is the process output:
-    the engine's latest decision (ADR 0009). A person's resolution never changes it; it is
-    exported only for an instance the engine never decided. `names` limits it to those
-    instance names (one delivery batch); the others may still be pending.
+    exactly as supplied, accents included. Decisions without optional review retain the
+    challenge's engine-first export. Reviewed decisions wait for pending approval and
+    export a later human resolution when present (ADR 0021). `names` limits the export to
+    one delivery batch; other instances may still be pending.
     """
     with events.span("export_outcomes", process_id=process_id, batch=len(names or ())) as span:
         body, duplicates = await _export(session, process_id, names)
@@ -537,6 +585,22 @@ async def _export(
         for row in rows:
             (engine if row.author == ENGINE else human)[row.instance_id] = row
     exported = {**human, **engine}
+    reviews = await decision_reviewer.for_decisions(session, list(engine.values()))
+    awaiting = []
+    for instance in instances:
+        automatic = engine.get(instance.id)
+        review = reviews.get(automatic.id) if automatic else None
+        if review is None:
+            continue  # Preserve the challenge export for decisions without an optional review.
+        resolution = human.get(instance.id)
+        if resolution and resolution.id > automatic.id:
+            exported[instance.id] = resolution
+        elif review.requires_human:
+            awaiting.append(instance.name)
+    if awaiting:
+        raise ConflictError(
+            f"{len(awaiting)} instances awaiting human review: {', '.join(awaiting[:5])}"
+        )
 
     undecided = [i.name for i in instances if i.id not in exported]
     if undecided:

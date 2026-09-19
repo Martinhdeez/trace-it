@@ -36,8 +36,9 @@ async def run_process(process_id: int, session: Session) -> RunSummary:
     summary="Decide the decided instances again with the current rules and sources",
     description="After a source resync, a corrected datum or a rule adopted later. Only a "
     "decision that changes is written, as a new engine row; the history stays. An instance "
-    "a person decided last is never re-decided: a disagreement comes back in `conflicts`. "
-    "`names` limits it to those instances; `dry_run=true` only reports.",
+    "a person decided last or that awaits review is never replaced: a disagreement comes "
+    "back in `conflicts`. `names` limits it to those instances. `dry_run=true` compares only "
+    "engine outcomes, with no reviewer calls. New engine decisions receive optional reviews.",
 )
 async def reprocess_process(
     process_id: int, session: Session, body: ReprocessIn | None = None, dry_run: bool = False
@@ -94,7 +95,7 @@ async def list_events(
 @router.get(
     "/processes/{process_id}/queue",
     operation_id="getQueue",
-    summary="Instances waiting for a person (by default, the escalated ones)",
+    summary="Instances waiting for a person: escalations and reviewer disagreements",
 )
 async def get_queue(
     process_id: int, session: Session, type: str | None = None
@@ -139,7 +140,7 @@ async def resolve_instance(
                 }
             },
         },
-        409: {"description": "Some instance has no decision yet"},
+        409: {"description": "Some instance has no decision or is awaiting human review"},
     },
 )
 async def export_outcomes(process_id: int, session: Session) -> PlainTextResponse:

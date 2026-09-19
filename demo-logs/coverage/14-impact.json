@@ -1,0 +1,14 @@
+{
+  "unchanged": 19,
+  "changes": [],
+  "conflicts": [
+    {
+      "instance_id": 19,
+      "name": "copia_2026_0518.pdf",
+      "before": "NO_PAGAR",
+      "after": "ESCALAR",
+      "previous_author": "Mateo",
+      "reason": "MISSING_DATA: date, iban, issuer_nif, purchase_order"
+    }
+  ]
+}

@@ -15,6 +15,13 @@ class DecisionTypeIO(BaseModel):
     requires_human: bool = False  # goes to the human queue for a manager
 
 
+class DecisionReviewConfig(BaseModel):
+    """Optional advice after the engine; any disagreement needs human approval."""
+
+    guidance: str = Field(min_length=1)
+    timeout_seconds: float = Field(default=30, gt=0, le=120)
+
+
 class ProcessIn(BaseModel):
     name: str
     # The use case this process belongs to, by name; it must exist (`use-case.json` next to
@@ -24,6 +31,7 @@ class ProcessIn(BaseModel):
     description: str | None = None
     decision_types: list[DecisionTypeIO]
     symbols: list[SymbolIO] = []
+    decision_review: DecisionReviewConfig | None = None
 
 
 class ProcessOut(BaseModel):
@@ -36,3 +44,4 @@ class ProcessOut(BaseModel):
 class ProcessDetail(ProcessOut):
     decision_types: list[DecisionTypeIO]
     symbols: list[SymbolIO]
+    decision_review: DecisionReviewConfig | None = None
