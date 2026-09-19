@@ -2646,8 +2646,9 @@
         "tags": [
           "process discovery"
         ],
-        "summary": "Workbook",
+        "summary": "Evidence Asset",
         "operationId": "uploadDraftWorkbook",
+        "deprecated": true,
         "security": [
           {
             "TraceItBearer": []
@@ -2686,6 +2687,79 @@
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/Body_uploadDraftWorkbook"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryDraftOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/process-drafts/{draft_id}/evidence": {
+      "post": {
+        "tags": [
+          "process discovery"
+        ],
+        "summary": "Evidence Asset",
+        "operationId": "uploadDraftEvidence",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_uploadDraftEvidence"
               }
             }
           }
@@ -3318,6 +3392,11 @@
         "summary": "What the normalizer makes of a norm, without saving anything",
         "description": "Same reading as `POST /norm`, returned for review: nothing is written. With `previous` (an earlier preview) and `feedback` the normalizer revises that proposal. `existing` holds the rules that the sentences' `covered` ids name, whatever their status: what the norm asks for that is already there. `POST /norm/accept` saves the reviewed one.",
         "operationId": "previewNorm",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -3390,6 +3469,11 @@
         "summary": "Save a reviewed norm preview: its checks become rules that compile in the background (status `compiling`)",
         "description": "The body is a preview's `norm_rules`, possibly with checks or sentences removed. 409 when a check decides a decision type that does not exist or is the default, or says exactly what an existing rule says.",
         "operationId": "acceptNorm",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -8991,6 +9075,25 @@
           "files"
         ],
         "title": "Body_submitDocumentBatch"
+      },
+      "Body_uploadDraftEvidence": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision",
+          "file"
+        ],
+        "title": "Body_uploadDraftEvidence"
       },
       "Body_uploadDraftWorkbook": {
         "properties": {

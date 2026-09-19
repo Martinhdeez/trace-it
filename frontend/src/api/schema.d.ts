@@ -663,8 +663,28 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Workbook */
+        /**
+         * Evidence Asset
+         * @deprecated
+         */
         post: operations["uploadDraftWorkbook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/process-drafts/{draft_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evidence Asset */
+        post: operations["uploadDraftEvidence"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2372,6 +2392,13 @@ export interface components {
             verify_fields?: ("supplier_tax_id" | "payment_iban" | "purchase_order_ref")[] | null;
             /** Mode */
             mode?: ("local" | "api" | "hybrid") | null;
+        };
+        /** Body_uploadDraftEvidence */
+        Body_uploadDraftEvidence: {
+            /** Revision */
+            revision: number;
+            /** File */
+            file: string;
         };
         /** Body_uploadDraftWorkbook */
         Body_uploadDraftWorkbook: {
@@ -6967,6 +6994,43 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": components["schemas"]["Body_uploadDraftWorkbook"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscoveryDraftOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    uploadDraftEvidence: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                draft_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_uploadDraftEvidence"];
             };
         };
         responses: {
