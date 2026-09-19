@@ -6,7 +6,7 @@ The team split on 2026-09-19: the backend team owns `backend/`, `tools/` and the
 Inputs:
 - [integration.md](integration.md): the matrix. `#n` below is a row of its section 1.
 - [frontend-handoff.md](frontend-handoff.md): Carlos's packages 0-12. `pkg n` below is one of them.
-- PR #92 (`feat/integration-backend-runs-auth`): run history, 401/403 for manager-only writes, required cut-off date.
+- PR #92 (**merged** at c72270c): run history, 401/403 for manager-only writes, required cut-off date. The tools and the runbook already send the manager's id.
 - PR #93 (`feat/integration-proposals`, WIP): unified proposals for 3 channels and 4 kinds.
 
 This plan does not repeat anything #92 or #93 already does.
@@ -27,8 +27,8 @@ The (a) and (c) rows, and who covers them:
 
 | Row | Feature | Dir | Covered by |
 |---|---|---|---|
-| #3 | Roles and enforcement | c | #92 |
-| #7 | Run history | a | #92 |
+| #3 | Roles and enforcement | c | #92 (done) |
+| #7 | Run history | a | #92 (done) |
 | #10 | Symbol types | c | **B2** |
 | #30 | `FieldReading.symbol` | a | **B1** |
 | #35 | Live updates | c | **B4** |
@@ -46,8 +46,8 @@ The (a) and (c) rows, and who covers them:
 | B4 | Live updates: what polling needs now, and `Last-Event-ID` | none | yes | S |
 | B5 | Check the handoff packages for backend gaps | none | yes | S |
 | B6 | The 4 ingestion errors in the last demo | none (the fix may need #93) | investigation: yes | M |
-| B7 | Batch-2 rehearsal with manager auth and step 1d | #92 merged | yes | M |
-| B8 | `tools/` and `make demo` after #92 | #92 merged | yes | S |
+| B7 | Batch-2 rehearsal with manager auth and step 1d | #92 (done), B8 | yes | M |
+| B8 | Verify `tools/` and `make demo` after #92 | #92 (done) | yes | S |
 
 ### B0. Automated frontend-backend check
 
@@ -67,7 +67,7 @@ The (a) and (c) rows, and who covers them:
 - **Scope grows with Carlos's packages:**
   - Steps that work today are live.
   - Each step still waiting for a package is `test.fixme('pkg n')`. It becomes live in the PR that lands package n.
-  - Today: login is pkg 1, run history is pkg 7 (needs #92), and escalation accept is pkg 5 (needs #93).
+  - Today: login is pkg 1, run history is pkg 7 (#92 is merged, waiting for the package), and escalation accept is pkg 5 (needs #93).
 - **No LLM key:** the path never calls a model.
   - The pack is frozen, so nothing compiles.
   - The assistant's proposal is not part of the path (see D4).
@@ -150,7 +150,7 @@ A first pass, done while writing this plan:
 | 11 | OCR mode, reviewer and models in the backend | Exists, no new endpoint: `GET /processes/{id}/execution`, `PUT /processes/{id}/draft {execution \| decision_review}`, `GET /use-cases/{id}`, `PUT /use-cases/{id}/agents/{role}`. The handoff's OCR values (`local`/`gemini`/`got`) map to the backend's `local`/`api`/`hybrid` in the frontend |
 | 12 | Mock removal | Nothing on the backend |
 
-**What:** confirm the table against `frontend/openapi.json` after #92 and #93 merge.
+**What:** confirm the table against `frontend/openapi.json` now for #92's part, and again after #93 merges.
 - Every operation id and response field named in the handoff's endpoint tables must exist.
 - Open a `backend-gap` issue for each miss, in the handoff's format.
 - **Files:** none, or this table.
@@ -174,10 +174,10 @@ A first pass, done while writing this plan:
 
 ### B7. Batch-2 rehearsal with manager auth and step 1d
 
-**What:** rehearse all of [runbook-batch2.md](runbook-batch2.md) on a restored copy of the live database, after #92 merges. Never on the live database itself. The copy comes from `make backup`, restored under another name.
+**What:** rehearse all of [runbook-batch2.md](runbook-batch2.md) on a restored copy of the live database. #92 is merged, so this can start now. Never on the live database itself. The copy comes from `make backup`, restored under another name.
 - Check every write against #92's 401/403:
   - `sync` (4b), `reprocess` (5, 5b, 9), `norm` (6), `retire`, `validate` and `publish` (6e), and the rule create in 6d;
-  - `files` and `run` in 7'. That line has no `-H "$MANAGER"` on `run` today.
+  - `files` and `run` in 7'. #92 already added `-H "$MANAGER"` to both.
 - Check that `tools/demo_run.py` (7) logs in as the manager and sends the cut-off.
 - Run step 1d (compiler `max_tokens` 16000, "Compiler token limit") and confirm the draft shows `compiler 16000`. Then confirm the step-6 compile of one v4-style check comes back `draft`, not `blocked` with `finish_reason` length.
   - Use a short norm text. This step calls the LLM, so it needs keys in `.env`.
@@ -188,15 +188,15 @@ A first pass, done while writing this plan:
 
 ### B8. `tools/` and `make demo` after #92
 
-**What:** after #92 merges, run the driver scripts against a fresh `make setup` with the ERP up:
+**What:** #92 already changed the tools: `demo_run.py` logs in as the manager and sends the cut-off, and `bench_scale.py` and `audit_page` use user 1. What is left is to run the driver scripts end to end against a fresh `make setup` with the ERP up, since #92's CI does not run them:
 - `make demo` (all 500 invoices);
 - `make demo-llm-down`;
 - `tools/bench_scale.py` (smoke);
 - `tools/audit_page`;
 - `make trace-decision`.
 
-Every write must send the manager's `X-User-Id`, and the workbook must send the cut-off. Fix any 401, 403 or 422.
-- **Why:** #92 closes writes that the tools used without a header.
+Fix any 401, 403 or 422 that is left.
+- **Why:** #92 closed writes that the tools used without a header.
 - **Files:** `tools/*`, `tools/README.md`.
 - **Done check:**
   - `make demo` writes 500 outcomes, and `make check-outcomes` is OK.
@@ -208,15 +208,15 @@ Every write must send the manager's `X-User-Id`, and the workbook must send the 
 **Wave 1, now.** Launch these together:
 - **B0 first**, because it is the check every other item must pass. It starts with the steps that work today.
 - **B1, B2 (once D1 is answered), B4, B5 (first pass above) and B6 (investigation).**
+- **B8, then B7.** #92 is merged, so both can start now. B7's step 7 uses `demo_run.py`, so B8 goes first.
 - They touch different files, except the generated OpenAPI files: B1 and B2 both regenerate them. Merge one of them, then rebase the other and run `make openapi` again.
 - B0's own done check runs after it merges. B1, B2 and B4 merge after B0, so each one is proven by `make e2e-integration`.
 
-**Wave 2, after #92 and #93 merge:**
+**Wave 2, after #93 merges:**
 - **B3** (`main.py`).
-- **B7** and **B8**. Both need #92. Run B8 first: B7's step 7 uses `demo_run.py`.
 - **The B6 fix**, if it touches `traces/service.py`.
 - **The B5 confirmation** against the merged `openapi.json`.
-- **Grow B0:** turn on its pkg 7 steps (after #92) and pkg 5 accept steps (after #93) once Carlos's packages land.
+- **Grow B0:** turn on its pkg 7 steps (#92 is merged) and its pkg 5 accept steps (after #93) as Carlos's packages land.
 
 Merge order inside a wave: the smallest API diff first, then `make openapi` on each rebase.
 
