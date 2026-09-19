@@ -64,6 +64,11 @@ export function Inbox() {
     queryKey: keys.queue(processId, 'all'),
     queryFn: () => api.queue(processId),
   })
+  const summary = useQuery({
+    queryKey: keys.summary(processId),
+    queryFn: () => api.summary(processId),
+  })
+  const pending = summary.data?.by_status.PENDING ?? 0
   const history = useQuery({
     queryKey: keys.instances(processId),
     queryFn: () => api.listInstances(processId),
@@ -127,12 +132,12 @@ export function Inbox() {
         <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-[28px] font-medium leading-[1.1] tracking-[-0.045em]">
-              {view === 'pendientes' ? greeting(cases.length) : 'Historial'}
+              {view === 'pendientes' ? greeting(cases.length, pending) : 'Historial'}
             </h1>
             <p className="mt-1 text-[13px] text-muted">
               {view === 'pendientes'
                 ? `${process.data?.name ?? 'Proceso'} · ordenadas por urgencia a ${formatDay(today.date)}${today.cutOff ? ' (fecha de corte)' : ''}`
-                : 'Todo lo que el proceso o una persona ya decidió, con su motivo.'}
+                : 'Todos los documentos recibidos y sus resultados.'}
             </p>
           </div>
           <Segmented
@@ -166,10 +171,17 @@ export function Inbox() {
               ) : null}
               {queue.isSuccess && visible.length === 0 ? (
                 <section className="rounded-[16px] bg-surface ring-1 ring-line">
-                  <EmptyState icon={CheckCircle2} title={day ? 'Nada vence ese día' : 'Todo al día'}>
+                  <EmptyState icon={CheckCircle2} title={day ? 'Nada vence ese día' : pending ? 'Documentos pendientes de evaluar' : 'Sin revisiones pendientes'}>
                     {day
                       ? 'Elige otro día en el calendario o quita el filtro.'
-                      : 'Ninguna factura te espera. Arrastra facturas a esta página para procesarlas.'}
+                      : pending
+                        ? `${pending} documento${pending === 1 ? '' : 's'} recibido${pending === 1 ? '' : 's'}, pendiente${pending === 1 ? '' : 's'} de evaluación. Aparecerán aquí si necesitan una decisión tuya.`
+                        : 'No hay documentos que requieran tu revisión. Puedes consultar los recibidos en Historial.'}
+                    {!day && pending > 0 ? (
+                      <Link to={paths.panel(processId)} className="mt-3 inline-block font-medium text-ink underline">
+                        Ir a la consola para evaluar
+                      </Link>
+                    ) : null}
                   </EmptyState>
                 </section>
               ) : (
@@ -266,9 +278,10 @@ export function Inbox() {
   )
 }
 
-function greeting(count: number): string {
-  if (count === 0) return 'Nada te espera'
-  return `${count} factura${count === 1 ? '' : 's'} te espera${count === 1 ? '' : 'n'}`
+function greeting(count: number, pending: number): string {
+  if (count === 0 && pending > 0) return `${pending} documento${pending === 1 ? '' : 's'} por evaluar`
+  if (count === 0) return 'Sin revisiones pendientes'
+  return `${count} documento${count === 1 ? '' : 's'} te espera${count === 1 ? '' : 'n'}`
 }
 
 /**

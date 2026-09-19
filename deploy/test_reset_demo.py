@@ -36,16 +36,57 @@ def test_restored_database_reset_and_failure_recovery(tmp_path):
                 table: db.execute(f'SELECT * FROM "{table}" ORDER BY 1').fetchall()
                 for table in (
                     "users",
-                    "rules",
-                    "norm_rules",
                     "sources",
-                    "processes",
-                    "process_versions",
                     "agent_configs",
                     "symbols",
                 )
             }
 
+        def assert_initial_rules():
+            for baseline in seed["rule_baselines"]:
+                pid = baseline["process_id"]
+                if baseline["process_name"] == "Invoice payment":
+                    assert len(baseline["norm_rules"]) == 6
+                    assert len(baseline["rules"]) == 12
+                    assert not any(
+                        "end with the character" in r["text"] for r in baseline["rules"]
+                    )
+                rows = db.execute(
+                    "SELECT * FROM rules WHERE process_id=%s ORDER BY id", (pid,)
+                ).fetchall()
+                assert len(rows) == len(baseline["rules"])
+                assert [(r["text"], r["code"], r["hash"]) for r in rows] == [
+                    (r["text"], r["code"], r["hash"]) for r in baseline["rules"]
+                ]
+                version = db.execute(
+                    "SELECT v.snapshot FROM processes p JOIN process_versions v ON v.id=p.active_version_id WHERE p.id=%s",
+                    (pid,),
+                ).fetchone()["snapshot"]
+                assert [(r["id"], r["hash"]) for r in version["rules"]] == [
+                    (r["id"], r["hash"]) for r in rows
+                ]
+                assert version["execution"] == execution[pid]
+                assert (
+                    db.execute(
+                        "SELECT count(*) AS n FROM process_versions WHERE process_id=%s",
+                        (pid,),
+                    ).fetchone()["n"]
+                    == 1
+                )
+                assert (
+                    db.execute(
+                        "SELECT count(*) AS n FROM process_drafts WHERE process_id=%s",
+                        (pid,),
+                    ).fetchone()["n"]
+                    == 0
+                )
+
+        execution = {
+            r["process_id"]: r["snapshot"]["execution"]
+            for r in db.execute(
+                "SELECT v.process_id,v.snapshot FROM process_versions v JOIN processes p ON p.active_version_id=v.id"
+            ).fetchall()
+        }
         original = preserved()
         cursor = db.execute(
             "SELECT id,initial_uid,next_uid,uidvalidity,state,token_hash FROM mail_accounts"
@@ -92,6 +133,7 @@ def test_restored_database_reset_and_failure_recovery(tmp_path):
         assert (data / "objects" / "sentinel.pdf").exists()
         first = module.reset(db, seed, data)
         assert first["examples"] == 12
+        assert_initial_rules()
         assert preserved() == original
         assert (
             db.execute(
@@ -117,7 +159,18 @@ def test_restored_database_reset_and_failure_recovery(tmp_path):
         )
         first_ids = [r["id"] for r in db.execute("SELECT id FROM instances").fetchall()]
         assert min(first_ids) > max(original_ids)
+        # User-added and edited rules, including published snapshots and drafts, must disappear.
+        db.execute(
+            "UPDATE rules SET text='changed in rehearsal' WHERE id=(SELECT min(id) FROM rules)"
+        )
+        db.execute(
+            "INSERT INTO rules (process_id,text,type,decision,status) VALUES (1,'extra rule','requirement','ESCALAR','draft')"
+        )
+        db.execute(
+            "INSERT INTO process_drafts (process_id,base_version_id,revision,snapshot,author) SELECT p.id,p.active_version_id,1,v.snapshot,'test' FROM processes p JOIN process_versions v ON v.id=p.active_version_id WHERE p.id=1"
+        )
         module.reset(db, seed, data)
+        assert_initial_rules()
         assert preserved() == original
         assert db.execute("SELECT min(id) AS n FROM instances").fetchone()["n"] > max(
             first_ids

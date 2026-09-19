@@ -211,8 +211,16 @@ with new monotonic IDs, without provider calls. Runtime decisions, runs, proposa
 learning results, alerts, traces, mail receipts and uploaded documents are removed.
 The complete extraction directory is cleared, including SQLite jobs and OCR/provider caches.
 
-Users, process configuration, published versions/rules, agent settings, all reference source
+Users, process configuration, agent settings, all reference source
 snapshots, original Excel workbooks, external ERP services and OCR models are retained.
+Initial rule baselines are restored in the rule/norm authoring tables and the active runtime
+snapshot. Added/edited rehearsal rules and drafts are removed, and old demo versions are
+replaced with one baseline version. The invoice baseline has the six original `Norma_Pagos_v3` clauses from the official
+`ikurotime/500-sombras-de-alberto` Excel, implemented by the frozen 12 checks. Capture
+verifies the workbook text and compiled-rule hashes; it requires `--norm-workbook`.
+Hiring uses its first approved version (13 rules). Current provider,
+execution and schema settings remain intact. The version-2 private fixture records and checks
+these baselines; it is never recaptured automatically from a modified live process.
 Mailbox identity, token and UID cursor are preserved, so old messages are not replayed.
 A previously active worker is checked and resumed with the new backend image after successful
 health checks; stopped workers stay stopped. Resending a removed PDF in a new email can
@@ -235,4 +243,4 @@ Validation: `pytest deploy/test_demo_deploy.py deploy/erp/test_app_rollback.py` 
 successful deployment and backup/reset/mail-check failures. `deploy/test_reset_demo.py`
 uses `DEMO_RESET_TEST_DATABASE_URL` (database must be `trace_demo_reset_test`) and
 `DEMO_RESET_TEST_SEED` against an isolated restored copy to verify deletion, repeatability,
-configuration/cursor preservation, foreign-key failure and filesystem rollback.
+configuration/cursor preservation, rule restoration, foreign-key failure and filesystem rollback.
