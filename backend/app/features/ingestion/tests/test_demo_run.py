@@ -283,3 +283,64 @@ async def test_historical_same_name_hash_cannot_override_newest_instance(tmp_pat
     assert "/processes/7/run" not in paths
     assert "/processes/7/export" not in paths
     assert "/processes/7/files" not in paths
+
+
+async def test_reviewed_human_resolution_supplies_detail_for_exported_outcome(tmp_path):
+    book = tmp_path / "master.xlsx"
+    invoice = tmp_path / "invoice.pdf"
+    book.write_bytes(b"content")
+    invoice.write_bytes(b"%PDF-existing")
+    file_hash = hashlib.sha256(invoice.read_bytes()).hexdigest()
+
+    def respond(request):
+        path = request.url.path
+        if path.endswith("/sources/workbook"):
+            return httpx.Response(201, json={})
+        if path.endswith("/sources/erp/sync"):
+            return httpx.Response(200, json={"rows": 1})
+        if path.endswith("/instances"):
+            return httpx.Response(200, json=[{"id": 15, "name": invoice.name}])
+        if path == "/instances/15":
+            return httpx.Response(
+                200,
+                json={
+                    "id": 15,
+                    "file_hash": file_hash,
+                    "status": "DECIDED",
+                    "symbols": {},
+                    "decisions": [
+                        {
+                            "id": 100,
+                            "decision": "PAGAR",
+                            "author": "engine",
+                            "results": [{"fires": True, "reason": "Order matched"}],
+                        },
+                        {
+                            "id": 101,
+                            "decision": "NO_PAGAR",
+                            "author": "operator",
+                            "results": [],
+                        },
+                    ],
+                    "reviews": [{"decision_id": 100, "requires_human": True}],
+                },
+            )
+        if path.endswith("/run"):
+            return httpx.Response(200, json={"decided": 0})
+        if path.endswith("/export"):
+            return httpx.Response(200, text='{"file_id":"invoice.pdf","result":"NO_PAGAR"}\n')
+        raise AssertionError(f"Unexpected request: {path}")
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(respond), base_url="http://demo"
+    ) as api:
+        await DEMO["run"](api, 7, [invoice], book, "2026-09-19", tmp_path / "out")
+
+    assert json.loads((tmp_path / "out/outcomes.jsonl").read_text()) == {
+        "file_id": "invoice.pdf",
+        "result": "NO_PAGAR",
+    }
+    detail = json.loads((tmp_path / "out/detail.json").read_text())
+    assert detail == [
+        {"file_id": "invoice.pdf", "result": "NO_PAGAR", "rules_that_fired": [], "symbols": {}}
+    ]

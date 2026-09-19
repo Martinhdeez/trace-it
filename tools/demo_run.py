@@ -168,9 +168,20 @@ async def _run(
         response = await api.get(f"/instances/{instance['id']}")
         response.raise_for_status()
         document = response.json()
-        # Match export: latest engine decision, falling back to a human decision.
+        # Match export: engine-first unless its optional review has a later resolution.
         decisions = document["decisions"]
         latest = next((d for d in reversed(decisions) if d["author"] == "engine"), decisions[-1])
+        if latest["author"] == "engine" and any(
+            review["decision_id"] == latest["id"] for review in document.get("reviews", [])
+        ):
+            latest = next(
+                (
+                    d
+                    for d in reversed(decisions)
+                    if d["author"] != "engine" and d["id"] > latest["id"]
+                ),
+                latest,
+            )
         detail.append(
             {
                 **outcome,

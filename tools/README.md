@@ -41,6 +41,10 @@ If a selected file matches an older version of a filename that has since been
 replaced, the demo stops: the API exports the newest instance of that name.
 Use a fresh process to evaluate that historical batch. Output files are staged
 together and replace the previous artifacts only after the entire run succeeds.
+For a custom process with optional decision review enabled, pending human approval
+blocks export with HTTP 409. Complete that review and rerun the driver; exported
+results and detail then follow the approved human resolution. `--local-only`
+controls OCR providers, not a separately configured decision reviewer.
 
 For a bounded, local-only run without Gemini or Jev requests:
 
