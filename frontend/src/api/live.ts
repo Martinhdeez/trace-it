@@ -1,4 +1,5 @@
 import type {
+  AgentConfigOut,
   AlertOut,
   ApiClient,
   DocumentUpload,
@@ -34,6 +35,8 @@ import type {
   Rule,
   RuleDetail,
   RuleState,
+  UseCaseDetail,
+  UseCaseOut,
   User,
 } from './contracts'
 import { BASE, get, getText, post, put, query, upload } from './http'
@@ -57,23 +60,12 @@ type RawRule = {
   activated_at: string | null
 }
 type RawRuleDetail = RawRule & { code: string | null; tests: Record<string, unknown>[] | null }
-type RawUseCase = { id: number; name: string; description: string }
-type RawAgentConfig = {
-  id: number
-  role: string
-  version: number
-  config: { model: string | null; instructions: string; model_settings: object; limits: object; examples: unknown[] }
-  active: boolean
-  author: string
-  note: string | null
-  created_at: string
-}
-type RawUseCaseDetail = RawUseCase & { agents: RawAgentConfig[] }
 
 const process = (raw: RawProcess): Process => ({
   id: raw.id,
   nombre: raw.name,
   descripcion: raw.description,
+  use_case_id: raw.use_case_id,
 })
 
 const processDetail = (raw: RawProcessDetail): ProcessDetail => ({
@@ -384,26 +376,11 @@ export const liveClient: ApiClient = {
   syncSource: (processId, name) =>
     post<SyncResult>(`/processes/${processId}/sources/${encodeURIComponent(name)}/sync`),
 
-  listLlmConfig: async () => {
-    const cases = await get<RawUseCase[]>('/use-cases')
-    const details = await Promise.all(
-      cases.map((item) => get<RawUseCaseDetail>(`/use-cases/${item.id}`)),
-    )
-    return details.flatMap((item) =>
-      item.agents.map((agent) => ({
-        papel: `${item.id}:${agent.role}`,
-        modelo: agent.config.model ?? '',
-      })),
-    )
-  },
-  setLlmConfig: async (key, model) => {
-    const [useCaseId, role] = key.split(':')
-    const detail = await get<RawUseCaseDetail>(`/use-cases/${useCaseId}`)
-    const current = detail.agents.find((agent) => agent.role === role)
-    const raw = await put<RawAgentConfig>(`/use-cases/${useCaseId}/agents/${role}`, {
-      config: { ...current?.config, model },
+  listUseCases: () => get<UseCaseOut[]>('/use-cases'),
+  getUseCase: (id) => get<UseCaseDetail>(`/use-cases/${id}`),
+  setAgentModel: (useCaseId, agent, model) =>
+    put<AgentConfigOut>(`/use-cases/${useCaseId}/agents/${agent.role}`, {
+      config: { ...agent.config, model },
       note: 'Cambiado desde la consola',
-    })
-    return { papel: `${useCaseId}:${raw.role}`, modelo: raw.config.model ?? '' }
-  },
+    }),
 }
