@@ -40,6 +40,16 @@ When a required symbol is missing, a rule's code fails at runtime, or two fired 
 
 Names inside a definition (process, decision types, symbols, sources) are the process's own data. Write them in English, except where an external contract fixes them: the invoice process keeps `PAGAR`, `NO_PAGAR` and `ESCALAR` because the challenge's `outcomes.jsonl` requires them verbatim.
 
+## `invoice-payment/frozen/<date>/`: a compiled rule set, frozen
+
+The checks the normalizer and the compiler wrote from `Norma_Pagos_v3`, kept exactly as they
+were adopted for delivery: `invoice-payment.json` (a pack of its own process, `Invoice payment -
+frozen <date>`, whose rules point at `rules/n<norm rule>-<check>.py`) and `manifest.json` (the
+norm's sentences, each check's hash, reading, test rows and test report, the models, the golden
+result and how many norm runs it took). `make load-frozen` loads and activates it with no LLM,
+exactly like the hand-written rules below; `backend/tests/e2e/test_frozen_rules.py` reloads it
+and checks the hashes and 471/471 on the golden.
+
 ## `rules-v3/`: hand-written code
 
 The invoice rules point at `rules-v3/r01-...py` to `r16-...py`, one file per rule in the order of the JSON. A rule that arrives with its code passes the sandbox's static check and is stored validated (`report.origin = "hand-written"`), so `--activate` runs the whole process without any model. Only the CLI resolves `code` paths, never `POST /processes/definition` (a client-supplied path would read any file the backend can); over HTTP such a rule is refused with 409. The compiler can regenerate the same rules from their texts, and `make eval-compiler` compares its output with these files. Where each rule comes from: `docs/invoice-payment-rules.md`.
