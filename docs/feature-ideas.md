@@ -24,6 +24,14 @@ overwrite the first file or stop, and either way one line is missing from the ex
 content-hashed (ADR 0008); add a test that two names with the same bytes give two instances and two
 lines.
 
+**Orchestrator agent per file and more input formats.** An agent receives any file, works out what it
+is and plans its processing with tools. PDFs and images are read by a model with evidence and
+confidence per field, XML invoices (Facturae) skip the reading, spreadsheets are mapped column by
+column to suppliers, orders and ledger entries with learned profiles, and EML and ZIP files are opened
+so each attachment goes back through the router. *Us:* the process is general, the inputs are PDF,
+OCR and the workbook. Unpacking EML and ZIP and taking Facturae XML are cheap, and they answer the
+rubric question about new file types with something that runs.
+
 ## Decision and review
 
 **Review screen with the page beside the reading.** The escalated case shows the page image next to the
@@ -54,6 +62,17 @@ read the rules of this process, we generate the whole process for any case.
 answers "N of 540 recalculated, M change". *Us:* impact check before activation and a dry-run
 reprocess exist (`demo-logs/coverage/14-impact.json`, `15-reprocess-dry.json`); rehearse it live.
 
+**What-if simulator.** Before applying anything, the manager asks "what if the tolerance were 0.50",
+"what if the PAGAR threshold were 0.95" or "what if this ledger entry became PAGADA" and sees which
+decisions would change. The 500 decisions recalculate in 49 ms at zero model cost, and a new ERP
+snapshot expires only the decisions that depend on what changed. *Us:* a rule change is checked
+against past decisions before activation (ADR 0004). We lack the same preview for a change in a
+source value or a threshold, without writing a new rule.
+
+**Editable policy from the console.** The manager changes settings such as the extractor in use and
+the reference date from the console, and the pipeline honours them on the next run. *Us:* runtime
+configuration is versioned (ADR 0011); check the console exposes it.
+
 ## Resilience and delivery
 
 **Failure switch in the demo.** A command takes the LLM down, new documents stay pending, nothing is
@@ -64,6 +83,14 @@ the stage.
 **Audit gate before packaging.** The export refuses to be written while a delivery audit is red, and a
 safe delivery of batch 1 is published early in the day. *Us:* export answers 409 while anything is
 `PENDING`; consider publishing batch 1 before batch 2 arrives.
+
+**Independent delivery verifier.** A separate tool that shares no code with the solution checks the
+delivery from outside. It covers the contract (encoding, BOM, CRLF, strict JSON, exact `result`,
+`file_id` normalisation, duplicates, missing and extra lines), runs seven plausible versions of the
+organisers' private validator, fuzzes the JSONL with 40 mutations, rebuilds a second opinion per
+invoice with its own parser and OCR, and checks the delivery repo (exactly three files, clean tree,
+pushed). *Us:* golden e2e tests. Since validation is binary, the contract and repo checks are worth
+copying before Sunday's 10:30 clone.
 
 **Offline demo kit.** The demo database and cache travel to the presenting laptop with a manifest
 checked on install, so the demo needs no network. *Us:* worth doing for the defence laptop.
