@@ -19,6 +19,11 @@ export const es = {
     signIn: 'Entrar',
     anonymous: 'sin identificar',
   },
+  planes: {
+    ingestion: 'Lectura',
+    agents: 'Agentes',
+    execution: 'Ejecución',
+  },
   health: {
     ok: 'Bien',
     degraded: 'Degradado',
