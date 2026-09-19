@@ -29,7 +29,7 @@ export function Settings() {
         <PageIntro
           kicker="Espacio"
           title="Ajustes"
-          description="Quién eres para el backend, qué modelo lleva cada papel y qué parte de la API está viva."
+          description="Quién eres para el backend y el estado de la API. OCR y modelos de un proceso concreto están en Ajustes de ese proceso."
         />
 
         <div className="max-w-2xl space-y-3">

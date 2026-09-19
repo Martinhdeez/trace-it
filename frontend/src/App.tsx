@@ -1,6 +1,5 @@
-import { Navigate, Outlet, Route, Routes } from 'react-router'
+import { Navigate, Outlet, Route, Routes, useParams } from 'react-router'
 import { AppShell } from './components/shell/AppShell'
-import { Audit } from './routes/Audit'
 import { Instances } from './routes/Instances'
 import { Landing } from './routes/Landing'
 import { NewProcess } from './routes/NewProcess'
@@ -8,9 +7,9 @@ import { Process } from './routes/Process'
 import { Processes } from './routes/Processes'
 import { Queue } from './routes/Queue'
 import { Rule } from './routes/Rule'
-import { Rules } from './routes/Rules'
 import { Settings } from './routes/Settings'
-import { Sources } from './routes/Sources'
+import { Definition } from './routes/Definition'
+import { ProcessSettings } from './routes/ProcessSettings'
 import { paths } from './lib/paths'
 
 export default function App() {
@@ -21,13 +20,21 @@ export default function App() {
         <Route path="/processes" element={<Processes />} />
         <Route path="/processes/new" element={<NewProcess />} />
         <Route path="/processes/:processId" element={<Process />} />
+        <Route path="/processes/:processId/definition" element={<Definition />} />
+        <Route path="/processes/:processId/definition/contexto" element={<Definition />} />
+        <Route path="/processes/:processId/definition/inputs" element={<Definition />} />
+        <Route path="/processes/:processId/definition/fuentes" element={<Definition />} />
+        <Route path="/processes/:processId/review" element={<Queue />} />
+        <Route path="/processes/:processId/settings" element={<ProcessSettings />} />
         <Route path="/processes/:processId/instances" element={<Instances />} />
-        <Route path="/processes/:processId/queue" element={<Queue />} />
-        <Route path="/processes/:processId/rules" element={<Rules />} />
         <Route path="/processes/:processId/rules/:ruleId" element={<Rule />} />
-        <Route path="/processes/:processId/audit" element={<Audit />} />
-        <Route path="/processes/:processId/sources" element={<Sources />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/processes/:processId/rules" element={<Legacy to={paths.definition} />} />
+        <Route path="/processes/:processId/knowledge" element={<Legacy to={paths.definitionSources} />} />
+        <Route path="/processes/:processId/sources" element={<Legacy to={paths.definitionSources} />} />
+        <Route path="/processes/:processId/queue" element={<Legacy to={paths.review} />} />
+        <Route path="/processes/:processId/audit" element={<Legacy to={paths.definition} />} />
+        <Route path="/processes/:processId/versions" element={<Legacy to={paths.definition} />} />
       </Route>
       <Route path="*" element={<Navigate to={paths.processes} replace />} />
     </Routes>
@@ -42,4 +49,9 @@ function Console() {
       </div>
     </AppShell>
   )
+}
+
+function Legacy({ to }: { to: (id: number | string) => string }) {
+  const processId = useParams().processId
+  return <Navigate to={to(processId ?? '')} replace />
 }

@@ -769,23 +769,47 @@ export const mockClient: ApiClient = {
       tiene_texto: !file.name.startsWith('scan'),
       ingerido: new Date().toISOString(),
     }))
-    if (processId === 1) files.unshift(...added)
+    if (processId === 1) {
+      files.unshift(...added)
+      let nextId = instances.reduce((max, item) => Math.max(max, item.instance.id), 0) + 1
+      for (const file of incoming) {
+        instances.push({
+          instance: {
+            id: nextId++,
+            nombre: file.name,
+            estado: 'PENDIENTE',
+            decision: null,
+          },
+          reason: '',
+          latencyMs: 0,
+          decisions: [],
+        })
+      }
+    }
     return wait(added, 600)
   },
 
   listSources: (processId) => wait(processId === 1 ? [...sources] : []),
 
-  uploadSource: async (_processId, name, file) => {
-    const load: SourceLoad = {
-      nombre: name,
-      origen: file.name,
-      filas: 0,
-      cargada: new Date().toISOString(),
+  uploadWorkbook: async (processId, file) => {
+    const loads: SourceLoad[] = [
+      { nombre: 'suppliers', origen: file.name, filas: 12, cargada: new Date().toISOString() },
+      { nombre: 'orders', origen: file.name, filas: 516, cargada: new Date().toISOString() },
+      { nombre: 'parameters', origen: file.name, filas: 1, cargada: new Date().toISOString() },
+    ]
+    if (processId === 1) {
+      for (const load of loads) {
+        const index = sources.findIndex((item) => item.nombre === load.nombre)
+        if (index >= 0) sources[index] = load
+        else sources.push(load)
+      }
     }
-    const index = sources.findIndex((item) => item.nombre === name)
-    if (index >= 0) sources[index] = load
-    else sources.push(load)
-    return wait(load, 500)
+    return wait(loads, 400)
+  },
+
+  uploadSource: async (processId, name, file) => {
+    const loads = await mockClient.uploadWorkbook(processId, file)
+    return loads.find((item) => item.nombre === name) ?? loads[0]
   },
 
   syncErp: async () => {

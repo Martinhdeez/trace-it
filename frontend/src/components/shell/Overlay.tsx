@@ -7,10 +7,12 @@ export function Overlay({
   onClose,
   children,
   align = 'center',
+  size = 'md',
 }: {
   onClose: () => void
   children: ReactNode
   align?: 'center' | 'right'
+  size?: 'md' | 'lg'
 }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -37,7 +39,13 @@ export function Overlay({
         }
         animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
         transition={{ duration: 0.22, ease }}
-        className={align === 'right' ? 'h-full w-full max-w-md' : 'w-full max-w-lg'}
+        className={
+          align === 'right'
+            ? 'h-full w-full max-w-md'
+            : size === 'lg'
+              ? 'w-full max-w-3xl'
+              : 'w-full max-w-lg'
+        }
         onClick={(event) => event.stopPropagation()}
       >
         {children}

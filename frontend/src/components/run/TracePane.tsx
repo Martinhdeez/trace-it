@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ChevronDown } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, XCircle } from 'lucide-react'
 import type { InstanceDetail, Rule, RuleOutcome } from '../../api/contracts'
 import { formatMs } from '../../lib/format'
 import { cn } from '../../lib/cn'
@@ -17,13 +17,20 @@ const ease = [0.23, 1, 0.32, 1] as const
 export function TracePane({
   instance,
   rules,
+  wide = false,
 }: {
   instance: InstanceDetail | undefined
   rules: Rule[]
+  wide?: boolean
 }) {
   if (!instance) {
     return (
-      <aside className="flex h-full min-h-0 w-[340px] shrink-0 flex-col px-5 py-4 text-[13px] text-muted">
+      <aside
+        className={cn(
+          'flex h-full min-h-0 shrink-0 flex-col px-5 py-4 text-[13px] text-muted',
+          wide ? 'min-w-0 flex-1' : 'w-[360px]',
+        )}
+      >
         Decisión
       </aside>
     )
@@ -32,36 +39,79 @@ export function TracePane({
   const current = label(instance)
   const latest = instance.decisiones.at(-1)
   const symbols = Object.entries(instance.simbolos ?? {})
+  const fired = latest?.resultados.filter((result) => result.salta === true).length ?? 0
+  const errors = latest?.resultados.filter((result) => result.salta === null).length ?? 0
+  const DecisionIcon =
+    current === 'PAGAR' || current === 'APROBAR'
+      ? CheckCircle2
+      : current === 'NO_PAGAR' || current === 'RECHAZAR'
+        ? XCircle
+        : AlertTriangle
   const ruleText = (outcome: RuleOutcome) =>
     rules.find((rule) => rule.id === outcome.regla_id)?.texto ?? `Regla ${outcome.regla_id}`
 
   return (
-      <aside className="flex h-full min-h-0 w-[340px] shrink-0 flex-col overflow-y-auto px-2 pb-3">
-      <div className="px-3 py-3">
-        <h2 className="text-[13px] font-medium">Decisión</h2>
+    <aside
+      className={cn(
+        'flex h-full min-h-0 shrink-0 flex-col overflow-y-auto pb-4',
+        wide ? 'min-w-0 flex-1 px-6' : 'w-[360px] px-2',
+      )}
+    >
+      <div className={cn('py-3', wide ? 'mx-auto w-full max-w-[820px]' : 'px-3')}>
+        <p className="text-[11px] text-muted">Resultado del proceso</p>
+        <h2 className="mt-0.5 truncate font-mono text-[13px]">{instance.nombre}</h2>
       </div>
 
-      <div className="rounded-[16px] bg-well px-4 py-4 ring-1 ring-black/[0.04]">
-        <p className="font-mono text-[12px] text-muted">{latest?.motivo || instance.estado}</p>
-        <p
-          className={cn(
-            'mt-2 text-[28px] font-medium leading-none tracking-[-0.045em]',
-            current === 'PAGAR' && 'text-pagar',
-            current === 'NO_PAGAR' && 'text-nopagar',
-            (current === 'ESCALAR' || current === 'REVISION') && 'text-escalar',
-          )}
-        >
-          {current.replaceAll('_', ' ')}
-        </p>
+      <div
+        className={cn(
+          'rounded-[16px] bg-white ring-1 ring-black/[0.06]',
+          wide ? 'mx-auto w-full max-w-[820px] px-6 py-6' : 'px-4 py-4',
+        )}
+      >
+        <div className="flex items-start gap-4">
+          <span
+            className={cn(
+              'grid h-10 w-10 shrink-0 place-items-center rounded-[12px]',
+              (current === 'PAGAR' || current === 'APROBAR') && 'bg-pagar-soft text-pagar',
+              (current === 'NO_PAGAR' || current === 'RECHAZAR') && 'bg-nopagar-soft text-nopagar',
+              (current === 'ESCALAR' || current === 'REVISION') && 'bg-escalar-soft text-escalar',
+            )}
+          >
+            <DecisionIcon size={19} strokeWidth={1.8} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-muted">Decisión final</p>
+            <p
+              className={cn(
+                'mt-1 text-[26px] font-medium leading-none tracking-[-0.045em]',
+                (current === 'PAGAR' || current === 'APROBAR') && 'text-pagar',
+                (current === 'NO_PAGAR' || current === 'RECHAZAR') && 'text-nopagar',
+                (current === 'ESCALAR' || current === 'REVISION') && 'text-escalar',
+              )}
+            >
+              {current.replaceAll('_', ' ')}
+            </p>
+            <p className="mt-2 text-[12.5px] leading-5 text-muted">
+              {latest?.motivo || 'El proceso todavía no ha emitido una decisión.'}
+            </p>
+          </div>
+        </div>
+
         {latest ? (
-          <p className="mt-2 truncate text-[12px] text-muted">
-            {latest.autor === 'motor' ? 'Motor' : latest.autor} ·{' '}
-            <span className="font-mono">{latest.reglas_hash.slice(0, 12) || '—'}</span>
-          </p>
+          <div className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-[10px] bg-black/[0.06] ring-1 ring-black/[0.04]">
+            <DecisionStat label="Reglas evaluadas" value={latest.resultados.length} />
+            <DecisionStat label="Activadas" value={fired} />
+            <DecisionStat label="Errores" value={errors} />
+          </div>
         ) : null}
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
+          <span>{latest?.autor === 'motor' ? 'Decidido por el motor' : latest?.autor}</span>
+          {latest ? <span className="font-mono text-faint">{latest.reglas_hash.slice(0, 12)}</span> : null}
+        </div>
       </div>
 
-      {latest?.resultados.length ? (
+      <div className={cn(wide && 'mx-auto w-full max-w-[820px]')}>
+        {latest?.resultados.length ? (
         <Block title={`reglas · ${latest.resultados.length}`} openByDefault>
           <ul className="divide-y divide-hairline">
             {latest.resultados.map((outcome) => (
@@ -93,9 +143,9 @@ export function TracePane({
             ))}
           </ul>
         </Block>
-      ) : null}
+        ) : null}
 
-      <Block title={`símbolos · ${symbols.length}`}>
+        <Block title={`símbolos · ${symbols.length}`}>
         {symbols.length === 0 ? (
           <p className="px-3 py-3 text-[12px] text-muted">
             Nadie ha extraído los símbolos de esta instancia todavía.
@@ -117,9 +167,9 @@ export function TracePane({
             ))}
           </ul>
         )}
-      </Block>
+        </Block>
 
-      <Block title={`traza · ${instance.eventos.length} pasos`}>
+        <Block title={`traza · ${instance.eventos.length} pasos`}>
         <ol className="divide-y divide-hairline">
           {instance.eventos.map((event, index) => (
             <li key={`${event.paso}-${index}`} className="px-3 py-2">
@@ -139,9 +189,9 @@ export function TracePane({
             </li>
           ))}
         </ol>
-      </Block>
+        </Block>
 
-      {instance.decisiones.length > 1 ? (
+        {instance.decisiones.length > 1 ? (
         <Block title={`histórico · ${instance.decisiones.length}`}>
           <ul className="divide-y divide-hairline">
             {instance.decisiones.map((decision) => (
@@ -155,12 +205,22 @@ export function TracePane({
             ))}
           </ul>
         </Block>
-      ) : null}
+        ) : null}
 
-      <Block title="línea de la exportación">
-        <JsonHighlight value={{ file_id: instance.nombre, result: instance.decision }} />
-      </Block>
+        <Block title="línea de la exportación">
+          <JsonHighlight value={{ file_id: instance.nombre, result: instance.decision }} />
+        </Block>
+      </div>
     </aside>
+  )
+}
+
+function DecisionStat({ label: text, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-white px-3 py-2.5">
+      <p className="font-mono text-[17px] tracking-[-0.04em] tabular-nums">{value}</p>
+      <p className="mt-0.5 text-[10px] text-muted">{text}</p>
+    </div>
   )
 }
 
