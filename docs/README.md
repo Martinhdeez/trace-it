@@ -13,6 +13,7 @@ Start with the [root README](../README.md) for what the system does, then:
 | [scale-and-cost.md](scale-and-cost.md) | Measured throughput (engine, ingestion, ERP, compilation), the token cost formula, limits, and what a new input type changes |
 | [runbook-batch2.md](runbook-batch2.md) | Saturday's batch 2, ERP update and norm v4, step by step, with rehearsal timings |
 | [mentor-questions.md](mentor-questions.md) | Open doubts about the reference outcomes, how we handle each and what flips it |
+| [competitors.md](competitors.md) | The other Maisa teams' headline features on Saturday morning, and how we position ours |
 | [sources-http.md](sources-http.md) | The HTTP source connector (the ERP): configuration and guarantees |
 | [ingestion/README.md](ingestion/README.md) | Document ingestion: PDF, OCR, workbook |
 | [../processes/README.md](../processes/README.md) | Format of a process pack |
