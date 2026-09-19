@@ -212,6 +212,18 @@ test.fixme('pkg 8: the proposals inbox lists the resolution', async () => {
   // Accept or reject from the inbox, with `proposal_id` on resolve (#93).
 })
 
-test.fixme('pkg 7: run history lists the run', async () => {
-  // Panel -> Historial: the run from this test, with its counts and the manager as author.
+test('pkg 7: run history lists the run', async () => {
+  await page.goto(`/processes/${processId}`)
+  // Two runs: the text PDFs, then the scan. The older one lists its own cases.
+  const runs = page.getByRole('link', { name: /decisiones · v1/ })
+  await expect(runs).toHaveCount(2)
+  await runs.last().click()
+  await expect(page).toHaveURL(/\?run=\d+/)
+  await expect(page.getByText(/^Ejecución del .* · v1$/)).toBeVisible()
+  for (const name of ESCALATED) {
+    await expect(page.getByRole('button', { name: new RegExp(name.replace('.', '\\.')) })).toBeVisible()
+  }
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`/processes/${processId}$`))
+  await realAndClean()
 })

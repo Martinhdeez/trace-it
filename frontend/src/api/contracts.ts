@@ -37,6 +37,8 @@ export type Suggestion = Schemas['Suggestion']
 export type ResolveIn = Schemas['ResolveIn']
 export type RuleIn = Schemas['RuleIn']
 export type RuleDetailOut = Schemas['RuleDetail']
+export type RunOut = Schemas['RunOut']
+export type RunDetail = Schemas['RunDetail']
 export type InstanceTrace = Schemas['InstanceTrace']
 export type SpanNode = Schemas['SpanNode']
 export type ExtractionResult = Schemas['ExtractionResult']
@@ -347,6 +349,10 @@ export interface ApiClient {
   saveDraft(processId: number, body: DraftIn): Promise<VersionDraft>
 
   run(processId: number): Promise<RunSummary>
+  /** Every run of the process, newest first. */
+  listRuns(processId: number): Promise<RunOut[]>
+  /** One run and the decisions it appended. */
+  getRun(id: number): Promise<RunDetail>
   listInstances(processId: number, filters?: InstanceFilters): Promise<InstanceOut[]>
   getInstance(id: number): Promise<InstanceDetail>
   getDocument(instanceId: number): Promise<ExtractionResult>

@@ -554,6 +554,8 @@ export const mockClient: ApiClient = {
   saveDraft: noMock,
 
   run: noMock,
+  listRuns: noMock,
+  getRun: noMock,
   listInstances: noMock,
 
   getInstance: noMock,
