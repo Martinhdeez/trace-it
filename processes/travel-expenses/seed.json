@@ -1,7 +1,0 @@
-[
-  {"name": "expense-report-001.json", "symbols": {"employee": "alice@example.com", "amount": 120.50, "has_receipt": true}},
-  {"name": "expense-report-002.json", "symbols": {"employee": "bob@example.com", "amount": 80, "has_receipt": false}},
-  {"name": "expense-report-003.json", "symbols": {"employee": "carla@example.com", "amount": 850, "has_receipt": true}},
-  {"name": "expense-report-004.json", "symbols": {"employee": "diego@example.com", "amount": 900, "has_receipt": false}},
-  {"name": "expense-report-005.json", "symbols": {"employee": "eva@example.com", "amount": 499.99, "has_receipt": true}}
-]
