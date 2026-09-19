@@ -9,9 +9,7 @@ from app.features.users.model import User
 
 # ponytail: identity by header, no password or token. Add real auth if the app leaves the
 # hackathon; every endpoint already goes through this one dependency.
-async def current_user(
-    session: Session, x_user_id: Annotated[int | None, Header()] = None
-) -> User:
+async def current_user(session: Session, x_user_id: Annotated[int | None, Header()] = None) -> User:
     """401 when the caller does not say who it is, or names a user that does not exist."""
     user = None if x_user_id is None else await session.get(User, x_user_id)
     if user is None:

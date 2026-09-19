@@ -8,15 +8,23 @@ The backend is the contract; this page is the map. Live and exact: `make setup`,
 http://localhost:8000/docs (OpenAPI). Every response is JSON in English. Errors come in
 two shapes:
 
-- Domain errors (404, 409, 403, the 422s `invalid_document` and `sandbox_error`, 500):
+- Domain errors (401, 403, 404, 409, the 422s `invalid_document` and `sandbox_error`, 500):
   `{"code", "message"}`.
 - Request validation (422 from FastAPI, a body or parameter that does not match the
   schema): `{"detail": [{"loc", "msg", "type"}]}`. Kept as FastAPI sends it; a 422 without
   `code` is always this one.
 
 The committed contract is `frontend/openapi.json` (`make openapi`), with typed
-`operationId`s and one name per schema. Identify with `X-User-Id` (from `POST /login`); resolving,
-activating rules, document extraction and source uploads need it. CORS is open.
+`operationId`s and one name per schema. CORS is open.
+
+**Who may call what.** Identify with `X-User-Id` (the id `POST /login` returns). The console's
+user is the manager, who handles only escalations (Q5 in [integration.md](integration.md)).
+Reads stay open. These need a manager: run, reprocess, source sync,
+`POST /processes/definition`, draft validate and publish, resolve, alert ack, `POST /users`,
+rule activate and retire, learning. A missing header, or an id that does not exist, answers
+401 `{"code": "unauthenticated"}`; a user who is not a manager answers 403
+`{"code": "permission_denied"}`. Uploads, extraction and rule creation need any known user.
+The first manager comes from the pack (`make setup` loads its `users`).
 
 ## One screen, one call
 
@@ -35,7 +43,7 @@ activating rules, document extraction and source uploads need it. CORS is open.
 | Provider activity | `GET /traces?process_id={id}&name=provider_call` | model, HTTP status, request fingerprint, replay/network outcome and reported tokens |
 | Metrics | `GET /processes/{id}/metrics` | stage timings, agent `llm` usage and separate reader `providers` totals; replay does not count as network usage |
 | Assistant | `GET /instances/{id}/suggestion` | decision, reasoning and a proposed rule. 409 if not escalated, 502 if the model failed |
-| Resolve | `POST /instances/{id}/resolve` `{decision, reason}` | adds a decision; the engine's stays |
+| Resolve | `POST /instances/{id}/resolve` `{decision, reason}` | manager; adds a decision, the engine's stays |
 | Rules | `GET /processes/{id}/rules?status=` | compiling, draft, active, blocked, retired |
 | Rule | `GET /rules/{id}` | `code`, `tests`, `report` (`valid`, `tests`, `discrepancies`, `attempts`, `reviews`; `needs_data` when blocked) |
 | Norm | `POST /processes/{id}/norm`, `GET /processes/{id}/norm-rules` | the client's norm split into norm rules, each with its rules |
@@ -44,18 +52,20 @@ activating rules, document extraction and source uploads need it. CORS is open.
 | Norm proposal | `GET /norm-proposals/{id}`, `POST .../validate`, `POST .../approve`, `POST .../reject` | Isolated previews; explicit manager adoption with a validation ID |
 | Sources | `GET /processes/{id}/sources` | current load per source: rows count, origin, `loaded_at`, and from its latest sync `status` (`ok`/`down`, null if never synced), `error`, `checked_at`. A `down` load is not read by runs until a sync succeeds (ADR 0028) |
 | Source rows | `GET /processes/{id}/sources/{name}` | same plus `data` |
-| Sync the ERP | `POST /processes/{id}/sources/{name}/sync`, `GET .../diff` | 502 when the download fails or the rows miss a canonical field (`processes/<pack>/schema.json`); nothing is written. Runs sync live sources themselves |
+| Sync the ERP | `POST /processes/{id}/sources/{name}/sync`, `GET .../diff` | the sync needs a manager. 502 when the download fails or the rows miss a canonical field (`processes/<pack>/schema.json`); nothing is written. Runs sync live sources themselves |
 | Audit trail | `GET /processes/{id}/events?step=&instance_id=&limit=` | newest first. Steps: `decision`, `resolution`, `ingest_document`, `compile_rule`, `normalize_norm`, `suggest_escalation`, `sync_source`, `sync_source_failed` |
 | Findings | `GET /processes/{id}/findings` | past decisions a later rule says were wrong |
 | Alerts | `GET /processes/{id}/alerts?status=open\|acknowledged\|resolved` | past decisions that newer data or rules would decide otherwise (ADR 0026): `before`, `after`, `trigger` (`source_sync` with the rows involved, or `rule_change` with rule ids), `evidence` (reason codes before and after), `acknowledged_by`, `resolved_by_decision_id`. Raised after a sync that changes rows and after a version is published |
-| Acknowledge | `POST /alerts/{id}/ack` `{note?}` | needs `X-User-Id`; 409 if already acknowledged. Act with Resolve or Reprocess; the later decision marks the alert `resolved` |
-| Run | `POST /processes/{id}/run` | first syncs every live source (`sync_before_run` in the pack's `schema.json`), then decides every PENDING instance with symbols; `down_sources` (`{name: why}`, omitted when none) lists sources whose sync failed: their rules do not run and those cases escalate `SOURCE_UNAVAILABLE: <source>` unless a rule that ran already rejects (ADR 0028); 409 while a rule is `compiling` or when no rule is `active`/`blocked` |
-| Reprocess | `POST /processes/{id}/reprocess?dry_run=` (optional `{"names": [...]}`) | decides the DECIDED instances again with the current rules and sources; appends a new engine decision only where it changes; an instance a person decided last is never touched and comes back in `conflicts`. Syncs live sources first like Run (`down_sources`), except with `dry_run=true`. Same 409 as Run |
+| Acknowledge | `POST /alerts/{id}/ack` `{note?}` | manager; 409 if already acknowledged. Act with Resolve or Reprocess; the later decision marks the alert `resolved` |
+| Run | `POST /processes/{id}/run` | manager. First syncs every live source (`sync_before_run` in the pack's `schema.json`), then decides every PENDING instance with symbols; `down_sources` (`{name: why}`, omitted when none) lists sources whose sync failed: their rules do not run and those cases escalate `SOURCE_UNAVAILABLE: <source>` unless a rule that ran already rejects (ADR 0028); 409 while a rule is `compiling` or when no rule is `active`/`blocked` |
+| Reprocess | `POST /processes/{id}/reprocess?dry_run=` (optional `{"names": [...]}`) | manager. Decides the DECIDED instances again with the current rules and sources; appends a new engine decision only where it changes; an instance a person decided last is never touched and comes back in `conflicts`. Syncs live sources first like Run (`down_sources`), except with `dry_run=true`. Same 409 as Run |
+| Run history | `GET /processes/{id}/runs?limit=50` | every run and reprocess, newest first (Q1): `id`, `kind` (`run`/`reprocess`), `started_at`, `finished_at`, `author`, `version_id`, `version_number`, `rules_hash`, `instances` evaluated, `decided` (decisions it appended), `by_decision` and `escalated` over **every** evaluated instance (so a rerun of the same invoices compares with the run before it), `escalation_reasons` (`{reason code: n}`), `down_sources`, `trace_id` |
+| Past run | `GET /runs/{id}` | the same plus `decisions[]` (`decision_id`, `instance_id`, `name`, `decision`, `reason`, `created_at`): what that run appended, read-only |
 | Export | `GET /processes/{id}/export` | `outcomes.jsonl`; 409 while anything is undecided or awaiting reviewer-requested approval. One batch only: `make export-batch` (`docs/runbook-batch2.md`) |
 | Upload | `POST /processes/{id}/files` (multipart `file`) | stores the PDF and fills symbols from the current extraction plan; existing invoice defaults are retained |
-| Workbook | `POST /processes/{id}/sources/workbook` (multipart `file`, optional `cut_off_date`) | appends supplier/order snapshots; never replaces ERP |
+| Workbook | `POST /processes/{id}/sources/workbook` (multipart `file`, required `cut_off_date` `YYYY-MM-DD`) | appends supplier/order snapshots and a `parameters` row with the cut-off that R12 reads; never replaces ERP. 422 without a cut-off: there is no default (Q4) |
 | Re-extract | `POST /instances/{id}/extract` (JSON `{}` or reader options) | pending documents only; current symbol schema, rules and source snapshots, preserved evidence; 409 if already decided |
-| Users | `GET /users`, `POST /users`, `POST /login`, `GET /me` | roles `manager`, `operator` |
+| Users | `GET /users`, `POST /users`, `POST /login`, `GET /me` | roles `manager`, `operator`; `POST /users` needs a manager |
 | Metrics | `GET /processes/{id}/metrics?since=` | runs, step durations, LLM tokens by model and role, outcomes (unchanged) |
 | Monitoring: ingestion | `GET /processes/{id}/metrics/ingestion?since=`, `GET /metrics/ingestion` (all processes) | `files`, `files_per_second`, `pages`, `ocr_calls`, `vision_calls`, `judge_calls`, `focused_reads`, `cache_hits`, `abstentions`, `abstentions_by_field`, `steps[]` |
 | Monitoring: agents | `GET /processes/{id}/metrics/agents?since=`, `GET /metrics/agents` | tokens in/out/cached, requests, retries, fallbacks, truncations `by_model`, `by_role`, `by_rule`, `by_norm_rule`, `by_use_case`; `per_hour[]`; `compile` (success rate, attempts); `norms[]` (tokens, `seconds_to_active`) |

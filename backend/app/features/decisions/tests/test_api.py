@@ -6,12 +6,10 @@ inserted directly. The sandbox is faked except where a test says otherwise.
 
 import json
 import uuid
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from typing import Any
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from sqlalchemy import update
 
 from app.core.database import session_factory
@@ -20,9 +18,8 @@ from app.features.ingestion.model import File, Instance
 from app.features.processes.model import DecisionType, Symbol
 from app.features.rules.model import Rule
 from app.features.sources.model import Source
-from app.main import app
 from tests.support.fakes import dataset_runner
-from tests.support.users import manager
+from tests.support.users import manager, manager_client
 
 SUPPLIERS = [
     {"nif": "B96233419", "iban": "ES2100752345670600123456"},
@@ -146,12 +143,7 @@ def fake_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sandbox, "run_dataset", FAKE_SANDBOX)
 
 
-@asynccontextmanager
-async def client() -> AsyncIterator[AsyncClient]:
-    """A client acting as a manager, the console's user (Q5)."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
-        await manager(api)
-        yield api
+client = manager_client
 
 
 async def test_run_resolve_and_export(fake_sandbox: None) -> None:
