@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "trace-it",
-    "description": "Deterministic decision processes with rules compiled to code by agents.\n\nIdentify with the `X-User-Id` header (see `POST /login`). Errors are `{\"code\", \"message\"}`, except request validation (422), which keeps FastAPI's `{\"detail\": [...]}`.",
+    "description": "Deterministic decision processes with rules compiled to code by agents.\n\nUse `Authorization: Bearer <API_TOKEN>` for every application endpoint and the `/db` administration endpoints. Bearer calls act as the dedicated API manager; `X-User-Id` is ignored. Browser/HTTP Basic callers continue to identify with `X-User-Id` (see `POST /login`). `/db` always requires Bearer authentication. See the [API guide](guide) for examples, permissions and deployment details. Errors are `{\"code\", \"message\"}`, except request validation (422), which keeps FastAPI's `{\"detail\": [...]}`.",
     "version": "0.1.0"
   },
   "paths": {
@@ -28,7 +28,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ]
       }
     },
     "/ready": {
@@ -54,6 +59,492 @@
               }
             }
           }
+        },
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ]
+      }
+    },
+    "/db/tables": {
+      "get": {
+        "tags": [
+          "database administration"
+        ],
+        "summary": "Tables",
+        "description": "Registered Trace-it application tables only; audit tables are read-only.",
+        "operationId": "listDatabaseTables",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DatabaseTable"
+                  },
+                  "type": "array",
+                  "title": "Response Listdatabasetables"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ]
+      }
+    },
+    "/db/tables/{table_name}/schema": {
+      "get": {
+        "tags": [
+          "database administration"
+        ],
+        "summary": "Schema",
+        "description": "Columns, generated values, keys, checks and indexes. Names are not SQL expressions.",
+        "operationId": "getDatabaseTableSchema",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/db/tables/{table_name}/rows": {
+      "get": {
+        "tags": [
+          "database administration"
+        ],
+        "summary": "Rows",
+        "description": "Primary-key ordered pages, including an etag for each complete row.",
+        "operationId": "listDatabaseRows",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          },
+          {
+            "name": "filters",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "JSON equality filters, e.g. {\"id\":1}",
+              "title": "Filters"
+            },
+            "description": "JSON equality filters, e.g. {\"id\":1}"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseRows"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "database administration"
+        ],
+        "summary": "Create",
+        "description": "Insert one row and audit it atomically. Omit generated columns.",
+        "operationId": "createDatabaseRow",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseWriteResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/db/tables/{table_name}/row": {
+      "get": {
+        "tags": [
+          "database administration"
+        ],
+        "summary": "Row",
+        "operationId": "getDatabaseRow",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Complete primary key as JSON, e.g. {\"id\":1}",
+              "title": "Key"
+            },
+            "description": "Complete primary key as JSON, e.g. {\"id\":1}"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "database administration"
+        ],
+        "summary": "Update",
+        "description": "Update one locked row if its etag still matches; requires a reason.",
+        "operationId": "updateDatabaseRow",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseWriteResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "database administration"
+        ],
+        "summary": "Delete",
+        "description": "Delete exactly one row by primary key and etag; foreign keys remain enforced.",
+        "operationId": "deleteDatabaseRow",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseDelete"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseWriteResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/db/tables/{table_name}/export": {
+      "get": {
+        "tags": [
+          "database administration"
+        ],
+        "summary": "Export",
+        "description": "A bounded JSONL page. Follow X-Next-Offset until it is absent.",
+        "operationId": "exportDatabaseRows",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          },
+          {
+            "name": "filters",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Filters"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -64,6 +555,11 @@
         ],
         "summary": "Versions",
         "operationId": "listProcessVersions",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -110,6 +606,11 @@
         ],
         "summary": "Version",
         "operationId": "getProcessVersion",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "version_id",
@@ -152,6 +653,11 @@
         ],
         "summary": "Draft",
         "operationId": "getProcessDraft",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -208,6 +714,11 @@
         ],
         "summary": "Edit",
         "operationId": "editProcessDraft",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -274,6 +785,11 @@
         ],
         "summary": "Discard",
         "operationId": "discardProcessDraft",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -334,6 +850,11 @@
         ],
         "summary": "Validate",
         "operationId": "validateProcessDraft",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -392,6 +913,11 @@
         ],
         "summary": "Publish",
         "operationId": "publishProcessDraft",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -460,6 +986,11 @@
         ],
         "summary": "Replay",
         "operationId": "replayDecision",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "decision_id",
@@ -519,6 +1050,11 @@
         "summary": "Execution Settings",
         "description": "Editable values and preset previews; reading never creates a draft.",
         "operationId": "getExecutionSettings",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -577,6 +1113,11 @@
         ],
         "summary": "All users",
         "operationId": "listUsers",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -600,6 +1141,11 @@
         ],
         "summary": "Create a user",
         "operationId": "createUser",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "x-user-id",
@@ -693,7 +1239,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ]
       }
     },
     "/me": {
@@ -703,6 +1254,11 @@
         ],
         "summary": "The current user",
         "operationId": "me",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "x-user-id",
@@ -767,7 +1323,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ]
       }
     },
     "/processes/definition": {
@@ -778,6 +1339,11 @@
         "summary": "Create or update a whole process from its JSON definition (idempotent)",
         "description": "Same format as the files under `processes/`. New rules enter as drafts; rules whose text already exists, and users whose email exists, are left as they are.",
         "operationId": "loadDefinition",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "x-user-id",
@@ -837,6 +1403,11 @@
         ],
         "summary": "A process with its setup",
         "operationId": "getProcess",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -879,6 +1450,11 @@
         ],
         "summary": "List Drafts",
         "operationId": "listDiscoverySessions",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "x-user-id",
@@ -930,6 +1506,11 @@
         ],
         "summary": "Start",
         "operationId": "startDiscoverySession",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "x-user-id",
@@ -989,6 +1570,11 @@
         ],
         "summary": "Get",
         "operationId": "getDiscoverySession",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "draft_id",
@@ -1047,6 +1633,11 @@
         ],
         "summary": "History",
         "operationId": "getDiscoverySessionHistory",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "draft_id",
@@ -1109,6 +1700,11 @@
         ],
         "summary": "Message",
         "operationId": "messageDiscoverySession",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "draft_id",
@@ -1177,6 +1773,11 @@
         ],
         "summary": "Workbook",
         "operationId": "uploadDraftWorkbook",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "draft_id",
@@ -1245,6 +1846,11 @@
         ],
         "summary": "Sync",
         "operationId": "syncDraftSource",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "draft_id",
@@ -1322,6 +1928,11 @@
         ],
         "summary": "Review",
         "operationId": "reviewDraftProposal",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "draft_id",
@@ -1390,6 +2001,11 @@
         ],
         "summary": "Prepare",
         "operationId": "prepareDiscoverySession",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "draft_id",
@@ -1458,6 +2074,11 @@
         ],
         "summary": "Publish",
         "operationId": "publishDiscoverySession",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "draft_id",
@@ -1526,6 +2147,11 @@
         ],
         "summary": "Configure Execution",
         "operationId": "configureDiscoveryExecution",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "draft_id",
@@ -1594,6 +2220,11 @@
         ],
         "summary": "Rules",
         "operationId": "listRules",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -1661,6 +2292,11 @@
         ],
         "summary": "Add a rule as text. It is compiled in the background (status `compiling`)",
         "operationId": "createRule",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -1730,6 +2366,11 @@
         "summary": "Turn a norm in natural language into norm rules and their checks. The checks compile in the background, concurrently (status `compiling`)",
         "description": "The normalizer agent keeps each sentence of the norm (any language) as one norm rule and splits it into atomic checks in English, each an ordinary rule (`norm_rule_id` links it) with the decision the norm implies and how it was read (kept in the rule's `report.norm`). Statements that are not checkable conditions come back as the norm rule's `policies`; ids of active rules that already cover it, as `covered`.",
         "operationId": "normalizeNorm",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -1801,6 +2442,11 @@
         ],
         "summary": "The sentences of the client's norm, each with its atomic rules",
         "operationId": "listNormRules",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -1847,6 +2493,11 @@
         ],
         "summary": "A rule with its code",
         "operationId": "getRule",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "rule_id",
@@ -1889,6 +2540,11 @@
         ],
         "summary": "Recompile a draft or blocked rule: tests, code, validation; waits for it",
         "operationId": "compileRule",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "rule_id",
@@ -1947,6 +2603,11 @@
         ],
         "summary": "What activating (or retiring) this rule would change, without doing it",
         "operationId": "getImpact",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "rule_id",
@@ -1989,6 +2650,11 @@
         ],
         "summary": "Stage a validated rule in the process draft; publish the draft to activate",
         "operationId": "activateRule",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "rule_id",
@@ -2050,6 +2716,11 @@
         ],
         "summary": "Stage removal of a rule; validate and publish the process draft to retire it",
         "operationId": "retireRule",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "rule_id",
@@ -2112,6 +2783,11 @@
         "summary": "Decide every pending instance with the active rules",
         "description": "Syncs the process's live sources first; a source that fails is down for this run and listed in `down_sources`, as is a source a rule reads that was never loaded (ADR 0028).",
         "operationId": "runProcess",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -2171,6 +2847,11 @@
         "summary": "Decide the decided instances again with the current rules and sources",
         "description": "After a source resync, a corrected datum or a rule adopted later. Only a decision that changes is written, as a new engine row; the history stays. An instance a person decided last or that awaits review is never replaced: a disagreement comes back in `conflicts`. `names` limits it to those instances. `dry_run=true` compares only engine outcomes, with no reviewer calls. New engine decisions receive optional reviews. Like a run, it syncs the live sources first, except a dry run (ADR 0028).",
         "operationId": "reprocessProcess",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -2257,6 +2938,11 @@
         "summary": "Run history, newest first: each run and reprocess with its outcome",
         "description": "One entry per stored execution: when, who, the process version and rules hash, the engine's outcome per decision type for every instance it evaluated, the escalations and their reason codes, `down_sources` and the `trace_id`. `by_decision` and `escalated` cover every evaluated instance, so a rerun of the same invoices compares with the run before it; `decided` counts only the decisions it appended.",
         "operationId": "listRuns",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -2315,6 +3001,11 @@
         ],
         "summary": "One past run with the decisions it appended, read-only",
         "operationId": "getRun",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "run_id",
@@ -2357,6 +3048,11 @@
         ],
         "summary": "The numbers of a process page: instances, decisions, queue, rules, sources",
         "operationId": "getProcessSummary",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -2400,6 +3096,11 @@
         "summary": "Instances with their latest decision, oldest first",
         "description": "`status` is PENDING or DECIDED; `decision` filters on the latest decision; `q` is a case-insensitive match on the name.",
         "operationId": "listInstances",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -2495,6 +3196,11 @@
         "summary": "The trace of a process, newest first",
         "description": "Every recorded step (span, ADR 0018): `decision`, `resolution`, `ingest_document`, `upload_document`, `run_process`, `evaluate_rule`, `compile_rule`, `llm_run`, `normalize_norm`, `suggest_escalation`, `sync_source`, `export_outcomes`... A failed step has `status: error`. Filter with `step` and `instance_id`; `GET /traces/{trace_id}` gives the tree a step belongs to.",
         "operationId": "listEvents",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -2585,6 +3291,11 @@
         ],
         "summary": "Instances waiting for a person: escalations and reviewer disagreements",
         "operationId": "getQueue",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -2647,6 +3358,11 @@
         ],
         "summary": "An instance with its symbols, decision history and trace",
         "operationId": "getInstance",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -2689,6 +3405,11 @@
         ],
         "summary": "A person decides. Adds a decision, never edits the engine's",
         "operationId": "resolveInstance",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -2760,6 +3481,11 @@
         ],
         "summary": "outcomes.jsonl, one line per instance",
         "operationId": "exportOutcomes",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -2814,6 +3540,11 @@
         ],
         "summary": "Past decisions a later rule says were wrong",
         "operationId": "listFindings",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -2860,6 +3591,11 @@
         ],
         "summary": "Assistant's suggested decision, reasoning and new rule for an escalated case. Only a suggestion: the person resolves the instance and creates the rule (POST /processes/{id}/rules) themselves",
         "operationId": "getSuggestion",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -2908,6 +3644,11 @@
         ],
         "summary": "Inspect the current fields and rule dependencies used for document extraction",
         "operationId": "getProcessExtractionPlan",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -2966,6 +3707,11 @@
         ],
         "summary": "Store a PDF and its reading evidence as an instance of a process",
         "operationId": "uploadProcessDocument",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -3034,6 +3780,11 @@
         ],
         "summary": "Read persisted document evidence from PostgreSQL",
         "operationId": "getInstanceDocument",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -3092,6 +3843,11 @@
         ],
         "summary": "Get Document Locations",
         "operationId": "getDocumentLocations",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -3150,6 +3906,11 @@
         ],
         "summary": "Get Document Page",
         "operationId": "getDocumentPage",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -3210,6 +3971,11 @@
         ],
         "summary": "Re-extract a pending document using current symbols, rules and source snapshots",
         "operationId": "extractInstanceDocument",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -3281,6 +4047,11 @@
         ],
         "summary": "Load supplier and order snapshots from an XLSX workbook",
         "operationId": "uploadProcessWorkbook",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -3349,6 +4120,11 @@
         ],
         "summary": "The file the instance was made from, byte for byte (usually a PDF)",
         "operationId": "getInstanceFile",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -3387,6 +4163,11 @@
         ],
         "summary": "The current load of each source of truth",
         "operationId": "listSources",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -3433,6 +4214,11 @@
         ],
         "summary": "The current load of one source, rows included",
         "operationId": "getSource",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -3485,6 +4271,11 @@
         "summary": "Download an HTTP source (e.g. the ERP) into a new snapshot",
         "description": "Reads the source's configuration from the `sources.json` of the process's use case on every call. Writes one new snapshot only if the whole download succeeds; otherwise answers 502 and the previous snapshot stays current. Returns the counts, the retries and the diff against the previous snapshot.",
         "operationId": "syncSource",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -3555,6 +4346,11 @@
         ],
         "summary": "The latest snapshot of a source against the one before it",
         "operationId": "diffSource",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -3621,7 +4417,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ]
       }
     },
     "/use-cases/{use_case_id}": {
@@ -3631,6 +4432,11 @@
         ],
         "summary": "A use case with the active configuration of each agent role",
         "operationId": "getUseCase",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "use_case_id",
@@ -3673,6 +4479,11 @@
         ],
         "summary": "Every version of an agent role's configuration, oldest first",
         "operationId": "listAgentConfigVersions",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "use_case_id",
@@ -3737,6 +4548,11 @@
         ],
         "summary": "Save a new version of an agent role's configuration and activate it",
         "operationId": "configureAgent",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "use_case_id",
@@ -3826,6 +4642,11 @@
         ],
         "summary": "Activate an existing version (rollback, or adopt one loaded from the pack)",
         "operationId": "activateAgentConfig",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "config_id",
@@ -3889,8 +4710,13 @@
           "traces"
         ],
         "summary": "Recent spans, newest first",
-        "description": "Every step the system took, as spans of the audit trail (ADR 0018). Filter by process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, `sync_source`, `upload_document`...), status (`ok`, `error`), plane, time window (`since` <= start < `until`), rule, norm rule, use case, or a span's `model`, `role`, `agent` (the agents plane's `by_role` key), `provider` and `operation`. Every row of `/metrics/{plane}` carries its drill-down here as `traces`.",
+        "description": "Every step the system took, as spans of the audit trail (ADR 0018). Filter by process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, `sync_source`, `upload_document`...), status (`ok`, `error`), plane, time window (`since` <= start < `until`), rule, norm rule, use case, or a span's `model`, `role`, `agent` (the agents plane's `by_role` key), `provider`, `operation` and `source` (a `sync_source` span's source). Every row of `/metrics/{plane}` carries its drill-down here as `traces`.",
         "operationId": "listSpans",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -4119,6 +4945,22 @@
             }
           },
           {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -4166,6 +5008,11 @@
         ],
         "summary": "One trace as a tree of spans",
         "operationId": "getTrace",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "trace_id",
@@ -4215,6 +5062,11 @@
         ],
         "summary": "The journey of one instance: file, reading, symbols, decisions, people, export",
         "operationId": "getInstanceTrace",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -4257,6 +5109,11 @@
         ],
         "summary": "How a rule was produced (norm, tests, attempts, reviews, activation) and its runtime stats",
         "operationId": "getRuleTrace",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "rule_id",
@@ -4300,6 +5157,11 @@
         "summary": "Aggregates of a process: runs, throughput, step durations, LLM tokens, outcomes",
         "description": "`steps` gives count, errors and p50/p95 duration per step type (`compile_rule` is the rule compile time, `evaluate_rule` one rule over a run); `llm` the calls, retries, errors and tokens by model and role. `providers` separates OCR provider attempts, network requests, journal replays, errors and reported tokens by provider, model and operation. Replayed tokens do not count as new usage. `since` keeps the spans and decisions from that moment on.",
         "operationId": "getProcessMetrics",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -4360,6 +5222,11 @@
         "summary": "The ingestion plane of a process",
         "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
         "operationId": "getProcessIngestionMetrics",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -4420,6 +5287,11 @@
         "summary": "The ingestion plane across every process",
         "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
         "operationId": "getIngestionMetrics",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "since",
@@ -4471,6 +5343,11 @@
         "summary": "The agents plane of a process",
         "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
         "operationId": "getProcessAgentsMetrics",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -4531,6 +5408,11 @@
         "summary": "The agents plane across every process",
         "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
         "operationId": "getAgentsMetrics",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "since",
@@ -4582,6 +5464,11 @@
         "summary": "The execution plane of a process",
         "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
         "operationId": "getProcessExecutionMetrics",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -4642,6 +5529,11 @@
         "summary": "The execution plane across every process",
         "description": "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span name to one), never mixed into one total (`docs/observability-dashboards.md`): `ingestion` (upload, store, extraction, native text, OCR, vision, workbook, source sync: files/s, pages, calls, cache hits, abstentions, and per provider the attempts, network requests, replays, tokens, `known_cost_usd` and `unpriced_requests`), `agents` (normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, impact, activation: `total` and tokens and cost by model, role, rule, norm rule, use case and hour, fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the human queue, time to resolution; 0 tokens by design). Each has `steps` with count, errors, p50/p95. Cost is USD where the model's price is known; `unpriced_requests` counts the rest, never read as 0. Every row's `traces` is its drill-down in `GET /traces`. Provider token totals exclude journal replay and reflect reported usage, not billing. `since` keeps what happened from that moment on.",
         "operationId": "getExecutionMetrics",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "since",
@@ -4708,7 +5600,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ]
       }
     },
     "/events/stream": {
@@ -4719,6 +5616,11 @@
         "summary": "Every new span, live (server-sent events)",
         "description": "`text/event-stream`: one event per span as it is written, `event` is its plane, `id` its `events.id`, `data` a span as in `GET /traces`. `: ping` when nothing new came in the last second. Filter by `plane` and `process_id`; `after` replays from that id (default: only new spans). A reconnecting `EventSource` sends `Last-Event-ID`, used when `after` is not given.",
         "operationId": "streamEvents",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "plane",
@@ -4809,6 +5711,11 @@
         ],
         "summary": "Analyze past cases and propose norms; changes no decisions or rules",
         "operationId": "analyzeProcessCases",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -4875,6 +5782,11 @@
         ],
         "summary": "List Analyses",
         "operationId": "listLearningAnalyses",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -4949,6 +5861,11 @@
         ],
         "summary": "Get Analysis",
         "operationId": "getLearningAnalysis",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "analysis_id",
@@ -5007,6 +5924,11 @@
         ],
         "summary": "Get Proposal",
         "operationId": "getNormProposal",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "proposal_id",
@@ -5065,6 +5987,11 @@
         ],
         "summary": "Prepare isolated code/tests or paired guidance previews; waits up to five minutes",
         "operationId": "validateNormProposal",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "proposal_id",
@@ -5123,6 +6050,11 @@
         ],
         "summary": "Publish the exact latest validated norm after checking for stale evidence",
         "operationId": "approveNormProposal",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "proposal_id",
@@ -5191,6 +6123,11 @@
         ],
         "summary": "Reject",
         "operationId": "rejectNormProposal",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "proposal_id",
@@ -5260,6 +6197,11 @@
         "summary": "Past decisions that newer data or rules would decide otherwise",
         "description": "Raised after a source sync that changes rows and after a process version is published (ADR 0026). Each alert names the decision flagged, the outcome the engine would reach now, the trigger (source rows involved, or rule ids) and the reason codes before and after. The decision itself is never changed: act with `resolve` or `reprocess`; the later decision marks the alert `resolved`.",
         "operationId": "listAlerts",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -5327,6 +6269,11 @@
         ],
         "summary": "The manager has seen the alert; records who and an optional note",
         "operationId": "ackAlert",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "alert_id",
@@ -5406,6 +6353,11 @@
         "summary": "The assistant proposes a decision for an escalated instance; a manager settles it",
         "description": "Why the case escalated, the options with their consequence, the proposed one and its evidence, in `payload`. Only a proposal: no decision is taken until a manager accepts it (or resolves the instance with its `proposal_id`). A new one supersedes the instance's open proposal.",
         "operationId": "proposeDecision",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -5471,6 +6423,11 @@
         "summary": "Proposals from the escalation assistant, the process chat and learning",
         "description": "Newest first. `kind` is decision, rule, context, input or source.",
         "operationId": "listProposals",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "process_id",
@@ -5556,6 +6513,11 @@
         "summary": "The manager accepts a proposal; its channel's own workflow applies it",
         "description": "decision: resolves the instance with the proposed decision. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.",
         "operationId": "acceptProposal",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "proposal_id",
@@ -5634,6 +6596,11 @@
         ],
         "summary": "The manager rejects a proposal; nothing it proposed is applied",
         "operationId": "rejectProposal",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "proposal_id",
@@ -5712,6 +6679,11 @@
         ],
         "summary": "Ocr Config",
         "operationId": "getOcrConfig",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "x-user-id",
@@ -5759,6 +6731,11 @@
         ],
         "summary": "Extract",
         "operationId": "extractDocument",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "x-user-id",
@@ -5818,6 +6795,11 @@
         ],
         "summary": "Get Result",
         "operationId": "getDocumentExtraction",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "extraction_id",
@@ -5876,6 +6858,11 @@
         ],
         "summary": "Submit Batch",
         "operationId": "submitDocumentBatch",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "x-user-id",
@@ -5933,6 +6920,11 @@
         ],
         "summary": "Get Batch",
         "operationId": "getDocumentBatch",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "batch_id",
@@ -7181,6 +8173,281 @@
           "id"
         ],
         "title": "CreatedNormRule"
+      },
+      "DatabaseCreate": {
+        "properties": {
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "values",
+          "reason"
+        ],
+        "title": "DatabaseCreate"
+      },
+      "DatabaseDelete": {
+        "properties": {
+          "key": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Key"
+          },
+          "expected_etag": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Expected Etag"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "expected_etag",
+          "reason"
+        ],
+        "title": "DatabaseDelete"
+      },
+      "DatabaseRow": {
+        "properties": {
+          "key": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Key"
+          },
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
+          },
+          "etag": {
+            "type": "string",
+            "title": "Etag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "values",
+          "etag"
+        ],
+        "title": "DatabaseRow"
+      },
+      "DatabaseRows": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/DatabaseRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rows",
+          "limit",
+          "offset",
+          "next_offset"
+        ],
+        "title": "DatabaseRows"
+      },
+      "DatabaseSchema": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "primary_key": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Primary Key"
+          },
+          "writable": {
+            "type": "boolean",
+            "title": "Writable"
+          },
+          "columns": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "foreign_keys": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Foreign Keys"
+          },
+          "unique_constraints": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Unique Constraints"
+          },
+          "check_constraints": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Check Constraints"
+          },
+          "indexes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Indexes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "primary_key",
+          "writable",
+          "columns",
+          "foreign_keys",
+          "unique_constraints",
+          "check_constraints",
+          "indexes"
+        ],
+        "title": "DatabaseSchema"
+      },
+      "DatabaseTable": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "primary_key": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Primary Key"
+          },
+          "writable": {
+            "type": "boolean",
+            "title": "Writable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "primary_key",
+          "writable"
+        ],
+        "title": "DatabaseTable"
+      },
+      "DatabaseUpdate": {
+        "properties": {
+          "key": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Key"
+          },
+          "expected_etag": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Expected Etag"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason"
+          },
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "minProperties": 1,
+            "title": "Values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "expected_etag",
+          "reason",
+          "values"
+        ],
+        "title": "DatabaseUpdate"
+      },
+      "DatabaseWriteResult": {
+        "properties": {
+          "key": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Key"
+          },
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
+          },
+          "etag": {
+            "type": "string",
+            "title": "Etag"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "values",
+          "etag",
+          "change_id"
+        ],
+        "title": "DatabaseWriteResult"
       },
       "DecisionOut": {
         "properties": {
@@ -8542,6 +9809,13 @@
             "type": "integer",
             "title": "Escalated"
           },
+          "escalation_reasons": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Escalation Reasons"
+          },
           "pending": {
             "type": "integer",
             "title": "Pending"
@@ -8599,6 +9873,7 @@
           "decisions_by_outcome",
           "failures",
           "escalated",
+          "escalation_reasons",
           "pending",
           "resolutions",
           "resolutions_by_author",
@@ -9465,6 +10740,13 @@
                 "iban": 12
               }
             ]
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceStats"
+            },
+            "type": "array",
+            "title": "Sources"
           }
         },
         "type": "object",
@@ -9485,7 +10767,8 @@
           "providers",
           "cache_hits",
           "abstentions",
-          "abstentions_by_field"
+          "abstentions_by_field",
+          "sources"
         ],
         "title": "IngestionMetrics",
         "description": "Tokens and USD cost per provider in `providers`; no LLM run of the agents counts."
@@ -9750,6 +11033,14 @@
             },
             "type": "array",
             "title": "Spans"
+          },
+          "sources_read": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRead"
+            },
+            "type": "array",
+            "title": "Sources Read",
+            "default": []
           }
         },
         "type": "object",
@@ -10505,6 +11796,19 @@
             "type": "integer",
             "title": "Escalated"
           },
+          "escalation_reasons": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Escalation Reasons",
+            "examples": [
+              {
+                "MISSING_DATA": 20,
+                "OTHER": 1
+              }
+            ]
+          },
           "pending": {
             "type": "integer",
             "title": "Pending"
@@ -10522,6 +11826,7 @@
           "decisions_by_outcome",
           "failures",
           "escalated",
+          "escalation_reasons",
           "pending"
         ],
         "title": "ProcessMetrics"
@@ -10885,6 +12190,11 @@
           "unpriced_requests": {
             "type": "integer",
             "title": "Unpriced Requests",
+            "default": 0
+          },
+          "rate_limited": {
+            "type": "integer",
+            "title": "Rate Limited",
             "default": 0
           },
           "traces": {
@@ -12564,6 +13874,141 @@
         ],
         "title": "SourceProposal"
       },
+      "SourceRead": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "examples": [
+              "ok",
+              "error"
+            ]
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "requests": {
+            "type": "integer",
+            "title": "Requests"
+          },
+          "retries": {
+            "type": "integer",
+            "title": "Retries"
+          },
+          "rate_limited": {
+            "type": "integer",
+            "title": "Rate Limited"
+          },
+          "timeouts": {
+            "type": "integer",
+            "title": "Timeouts"
+          },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "status",
+          "started_at",
+          "duration_ms",
+          "requests",
+          "retries",
+          "rate_limited",
+          "timeouts",
+          "trace_id"
+        ],
+        "title": "SourceRead",
+        "description": "The latest `sync_source` span of one source before the instance's latest decision."
+      },
+      "SourceStats": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "syncs": {
+            "type": "integer",
+            "title": "Syncs"
+          },
+          "errors": {
+            "type": "integer",
+            "title": "Errors"
+          },
+          "requests": {
+            "type": "integer",
+            "title": "Requests"
+          },
+          "retries": {
+            "type": "integer",
+            "title": "Retries"
+          },
+          "rate_limited": {
+            "type": "integer",
+            "title": "Rate Limited"
+          },
+          "p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Ms"
+          },
+          "traces": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traces"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "syncs",
+          "errors",
+          "requests",
+          "retries",
+          "rate_limited",
+          "p95_ms"
+        ],
+        "title": "SourceStats",
+        "description": "`sync_source` spans of one source of truth, with its connector's stats."
+      },
       "SourceSummary": {
         "properties": {
           "id": {
@@ -13644,6 +15089,13 @@
           "warnings"
         ],
         "title": "WorkbookUpload"
+      }
+    },
+    "securitySchemes": {
+      "TraceItBearer": {
+        "type": "http",
+        "description": "The deployment's Trace-it API token. Acts as the dedicated API manager.",
+        "scheme": "bearer"
       }
     }
   }

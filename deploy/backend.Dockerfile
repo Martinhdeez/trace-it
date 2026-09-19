@@ -15,7 +15,11 @@ COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./
 COPY processes /processes
 COPY tools/hiring_demo.py /srv/hiring_demo.py
+COPY deploy/backend-start.sh /srv/backend-start.sh
+COPY docs/production-api.md /docs/production-api.md
 RUN useradd --uid 10001 --create-home trace \
-    && mkdir -p /srv/.data /srv/.models && chown -R trace:trace /srv/.data /srv/.models
+    && mkdir -p /srv/.data /srv/.models \
+    && chmod 755 /srv/backend-start.sh \
+    && chown -R trace:trace /srv/.data /srv/.models
 USER 10001:10001
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--root-path", "/nexia/trace-it/api"]
+CMD ["/srv/backend-start.sh"]

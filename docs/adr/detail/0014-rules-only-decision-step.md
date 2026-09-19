@@ -1,9 +1,11 @@
 ---
-status: superseded
-superseded_by: 0021
+status: accepted
 ---
 
 # Combine rule findings by decision-type priority only; process context never enters the automatic decision
+
+Amended by ADR 0021: an optional reviewer may recommend after the rules; it never changes the
+engine's outcome.
 
 ## Context
 ADR 0001 says: "A separate decision step then considers those findings together with

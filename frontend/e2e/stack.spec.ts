@@ -57,6 +57,48 @@ test('gateway protects both the console and API', async ({ baseURL, request }) =
   expect((await request.get('assets/missing.js')).status()).toBe(404)
 })
 
+test('Bearer API, public documentation and database boundaries through the real gateway', async ({ baseURL, request }) => {
+  const api = await requests.newContext({
+    baseURL,
+    httpCredentials: { username: '', password: '' },
+    extraHTTPHeaders: { Authorization: 'Bearer ci-only-api-token' },
+  })
+  try {
+    expect((await api.get('')).status()).toBe(401)
+    expect((await api.get('api/processes')).status()).toBe(200)
+    const identity = await api.get('api/me', { headers: { 'X-User-Id': '999999' } })
+    expect((await identity.json()).email).toBe('trace-it-api@localhost')
+    expect((await api.get('api/db/tables')).status()).toBe(200)
+    expect((await request.get('api/db/tables')).status()).toBe(401)
+    for (const path of ['api/docs', 'api/openapi.json', 'api/guide']) {
+      expect((await api.get(path, { headers: { Authorization: '' } })).status()).toBe(200)
+    }
+    for (const path of ['api/processes', 'api/db/tables', 'api/ready']) {
+      expect((await api.get(path, { headers: { Authorization: 'Bearer wrong' } })).status()).toBe(401)
+      expect((await api.get(path, { headers: { Authorization: '' } })).status()).toBe(401)
+    }
+    for (const name of ['pg_authid', 'alembic_version', 'other_app', 'public.users']) {
+      expect((await api.get(`api/db/tables/${name}/rows`)).status()).toBe(404)
+    }
+    const created = await api.post('api/db/tables/users/rows', { data: {
+      values: { name: 'Gateway API test', email: `${randomUUID()}@ci.invalid`, role: 'operator' },
+      reason: 'Verify gateway CRUD',
+    } })
+    expect(created.status(), await created.text()).toBe(201)
+    const row = await created.json()
+    const updated = await api.patch('api/db/tables/users/row', { data: {
+      key: row.key, expected_etag: row.etag, values: { name: 'Updated gateway test' },
+      reason: 'Verify gateway update',
+    } })
+    expect(updated.status(), await updated.text()).toBe(200)
+    const changed = await updated.json()
+    const removed = await api.delete('api/db/tables/users/row', { data: {
+      key: row.key, expected_etag: changed.etag, reason: 'Remove gateway test record',
+    } })
+    expect(removed.status(), await removed.text()).toBe(200)
+  } finally { await api.dispose() }
+})
+
 test('production assets and navigation stay inside the deployment prefix', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))

@@ -112,6 +112,10 @@ export async function put<T>(path: string, body: unknown): Promise<T> {
   return response.json() as Promise<T>
 }
 
+export async function del(path: string): Promise<void> {
+  await send(path, { method: 'DELETE', headers: headers() })
+}
+
 export async function upload<T>(path: string, form: FormData): Promise<T> {
   // No Content-Type: the browser sets the multipart boundary.
   const response = await send(path, { method: 'POST', headers: headers(), body: form })

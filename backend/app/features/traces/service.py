@@ -4,6 +4,7 @@ was produced, a process's aggregates, and the three monitoring planes."""
 import asyncio
 import json
 import statistics
+from collections import Counter
 from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
@@ -22,6 +23,7 @@ from app.features.agents.llm import TRUNCATED
 from app.features.alerts import service as alerts
 from app.features.decisions import service as decisions
 from app.features.decisions.model import ENGINE, Decision
+from app.features.decisions.runs import reason_codes
 from app.features.decisions.schemas import DecisionOut
 from app.features.ingestion.model import File, Instance
 from app.features.processes.model import Process
@@ -46,6 +48,8 @@ from app.features.traces.schemas import (
     RuleRunStats,
     RuleRuntime,
     RuleTrace,
+    SourceRead,
+    SourceStats,
     SpanNode,
     SpanOut,
     StepStats,
@@ -61,6 +65,7 @@ FAILURES = (
     "RULE_CONFLICT",
 )
 LIFECYCLE = ("save_rule", "compile_rule", "activate_rule", "retire_rule", "impact_check")
+SYNC_STATS = ("requests", "retries", "rate_limited", "timeouts")  # of a `sync_source` span
 
 # Every span name, in exactly one monitoring plane. `test_planes.py` fails when the code
 # emits a span that is not here. An `llm_run` is always `agents`, whichever step called it.
@@ -112,14 +117,14 @@ PLANES: dict[str, Plane] = {
     "reject_norm": _AGENTS,
     "accept_proposal": _AGENTS,  # a manager settles any proposal (docs/api.md, Proposals)
     "reject_proposal": _AGENTS,
+    "suggest_escalation": _AGENTS,  # the assistant's LLM suggestions, not the engine's run
+    "propose_decision": _AGENTS,
     # Running compiled code over instances, and the people acting on its decisions.
     "run_process": _EXECUTION,
     "evaluate_rule": _EXECUTION,
     "decision": _EXECUTION,
     "reprocess": _EXECUTION,
     "review_decision": _EXECUTION,
-    "suggest_escalation": _EXECUTION,
-    "propose_decision": _EXECUTION,
     "resolution": _EXECUTION,
     "export_outcomes": _EXECUTION,
     "detect_stale_decisions": _EXECUTION,  # ADR 0026
@@ -161,7 +166,7 @@ async def list_spans(
     data: dict[str, str | None] | None = None,
 ) -> list[SpanOut]:
     """`data` filters span attributes: `model`, `role`, `agent` (the `by_role` key: the
-    agent's name, else its role), `provider`, `operation`."""
+    agent's name, else its role), `provider`, `operation`, `source`."""
     query = select(Event).where(*_scope(process_id, since))
     if step is not None:
         query = query.where(Event.step == step)
@@ -243,6 +248,21 @@ async def instance_trace(session: AsyncSession, instance_id: int) -> InstanceTra
                 exported = None
     if instance.status == "PENDING":
         exported = None
+    read: list[Event] = []
+    if history:
+        name = Event.data["source"].astext
+        read = list(
+            await session.scalars(
+                select(Event)
+                .where(
+                    Event.step == "sync_source",
+                    Event.process_id == instance.process_id,
+                    Event.started_at <= history[-1].created_at,
+                )
+                .distinct(name)
+                .order_by(name, Event.id.desc())
+            )
+        )
     return InstanceTrace(
         id=instance.id,
         process_id=instance.process_id,
@@ -271,6 +291,17 @@ async def instance_trace(session: AsyncSession, instance_id: int) -> InstanceTra
         ],
         exported_decision=exported.decision if exported else None,
         spans=_roots(_nodes(rows)),
+        sources_read=[
+            SourceRead(
+                source=e.data["source"],
+                status=e.status,
+                started_at=e.started_at,
+                duration_ms=e.duration_ms,
+                trace_id=e.trace_id,
+                **{k: e.data.get(k) or 0 for k in SYNC_STATS},
+            )
+            for e in read
+        ],
     )
 
 
@@ -494,6 +525,7 @@ async def _providers(session: AsyncSession, where: list, scope: dict) -> list[Pr
             func.count().filter(network, known),
             func.count().filter(network, included),
             func.count().filter(network, unpriced),
+            func.count().filter(Event.data["http_status_code"].as_integer() == 429),
         )
         .where(*where, Event.step == "provider_call")
         .group_by(provider, model, operation)
@@ -522,6 +554,7 @@ async def _providers(session: AsyncSession, where: list, scope: dict) -> list[Pr
             priced_requests=priced,
             included_requests=included_count,
             unpriced_requests=unpriced,
+            rate_limited=limited,
             traces=_link(scope, name="provider_call", provider=p, model=m, operation=o),
         )
         for (
@@ -546,6 +579,7 @@ async def _providers(session: AsyncSession, where: list, scope: dict) -> list[Pr
             priced,
             included_count,
             unpriced,
+            limited,
         ) in rows
     ]
 
@@ -560,8 +594,10 @@ def _decided(process_id: int | None, since: datetime | None) -> list:
 
 
 async def _outcomes(session: AsyncSession, process_id: int | None, since: datetime | None):
-    """Decisions by outcome, escalations by cause, the human queue and the undecided."""
-    decided = _decided(process_id, since)
+    """Each instance's latest decision by outcome and failure, the human queue with each
+    case's first reason code (`OTHER` if none), and the undecided."""
+    latest = select(func.max(Decision.id)).group_by(Decision.instance_id)
+    decided = [*_decided(process_id, since), Decision.id.in_(latest)]
     by_outcome = await session.execute(
         select(Decision.decision, func.count())
         .join(Instance, Decision.instance_id == Instance.id)
@@ -579,10 +615,13 @@ async def _outcomes(session: AsyncSession, process_id: int | None, since: dateti
     if process_id is not None:
         undecided.append(Instance.process_id == process_id)
     ids = [process_id] if process_id is not None else await session.scalars(select(Process.id))
+    queue = [i for p in ids for i in await decisions.queue(session, p, None)]
+    reasons = Counter((reason_codes(i.reason) or ["OTHER"])[0] for i in queue)
     return (
         dict(by_outcome.all()),
         dict(zip(FAILURES, failures, strict=True)),
-        sum([len(await decisions.queue(session, i, None)) for i in ids]),
+        len(queue),
+        dict(reasons),
         await session.scalar(select(func.count()).where(*undecided)),
     )
 
@@ -592,7 +631,7 @@ async def metrics(session: AsyncSession, process_id: int, since: datetime | None
     spans = _scope(process_id, since)
     scope = {"process_id": process_id, "since": since}
     runs, instances, per_second = await _runs(session, spans)
-    by_outcome, failures, escalated, pending = await _outcomes(session, process_id, since)
+    by_outcome, failures, escalated, reasons, pending = await _outcomes(session, process_id, since)
     return ProcessMetrics(
         since=since,
         runs=runs,
@@ -604,6 +643,7 @@ async def metrics(session: AsyncSession, process_id: int, since: datetime | None
         decisions_by_outcome=by_outcome,
         failures=failures,
         escalated=escalated,
+        escalation_reasons=reasons,
         pending=pending,
     )
 
@@ -699,7 +739,38 @@ async def _ingestion(session: AsyncSession, where: list, base: dict) -> Ingestio
         cache_hits=calls[5],
         abstentions=sum(abstentions.values()),
         abstentions_by_field=abstentions,
+        sources=await _sources(session, where, base),
     )
+
+
+async def _sources(session: AsyncSession, where: list, scope: dict) -> list[SourceStats]:
+    """`sync_source` spans by source: the connector's requests, retries and 429s."""
+    name = Event.data["source"].astext
+    rows = await session.execute(
+        select(
+            name,
+            func.count(),
+            _ERRORS,
+            *map(_total, ("requests", "retries", "rate_limited")),
+            _p(0.95),
+        )
+        .where(*where, Event.step == "sync_source")
+        .group_by(name)
+        .order_by(name)
+    )
+    return [
+        SourceStats(
+            source=s,
+            syncs=n,
+            errors=e,
+            requests=requests,
+            retries=retries,
+            rate_limited=limited,
+            p95_ms=p95,
+            traces=_link(scope, name="sync_source", source=s),
+        )
+        for s, n, e, requests, retries, limited, p95 in rows
+    ]
 
 
 async def _agents(session: AsyncSession, where: list, base: dict) -> AgentsMetrics:
@@ -853,7 +924,7 @@ async def _execution(session: AsyncSession, where: list, base: dict) -> Executio
         .group_by(Event.rule_id)
         .order_by(Event.rule_id)
     )
-    by_outcome, failures, escalated, pending = await _outcomes(session, process_id, since)
+    by_outcome, failures, escalated, reasons, pending = await _outcomes(session, process_id, since)
     # A person's decision, and how long after the engine's last decision before it.
     by_engine = aliased(Decision)
     engine = (
@@ -897,6 +968,7 @@ async def _execution(session: AsyncSession, where: list, base: dict) -> Executio
         decisions_by_outcome=by_outcome,
         failures=failures,
         escalated=escalated,
+        escalation_reasons=reasons,
         pending=pending,
         resolutions=len(resolved),
         resolutions_by_author=authors,

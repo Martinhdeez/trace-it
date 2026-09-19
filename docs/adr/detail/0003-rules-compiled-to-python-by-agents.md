@@ -5,7 +5,7 @@ status: accepted
 # Compile each rule's text to free Python code with agents, not to a closed DSL
 
 ## Context
-Rules are written in natural language by the business (the invoice pack has 16 rules for
+Rules are written in natural language by the business (the invoice pack has 17 rules for
 norma v3; norma v4 arrives on Saturday 18:00, and a live change is possible on Sunday).
 Rules are added, removed and reworded all the time, and the application must serve any
 process (a second pack, `travel-expenses`, exists to prove it) without code changes. ADR 0002
@@ -50,6 +50,10 @@ def evaluate(instance: dict, sources: dict[str, list[dict]], others: list[dict])
 - Compilation runs when a rule is created or changed (`POST /rules/{id}/compile`, chained
   by the UI; 30-60 s because of LLM calls).
 
+**Update (2026-09-19).** Saving a rule (`POST /processes/{id}/rules`) or a norm
+(`POST /processes/{id}/norm`) compiles it in the background; `POST /rules/{id}/compile`
+recompiles a draft or blocked rule.
+
 ## Consequences
 - We run LLM-written code. That is only acceptable with ADR 0004 (verification) and
   ADR 0005 (sandbox).
@@ -61,10 +65,11 @@ def evaluate(instance: dict, sources: dict[str, list[dict]], others: list[dict])
 ## Evidence
 - Contract enforced by the sandbox: `_validate` in `agents/sandbox.py` rejects any result
   that is not exactly `{"fires": bool, "reason": str}`.
-- Compiler prompt and context: `agents/compiler.py` (`SYSTEM`, `_context`).
+- Compiler prompts and context: `agents/prompts/` (`coder.md`, `tester.md`, `shared.md`) and
+  `agents/compiler.py` (`context`).
 - Decision from the rule, not the code: `engine.decide` reads `rule.decision`.
-- The 16 v3 rules hand-written against the same contract pass through the real sandbox
-  and engine (`decisions/tests/test_rules_v3.py`, 5 tests).
+- The 17 v3 rules hand-written against the same contract pass through the real sandbox
+  and engine (`decisions/tests/test_rules_v3.py`, 55 tests).
 
 ## Related
 ADR 0002, 0004, 0005, 0007. Plan P1, P8, P18, P19.

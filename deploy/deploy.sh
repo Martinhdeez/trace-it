@@ -5,6 +5,7 @@ umask 077
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 unset DOCKER_HOST DOCKER_CONTEXT COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES
 unset POSTGRES_PASSWORD TRACE_ENV_FILE TRACE_MODEL_DIR TRACE_AUTH_FILE TRACE_PORT
+unset TRACE_DATABASE_USER TRACE_DATABASE_PASSWORD TRACE_DATABASE_URL TRACE_APP_DATABASE_PASSWORD
 [[ "$EUID" == 0 && "$#" == 4 ]]
 revision=$1 backend=$2 frontend=$3 actor=$4
 [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
@@ -65,25 +66,25 @@ trap rollback ERR
 "${compose[@]}" exec -T db pg_restore --list < "$backup/database.dump" > "$backup/database.list"
 "${compose[@]}" run --rm --no-deps -T backend python -c \
   'import sys, tarfile; t=tarfile.open(fileobj=sys.stdout.buffer, mode="w|gz"); t.add("/srv/.data", arcname="data"); t.close()' > "$backup/ingestion.tar.gz"
-"${compose[@]}" run --rm --no-deps -T backend alembic upgrade head
+# Runtime may be restricted; only this one-off migration container receives owner credentials.
+set -a
+source secrets/compose.env
+set +a
+export TRACE_DATABASE_URL="postgresql+psycopg://trace:${POSTGRES_PASSWORD}@db:5432/trace"
+"${compose[@]}" run --rm --no-deps -T -e TRACE_DATABASE_URL backend alembic upgrade head
+if [[ "${TRACE_DATABASE_USER:-trace}" == trace_app ]]; then
+  export TRACE_APP_DATABASE_PASSWORD="${TRACE_DATABASE_PASSWORD:?Missing runtime database password}"
+  "${compose[@]}" run --rm --no-deps -T -e TRACE_DATABASE_URL -e TRACE_APP_DATABASE_PASSWORD \
+    backend python -m app.features.database_api.provision
+  unset TRACE_APP_DATABASE_PASSWORD
+fi
+unset TRACE_DATABASE_URL
 if [[ ! -f INITIALIZED ]]; then
   # Seed the bundled use case and users once. Rule publication remains a manager action.
   "${compose[@]}" run --rm --no-deps -T backend python -m app.cli load /processes/invoice-payment.json
   touch INITIALIZED
 fi
 "${compose[@]}" up -d --wait --wait-timeout 180 backend frontend
-# Keep both bundled demonstrations available in production. The hiring driver is
-# idempotent for already-uploaded CVs; discovery only runs when the process is absent.
-process_id=$("${compose[@]}" exec -T backend python -c '
-import json, urllib.request
-rows=json.load(urllib.request.urlopen("http://backend:8000/processes"))
-print(next((row["id"] for row in rows if row["name"] == "Hiring screening"), ""))
-')
-hiring_args=(--base-url http://backend:8000 --auto --skip-learning --report /tmp/hiring-bootstrap.md)
-if [[ -n "$process_id" ]]; then
-  hiring_args+=(--process "$process_id")
-fi
-"${compose[@]}" exec -T backend python /srv/hiring_demo.py "${hiring_args[@]}"
 curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18173/internal-health >/dev/null
 python3 /opt/trace-it/activate-route.py
 curl --config secrets/curl.conf --fail --silent --show-error --max-time 20 \

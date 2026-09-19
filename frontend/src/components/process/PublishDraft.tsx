@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { ValidationReport, VersionDraft, VersionOut } from '../../api/contracts'
+import { keys } from '../../api/queries'
 import { Button, Field, Textarea } from '../shell/Controls'
 import { ErrorNotice } from '../shell/Notice'
 import { HistoricalCoverage } from './HistoricalCoverage'
+import { ValidationImpact } from './ValidationImpact'
 
 export function validationOf(draft: VersionDraft): ValidationReport | null {
   return draft.validation as ValidationReport | null
@@ -26,6 +28,7 @@ export function PublishDraft({
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState(initial)
   const [reason, setReason] = useState('')
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
   const validation = validationOf(draft)
 
   const validate = useMutation({
@@ -44,7 +47,14 @@ export function PublishDraft({
       onPublished?.(version)
     },
   })
-  const busy = validate.isPending || publish.isPending
+  const discard = useMutation({
+    mutationFn: () => api.discardDraft(processId, draft.revision),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: keys.execution(processId) })
+      await queryClient.invalidateQueries({ queryKey: keys.draft(processId) })
+    },
+  })
+  const busy = validate.isPending || publish.isPending || discard.isPending
 
   return (
     <div className="space-y-3">
@@ -57,8 +67,9 @@ export function PublishDraft({
       </Button>
       {validate.isError && <ErrorNotice error={validate.error} />}
       {validation && (
-        <div role="status">
+        <div role="status" className="space-y-3">
           <HistoricalCoverage validation={validation} />
+          <ValidationImpact processId={processId} validation={validation} />
         </div>
       )}
       {validation && !validation.valid && (
@@ -71,7 +82,7 @@ export function PublishDraft({
       {validation && (
         <>
           <details>
-            <summary>Ver el borrador completo y su validación</summary>
+            <summary className="cursor-pointer text-[12px] text-muted">Detalles técnicos del borrador y la validación</summary>
             <pre className="max-h-96 overflow-auto text-xs">{JSON.stringify(draft, null, 2)}</pre>
           </details>
           <Field label="Motivo de la publicación">
@@ -87,6 +98,16 @@ export function PublishDraft({
         </>
       )}
       {publish.isError && <ErrorNotice error={publish.error} />}
+      <div className="border-t border-hairline pt-3">
+        {confirmDiscard ? <div className="flex items-center gap-2">
+          <p className="mr-auto text-[12px] text-muted">Se perderán los cambios no publicados.</p>
+          <Button tone="ghost" disabled={busy} onClick={() => setConfirmDiscard(false)}>Cancelar</Button>
+          <Button disabled={busy} onClick={() => discard.mutate()}>Confirmar descarte</Button>
+        </div> : <Button tone="ghost" disabled={busy} onClick={() => setConfirmDiscard(true)}>
+          Descartar borrador
+        </Button>}
+        {discard.isError && <ErrorNotice error={discard.error} />}
+      </div>
     </div>
   )
 }

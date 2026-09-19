@@ -6,7 +6,7 @@ status: accepted
 
 ## Context
 The ERP changes under us: on Saturday the batch 2 update marks orders paid, and a person had
-to remember `POST /sources/erp/sync` before each run (runbook step 4b). A run decided on
+to remember `POST /processes/{id}/sources/erp/sync` before each run (runbook step 4b). A run decided on
 whatever snapshot was last stored, however old. When a sync failed, the previous snapshot
 "stayed current", so an ERP outage silently became decisions on stale data: an order paid
 yesterday could be paid again today. Separately, rules read ERP rows by field name
@@ -104,7 +104,7 @@ never use the last snapshot; escalate only what depends on it.
   `ESCALAR SOURCE_UNAVAILABLE: erp`, no stale snapshot in the inputs, replay matches,
   source `down`, ingestion `degraded`; a row missing `status` and a connector without
   `purchase_order` fail the sync; precedence; no workbook or no cut-off row escalates
-  `SOURCE_UNAVAILABLE`, an explicitly empty table still rejects; the ERP readers among the 16 hand-written and
+  `SOURCE_UNAVAILABLE`, an explicitly empty table still rejects; the ERP readers among the 17 hand-written and
   12 frozen rules), `tests/e2e/test_api_flow.py` (the API flow against the real challenge
   ERP, synced by the run), golden 471/471 (`test_engine_golden.py`, `test_frozen_rules.py`).
 - Live run on 2026-09-19, fresh database `trace_erp_live`, frozen rule set, own challenge

@@ -34,3 +34,7 @@ The system stops at the decision. Executing payments or other downstream actions
 - LLM output may draft rules, extract evidence, explain uncertainty, and propose learning. It cannot silently change rules or finalize an escalated case.
 - Process context informs the decision step but does not rewrite deterministic findings.
 - Historical impact analysis becomes part of rule approval, giving managers evidence before they publish a change.
+
+**Update (2026-09-19).** Approval and impact analysis apply to whole process versions: the draft is
+validated (`POST /processes/{id}/draft/validate`) and then published (ADR 0031). The interfaces
+above are conceptual: the engine is `engine.decide` and the replay is `versions.service.inspect`.

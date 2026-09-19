@@ -4,6 +4,9 @@ status: accepted
 
 # Require manager publication of complete process versions
 
+Renumbered from a second 0022 on 2026-09-19: two ADRs had the same number, and 0022 stays
+with the OCR evidence ADR, which was merged first.
+
 ## Context
 
 ADR 0015 proposed immutable process versions, but rule status, outcome definitions,
@@ -56,6 +59,10 @@ Python runtime or promise reproducibility across future engine contract changes.
 Existing rule activation/retirement endpoints now stage edits. CLI approval identifies a
 manager and publishes once. `make demo` no longer implicitly approves configuration.
 No frontend changes are included.
+**Update (2026-09-19).** The console now validates the draft, shows its historical coverage
+and publishes it (`frontend/src/components/process/PublishDraft.tsx`). Validation compares
+each case with its last engine decision; a person's resolution is informational and never
+blocks publication (R01).
 
 ## Evidence
 

@@ -55,7 +55,7 @@ A manager saves a rule in plain language (`POST /processes/{id}/rules`); nobody 
 |---|---|---|
 | `compiling` | Saved; tester and coder are writing its tests and code in the background (1-4 min). A restart re-queues it | no |
 | `active` | Its code passed the tests and changes few past decisions (ADR 0004), or a manager activated it | yes |
-| `blocked` | The agents answered NeedsData: the process lacks a symbol or source it needs, and every instance escalates with `RULE_NEEDS_DATA` (ADR 0016) until the data exists and it is recompiled. (A failed compile on save used to block the rule with `RULE_COMPILE_FAILED`; superseded by ADR 0022: it now stays a `draft` that cannot be published) | yes, as an escalation |
+| `blocked` | The agents answered NeedsData: the process lacks a symbol or source it needs, and every instance escalates with `RULE_NEEDS_DATA` (ADR 0016) until the data exists and it is recompiled. (A failed compile on save used to block the rule with `RULE_COMPILE_FAILED`; superseded by ADR 0031: it now stays a `draft` that cannot be published) | yes, as an escalation |
 | `draft` | Compiled but waiting for a person: failing tests or too much impact | no |
 | `retired` | Taken out of the process by a manager | no |
 
@@ -72,7 +72,7 @@ A **use case** is what the app is used for (e.g. "Invoice payment"): its `descri
 | `PUT /use-cases/{id}/agents/{role}` | manager | Body `{config, note}`: a new version, active from now on |
 | `POST /agent-configs/{id}/activate` | manager | Activate an existing version: rollback, or adopt one loaded from the pack |
 
-**When a provider fails** (ADR 0019): a role's `fallback_models` are tried in order when the model before answers 5xx, 429 (after the SDK's two retries), times out (`timeout_seconds`) or refuses the connection. An answer a validator rejects never switches models. The `llm_run` span holds `chain`, `failed_attempts` (`[{model, error}]`) and `model`, the one that answered. When every model fails the run is a 502 and the rule stays a `draft` with the error; it cannot be published, so the published version keeps deciding (ADR 0022, atomic publication, supersedes the `blocked` behaviour of ADR 0020). The invoice use case starts every role on `deepseek-v4-flash` and falls back to `glm5.3` / `qwen3.6`. To see it: `make demo-llm-down` sends the normalizer's primary model to an unreachable address (`OPENAI_BASE_URL=http://127.0.0.1:9/v1`) and prints the span:
+**When a provider fails** (ADR 0019): a role's `fallback_models` are tried in order when the model before answers 5xx, 429 (after the SDK's two retries), times out (`timeout_seconds`) or refuses the connection. An answer a validator rejects never switches models. The `llm_run` span holds `chain`, `failed_attempts` (`[{model, error}]`) and `model`, the one that answered. When every model fails the run is a 502 and the rule stays a `draft` with the error; it cannot be published, so the published version keeps deciding (ADR 0031, atomic publication, supersedes the `blocked` behaviour of ADR 0020). The invoice use case starts every role on `deepseek-v4-flash` and falls back to `glm5.3` / `qwen3.6`. To see it: `make demo-llm-down` sends the normalizer's primary model to an unreachable address (`OPENAI_BASE_URL=http://127.0.0.1:9/v1`) and prints the span:
 
 ```
 chain: ["deepseek-v4-flash", "glm5.3", "qwen3.6"]
@@ -113,7 +113,6 @@ benchmark and golden-reference tools also need `pdftotext` (poppler).
 | `make test` | Unit tests (`-m "not e2e and not llm"`) |
 | `make test-e2e` | Golden outcomes of batch 1 and the API flow (needs the challenge submodule) |
 | `make check` | `ruff check`, `ruff format --check` (backend and `tools/`), then `test` and `test-e2e`. Run before every PR |
-| `make e2e-integration` | The demo path through the real console and API in Chromium, on a fresh `trace_e2e_test` database with the frozen pack; no LLM key (`tests/integration/README.md`). Run before every PR into `integration` |
 | `make eval-compiler` | Opt-in, calls real LLMs: compiles the 16 rules and compares with `rules-v3/`; report in `backend/evals/reports/` |
 | `make eval-norm` | Opt-in, calls real LLMs: the client's `Norma_Pagos_v3` -> normalizer -> compiler -> batch 1 vs golden; report in `backend/evals/reports/` |
 | `make demo-llm-down` | Opt-in, calls real LLMs (Helmcode): the normalizer's primary provider is unreachable and a fallback model answers; prints the `llm_run` span (ADR 0019) |

@@ -11,8 +11,8 @@ clock or backend. The engine needs batches: 540 files × 12+ rules per run.
 
 Threat model. The code is not written by an external attacker, but it is not trusted
 either: (1) a model can write something harmful by mistake; (2) an indirect prompt
-injection path exists: invoice text (e.g. `factura_1936`) → escalation assistant's
-proposed rule → a manager approves it → compilers turn it into code. The manager's approval
+injection path exists: invoice text (e.g. `factura_1936`) → a proposed rule
+(escalation assistant, definition chat or learning agent) → a manager approves it → compilers turn it into code. The manager's approval
 and the blind tester (ADR 0004) reduce but do not close that path.
 
 ## Alternatives considered
@@ -61,14 +61,16 @@ and the blind tester (ADR 0004) reduce but do not close that path.
 - Memory limit only on Linux (macOS has no `RLIMIT_AS`).
 
 ## Evidence
-- 24 tests in `agents/tests/test_sandbox.py` (6 functions, parametrised): valid rule;
+- 26 tests in `agents/tests/test_sandbox.py` (8 functions, parametrised): valid rule;
   malformed results and exceptions; forbidden code rejected before running (dunder and
   underscore names, frame attributes, non-allowlisted imports); `re.enum.sys` is not
   reachable; infinite loop killed by timeout; one bad case in a batch fails only that case.
-- Measured on batch 1 (Linux): 500 instances × 16 rules through `run_dataset` in 1 s
-  (`make demo`); `test_500_instances_run_each_rule_once` pins one subprocess per rule.
+- Measured on batch 1 (Linux): 500 instances × 16 rules (then) through `run_dataset` in 1 s
+  (the text-layer demo; `make demo` now runs OCR through the API); `test_500_instances_run_each_rule_once` pins one subprocess per rule.
   Repeating the population per case (the earlier `run_batch` path) hit the 512 MB limit
   at 500 instances and escalated every invoice, which is why `run_dataset` exists.
+- **Update (2026-09-19).** Rules now run in parallel, one subprocess each, up to
+  `TRACE_DECISION_WORKERS` (4) at once (`decisions/engine.py`, `decide`).
 
 ## Related
 ADR 0003, 0004, 0016.

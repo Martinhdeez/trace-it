@@ -14,6 +14,7 @@ import type {
   RuleStatus as RuleStatusCode,
   SymbolIn,
   SymbolIO,
+  ValidationReport,
   VersionOut,
 } from '../api/contracts'
 import { DefinitionSwitch } from '../components/process/DefinitionSwitch'
@@ -25,6 +26,7 @@ import {
 } from '../components/process/FileChip'
 import { ProcessScreen } from '../components/process/ProcessScreen'
 import { TruthSources } from '../components/process/TruthSources'
+import { ValidationImpact } from '../components/process/ValidationImpact'
 import { Button, Input, Select, Textarea } from '../components/shell/Controls'
 import { ErrorNotice, Empty, Notice } from '../components/shell/Notice'
 import { ExpandableText } from '../components/shell/ExpandableText'
@@ -35,6 +37,7 @@ import { definitionTabFromPath } from '../lib/definitionTabs'
 import { formatRunDate } from '../lib/format'
 import { paths } from '../lib/paths'
 import { ruleLabel } from '../lib/process'
+import { useSession } from '../state/session'
 
 type Attachment = FilePreview & { file: File }
 
@@ -100,18 +103,23 @@ function lastAnswer(session: DiscoverySession): string {
  * The draft is where every edit goes. `GET /execution` says whether one exists
  * (`revision`), so the console never asks for a draft that is not there.
  */
-function useDraft(processId: number) {
+function useDraft(processId: number, enabled = true) {
   const execution = useQuery({
     queryKey: keys.execution(processId),
     queryFn: () => api.getExecution(processId),
+    enabled,
   })
   const revision = execution.data?.revision ?? null
   const draft = useQuery({
     queryKey: keys.draft(processId),
     queryFn: () => api.getDraft(processId),
-    enabled: revision != null,
+    enabled: enabled && revision != null,
   })
-  return { revision, snapshot: revision != null ? draft.data?.snapshot : undefined }
+  return {
+    revision,
+    snapshot: revision != null ? draft.data?.snapshot : undefined,
+    pending: execution.isPending,
+  }
 }
 
 /** A stale revision means someone else edited the draft. */
@@ -167,9 +175,9 @@ export function Definition() {
   const outcomes = process.data?.decision_types.map((outcome) => outcome.name) ?? []
   const history = [...(versions.data ?? [])].sort((a, b) => b.number - a.number)
   const latestVersion = history[0]
-  // An older version, read only; null is the one in force with the live panes.
+  // A selected version is read only; null shows the live definition panes.
   const [viewing, setViewing] = useState<number | null>(null)
-  const viewed = history.find((version) => version.id === viewing && version !== latestVersion)
+  const viewed = history.find((version) => version.id === viewing)
 
   /** Normas: the normalizer. Anywhere else: the process chat, in discuss mode. */
   const send = useMutation({
@@ -334,13 +342,14 @@ export function Definition() {
             <VersionChip
               versions={history}
               selected={viewed ?? latestVersion}
-              onSelect={(version) => setViewing(version === latestVersion ? null : version.id)}
+              onSelect={(version) => setViewing(version.id)}
               findings={findings.data ?? []}
             />
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
             {viewed && latestVersion ? (
               <VersionView
+                processId={processId}
                 version={viewed}
                 current={latestVersion}
                 rules={all}
@@ -977,16 +986,11 @@ function VersionChip({
             <p className="px-2.5 py-1.5 text-[12px] text-muted">Aún no hay versiones publicadas.</p>
           )}
           <div className="my-1 border-t border-hairline" />
-          <button
-            type="button"
-            role="menuitem"
-            className="flex w-full rounded-[8px] px-2.5 py-1.5 text-left text-[12px] text-muted hover:bg-canvas hover:text-ink"
-            onClick={() => setOpen(false)}
-          >
+          <p className="px-2.5 py-1.5 text-[12px] text-muted">
             {findings.length
-              ? `Backtesting · ${findings.length} contradicción${findings.length === 1 ? '' : 'es'}`
-              : 'Backtesting contra el histórico'}
-          </button>
+              ? `Impacto histórico · ${findings.length} aviso${findings.length === 1 ? '' : 's'}`
+              : 'Sin avisos sobre decisiones anteriores'}
+          </p>
           {findings.length ? (
             <ul className="max-h-40 overflow-y-auto border-t border-hairline py-1">
               {findings.slice(0, 6).map((finding) => (
@@ -1007,16 +1011,34 @@ type SnapshotSymbol = { name: string; type: string; description?: string }
 
 /** A published version as it was: what it decided with, never editable from here. */
 function VersionView({
+  processId,
   version,
   current,
   rules,
   onBack,
 }: {
+  processId: number
   version: VersionOut
   current: VersionOut
   rules: Rule[]
   onBack: () => void
 }) {
+  const queryClient = useQueryClient()
+  const { isManager } = useSession()
+  const { revision, pending } = useDraft(processId, isManager)
+  const [restored, setRestored] = useState(false)
+  const restore = useMutation({
+    mutationFn: () => api.saveDraft(processId, {
+      expected_revision: null,
+      restore_version_id: version.id,
+      refresh_agents: false,
+    }),
+    onSuccess: async () => {
+      setRestored(true)
+      await queryClient.invalidateQueries({ queryKey: keys.execution(processId) })
+      await queryClient.invalidateQueries({ queryKey: keys.draft(processId) })
+    },
+  })
   const process = (version.snapshot.process ?? {}) as {
     description?: string
     symbols?: SnapshotSymbol[]
@@ -1028,16 +1050,32 @@ function VersionView({
   return (
     <div className="space-y-6">
       <Notice
-        title={`Estás viendo v${version.number}, solo lectura`}
+        title={version === current ? `v${version.number} en vigor` : `Estás viendo v${version.number}, solo lectura`}
         action={
           <button type="button" onClick={onBack} className="text-[12px] text-muted hover:text-ink">
-            Volver a v{current.number}
+            Volver a la definición
           </button>
         }
       >
         {formatRunDate(version.created_at)} · {version.author}
         {version.reason ? ` · ${version.reason}` : ''}
       </Notice>
+
+      {isManager && version !== current ? <section className="space-y-2">
+        {restored ? <Notice title={`v${version.number} restaurada como borrador`}>
+          Valida y publica el borrador para ponerla en vigor como una versión nueva.
+        </Notice> : pending ? <p className="text-[12px] text-muted">Comprobando el borrador…</p> : revision != null ? <p className="text-[12px] text-muted">
+          Ya existe un borrador. Descártalo o publícalo antes de restaurar esta versión.
+        </p> : <Button disabled={restore.isPending} onClick={() => restore.mutate()}>
+          Restaurar como borrador
+        </Button>}
+        {restore.isError ? <ErrorNotice error={restore.error} /> : null}
+      </section> : null}
+
+      <section>
+        <p className="mb-2 font-mono text-[11px] tracking-[0.12em] text-faint">IMPACTO HISTÓRICO AL PUBLICAR</p>
+        <ValidationImpact processId={processId} validation={version.validation as ValidationReport} />
+      </section>
 
       {process.description ? (
         <section>

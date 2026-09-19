@@ -157,6 +157,13 @@ the public VPS. Reports and traces are uploaded even when a gate fails.
 
 ## Operations and recovery
 
+Bearer access and the restricted `trace_app` runtime role are documented in the
+[production API guide](../docs/production-api.md). Set `TRACE_API_TOKEN` only in the private
+runtime environment; set `TRACE_DATABASE_USER` and `TRACE_DATABASE_PASSWORD` in the private
+Compose environment after provisioning the role. The deploy script uses the owner only
+for one-off migrations and grant refreshes. Public API documentation does not require the
+web password; data endpoints still require Basic or Bearer, and `/db` always requires Bearer.
+
 Disable future deployment: set `TRACE_DEPLOY_ENABLED=false` and remove
 `/opt/trace-it/DEPLOY_ENABLED` as root. This does not stop the running app.
 

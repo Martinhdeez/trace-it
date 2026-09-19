@@ -68,13 +68,17 @@ through the use case needs neither.
 ## Consequences
 - ERP data can be minutes old; accepted, because decisions must be reproducible (ADR 0008).
 - One more connector to maintain, but it is the template for any HTTP source.
-- Combined with model fallback chains (ADR 0006), this is the resilience story for the demo.
+- Combined with model fallback chains (ADR 0019), this is the resilience story for the demo.
 
 ## Evidence
 - Implemented in `features/sources/http_connector.py`, configured by
   `processes/invoice-payment/sources.json`; see `docs/sources-http.md`. Points 1-7 and 9
   are done; the circuit breaker (8) is bounded retries plus "the previous snapshot stays
   current" rather than a breaker with a cool-down.
+  **Update (2026-09-19).** The failed sync still keeps the previous load stored, but a run
+  does not use it: a live source (`sync_before_run` in `schema.json`) whose pre-run sync
+  fails, or that was never loaded, is down for that run, and the rules that read it
+  escalate with `SOURCE_UNAVAILABLE` (ADR 0028; `sources/service.py`, `sync_before_run`).
 - `sources/tests/test_erp_sync.py`: a second process of the use case syncs through the
   pack's connector; a use case without a pack answers 404.
 - `sources/tests/test_erp_sync.py` against the real challenge ERP as a subprocess: 516

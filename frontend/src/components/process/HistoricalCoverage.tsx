@@ -4,8 +4,8 @@ import { Notice } from '../shell/Notice'
 export function HistoricalCoverage({ validation }: { validation: ValidationReport }) {
   const coverage = validation.coverage
   if (!coverage) {
-    return <Notice tone="warning" title="Historical coverage not reported">
-      This validation has no historical coverage counts. Review the full report before publishing.
+    return <Notice tone="warning" title="Cobertura histórica no disponible">
+      Esta validación no incluye el recuento de casos históricos. Revisa el informe completo antes de publicar.
     </Notice>
   }
 
@@ -14,22 +14,22 @@ export function HistoricalCoverage({ validation }: { validation: ValidationRepor
   const zeroCoverage = total > 0 && evaluated === 0
   const incomplete = notEvaluable > 0
   const title = total === 0
-    ? 'No historical decisions to evaluate'
+    ? 'No hay decisiones históricas que evaluar'
     : zeroCoverage
-      ? 'No historical decisions were fully evaluable'
+      ? 'Ninguna decisión histórica pudo evaluarse por completo'
       : incomplete
-        ? 'Partial historical coverage'
-        : 'Historical cases were evaluable'
+        ? 'Cobertura histórica parcial'
+        : 'Todos los casos históricos pudieron evaluarse'
 
   return <Notice tone={total === 0 || incomplete ? 'warning' : 'neutral'} title={title}>
-    <p>{evaluated} of {total} historical decisions fully evaluated; {notEvaluable} could not be fully evaluated.</p>
+    <p>{evaluated} de {total} decisiones históricas evaluadas por completo; {notEvaluable} quedaron incompletas.</p>
     {notEvaluable > 0 && <>
-      <p className="mt-1">{partial} retained some rule results; {none} had no evaluable rule results. Missing newly required symbols prevent a complete assessment of these historical cases.</p>
+      <p className="mt-1">{partial} conservaron resultados parciales; {none} no pudieron ejecutar ninguna regla. Faltan datos que la nueva versión exige.</p>
       {!!validation.not_evaluable?.length && <details className="mt-2">
-        <summary>Review cases without full coverage</summary>
+        <summary className="cursor-pointer">Revisar casos sin cobertura completa</summary>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           {validation.not_evaluable.map(item => <li key={item.instance_id}>
-            {item.name || `Case ${item.instance_id}`}: unavailable evidence for {item.missing_symbols.join(', ') || 'required fields'}
+            {item.name || `Caso ${item.instance_id}`}: faltan {item.missing_symbols.join(', ') || 'datos obligatorios'}
           </li>)}
         </ul>
       </details>}
