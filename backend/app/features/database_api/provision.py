@@ -48,9 +48,7 @@ def main() -> None:
                 permissions = "SELECT, INSERT, DELETE"
             else:
                 permissions = (
-                    "SELECT, INSERT"
-                    if name in READ_ONLY
-                    else "SELECT, INSERT, UPDATE, DELETE"
+                    "SELECT, INSERT" if name in READ_ONLY else "SELECT, INSERT, UPDATE, DELETE"
                 )
             connection.execute(
                 sql.SQL("GRANT {} ON TABLE public.{} TO {}").format(
