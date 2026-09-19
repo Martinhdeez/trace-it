@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Header, Query
 from fastapi.responses import StreamingResponse
 
 from app.core.database import Session
@@ -146,14 +146,18 @@ async def get_planes_health(session: Session) -> list[PlaneHealth]:
     description="`text/event-stream`: one event per span as it is written, `event` is its "
     "plane, `id` its `events.id`, `data` a span as in `GET /traces`. `: ping` when nothing "
     "new came in the last second. Filter by `plane` and `process_id`; `after` replays from "
-    "that id (default: only new spans).",
+    "that id (default: only new spans). A reconnecting `EventSource` sends `Last-Event-ID`, "
+    "used when `after` is not given.",
     response_class=StreamingResponse,
 )
 async def stream_events(
-    plane: Plane | None = None, process_id: int | None = None, after: int | None = None
+    plane: Plane | None = None,
+    process_id: int | None = None,
+    after: int | None = None,
+    last_event_id: int | None = Header(None, alias="Last-Event-ID"),
 ) -> StreamingResponse:
     return StreamingResponse(
-        service.stream(plane, process_id, after),
+        service.stream(plane, process_id, after if after is not None else last_event_id),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache"},
     )
