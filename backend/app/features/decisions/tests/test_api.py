@@ -9,7 +9,7 @@ import uuid
 from typing import Any
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from sqlalchemy import update
 
 from app.core.database import session_factory
@@ -18,8 +18,8 @@ from app.features.ingestion.model import File, Instance
 from app.features.processes.model import DecisionType, Symbol
 from app.features.rules.model import Rule
 from app.features.sources.model import Source
-from app.main import app
 from tests.support.fakes import dataset_runner
+from tests.support.users import manager, manager_client
 
 SUPPLIERS = [
     {"nif": "B96233419", "iban": "ES2100752345670600123456"},
@@ -122,7 +122,10 @@ async def seed(process_id: int, rules: dict[str, tuple[str, str]]) -> None:
 async def create_process(
     api: AsyncClient, role: str, rules: dict[str, tuple[str, str]] | None = None
 ) -> tuple[int, dict[str, str]]:
-    """A user with `role`, an invoice process and its seeded data."""
+    """A user with `role`, an invoice process and its seeded data. The client acts as a
+    manager from now on (run, sync); pass the returned headers to act as the user."""
+    if "X-User-Id" not in api.headers:
+        await manager(api)
     suffix = uuid.uuid4().hex[:8]
     r = await api.post("/users", json={"name": "Ana", "email": f"ana-{suffix}@x.com", "role": role})
     headers = {"X-User-Id": str(r.json()["id"])}
@@ -140,8 +143,7 @@ def fake_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sandbox, "run_dataset", FAKE_SANDBOX)
 
 
-def client() -> AsyncClient:
-    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+client = manager_client
 
 
 async def test_run_resolve_and_export(fake_sandbox: None) -> None:
@@ -226,7 +228,7 @@ async def test_run_resolve_and_export(fake_sandbox: None) -> None:
 
 async def test_resolve_rejects_a_decision_not_in_the_process(fake_sandbox: None) -> None:
     async with client() as api:
-        process_id, headers = await create_process(api, "operator")
+        process_id, headers = await create_process(api, "manager")
         [first, *_] = (await api.get(f"/processes/{process_id}/instances")).json()
 
         r = await api.post(
@@ -240,7 +242,7 @@ async def test_resolve_rejects_a_decision_not_in_the_process(fake_sandbox: None)
 
 async def test_export_a_duplicate_name_gives_a_single_line(fake_sandbox: None) -> None:
     async with client() as api:
-        process_id, headers = await create_process(api, "operator")
+        process_id, headers = await create_process(api, "manager")
         # A second, different file with the same name arrives later: it is the one exported.
         async with session_factory() as session:
             digest = uuid.uuid4().hex

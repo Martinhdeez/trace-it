@@ -17,6 +17,7 @@ from app.features.rules.model import Rule
 from app.features.sources.model import Source
 from tests.support.fakes import dataset_runner
 from tests.support.rows import publish_fixture
+from tests.support.users import anonymous
 
 RULES = {
     **{name: fn for name, (_, fn) in RULES_V3.items()},
@@ -153,7 +154,7 @@ async def test_ack_records_who_and_the_manager_then_acts() -> None:
         ids = await decided(api, process_id)
         [alert_id] = await load_erp(process_id, erp(**{"PO-2026-0474": "PENDIENTE"}))
 
-        assert (await api.post(f"/alerts/{alert_id}/ack")).status_code == 422  # who?
+        assert (await anonymous("POST", f"/alerts/{alert_id}/ack")).status_code == 401  # who?
         r = await api.post(
             f"/alerts/{alert_id}/ack", json={"note": "calling the supplier"}, headers=headers
         )

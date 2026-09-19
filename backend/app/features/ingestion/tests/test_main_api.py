@@ -25,8 +25,8 @@ def test_main_application_keeps_dev_routes_and_protects_ingestion(settings):
                 "/processes/{process_id}/sources/{name}/sync",
                 "/processes/{process_id}/sources/{name}/diff",
             } <= set(schema["paths"])
-            assert client.get("/v1/extractions/missing").status_code == 422
-            assert client.get("/instances/1/document").status_code == 422
+            assert client.get("/v1/extractions/missing").status_code == 401
+            assert client.get("/instances/1/document").status_code == 401
             operation = schema["paths"]["/processes/{process_id}/files"]["post"]
             assert operation["operationId"] == "uploadProcessDocument"
             assert any(p["name"] == "x-user-id" for p in operation["parameters"])

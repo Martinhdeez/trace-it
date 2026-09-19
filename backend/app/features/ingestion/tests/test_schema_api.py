@@ -70,13 +70,13 @@ async def test_new_definition_fields_are_used_without_restarting_and_history_is_
         ],
         "symbols": [{"name": "holder", "type": "text", "required": True}],
     }
-    loaded = await client.post("/processes/definition", json=definition)
-    assert loaded.status_code == 200, loaded.text
-    process_id = loaded.json()["process"]["id"]
     async with session_factory() as session:
         user = await session.get(User, int(client.headers["X-User-Id"]))
         user.role = "manager"
         await session.commit()
+    loaded = await client.post("/processes/definition", json=definition)
+    assert loaded.status_code == 200, loaded.text
+    process_id = loaded.json()["process"]["id"]
     await publish_draft(client, process_id)
     endpoint = f"/processes/{process_id}/files"
     content = pdf_bytes("Holder: Ana\nExpiry: 21/04/2027\nRenewed: false")
