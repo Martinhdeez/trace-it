@@ -174,7 +174,7 @@ export function Instances() {
             </div>
           }
         />
-        <TracePane instance={detail.data} trace={trace.data} />
+        <TracePane instance={detail.data} trace={trace.data} schema={process.data?.symbols} />
       </div>
       )}
     </ProcessScreen>
