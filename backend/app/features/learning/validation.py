@@ -36,6 +36,7 @@ def impact(snapshot: dict, added: list[dict]) -> dict:
         tuple(s["name"] for s in process["symbols"] if s["required"]),
     )
     latest = {d["instance_id"]: d for d in snapshot["decisions"]}
+    engine = {d["instance_id"]: d for d in snapshot["decisions"] if d["author"] == "engine"}
     selected = [i for i in snapshot["instances"] if i["id"] in latest and i["symbols"] is not None]
     population = [
         (i["id"], {**flatten_symbols(i["symbols"]), "_instance": i["name"]})
@@ -62,7 +63,12 @@ def impact(snapshot: dict, added: list[dict]) -> dict:
     }
     changes, conflicts, errors = [], [], []
     for instance, verdict in zip(selected, verdicts, strict=True):
-        previous = latest[instance["id"]]
+        # R01: compare with the engine's last word; a person is contradicted only when the
+        # new verdict differs from their resolution too.
+        last = latest[instance["id"]]
+        previous = engine.get(instance["id"], last)
+        if last["author"] != "engine" and verdict.decision != previous["decision"]:
+            previous = last
         if any(r.fires is None for r in verdict.results):
             errors.append({"instance_id": instance["id"], "reason": verdict.reason})
         if verdict.decision != previous["decision"]:
@@ -74,9 +80,7 @@ def impact(snapshot: dict, added: list[dict]) -> dict:
                 "reason": verdict.reason,
             }
             (
-                conflicts
-                if previous["author"] != "engine" or previous["id"] in pending
-                else changes
+                conflicts if previous["author"] != "engine" or last["id"] in pending else changes
             ).append(change)
     return {
         "basis": "stored symbols and current captured sources, not original historical replay",

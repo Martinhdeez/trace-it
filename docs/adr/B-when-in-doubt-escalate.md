@@ -22,6 +22,8 @@ would reject), `RULE_ERROR` (rule code failed), `RULE_CONFLICT` (a tie between d
 rules that did run do not already reject). Missing reference data is unknown, never an empty
 table. A person resolves the escalation in the console, as a new row.
 
+**Update 2026-09-19 (ADR 0035).** Every reason code has a plain-Spanish explanation in Revisión, templated with no LLM. Only rule-based escalations can be learned; the engine's own codes (`MISSING_DATA`, `SOURCE_UNAVAILABLE`...) never can.
+
 ## Alternatives considered
 
 | Option | Why we rejected it |

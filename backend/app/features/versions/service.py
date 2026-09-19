@@ -11,6 +11,8 @@ from app.features.decisions.model import Decision, Finding
 from app.features.processes import execution as execution_config
 from app.features.processes.model import Process
 from app.features.processes.schemas import ProcessDetail
+from app.features.proposals.model import ManagerProposal
+from app.features.proposals.service import supersede
 from app.features.rules.model import Rule
 from app.features.versions import configuration as config
 from app.features.versions import execution
@@ -513,6 +515,14 @@ async def publish_snapshot(
         "publish_process_version",
         process_id=process.id,
         data={"version_id": row.id, "parent_id": row.parent_id, "author": author, "reason": reason},
+    )
+    # A rule suggested for the previous version amends a rule that may have changed.
+    await supersede(
+        session,
+        "version_published",
+        ManagerProposal.process_id == process.id,
+        ManagerProposal.channel == "escalation",
+        ManagerProposal.kind == "rule",
     )
     return row
 

@@ -1,4 +1,5 @@
-"""Escalation assistant: suggests a decision, its reasoning and a new rule.
+"""Escalation assistant: suggests a decision, its reasoning and a new rule; after a person
+resolved the case, `suggest_rule` amends the escalation rule that fired (ADR 0035).
 
 The LLM never decides anything in the pipeline (ADR 0002). This is only a suggestion shown
 to a person, who then resolves the case and, if they want, adds the proposed rule (which is
@@ -206,4 +207,127 @@ async def suggest(session: AsyncSession, instance_id: int) -> Suggestion:
             ),
         )
         span.set(decision=suggestion.decision, model=trace.model)
+    return suggestion
+
+
+# After a resolution: the escalating rule, amended to generalise the person's decision.
+class RuleSuggestion(BaseModel):
+    text: str  # the amended rule, in English; compiled like any other rule
+    type: Literal["requirement", "prohibition"]
+    summary: str  # one line in Spanish for the console
+    rationale: str  # in Spanish: what of the person's reason it generalises
+    evidence: list[str] = Field(min_length=1)  # references from `evidence_refs`
+
+
+@dataclass(frozen=True)
+class RuleDeps:
+    identifiers: list[str]  # this case's own names: a general rule never mentions them
+    references: set[str]
+
+
+reviewer_agent = Agent(
+    None, output_type=RuleSuggestion, deps_type=RuleDeps, name="reviewer_agent", retries=1
+)
+
+
+@reviewer_agent.output_validator
+def _general(ctx: RunContext[RuleDeps], suggestion: RuleSuggestion) -> RuleSuggestion:
+    text = suggestion.text.casefold()
+    named = [i for i in ctx.deps.identifiers if i.casefold() in text]
+    if named:
+        raise ModelRetry(
+            f"the rule names this case ({', '.join(named)}): state conditions on symbol "
+            "values, categories, thresholds or source data only"
+        )
+    unknown = set(suggestion.evidence) - ctx.deps.references
+    if unknown:
+        raise ModelRetry(f"cite only references in evidence_refs: {sorted(unknown)}")
+    return suggestion
+
+
+def identifiers(instance: Instance) -> list[str]:
+    """What names this one case: its file, and the invoice number and file id it carries.
+    Short values are left out, since they also appear in amounts and thresholds."""
+    symbols = flatten_symbols(instance.symbols or {})
+    names = {
+        instance.name,
+        instance.name.rsplit(".", 1)[0],
+        *(str(symbols.get(k) or "") for k in ("file_id", "invoice_number")),
+    }
+    return sorted(n for n in names if len(n.strip()) >= 4)
+
+
+async def suggest_rule(
+    session: AsyncSession, instance: Instance, engine: Decision, resolution: Decision, rule_id: int
+) -> RuleSuggestion:
+    """Amend rule `rule_id`, the one escalation rule that fired in `engine`, so that cases
+    like this one get `resolution`'s decision. The caller already checked it is learnable
+    (`proposals.service.learnable`) and records the `suggest_rule` span. The context is
+    small on purpose: no file text, and only resolutions of cases the same rule escalated."""
+    from app.features.decisions.service import current_sources
+    from app.features.versions.configuration import rules as frozen_rules
+    from app.features.versions.configuration import setups
+    from app.features.versions.model import ProcessVersion
+
+    version = await session.get(ProcessVersion, engine.version_id)
+    rules = {r.id: r for r in frozen_rules(version.snapshot)}
+    old = rules[rule_id]
+    history = await session.execute(
+        select(Decision, Instance.symbols)
+        .join(Instance, Decision.instance_id == Instance.id)
+        .where(Instance.process_id == instance.process_id, Instance.id != instance.id)
+        .order_by(Decision.id)
+    )
+    engine_of: dict[int, Decision] = {}
+    similar = []
+    for d, symbols in history:  # people's resolutions of other cases this rule escalated
+        if d.author == ENGINE:
+            engine_of[d.instance_id] = d
+            continue
+        fired = engine_of[d.instance_id].results if d.instance_id in engine_of else []
+        if any(r.get("rule_id") == rule_id and r.get("fires") for r in fired):
+            similar.append(
+                {
+                    "ref": f"resolution:{d.id}",
+                    "symbols": flatten_symbols(symbols or {}),
+                    "decision": d.decision,
+                    "reason": d.reason,
+                }
+            )
+    similar = similar[-MAX_RESOLUTIONS:]
+    sources = await current_sources(session, instance.process_id)
+    context = {
+        "use_case_description": version.snapshot["process"]["description"],
+        "decision_types": version.snapshot["process"]["decision_types"],
+        "case": {"symbols": flatten_symbols(instance.symbols or {})},
+        "escalation": {
+            "reason": engine.reason,
+            "rule": {"id": old.id, "text": old.text, "type": old.type, "decision": old.decision},
+            "other_rules_fired": [
+                {"id": r["rule_id"], "decision": rules[r["rule_id"]].decision}
+                for r in engine.results
+                if r.get("fires") and r.get("rule_id") != rule_id and r.get("rule_id") in rules
+            ],
+        },
+        "resolution": {
+            "ref": f"resolution:{resolution.id}",
+            "decision": resolution.decision,
+            "reason": resolution.reason,
+        },
+        "similar_resolutions": similar,
+        "sources": {name: sorted(rows[0]) if rows else [] for name, rows in sources.items()},
+    }
+    context["evidence_refs"] = sorted(
+        {f"symbol:{name}" for name in instance.symbols or {}}
+        | {f"rule:{rule_id}", context["resolution"]["ref"]}
+        | {r["ref"] for r in similar}
+    )
+    suggestion, _ = await llm.run(
+        reviewer_agent,
+        "assistant",
+        json.dumps(context, ensure_ascii=False, default=str),
+        instructions=llm.prompt("reviewer_agent", "shared"),
+        setup=setups(version.snapshot).get("assistant"),
+        deps=RuleDeps(identifiers(instance), set(context["evidence_refs"])),
+    )
     return suggestion

@@ -29,6 +29,7 @@ AGENT_PROMPTS = {
     "normalizer",
     "process_chat",
     "reviewer",
+    "reviewer_agent",
     "shared",
     "tester",
 }
