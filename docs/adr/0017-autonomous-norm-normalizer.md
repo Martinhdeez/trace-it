@@ -63,6 +63,17 @@ checks, possibly with different decisions.
   code raise instead of returning "does not fire". The invoice description adds that a
   rule comparing an impossible date does not fire (the validity check already fails), so
   the three impossible dates are rejected, not escalated.
+- **Violation or doubt** (2026-09-19, product owner: "a genuine doubt a person must
+  resolve escalates"). Each check also reports `kind` with a one-sentence `kind_reason`:
+  `violation` when its failure proves the case breaks the norm, `doubt` when its failure
+  means the system cannot tell the right outcome by itself (several instances claim the
+  same thing, conflicting sources, ambiguous data). In code, like `decision_source`: an
+  `explicit` check keeps the norm's outcome; a `policy` doubt gets the escalation type
+  (highest-priority `requires_human`), a `policy` violation gets `failed_check_decision`.
+  The platform prompt says a sentence forbidding paying or processing the same thing twice
+  covers the external record (a violation) and the other instances in `others` (a doubt);
+  the invoice use case's normalizer `instructions` name the shared `purchase_order`. Both
+  fields are kept in `report.norm`.
 - `POST /processes/{id}/run` and `/reprocess` refuse (409) while any rule of the process
   is `compiling`, or when none is `active` or `blocked`: a run started while the norm's
   checks compiled decided 500 invoices with no rule, all paid by default.
@@ -118,6 +129,18 @@ checks, possibly with different decisions.
   disables the share limit), `decisions/tests/test_api.py` (run and reprocess refused
   while compiling or with no enforced rule). The four escalation paths were already covered in
   `decisions/tests/test_engine.py`.
+
+- Doubt runs, `make eval-norm`, 2026-09-19, all roles `helmcode:deepseek-v4-flash` (with
+  the fallback chain of PR #45 in runs 2 and 3), 12 checks, all valid first time, **471/471**
+  in 3 of 3 runs (433 PAGAR, 36 NO_PAGAR, 2 ESCALAR): sentence 5 gave the ERP checks as
+  `violation` (`NO_PAGAR`) and "no other instance in `others` has the same normalised
+  `purchase_order`" as `doubt`, so both PO-2026-0492 invoices escalate. Runs took 2.3,
+  2.0 and 0.9 min, 25-26 agent runs, 105-120k input and 48-57k output tokens. One
+  instability: an ERP-paid check was `explicit` (quoting "Nunca pagar") in 2 runs and
+  `policy` in 1, with the same decision.
+- Tests: `agents/tests/test_normalizer.py` (a `policy` doubt escalates with or without a
+  policy, an explicit decision kept for either kind, `kind` and `kind_reason` in
+  `report.norm`, the invoice guidance names the doubt).
 
 ## Related
 ADR 0003, 0004, 0006, 0011, 0016.

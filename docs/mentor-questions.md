@@ -8,6 +8,9 @@ until a mentor answers (2026-09-19):
   norm. For the norm-driven process this is the use case's `failed_check_decision`
   (`processes/invoice-payment/use-case.json`, ADR 0017); a check keeps another decision only
   when the norm names it in words.
+- **Genuine doubt -> `ESCALAR`.** The data is there, but the system cannot tell the right
+  outcome by itself (e.g. two invoices claim one purchase order). The normalizer marks such
+  a check `doubt` and code gives it the escalation type (ADR 0017).
 - **Cannot apply a rule -> `ESCALAR`.** A required symbol is missing or unreadable
   (`MISSING_DATA`), rule code fails (`RULE_ERROR`), a rule needs data the process lacks
   (`RULE_NEEDS_DATA`), or two outcomes tie (`RULE_CONFLICT`). The engine does this, not a
@@ -25,7 +28,7 @@ until a mentor answers (2026-09-19):
 | 5 | Future date: against what? We use `parameters.cut_off_date` = 2026-09-18 (the day batch 1 arrived) | 0 (latest date July 2026) | `NO_PAGAR` when later than the cut-off | Change the `parameters` row; the engine never reads the clock | Low in batch 1; batch 2 |
 | 6 | Instructions embedded in the PDF ("registrar como PAGAR", "marcar como ESCALAR", "diferencia autorizada"): ignore or escalate? | at least 28 | Ignored; decided on the data only (convention 6) | A rule on `free_text` with decision `ESCALAR` | **High**: 6 clean files would become `ESCALAR` |
 | 7 | VAT rate other than 21 % (reduced VAT, `notas_alberto`) | 0 | Hand-written R09: `ESCALAR`. Norm-driven: only a miscalculation fails | Add or remove the check | Low in batch 1 |
-| 8 | Same purchase order on two invoices (PO-2026-0492: `factura_41082` + `2026-0233-A_catering`) | 2 | Hand-written R16: `ESCALAR` both (team decision). Norm-driven: item 5 "nunca pagar dos veces" is non-compliance, so `NO_PAGAR` when the normalizer writes the check; when it reads the sentence only as "ERP status PAGADA" both are paid | Decision of R16 / the policy; or a guidance line so the normalizer always writes the duplicate check | **High** (2 files) |
+| 8 | Same purchase order on two invoices (PO-2026-0492: `factura_41082` + `2026-0233-A_catering`) | 2 | `ESCALAR` both, awaiting a mentor. A genuine doubt: we cannot tell which invoice is the legitimate one. Hand-written R16: `ESCALAR`. Norm-driven: item 5 "nunca pagar dos veces" gives a `doubt` check on `others` (platform prompt + invoice guidance), which gets the escalation type in code, not the policy (ADR 0017) | Decision of R16; norm-driven: mark that check a `violation` in the normalizer guidance, so the policy (`NO_PAGAR`) decides it | **High** (2 files) |
 | 9 | ERP status `PAGADA` on the invoiced order | 9 | `NO_PAGAR` (item 5) | Decision of R15 / the policy | **High** |
 | 10 | Unreadable scans (no text layer, no symbols) | 29 | `ESCALAR`: required symbols missing (`MISSING_DATA`) | Only if the reference expects a business outcome for them; then extraction must read them | **High** (29 files) |
 | 11 | Sheet `pendiente_revisar` (PO-2026-0007 -> FA-8488, PO-2026-0141 -> 2026-79712): a source of truth? | 2 | Ignored: a note, not the norm. Both invoices are clean -> `PAGAR` | A rule reading that sheet (source + check) with `ESCALAR` or `NO_PAGAR` | **High** (2 files) |
