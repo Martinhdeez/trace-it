@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
+from app.core.config import settings
 from app.core.events import Event
 from app.features.agents import compiler, decision_reviewer, sandbox
 from app.features.decisions import runs
@@ -140,7 +141,16 @@ async def decide_all(
     scans = {i.id: u for i in selected if (u := scan(i.symbols)) is not None}
     # One subprocess per rule, off the event loop.
     return await asyncio.to_thread(
-        decide, rules, out, dataset, sources, population, _traced(rules), scans
+        decide,
+        rules,
+        out,
+        dataset,
+        sources,
+        population,
+        _traced(rules),
+        scans,
+        None,
+        settings.decision_workers,
     )
 
 

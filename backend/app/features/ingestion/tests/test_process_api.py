@@ -1,6 +1,8 @@
 """Real PostgreSQL integration; enable with TRACEPAY_TEST_POSTGRES=1 after migrations."""
 
+import asyncio
 import os
+import threading
 import uuid
 from dataclasses import replace
 
@@ -92,6 +94,34 @@ async def test_upload_persists_original_and_evidence_without_approving_symbols(p
     stored = await client.get(f"/instances/{result['instance_id']}/document")
     assert stored.status_code == 200
     assert stored.json() == result["extraction"]
+
+
+async def test_different_documents_extract_concurrently(process_api):
+    client, process_id, service = process_api
+    original = service.extract
+    both_running = threading.Barrier(2)
+
+    def synchronized_extract(*args, **kwargs):
+        both_running.wait(timeout=2)
+        return original(*args, **kwargs)
+
+    service.extract = synchronized_extract
+    try:
+        first, second = await asyncio.gather(
+            client.post(
+                f"/processes/{process_id}/files",
+                files={"file": ("first.pdf", pdf_bytes(VALID + "\nFIRST"))},
+            ),
+            client.post(
+                f"/processes/{process_id}/files",
+                files={"file": ("second.pdf", pdf_bytes(VALID + "\nSECOND"))},
+            ),
+        )
+    finally:
+        service.extract = original
+
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
 
 
 async def test_document_locations_and_page_preserve_saved_reading(process_api):

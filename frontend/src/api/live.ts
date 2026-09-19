@@ -44,6 +44,8 @@ import type {
 } from './contracts'
 import { BASE, get, getText, post, put, query, upload } from './http'
 
+const UPLOAD_CONCURRENCY = 4
+
 /** The FastAPI API, as it is. */
 export const liveClient: ApiClient = {
   health: async () => {
@@ -120,23 +122,27 @@ export const liveClient: ApiClient = {
   exportOutcomes: (processId) => getText(`/processes/${processId}/export`),
 
   uploadFiles: async (processId, files, onProgress) => {
-    const results: DocumentUpload[] = []
-    for (const file of files) {
-      const form = new FormData()
-      form.append('file', file)
-      let result = await upload<DocumentUpload>(`/processes/${processId}/files`, form)
-      // The same file again: a PENDING instance keeps the symbols it had, so read it again.
-      if (!result.created && result.status === 'PENDING') {
-        result = await post<DocumentUpload>(`/instances/${result.instance_id}/extract`, {})
+    const results = new Array<DocumentUpload>(files.length)
+    let next = 0
+    let done = 0
+    async function worker() {
+      while (next < files.length) {
+        const index = next++
+        const form = new FormData()
+        form.append('file', files[index])
+        let result = await upload<DocumentUpload>(`/processes/${processId}/files`, form)
+        // The same file again: a PENDING instance keeps the symbols it had, so read it again.
+        if (!result.created && result.status === 'PENDING') {
+          result = await post<DocumentUpload>(`/instances/${result.instance_id}/extract`, {})
+        }
+        results[index] = result
+        done += 1
+        onProgress?.({ done, total: files.length, name: result.name, status: result.status })
       }
-      results.push(result)
-      onProgress?.({
-        done: results.length,
-        total: files.length,
-        name: result.name,
-        status: result.status,
-      })
     }
+    await Promise.all(
+      Array.from({ length: Math.min(UPLOAD_CONCURRENCY, files.length) }, () => worker()),
+    )
     return results
   },
   listSources: (processId) => get<SourceOut[]>(`/processes/${processId}/sources`),

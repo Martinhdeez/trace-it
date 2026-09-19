@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
+from app.core.config import settings
 from app.features.agents import compiler, sandbox
 from app.features.decisions.engine import decide
 from app.features.decisions.model import ENGINE, Decision, DecisionReview
@@ -151,6 +152,7 @@ async def evaluate(
             if i["id"] in selected and (unconfirmed := scan(i["symbols"])) is not None
         },
         down,
+        settings.decision_workers,
     )
     return dict(zip((key for key, _ in dataset), verdicts, strict=True))
 
