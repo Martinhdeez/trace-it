@@ -12,6 +12,15 @@ export type Role = User['role']
 type Schemas = components['schemas']
 export type ProcessSummary = Schemas['ProcessSummary']
 export type ExecutionMetrics = Schemas['ExecutionMetrics']
+export type IngestionMetrics = Schemas['IngestionMetrics']
+export type AgentsMetrics = Schemas['AgentsMetrics']
+export type Plane = Schemas['Plane']
+/** Each plane has its own metrics; they are never added together. */
+export type PlaneMetrics = {
+  ingestion: IngestionMetrics
+  agents: AgentsMetrics
+  execution: ExecutionMetrics
+}
 export type ProcessMetrics = Schemas['ProcessMetrics']
 export type PlaneHealth = Schemas['PlaneHealth']
 export type VersionDraft = Schemas['VersionDraftOut']
@@ -169,7 +178,7 @@ export interface ApiClient {
   uploadDraftWorkbook(id: number, revision: number, file: File): Promise<DiscoverySession>
 
   summary(processId: number): Promise<ProcessSummary>
-  planeMetrics(processId: number, plane: 'execution'): Promise<ExecutionMetrics>
+  planeMetrics<P extends Plane>(processId: number, plane: P): Promise<PlaneMetrics[P]>
   processMetrics(processId: number): Promise<ProcessMetrics>
   planesHealth(): Promise<PlaneHealth[]>
   /** 404 when the process has no draft. */
