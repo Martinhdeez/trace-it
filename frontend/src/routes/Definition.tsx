@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUp, ChevronDown, Paperclip, Plus, Sparkles, X } from 'lucide-react'
+import { ArrowUp, ChevronDown, Hammer, Paperclip, Plus, Sparkles, X } from 'lucide-react'
 import { api } from '../api/client'
 import { keys } from '../api/queries'
 import type {
@@ -23,7 +23,6 @@ import { ProcessScreen } from '../components/process/ProcessScreen'
 import { TruthSources } from '../components/process/TruthSources'
 import { Button, Input, Select, Textarea } from '../components/shell/Controls'
 import { ErrorNotice, Empty } from '../components/shell/Notice'
-import { StatusBadge } from '../components/shell/StatusBadge'
 import { NestedCard } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { definitionTabFromPath, type DefinitionTabId } from '../lib/definitionTabs'
@@ -73,22 +72,22 @@ type Turn = {
 
 const PANE_CHAT = {
   normas: {
-    empty: 'Una frase, como se la contarías a quien decide. Si toca varias reglas, suéltalas todas.',
+    chips: ['El IBAN debe coincidir con el maestro', 'Si falta el pedido, ESCALAR', 'NIF del emisor dado de alta'],
     placeholder: 'Un cambio en la norma, un ejemplo, o suelta un archivo.',
     proposals: 'Propuestas · aplicar abre una versión',
   },
   contexto: {
-    empty: 'Una convención: unidades, tolerancias, qué hacer si falta un valor. Entra al marco de la derecha.',
+    chips: ['NIF en mayúsculas, sin espacios', 'Importes en euros', 'Si falta un valor, ESCALAR'],
     placeholder: 'Cómo se lee un NIF, un euro, una fecha vacía…',
     proposals: 'Propuestas · aplicar entra al contexto',
   },
   inputs: {
-    empty: 'Un campo que sale del documento. Nombre y qué significa.',
+    chips: ['nif_emisor', 'iban_cobro', 'numero_pedido'],
     placeholder: 'nif_emisor, el NIF del emisor sin espacios.',
     proposals: 'Propuestas · aplicar suma el símbolo',
   },
   fuentes: {
-    empty: 'Qué Excel o ERP tiene que cruzar. La carga se hace a la derecha.',
+    chips: ['Maestro de proveedores', 'Pedidos abiertos', 'Parámetros del ERP'],
     placeholder: 'Maestro de proveedores, pedidos, el conector del ERP…',
     proposals: 'Propuestas',
   },
@@ -103,6 +102,12 @@ export function Definition() {
   const queryClient = useQueryClient()
   const [turns, setTurns] = useState<Turn[]>([])
   const [accepted, setAccepted] = useState<Set<string>>(new Set())
+  const [draft, setDraft] = useState('')
+  const [focusTick, setFocusTick] = useState(0)
+
+  useEffect(() => {
+    setDraft('')
+  }, [pane])
 
   const process = useQuery({
     queryKey: keys.process(processId),
@@ -221,11 +226,7 @@ export function Definition() {
       <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,1fr)]">
         <section className="flex min-h-0 flex-col border-b border-hairline lg:border-b-0 lg:border-r">
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-            {turns.length === 0 ? (
-              <p className="rounded-[16px] bg-well px-4 py-5 text-[13px] leading-6 text-muted ring-1 ring-black/[0.04]">
-                {chat.empty}
-              </p>
-            ) : (
+            {turns.length > 0 ? (
               <ol className="space-y-6">
                 {turns.map((turn) => (
                   <li key={turn.id} className="space-y-3">
@@ -274,7 +275,7 @@ export function Definition() {
                   </li>
                 ))}
               </ol>
-            )}
+            ) : null}
 
             {create.isError ? (
               <div className="mt-4">
@@ -298,7 +299,39 @@ export function Definition() {
             ) : null}
           </div>
 
-          <Composer placeholder={chat.placeholder} onSend={propose} />
+          {turns.length === 0 ? (
+            <div className="flex flex-wrap gap-2 px-5 pb-1">
+              {chat.chips.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => {
+                    setDraft(chip)
+                    setFocusTick((tick) => tick + 1)
+                  }}
+                  className={cn(
+                    'rounded-full px-3 py-1.5 text-left text-[12px] ring-1',
+                    draft === chip
+                      ? 'bg-white text-ink shadow-[0_1px_2px_rgba(19,19,19,0.06)] ring-black/[0.10]'
+                      : 'bg-canvas text-ink/75 ring-black/[0.06] hover:bg-white hover:text-ink',
+                  )}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <Composer
+            placeholder={chat.placeholder}
+            draft={draft}
+            onDraft={setDraft}
+            focusTick={focusTick}
+            onSend={(text, files) => {
+              propose(text, files)
+              setDraft('')
+            }}
+          />
         </section>
 
         <aside className="flex min-h-0 flex-col">
@@ -312,7 +345,9 @@ export function Definition() {
             />
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-            {pane === 'normas' ? <RulesPane processId={processId} rules={all} /> : null}
+            {pane === 'normas' ? (
+              <RulesPane processId={processId} rules={all} outcomes={outcomes} />
+            ) : null}
             {pane === 'contexto' ? <ContextPane process={process.data} /> : null}
             {pane === 'inputs' ? (
               <InputsPane processId={processId} process={process.data} />
@@ -325,32 +360,264 @@ export function Definition() {
   )
 }
 
-function RulesPane({ processId, rules }: { processId: number; rules: Rule[] }) {
+const RULE_STATUS: Record<
+  Rule['estado'],
+  { dot: string; ink: string; soft: string; pill: string; ring: string }
+> = {
+  activa: {
+    dot: 'bg-pagar',
+    ink: 'text-pagar',
+    soft: 'bg-pagar-soft',
+    pill: 'group-hover:bg-pagar-soft [@media(hover:none)]:bg-pagar-soft',
+    ring: 'border-pagar/20 border-t-pagar',
+  },
+  compilando: {
+    dot: 'bg-ocr',
+    ink: 'text-ocr',
+    soft: 'bg-ocr-soft',
+    pill: 'group-hover:bg-ocr-soft [@media(hover:none)]:bg-ocr-soft',
+    ring: 'border-ocr/20 border-t-ocr',
+  },
+  borrador: {
+    dot: 'bg-faint',
+    ink: 'text-muted',
+    soft: 'bg-well',
+    pill: 'group-hover:bg-well [@media(hover:none)]:bg-well',
+    ring: 'border-faint/25 border-t-faint',
+  },
+  bloqueada: {
+    dot: 'bg-escalar',
+    ink: 'text-escalar',
+    soft: 'bg-escalar-soft',
+    pill: 'group-hover:bg-escalar-soft [@media(hover:none)]:bg-escalar-soft',
+    ring: 'border-escalar/20 border-t-escalar',
+  },
+  rechazada: {
+    dot: 'bg-nopagar',
+    ink: 'text-nopagar',
+    soft: 'bg-nopagar-soft',
+    pill: 'group-hover:bg-nopagar-soft [@media(hover:none)]:bg-nopagar-soft',
+    ring: 'border-nopagar/20 border-t-nopagar',
+  },
+  retirada: {
+    dot: 'bg-faint/50',
+    ink: 'text-faint',
+    soft: 'bg-well',
+    pill: 'group-hover:bg-well [@media(hover:none)]:bg-well',
+    ring: 'border-faint/20 border-t-faint',
+  },
+}
+
+function RulesPane({
+  processId,
+  rules,
+  outcomes,
+}: {
+  processId: number
+  rules: Rule[]
+  outcomes: string[]
+}) {
+  const queryClient = useQueryClient()
+  const input = useRef<HTMLInputElement>(null)
+  const [adding, setAdding] = useState(false)
+  const [text, setText] = useState('')
+  const [pending, setPending] = useState<Set<number>>(new Set())
+
+  useEffect(() => {
+    if (adding) input.current?.focus()
+  }, [adding])
+
+  const create = useMutation({
+    mutationFn: (body: RuleInput) => api.createRule(processId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['rules'] })
+      setText('')
+      requestAnimationFrame(() => input.current?.focus())
+    },
+  })
+
+  const compile = useMutation({
+    mutationFn: (id: number) => api.compileRule(id),
+    onMutate: (id) => {
+      setPending((current) => new Set(current).add(id))
+    },
+    onSettled: (_data, _error, id) => {
+      setPending((current) => {
+        const next = new Set(current)
+        next.delete(id)
+        return next
+      })
+      void queryClient.invalidateQueries({ queryKey: ['rules'] })
+    },
+  })
+
+  const submit = () => {
+    const texto = text.trim()
+    if (!texto || create.isPending) return
+    create.mutate({
+      texto,
+      tipo: 'requisito',
+      decision: outcomes[0] ?? 'ESCALAR',
+    })
+  }
+
   return (
     <>
       <p className="mb-2 font-mono text-[11px] tracking-[0.12em] text-faint">
         NORMA · {rules.length}
       </p>
-      {rules.length === 0 ? (
-        <Empty>Ninguna regla todavía.</Empty>
-      ) : (
-        <ul className="divide-y divide-hairline">
-          {rules.map((rule) => (
-            <li key={rule.id}>
+      <ul className="divide-y divide-hairline">
+        {rules.map((rule) => {
+          const working = pending.has(rule.id) || rule.estado === 'compilando'
+          const canCompile = !working && (rule.estado === 'borrador' || rule.estado === 'bloqueada')
+          return (
+            <li key={rule.id} className="group flex h-9 items-center gap-2">
               <Link
                 to={paths.rule(processId, rule.id)}
-                className="flex items-start gap-2 py-2 hover:text-ink"
+                className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink hover:text-ink"
               >
-                <p className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink">
-                  {rule.texto}
-                </p>
-                <StatusBadge value={rule.estado} />
+                {rule.texto}
               </Link>
+              <RuleStatus
+                estado={rule.estado}
+                working={working}
+                action={canCompile ? 'Compilar' : undefined}
+                onAction={canCompile ? () => compile.mutate(rule.id) : undefined}
+              />
             </li>
-          ))}
-        </ul>
+          )
+        })}
+      </ul>
+
+      {adding ? (
+        <div className="flex items-center gap-2 py-2">
+          <Plus size={12} strokeWidth={2} className="shrink-0 text-faint" />
+          <input
+            ref={input}
+            value={text}
+            disabled={create.isPending}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                submit()
+              }
+              if (event.key === 'Escape') {
+                setAdding(false)
+                setText('')
+              }
+            }}
+            onBlur={() => {
+              if (!text.trim() && !create.isPending) setAdding(false)
+            }}
+            placeholder="Una frase. Enter guarda, Esc cancela."
+            className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-faint disabled:opacity-60"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="mt-1 flex w-full items-center gap-2 py-2 text-left text-[13px] text-muted hover:text-ink"
+        >
+          <Plus size={12} strokeWidth={2} />
+          Añadir regla
+        </button>
       )}
+
+      {create.isError ? (
+        <div className="mt-3">
+          <ErrorNotice error={create.error} />
+        </div>
+      ) : null}
+      {compile.isError ? (
+        <div className="mt-3">
+          <ErrorNotice error={compile.error} />
+        </div>
+      ) : null}
     </>
+  )
+}
+
+function RuleStatus({
+  estado,
+  working,
+  action,
+  onAction,
+}: {
+  estado: Rule['estado']
+  working: boolean
+  action?: string
+  onAction?: () => void
+}) {
+  const [seconds, setSeconds] = useState(0)
+  const tone = RULE_STATUS[estado]
+  const label = working ? `${seconds}s` : estado
+
+  useEffect(() => {
+    if (!working) {
+      setSeconds(0)
+      return
+    }
+    const id = window.setInterval(() => setSeconds((value) => value + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [working])
+
+  return (
+    <div
+      className={cn(
+        'inline-flex h-5 max-w-2 shrink-0 items-center overflow-hidden rounded-full',
+        'transition-[max-width,padding,gap,background-color] duration-150 ease-out',
+        'group-hover:max-w-[12rem] group-hover:gap-1 group-hover:px-1',
+        '[@media(hover:none)]:max-w-[12rem] [@media(hover:none)]:gap-1 [@media(hover:none)]:px-1',
+        working && 'max-w-[12rem] gap-1 px-1',
+        tone.pill,
+        working && tone.soft,
+      )}
+    >
+      <span className="relative h-2 w-2 shrink-0">
+        {working ? (
+          <>
+            <span className={cn('absolute inset-[2px] rounded-full', tone.dot)} />
+            <span
+              aria-hidden
+              className={cn(
+                'absolute inset-0 rounded-full border-[1.5px] animate-spin motion-reduce:animate-none',
+                tone.ring,
+              )}
+            />
+          </>
+        ) : (
+          <span className={cn('absolute inset-0 rounded-full', tone.dot)} />
+        )}
+      </span>
+      <span
+        className={cn(
+          'whitespace-nowrap text-[11px] leading-none tabular-nums',
+          'opacity-0 transition-opacity duration-150 ease-out',
+          'group-hover:opacity-100 [@media(hover:none)]:opacity-100',
+          working && 'opacity-100',
+          tone.ink,
+        )}
+      >
+        {label}
+      </span>
+      {action && onAction && !working ? (
+        <button
+          type="button"
+          title={action}
+          onClick={onAction}
+          className={cn(
+            'grid h-4 w-4 shrink-0 place-items-center text-faint',
+            'opacity-0 transition-opacity duration-150 ease-out',
+            'group-hover:opacity-100 hover:text-ink',
+            '[@media(hover:none)]:opacity-100',
+          )}
+        >
+          <Hammer size={11} strokeWidth={1.7} />
+        </button>
+      ) : null}
+    </div>
   )
 }
 
@@ -713,21 +980,36 @@ function ProposalCard({
 
 function Composer({
   placeholder,
+  draft,
+  onDraft,
+  focusTick,
   onSend,
 }: {
   placeholder: string
+  draft: string
+  onDraft: (text: string) => void
+  focusTick: number
   onSend: (text: string, files: Attachment[]) => void
 }) {
   const input = useRef<HTMLInputElement>(null)
-  const [text, setText] = useState('')
+  const box = useRef<HTMLDivElement>(null)
   const [files, setFiles] = useState<Attachment[]>([])
   const [over, setOver] = useState(false)
 
+  useEffect(() => {
+    if (!focusTick) return
+    const field = box.current?.querySelector('textarea')
+    if (!field) return
+    field.focus()
+    const end = field.value.length
+    field.setSelectionRange(end, end)
+  }, [focusTick])
+
   const send = () => {
-    const prompt = text.trim()
+    const prompt = draft.trim()
     if (!prompt && files.length === 0) return
     onSend(prompt || 'Revisa los adjuntos y propone cambios.', files)
-    setText('')
+    onDraft('')
     setFiles([])
   }
 
@@ -746,6 +1028,7 @@ function Composer({
   return (
     <div className="shrink-0 border-t border-hairline px-5 py-4">
       <div
+        ref={box}
         className={cn(
           'rounded-[16px] bg-white p-2 ring-1 transition-colors',
           over ? 'ring-focus' : 'ring-black/[0.06]',
@@ -772,8 +1055,8 @@ function Composer({
         ) : null}
         <Textarea
           rows={3}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
+          value={draft}
+          onChange={(event) => onDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
               event.preventDefault()
@@ -794,7 +1077,7 @@ function Composer({
           </button>
           <Button
             tone="primary"
-            disabled={!text.trim() && files.length === 0}
+            disabled={!draft.trim() && files.length === 0}
             onClick={send}
             className="h-8 px-3"
           >

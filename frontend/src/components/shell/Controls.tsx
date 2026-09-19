@@ -1,3 +1,4 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ButtonHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
 import type { InputHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { cn } from '../../lib/cn'
@@ -74,26 +75,68 @@ export function Segmented<T extends string>({
   value: T
   onChange: (value: T) => void
 }) {
+  const rail = useRef<HTMLDivElement>(null)
+  const [thumb, setThumb] = useState({ x: 0, w: 0 })
+  const [ready, setReady] = useState(false)
+
+  useLayoutEffect(() => {
+    const root = rail.current
+    if (!root) return
+
+    const measure = () => {
+      const active = root.querySelector<HTMLElement>('[data-active="true"]')
+      if (!active) return
+      const next = { x: active.offsetLeft, w: active.offsetWidth }
+      setThumb((prev) => (prev.x === next.x && prev.w === next.w ? prev : next))
+    }
+
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [value, options])
+
+  useEffect(() => {
+    if (thumb.w > 0) setReady(true)
+  }, [thumb.w])
+
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-full bg-canvas p-0.5 ring-1 ring-black/[0.06]">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          className={cn(
-            'rounded-full px-3 py-1 text-[12px]',
-            option.value === value
-              ? 'bg-white text-ink shadow-[0_1px_2px_rgba(19,19,19,0.06)]'
-              : 'text-muted hover:text-ink',
-          )}
-        >
-          {option.label}
-          {option.count != null ? (
-            <span className="ml-1.5 font-mono text-[11px] text-faint">{option.count}</span>
-          ) : null}
-        </button>
-      ))}
+    <div
+      ref={rail}
+      className="relative inline-flex items-center gap-0.5 rounded-full bg-canvas p-0.5 ring-1 ring-black/[0.06]"
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute top-0.5 left-0 h-[calc(100%-4px)] shrink-0 rounded-full bg-white shadow-[0_1px_2px_rgba(19,19,19,0.06)] motion-reduce:!transition-none"
+        style={{
+          width: thumb.w,
+          minWidth: thumb.w,
+          transform: `translateX(${thumb.x}px)`,
+          transition: ready
+            ? 'transform 220ms var(--ease-out), width 220ms var(--ease-out)'
+            : 'none',
+        }}
+      />
+      {options.map((option) => {
+        const active = option.value === value
+        return (
+          <button
+            key={option.value}
+            type="button"
+            data-active={active || undefined}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              'relative z-10 rounded-full px-3 py-1 text-[12px] transition-colors duration-200 motion-reduce:transition-none',
+              active ? 'text-ink' : 'text-muted hover:text-ink',
+            )}
+          >
+            {option.label}
+            {option.count != null ? (
+              <span className="ml-1.5 font-mono text-[11px] text-faint">{option.count}</span>
+            ) : null}
+          </button>
+        )
+      })}
     </div>
   )
 }

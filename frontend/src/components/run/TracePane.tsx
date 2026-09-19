@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { AlertTriangle, CheckCircle2, ChevronDown, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, FileSearch, XCircle } from 'lucide-react'
 import type { InstanceDetail, Rule, RuleOutcome } from '../../api/contracts'
 import { formatMs } from '../../lib/format'
 import { cn } from '../../lib/cn'
 import { label, tone } from '../../lib/status'
 import { JsonHighlight } from '../../lib/jsonHighlight'
 import { StatusBadge } from '../shell/StatusBadge'
+import { DocumentPopup } from './DocumentPopup'
 
 const ease = [0.23, 1, 0.32, 1] as const
 
@@ -17,20 +18,13 @@ const ease = [0.23, 1, 0.32, 1] as const
 export function TracePane({
   instance,
   rules,
-  wide = false,
 }: {
   instance: InstanceDetail | undefined
   rules: Rule[]
-  wide?: boolean
 }) {
   if (!instance) {
     return (
-      <aside
-        className={cn(
-          'flex h-full min-h-0 shrink-0 flex-col px-5 py-4 text-[13px] text-muted',
-          wide ? 'min-w-0 flex-1' : 'w-[360px]',
-        )}
-      >
+      <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col px-5 py-4 text-[13px] text-muted">
         Decisión
       </aside>
     )
@@ -51,23 +45,10 @@ export function TracePane({
     rules.find((rule) => rule.id === outcome.regla_id)?.texto ?? `Regla ${outcome.regla_id}`
 
   return (
-    <aside
-      className={cn(
-        'flex h-full min-h-0 shrink-0 flex-col overflow-y-auto pb-4',
-        wide ? 'min-w-0 flex-1 px-6' : 'w-[360px] px-2',
-      )}
-    >
-      <div className={cn('py-3', wide ? 'mx-auto w-full max-w-[820px]' : 'px-3')}>
-        <p className="text-[11px] text-muted">Resultado del proceso</p>
-        <h2 className="mt-0.5 truncate font-mono text-[13px]">{instance.nombre}</h2>
-      </div>
+    <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-6 pb-4">
+      <DocumentHeader instance={instance} />
 
-      <div
-        className={cn(
-          'rounded-[16px] bg-white ring-1 ring-black/[0.06]',
-          wide ? 'mx-auto w-full max-w-[820px] px-6 py-6' : 'px-4 py-4',
-        )}
-      >
+      <div className="mx-auto w-full max-w-[820px] rounded-[16px] bg-white px-6 py-6 ring-1 ring-black/[0.06]">
         <div className="flex items-start gap-4">
           <span
             className={cn(
@@ -110,7 +91,7 @@ export function TracePane({
         </div>
       </div>
 
-      <div className={cn(wide && 'mx-auto w-full max-w-[820px]')}>
+      <div className="mx-auto w-full max-w-[820px]">
         {latest?.resultados.length ? (
         <Block title={`reglas · ${latest.resultados.length}`} openByDefault>
           <ul className="divide-y divide-hairline">
@@ -212,6 +193,27 @@ export function TracePane({
         </Block>
       </div>
     </aside>
+  )
+}
+
+function DocumentHeader({ instance }: { instance: InstanceDetail }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mx-auto flex w-full max-w-[820px] items-center justify-between gap-3 py-3">
+      <div className="min-w-0">
+        <p className="text-[11px] text-muted">Resultado del proceso</p>
+        <h2 className="mt-0.5 truncate font-mono text-[13px]">{instance.nombre}</h2>
+      </div>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-ink px-3 text-[12px] font-medium text-white hover:bg-ink/90"
+      >
+        <FileSearch size={13} strokeWidth={1.7} />
+        Abrir documento
+      </button>
+      {open ? <DocumentPopup instance={instance} onClose={() => setOpen(false)} /> : null}
+    </div>
   )
 }
 
