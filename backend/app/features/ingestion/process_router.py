@@ -22,7 +22,7 @@ from app.features.users.dependencies import CurrentUser
 
 from . import process_service
 from .errors import InvalidDocumentError
-from .extraction_plan import ExtractionPlan, load_extraction_plan
+from .extraction_plan import ExtractionPlan, ExtractionPlanOut, load_extraction_plan
 from .process_extraction import read_document, reextract_document
 from .runtime import current_service
 from .schemas import CriticalField, ExtractionResult, ExtractOptions
@@ -63,7 +63,9 @@ class DocumentUpload(BaseModel):
     operation_id="getProcessExtractionPlan",
     summary="Inspect the current fields and rule dependencies used for document extraction",
 )
-async def extraction_plan(process_id: int, session: Session, user: CurrentUser) -> dict:
+async def extraction_plan(
+    process_id: int, session: Session, user: CurrentUser
+) -> ExtractionPlanOut:
     await process_service.require_process(session, process_id)
     plan: ExtractionPlan = await load_extraction_plan(session, process_id)
     return {**plan.model_dump(mode="json"), "fingerprint": plan.fingerprint}

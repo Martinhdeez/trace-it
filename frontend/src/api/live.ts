@@ -19,9 +19,11 @@ import type {
   User,
 } from './contracts'
 import { get, getText, post, put, query, upload } from './http'
+import type { components } from './schema'
 
-type RawUser = { id: number; name: string; email: string; role: 'manager' | 'operator' }
-type RawProcess = { id: number; name: string; use_case_id: number; description: string }
+type Schema = components['schemas']
+type RawUser = Schema['UserOut']
+type RawProcess = Schema['ProcessOut']
 type RawProcessDetail = RawProcess & {
   decision_types: { name: string; priority: number; is_default: boolean; requires_human: boolean }[]
   symbols: { name: string; type: string; description: string }[]
@@ -41,7 +43,7 @@ type RawRule = {
 }
 type RawRuleDetail = RawRule & { code: string | null; tests: Record<string, unknown>[] | null }
 type RawInstance = { id: number; name: string; status: string; decision: string | null }
-type RawUseCase = { id: number; name: string; description: string }
+type RawUseCase = Schema['UseCaseOut']
 type RawAgentConfig = {
   id: number
   role: string
