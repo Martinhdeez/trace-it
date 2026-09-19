@@ -1621,9 +1621,29 @@ export interface paths {
         put?: never;
         /**
          * The assistant proposes a decision for an escalated instance; a manager settles it
-         * @description Why the case escalated, the options with their consequence, the proposed one and its evidence, in `payload`. Only a proposal: no decision is taken until a manager accepts it (or resolves the instance with its `proposal_id`). A new one supersedes the instance's open proposal.
+         * @description Why the case escalated, the options with their consequence, the proposed one and its evidence, in `payload`. Only a proposal: no decision is taken until a manager accepts it (or resolves the instance with its `proposal_id`). A new one supersedes the instance's open proposal. If the case gets another decision while the model answers, nothing is stored (409).
          */
         post: operations["proposeDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/instances/{instance_id}/rule-proposal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * After a person resolved an escalated case, the assistant amends the rule that escalated it so similar cases get that decision; a manager accepts or rejects it
+         * @description Only when one escalation rule fired and, without it, the other rules give the person's decision; otherwise 409 with the reason in Spanish, and no model is called. `kind: rule`, `channel: escalation`; `payload`: `{decision_id` (the resolution), `engine_decision_id, replaces` (the rule it amends), `text` (English, compiled on accept), `summary, type, decision, resolved_as, version_id}`. Accepting stages it in the process draft in place of `replaces` and compiles it in the background; publishing stays `/processes/{id}/draft/validate` and `/publish`. Left open, it ends `superseded` with `outcome.cause`: `ignored` (another case resolved), `version_published`, `case_changed` or `superseded` (a newer suggestion).
+         */
+        post: operations["proposeRule"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1661,7 +1681,7 @@ export interface paths {
         put?: never;
         /**
          * The manager accepts a proposal; its channel's own workflow applies it
-         * @description decision: resolves the instance with the proposed decision. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.
+         * @description decision: resolves the instance with the proposed decision. Escalation rule: creates the amended rule in the process draft, retires `replaces` there and compiles it in the background; `outcome` is `{rule_id, retired, draft_revision}`. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.
          */
         post: operations["acceptProposal"];
         delete?: never;
@@ -8253,7 +8273,54 @@ export interface operations {
                     "application/json": components["schemas"]["ManagerProposalOut"];
                 };
             };
-            /** @description Instance not escalated */
+            /** @description Instance not escalated, or it changed while the model answered */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The assistant's model failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    proposeRule: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                instance_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagerProposalOut"];
+                };
+            };
+            /** @description Not resolved, not learnable (reason in Spanish), or stale */
             409: {
                 headers: {
                     [name: string]: unknown;

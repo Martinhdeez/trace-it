@@ -8,10 +8,11 @@ different proposed set.
 
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.decisions import service
-from app.features.decisions.model import ENGINE, Finding
+from app.features.decisions.model import ENGINE, Decision, Finding
 from app.features.rules.model import Rule
 
 
@@ -32,7 +33,9 @@ class Impact:
 
     unchanged: int
     changes: list[Change]  # the engine decided it, and would now decide otherwise
-    conflicts: list[Change]  # a person decided it, and the rules would contradict them
+    # a person decided it, and the rules would now decide otherwise than the engine did
+    # and than that person; one that now agrees with the person is neither (R01)
+    conflicts: list[Change]
 
 
 async def proposal_with(session: AsyncSession, rule: Rule) -> list[Rule]:
@@ -56,14 +59,23 @@ async def check(session: AsyncSession, process_id: int, proposed: list[Rule]) ->
     decided = [i for i in instances if latest.get(i.id) is not None and i.symbols is not None]
     verdicts = await service.decide_all(session, process_id, proposed, decided)
 
+    engine = await _engine_decisions(session, decided)
+
     unchanged = 0
     changes: list[Change] = []
     conflicts: list[Change] = []
     for instance, verdict in zip(decided, verdicts, strict=True):
-        previous = latest[instance.id]
+        # R01: the baseline is the engine's last word, not a person's resolution.
+        last = latest[instance.id]
+        previous = engine.get(instance.id, last)
         if verdict.decision == previous.decision:
             unchanged += 1
             continue
+        if last.author != ENGINE:
+            if verdict.decision == last.decision:  # the rules now agree with the person
+                unchanged += 1
+                continue
+            previous = last
         change = Change(
             instance_id=instance.id,
             name=instance.name,
@@ -78,6 +90,15 @@ async def check(session: AsyncSession, process_id: int, proposed: list[Rule]) ->
         (conflicts if previous.author != ENGINE else changes).append(change)
 
     return Impact(unchanged=unchanged, changes=changes, conflicts=conflicts)
+
+
+async def _engine_decisions(session: AsyncSession, instances) -> dict[int, Decision]:
+    rows = await session.scalars(
+        select(Decision)
+        .where(Decision.instance_id.in_([i.id for i in instances]), Decision.author == ENGINE)
+        .order_by(Decision.id)
+    )
+    return {row.instance_id: row for row in rows}
 
 
 async def record_findings(

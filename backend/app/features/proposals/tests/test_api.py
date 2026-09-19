@@ -119,6 +119,50 @@ async def test_rejecting_or_resolving_otherwise_never_decides_for_the_manager(mo
     assert overridden["outcome"]["decision"] == "PAGAR"
 
 
+async def test_resolving_without_the_proposal_closes_it_as_superseded_with_a_cause(monkeypatch):
+    """BE-1: a resolved case has no open proposal; `superseded` + cause is not `rejected`."""
+    async with client() as api:
+        pid, headers, iid, _ = await escalated(api, monkeypatch, [PROPOSAL])
+        proposal = await propose(api, iid, headers)
+        body = {"decision": "PAGAR", "reason": "Checked by phone"}
+        assert (await api.post(f"/instances/{iid}/resolve", json=body)).status_code == 200
+        listed = (await api.get(f"/processes/{pid}/proposals", headers=headers)).json()
+        detail = (await api.get(f"/instances/{iid}")).json()
+
+    [closed] = listed
+    assert closed["id"] == proposal["id"]
+    assert (closed["status"], closed["outcome"]) == ("superseded", {"cause": "case_changed"})
+    [expired] = [e for e in detail["events"] if e["step"] == "expire_proposal"]
+    assert expired["data"] == {"proposal_ids": [proposal["id"]], "cause": "case_changed"}
+
+
+async def test_an_answer_that_arrives_after_a_resolution_is_not_stored(monkeypatch):
+    """R04: the case is resolved while the model answers; nothing stays open, 409."""
+    from app.features.agents import assistant
+    from app.features.agents.assistant import Suggestion
+
+    async with client() as api:
+        pid, headers, iid, _ = await escalated(api, monkeypatch, [])
+
+        async def slow_suggest(session, instance_id):
+            r = await api.post(
+                f"/instances/{instance_id}/resolve",
+                json={"decision": "PAGAR", "reason": "Resolved meanwhile"},
+                headers=headers,
+            )
+            assert r.status_code == 200, r.text
+            return Suggestion.model_validate(PROPOSAL)
+
+        monkeypatch.setattr(assistant, "suggest", slow_suggest)
+        late = await api.post(f"/instances/{iid}/proposal", headers=headers)
+        listed = (await api.get(f"/processes/{pid}/proposals", headers=headers)).json()
+        detail = (await api.get(f"/instances/{iid}")).json()
+
+    assert late.status_code == 409 and "ha cambiado" in late.json()["message"]
+    assert listed == []
+    assert [d["author"] for d in detail["decisions"]] == ["engine", "Ana"]
+
+
 async def test_only_a_manager_settles(monkeypatch):
     async with client() as api:
         pid, headers, iid, _ = await escalated(api, monkeypatch, [PROPOSAL])

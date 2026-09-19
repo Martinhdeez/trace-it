@@ -34,7 +34,7 @@ from app.features.ingestion.model import Instance
 from app.features.ingestion.symbols import flatten_symbols, scan
 from app.features.processes.service import get as get_process
 from app.features.proposals.model import ManagerProposal
-from app.features.proposals.service import settle
+from app.features.proposals.service import settle, supersede
 from app.features.rules.model import Rule
 from app.features.sources import service as sources
 from app.features.sources.model import Source
@@ -656,6 +656,18 @@ async def resolve(
             "previous_author": previous.author if previous else None,
             **({"proposal_id": proposal.id} if proposal else {}),
         },
+    )
+    # A resolution never waits on a proposal: what is still open on this case answers a
+    # decision that is no longer the last, and an open rule suggestion on another case was
+    # ignored (ADR 0035).
+    await supersede(session, "case_changed", ManagerProposal.instance_id == instance.id)
+    await supersede(
+        session,
+        "ignored",
+        ManagerProposal.process_id == instance.process_id,
+        ManagerProposal.channel == "escalation",
+        ManagerProposal.kind == "rule",
+        ManagerProposal.instance_id != instance.id,
     )
     await session.commit()
     return await get_instance(session, instance_id)

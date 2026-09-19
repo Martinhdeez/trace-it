@@ -28,6 +28,8 @@ duplicate a payment, or leave a norm half applied.
   snapshot: the cases that need it escalate.
 - History is append-only. A change is replayed on past decisions as alerts, never as edits.
 
+**Update 2026-09-19 (ADR 0035).** A manager's resolution can become a rule change without code: amend the escalating rule, publish a new version, reprocess. Past decisions stay; similar cases get a new engine row.
+
 ## Alternatives considered
 
 | Option | Why we rejected it |

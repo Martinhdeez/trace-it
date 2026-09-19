@@ -149,6 +149,38 @@ async def test_a_human_decision_is_reported_but_does_not_block_the_version() -> 
         assert [c["name"] for c in report["changes"]] == ["FA-1016_papelería.pdf"]
 
 
+@pytest.mark.parametrize(("resolution", "conflict"), [("PAGAR", False), ("NO_PAGAR", True)])
+async def test_the_baseline_is_the_engine_and_a_person_only_when_contradicted(
+    resolution: str, conflict: bool
+) -> None:
+    """R01 in the Rule page: the engine escalated, a person resolved. A change that keeps
+    the escalation, or ends where the person did, contradicts nobody."""
+    async with client() as api:
+        process_id, headers = await prepare(api)
+        instances = (await api.get(f"/processes/{process_id}/instances")).json()
+        escalated = next(i for i in instances if i["name"] == "FA-5044_mensajería2.pdf")
+        await api.post(
+            f"/instances/{escalated['id']}/resolve",
+            json={"decision": resolution, "reason": "Checked with the supplier"},
+            headers=headers,
+        )
+        rules = (await api.get(f"/processes/{process_id}/rules")).json()
+        paid = next(r for r in rules if r["text"] == "order_already_paid")
+        iban = next(r for r in rules if r["text"] == "iban_mismatch")
+        unchanged = (await api.get(f"/rules/{paid['id']}/impact")).json()  # ESCALAR stays
+        retired = (await api.get(f"/rules/{iban['id']}/impact")).json()  # it would pay
+
+    assert "FA-5044_mensajería2.pdf" not in [c["name"] for c in unchanged["conflicts"]]
+    names = [c["name"] for c in retired["conflicts"]]
+    assert names == (["FA-5044_mensajería2.pdf"] if conflict else [])
+    assert "FA-5044_mensajería2.pdf" not in [c["name"] for c in retired["changes"]]
+    if conflict:
+        assert (retired["conflicts"][0]["before"], retired["conflicts"][0]["after"]) == (
+            "NO_PAGAR",
+            "PAGAR",
+        )
+
+
 async def test_retiring_is_checked_like_activating() -> None:
     async with client() as api:
         process_id, headers = await prepare(api)
