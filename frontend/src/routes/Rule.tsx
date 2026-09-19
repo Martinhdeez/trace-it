@@ -72,7 +72,7 @@ export function Rule() {
       crumbs={[
         { label: 'Procesos', to: paths.processes },
         { label: process.data?.name ?? '…', to: paths.process(processId) },
-        { label: 'Definición', to: paths.definition(processId) },
+        { label: 'Definición', to: paths.processChat(processId) },
         { label: `Regla ${ruleId}` },
       ]}
       actions={

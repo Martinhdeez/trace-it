@@ -688,7 +688,7 @@ Every step is manager-only: 401 without `X-User-Id`, 403 for an operator. The pu
     - Renders the answer as a turn, using the existing turn markup.
   - `.xlsx` attachments go to `uploadDraftWorkbook`. Other file types show a `Notice` ("Solo Excel"). The chip UI stays.
   - Proposals in the chat come from package 8, not from the chat response.
-  - A norm pasted in the Normas pane goes to `POST /processes/{id}/norm`, and the returned checks are listed with `ProposalCard`, already created as draft rules that compile in the background (row 14, Q2).
+  - The process chat sends authoring requests through discovery, which can revise context, inputs, outcomes, sources, guidance and rules in one reviewed plan. The manual Normas pane remains a fallback for direct rule entry.
 - `PANE_CHAT` chips and `FE:data/seed.ts` `invoiceSymbols` use the pack's names: `issuer_nif`, `iban`, `invoice_number`, `date`, `purchase_order`, `base`, `vat_rate`, `vat_amount` and `total`.
 - `NewProcess.tsx`:
   - `FromDefinition` does `JSON.parse`, then `loadDefinition` as it is. A 409 shows the backend's text.
@@ -714,7 +714,7 @@ Every step is manager-only: 401 without `X-User-Id`, 403 for an operator. The pu
 2. Inputs: add `iban_check`, `text`. The draft has it, and the other symbols are intact.
 3. Nuevo proceso → Importar: paste `processes/travel-expenses.json`. The process is created. Pasting `invoice-payment.json` a second time shows the 409 text.
 4. Chat: "¿Por qué se escalan estos casos?" returns an answer that cites cases.
-5. Normas: paste a norm sentence. The checks are listed and move from Compilando to Borrador.
+5. Process chat: ask a question or request a change. The complete plan appears for review before preparation and publication.
 
 **Estimate:** L.
 

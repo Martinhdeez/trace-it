@@ -1,16 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUp, BookOpenText, Check, ChevronDown, Hammer, Paperclip, Plus, X } from 'lucide-react'
+import { BookOpenText, Check, ChevronDown, Hammer, Plus, X } from 'lucide-react'
 import { api, ApiError } from '../api/client'
-import { families, keys } from '../api/queries'
+import { keys } from '../api/queries'
 import type {
-  CreatedCheck,
-  NormPreview,
-  Normalization,
-  DiscoverySession,
   Finding,
-  Proposal,
   ProcessDetail,
   Rule,
   RuleStatus as RuleStatusCode,
@@ -20,20 +15,11 @@ import type {
   VersionOut,
 } from '../api/contracts'
 import { DefinitionSwitch } from '../components/process/DefinitionSwitch'
-import {
-  FileChip,
-  revokePreview,
-  toPreview,
-  type FilePreview,
-} from '../components/process/FileChip'
 import { ProcessScreen } from '../components/process/ProcessScreen'
 import { TruthSources } from '../components/process/TruthSources'
 import { ValidationImpact } from '../components/process/ValidationImpact'
 import { Button, Input, Select, Textarea } from '../components/shell/Controls'
 import { ErrorNotice, Empty, EmptyState, Notice } from '../components/shell/Notice'
-import { Markdown } from '../components/shell/Markdown'
-import { TerminalLoader } from '../components/shell/TerminalLoader'
-import { NormProposal, type ProposalState } from '../components/process/NormProposal'
 import { ExpandableText } from '../components/shell/ExpandableText'
 import { NestedCard } from '../components/shell/Well'
 import { t } from '../i18n'
@@ -43,81 +29,6 @@ import { formatRunDate } from '../lib/format'
 import { paths } from '../lib/paths'
 import { ruleLabel } from '../lib/process'
 import { useSession } from '../state/session'
-
-type Attachment = FilePreview & { file: File }
-
-/** One exchange: what the manager wrote, and what came back. */
-type Turn = {
-  id: string
-  prompt: string
-  files: Attachment[]
-  /** The chat's answer (discuss mode). */
-  answer?: string
-  /** The rules an accepted proposal created; each one compiles in the background. */
-  checks?: CreatedCheck[]
-  /** Normas: the norm this proposal reads, kept so a later message can revise it. */
-  norm?: string
-  preview?: NormPreview
-  state?: ProposalState
-  /** Attachments that were not uploaded because they are not supported evidence. */
-  skipped?: string[]
-  error?: unknown
-}
-
-const PANE_CHAT = {
-  normas: {
-    title: 'Empieza por la norma',
-    intro: 'Pega la norma de tu empresa o escribe una regla. La convierto en comprobaciones y tú decides cuáles entran.',
-    chips: [
-      'El IBAN debe coincidir con el del maestro de proveedores',
-      'Si falta el pedido, se escala',
-      'El NIF del emisor debe estar dado de alta',
-    ],
-    placeholder: 'Pega una norma. Te propongo las reglas y tú decides.',
-    proposals: 'Propuesta',
-  },
-  contexto: {
-    title: 'Pregunta sobre el proceso',
-    intro: 'Qué decide, por qué escala un caso o qué reglas usan un dato.',
-    chips: ['¿Por qué se escalan estos casos?', '¿Qué reglas usan el IBAN?', '¿Qué falta para decidir?'],
-    placeholder: 'Pregunta al asistente sobre este proceso.',
-    proposals: 'Respuesta',
-  },
-  inputs: {
-    title: 'Los datos de cada documento',
-    intro: 'Pregunta qué dato falta para una regla o de dónde sale uno.',
-    chips: ['issuer_nif', 'iban', 'purchase_order'],
-    placeholder: '¿Qué símbolo falta para esta regla? issuer_nif, iban…',
-    proposals: 'Respuesta',
-  },
-  fuentes: {
-    title: 'Las tablas de referencia',
-    intro: 'Adjunta un Excel o pregunta contra qué se comprueba cada documento.',
-    chips: ['Maestro de proveedores', 'Pedidos abiertos', 'Parámetros del ERP'],
-    placeholder: 'Adjunta un Excel o pregunta por las fuentes.',
-    proposals: 'Respuesta',
-  },
-} as const
-
-const TABULAR_EVIDENCE = /\.(xlsx|csv|json)$/i
-
-const NORM_VERBS = ['leyendo la norma', 'buscando reglas que ya existen', 'separando comprobaciones', 'redactando la propuesta']
-const CHAT_VERBS = ['leyendo el proceso', 'buscando en las reglas', 'redactando la respuesta']
-
-/** The conversation for this process: the one still open, or a new one. */
-async function processConversation(processId: number, name: string): Promise<DiscoverySession> {
-  const open = (await api.listDiscoverySessions()).find(
-    (item) => item.process_id === processId && item.published_process_id == null,
-  )
-  if (!open) return api.startDiscoverySession(processId, name)
-  // Its revision is enough to post; the next answer brings the whole conversation back.
-  return { id: open.id, revision: open.revision } as DiscoverySession
-}
-
-function lastAnswer(session: DiscoverySession): string {
-  const message = [...session.messages].reverse().find((item) => item.role === 'assistant')
-  return typeof message?.text === 'string' ? message.text : ''
-}
 
 /**
  * The draft is where every edit goes. `GET /execution` says whether one exists
@@ -153,16 +64,7 @@ export function Definition() {
   const processId = Number(useParams().processId)
   const location = useLocation()
   const pane = definitionTabFromPath(location.pathname)
-  const chat = PANE_CHAT[pane]
-  const queryClient = useQueryClient()
-  const [turns, setTurns] = useState<Turn[]>([])
-  const [draft, setDraft] = useState('')
-  const [focusTick, setFocusTick] = useState(0)
-  const session = useRef<{ id: number; revision: number } | null>(null)
-
-  useEffect(() => {
-    setDraft('')
-  }, [pane])
+  const { isManager } = useSession()
 
   const process = useQuery({
     queryKey: keys.process(processId),
@@ -183,14 +85,6 @@ export function Definition() {
       query.state.data?.some((rule) => rule.status === 'compiling') ? 2_000 : false,
   })
 
-  // Chat and learning proposals wait here; escalation ones live on their case in Revisión.
-  const proposals = useQuery({
-    queryKey: keys.proposals(processId, 'open'),
-    queryFn: () => api.listProposals(processId, 'open'),
-    select: (items) => items.filter((item) => item.channel !== 'escalation'),
-  })
-  const inbox = proposals.data ?? []
-
   const all = rules.data ?? []
   const outcomes = process.data?.decision_types.map((outcome) => outcome.name) ?? []
   const history = [...(versions.data ?? [])].sort((a, b) => b.number - a.number)
@@ -198,100 +92,6 @@ export function Definition() {
   // A selected version is read only; null shows the live definition panes.
   const [viewing, setViewing] = useState<number | null>(null)
   const viewed = history.find((version) => version.id === viewing)
-
-  // The proposal the next message revises, if one waits for the manager.
-  const openProposal =
-    pane === 'normas' ? turns.findLast((turn) => turn.preview && turn.state === 'open') : undefined
-
-  /**
-   * Normas: the normalizer proposes, nothing is created; a message while a proposal is
-   * open revises it. Anywhere else: the process chat, in discuss mode.
-   */
-  const send = useMutation({
-    mutationFn: async ({
-      prompt,
-      files,
-      mode,
-      revising,
-    }: {
-      prompt: string
-      files: Attachment[]
-      mode: 'discuss' | 'revise'
-      revising?: Turn
-    }): Promise<Partial<Turn>> => {
-      // A plain Normas message uses the focused rule normalizer. Evidence or an explicit
-      // change request belongs to discovery, which can revise sources and the full process.
-      if (pane === 'normas' && files.length === 0 && mode === 'discuss') {
-        const norm = revising?.norm ?? prompt
-        const preview = await api.previewNorm(
-          processId,
-          revising?.preview
-            ? { text: norm, feedback: prompt, previous: { norm_rules: revising.preview.norm_rules } }
-            : { text: prompt },
-        )
-        return { preview, norm, state: 'open' }
-      }
-      if (!session.current) {
-        session.current = await processConversation(processId, process.data?.name ?? 'Definición')
-      }
-      const evidence = files.filter((item) => TABULAR_EVIDENCE.test(item.name))
-      for (const file of evidence) {
-        const next = await api.uploadDraftEvidence(session.current.id, session.current.revision, file.file)
-        session.current = { id: next.id, revision: next.revision }
-      }
-      const next = await api.messageDiscoverySession(
-        session.current.id,
-        session.current.revision,
-        prompt,
-        mode,
-      )
-      session.current = { id: next.id, revision: next.revision }
-      return {
-        answer: lastAnswer(next),
-        skipped: files.filter((item) => !TABULAR_EVIDENCE.test(item.name)).map((item) => item.name),
-      }
-    },
-    onMutate: ({ prompt, files }) => {
-      const id = crypto.randomUUID()
-      setTurns((current) => [...current, { id, prompt, files }])
-      return { id }
-    },
-    onSuccess: (result, { revising }, context) => {
-      setTurns((current) =>
-        current.map((turn) =>
-          turn.id === context?.id
-            ? { ...turn, ...result }
-            : turn.id === revising?.id
-              ? { ...turn, state: 'revised' }
-              : turn,
-        ),
-      )
-    },
-    onError: (error, _vars, context) => {
-      // A stale revision: start from the conversation's current one next time.
-      session.current = null
-      setTurns((current) =>
-        current.map((turn) => (turn.id === context?.id ? { ...turn, error } : turn)),
-      )
-    },
-  })
-
-  const settleTurn = (id: string, change: Partial<Turn>) =>
-    setTurns((current) => current.map((turn) => (turn.id === id ? { ...turn, ...change } : turn)))
-
-  // Only now do rules exist: the reviewed proposal is created and compiles.
-  const accept = useMutation({
-    mutationFn: ({ reviewed }: { turnId: string; reviewed: Normalization }) =>
-      api.acceptNorm(processId, reviewed),
-    onSuccess: (out, { turnId }) => {
-      settleTurn(turnId, {
-        state: 'accepted',
-        checks: out.norm_rules.flatMap((item) => item.checks),
-      })
-      void queryClient.invalidateQueries({ queryKey: ['rules'] })
-      void queryClient.invalidateQueries({ queryKey: keys.norm(processId) })
-    },
-  })
 
   return (
     <ProcessScreen
@@ -301,157 +101,43 @@ export function Definition() {
         { label: process.data?.name ?? '…', to: paths.process(processId) },
         { label: 'Definición' },
       ]}
+      actions={isManager ? (
+        <Link to={paths.processChat(processId)}>
+          <Button tone="ghost">Volver al chat</Button>
+        </Link>
+      ) : undefined}
     >
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,1fr)]">
-        <section className="flex min-h-0 flex-col border-b border-hairline lg:border-b-0 lg:border-r">
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-            {proposals.isError ? <ErrorNotice error={proposals.error} /> : null}
-            {turns.length > 0 || inbox.length > 0 ? (
-              <ol className="space-y-6">
-                {inbox.length > 0 ? (
-                  <li className="space-y-3">
-                    <p className="text-[12px] text-muted">
-                      {inbox.length} propuesta{inbox.length === 1 ? '' : 's'} esperan tu decisión ·
-                      aceptar entra al borrador
-                    </p>
-                    <ul className="space-y-2">
-                      {inbox.map((proposal) => (
-                        <ProposalCard key={proposal.id} processId={processId} proposal={proposal} />
-                      ))}
-                    </ul>
-                  </li>
-                ) : null}
-                {turns.map((turn) => (
-                  <li key={turn.id} className="space-y-3">
-                    <div className="rounded-[16px] bg-surface px-4 py-3 ring-1 ring-line">
-                      <p className="text-[13px] leading-6 text-ink">{turn.prompt}</p>
-                      {turn.files.length ? (
-                        <ul className="mt-2 flex flex-wrap gap-2">
-                          {turn.files.map((file) => (
-                            <li key={file.id}>
-                              <FileChip file={file} />
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </div>
-                    {turn.answer === undefined && !turn.preview && !turn.checks && !turn.error ? (
-                      <TerminalLoader verbs={pane === 'normas' ? NORM_VERBS : CHAT_VERBS} />
-                    ) : (
-                      <p className="font-mono text-[11px] tracking-[0.08em] text-faint">
-                        {chat.proposals.toUpperCase()}
-                      </p>
-                    )}
-                    {turn.skipped?.length ? (
-                      <Notice tone="warning" title="Solo Excel">
-                        No se han subido: {turn.skipped.join(', ')}
-                      </Notice>
-                    ) : null}
-                    {turn.error ? <ErrorNotice error={turn.error} /> : null}
-                    {turn.answer ? (
-                      <div className="rounded-[16px] bg-surface px-4 py-3 ring-1 ring-line">
-                        <Markdown>{turn.answer}</Markdown>
-                      </div>
-                    ) : null}
-                    {turn.preview && turn.state ? (
-                      <NormProposal
-                        processId={processId}
-                        preview={turn.preview}
-                        state={turn.state}
-                        accepting={accept.isPending && accept.variables?.turnId === turn.id}
-                        error={accept.variables?.turnId === turn.id ? accept.error : undefined}
-                        onAccept={(reviewed) => accept.mutate({ turnId: turn.id, reviewed })}
-                        onDiscard={() => settleTurn(turn.id, { state: 'discarded' })}
-                      />
-                    ) : null}
-                    {turn.checks ? (
-                      <ul className="space-y-2">
-                        {turn.checks.map((check) => (
-                          <ProposalCard key={check.rule_id} processId={processId} check={check} />
-                        ))}
-                      </ul>
-                    ) : null}
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <EmptyState title={chat.title} className="h-full justify-center">
-                {chat.intro}
-              </EmptyState>
-            )}
-          </div>
-
-          {turns.length === 0 ? (
-            <div className="flex flex-wrap gap-2 px-5 pb-1">
-              {chat.chips.map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => {
-                    setDraft(chip)
-                    setFocusTick((tick) => tick + 1)
-                  }}
-                  className={cn(
-                    'rounded-full px-3 py-1.5 text-left text-[12px] ring-1',
-                    draft === chip
-                      ? 'bg-surface text-ink shadow-lift ring-line'
-                      : 'bg-canvas text-ink/75 ring-line hover:bg-surface hover:text-ink',
-                  )}
-                >
-                  {chip}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          <Composer
-            placeholder={
-              openProposal ? 'Pide cambios a la propuesta: «quita la del IBAN», «que escale»…' : chat.placeholder
-            }
-            draft={draft}
-            onDraft={setDraft}
-            focusTick={focusTick}
-            busy={send.isPending}
-            allowChanges
-            onSend={(text, files, mode) => {
-              send.mutate({ prompt: text, files, mode, revising: openProposal })
-              setDraft('')
-            }}
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        <header className="mx-auto flex max-w-5xl items-start justify-between gap-3 border-b border-hairline pb-3">
+          <DefinitionSwitch processId={processId} />
+          <VersionChip
+            versions={history}
+            selected={viewed ?? latestVersion}
+            onSelect={(version) => setViewing(version.id)}
+            findings={findings.data ?? []}
           />
-        </section>
-
-        <aside className="flex min-h-0 flex-col">
-          <header className="flex shrink-0 items-start justify-between gap-3 border-b border-hairline px-5 py-3">
-            <DefinitionSwitch processId={processId} />
-            <VersionChip
-              versions={history}
-              selected={viewed ?? latestVersion}
-              onSelect={(version) => setViewing(version.id)}
-              findings={findings.data ?? []}
+        </header>
+        <div className="mx-auto max-w-5xl py-5">
+          {viewed && latestVersion ? (
+            <VersionView
+              processId={processId}
+              version={viewed}
+              current={latestVersion}
+              rules={all}
+              onBack={() => setViewing(null)}
             />
-          </header>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-            {viewed && latestVersion ? (
-              <VersionView
-                processId={processId}
-                version={viewed}
-                current={latestVersion}
-                rules={all}
-                onBack={() => setViewing(null)}
-              />
-            ) : null}
-            {viewed ? null : pane === 'normas' ? (
-              <RulesPane processId={processId} rules={all} outcomes={outcomes} />
-            ) : null}
-            {!viewed && pane === 'contexto' ? (
-              <ContextPane processId={processId} process={process.data} />
-            ) : null}
-            {!viewed && pane === 'inputs' ? (
-              <InputsPane processId={processId} process={process.data} />
-            ) : null}
-            {!viewed && pane === 'fuentes' ? <TruthSources processId={processId} /> : null}
-          </div>
-        </aside>
+          ) : null}
+          {viewed ? null : pane === 'normas' ? (
+            <RulesPane processId={processId} rules={all} outcomes={outcomes} />
+          ) : null}
+          {!viewed && pane === 'contexto' ? (
+            <ContextPane processId={processId} process={process.data} />
+          ) : null}
+          {!viewed && pane === 'inputs' ? (
+            <InputsPane processId={processId} process={process.data} />
+          ) : null}
+          {!viewed && pane === 'fuentes' ? <TruthSources processId={processId} /> : null}
+        </div>
       </div>
     </ProcessScreen>
   )
@@ -555,7 +241,7 @@ function RulesPane({
       </p>
       {rules.length === 0 ? (
         <EmptyState icon={BookOpenText} title="Aún no hay normas" className="py-8">
-          Escríbelas en el chat de la izquierda, o añade una a mano aquí abajo.
+          Pídelas en el chat del proceso, o añade una a mano aquí abajo.
         </EmptyState>
       ) : null}
       <ul className="divide-y divide-hairline">
@@ -1210,264 +896,6 @@ function VersionView({
           </div>
         </section>
       ) : null}
-    </div>
-  )
-}
-
-/**
- * One card per proposal: a check the normalizer already created as a draft rule, or a
- * chat or learning proposal that waits for the manager. Accepting one stages it into the
- * draft; nothing here publishes.
- */
-function ProposalCard(
-  props:
-    | { processId: number; check: CreatedCheck; proposal?: undefined }
-    | { processId: number; proposal: Proposal; check?: undefined },
-) {
-  if (props.proposal) return <InboxCard proposal={props.proposal} />
-  const { processId, check } = props
-  return (
-    <li className="rounded-[16px] bg-surface px-4 py-3 ring-1 ring-line">
-      <div className="flex items-start justify-between gap-3">
-        <p className="font-mono text-[11px] tracking-[0.12em] text-faint">
-          {t(`ruleType.${check.type}`)} · {check.decision}
-        </p>
-        <Link
-          to={paths.rule(processId, check.rule_id)}
-          className="text-[12px] text-muted hover:text-ink"
-        >
-          Regla {check.rule_id} →
-        </Link>
-      </div>
-      <p className="mt-2 text-[13px] leading-6 text-ink">{ruleLabel(check)}</p>
-      {check.summary ? (
-        <ExpandableText text={check.text} className="mt-1 text-[12px] leading-5 text-muted" />
-      ) : null}
-      {check.quote ? <p className="mt-1 text-[12px] text-muted">«{check.quote}»</p> : null}
-    </li>
-  )
-}
-
-function InboxCard({ proposal }: { proposal: Proposal }) {
-  const queryClient = useQueryClient()
-  const [rejecting, setRejecting] = useState(false)
-  const [reason, setReason] = useState('')
-
-  const settle = useMutation({
-    mutationFn: (accept: boolean) =>
-      accept ? api.acceptProposal(proposal.id) : api.rejectProposal(proposal.id, reason.trim()),
-    // Keep the card with its outcome until the list comes back without it.
-    onSuccess: () => {
-      for (const name of families.proposals) {
-        void queryClient.invalidateQueries({ queryKey: [name] })
-      }
-    },
-  })
-  const settled = settle.data?.status
-
-  return (
-    <li className="rounded-[16px] bg-surface px-4 py-3 ring-1 ring-line">
-      <div className="flex items-start justify-between gap-3">
-        <p className="font-mono text-[11px] tracking-[0.12em] text-faint">
-          {t(`proposalKind.${proposal.kind}`)} · {t(`proposalChannel.${proposal.channel}`)}
-        </p>
-        {settled ? (
-          <span className={cn('text-[12px]', settled === 'accepted' ? 'text-pagar' : 'text-muted')}>
-            {settled === 'accepted' ? 'Aceptada' : 'Rechazada'}
-          </span>
-        ) : (
-          <div className="flex gap-2">
-            <Button
-              tone="soft"
-              disabled={settle.isPending || (rejecting && !reason.trim())}
-              onClick={() => (rejecting ? settle.mutate(false) : setRejecting(true))}
-            >
-              Rechazar
-            </Button>
-            <Button tone="primary" disabled={settle.isPending} onClick={() => settle.mutate(true)}>
-              Aceptar
-            </Button>
-          </div>
-        )}
-      </div>
-
-      <p className="mt-2 text-[13px] leading-6 text-ink">{proposal.summary}</p>
-      {proposal.rationale ? (
-        <p className="mt-1 text-[12px] text-muted">{proposal.rationale}</p>
-      ) : null}
-      {proposal.evidence.length ? (
-        <p className="mt-1 text-[12px] text-muted">
-          <span className="font-mono">{proposal.evidence.join(' · ')}</span>
-        </p>
-      ) : null}
-
-      {rejecting && !settled ? (
-        <div className="mt-3 space-y-2">
-          <Textarea
-            rows={2}
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="Por qué no"
-          />
-        </div>
-      ) : null}
-      {settle.isError ? (
-        <div className="mt-3 space-y-2">
-          <ErrorNotice error={settle.error} />
-        </div>
-      ) : null}
-    </li>
-  )
-}
-
-function Composer({
-  placeholder,
-  draft,
-  onDraft,
-  focusTick,
-  busy,
-  allowChanges,
-  onSend,
-}: {
-  placeholder: string
-  draft: string
-  onDraft: (text: string) => void
-  focusTick: number
-  busy: boolean
-  allowChanges: boolean
-  onSend: (text: string, files: Attachment[], mode: 'discuss' | 'revise') => void
-}) {
-  const input = useRef<HTMLInputElement>(null)
-  const box = useRef<HTMLDivElement>(null)
-  const [files, setFiles] = useState<Attachment[]>([])
-  const [over, setOver] = useState(false)
-  const [proposeChanges, setProposeChanges] = useState(false)
-
-  useEffect(() => {
-    if (!focusTick) return
-    const field = box.current?.querySelector('textarea')
-    if (!field) return
-    field.focus()
-    const end = field.value.length
-    field.setSelectionRange(end, end)
-  }, [focusTick])
-
-  const send = () => {
-    const prompt = draft.trim()
-    if (busy || (!prompt && files.length === 0)) return
-    onSend(
-      prompt || 'Revisa los adjuntos y propón cambios.',
-      files,
-      proposeChanges || files.length > 0 ? 'revise' : 'discuss',
-    )
-    onDraft('')
-    setFiles([])
-  }
-
-  const addFiles = (incoming: File[]) => {
-    setFiles((current) => [...current, ...incoming.map(toPreview)])
-  }
-
-  const remove = (id: string) => {
-    setFiles((current) => {
-      const gone = current.find((item) => item.id === id)
-      if (gone) revokePreview(gone)
-      return current.filter((item) => item.id !== id)
-    })
-  }
-
-  return (
-    <div className="shrink-0 border-t border-hairline px-5 py-4">
-      <div
-        ref={box}
-        className={cn(
-          'rounded-[16px] bg-surface p-2 ring-1 transition-colors',
-          over ? 'ring-focus' : 'ring-line',
-        )}
-        onDragOver={(event) => {
-          event.preventDefault()
-          setOver(true)
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={(event) => {
-          event.preventDefault()
-          setOver(false)
-          addFiles([...event.dataTransfer.files])
-        }}
-      >
-        {files.length ? (
-          <ul className="mb-1.5 flex flex-wrap gap-2 px-1.5 pt-1">
-            {files.map((file) => (
-              <li key={file.id}>
-                <FileChip file={file} onRemove={() => remove(file.id)} />
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        <Textarea
-          rows={3}
-          value={draft}
-          onChange={(event) => onDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault()
-              send()
-            }
-          }}
-          placeholder={placeholder}
-          className="border-0 bg-transparent ring-0"
-        />
-        <div className="flex items-center justify-between px-1 pb-0.5">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => input.current?.click()}
-              className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-canvas hover:text-ink"
-              title="Adjuntar evidencia"
-            >
-              <Paperclip size={14} strokeWidth={1.6} />
-            </button>
-            {allowChanges ? (
-              <button
-                type="button"
-                aria-pressed={proposeChanges}
-                onClick={() => setProposeChanges((value) => !value)}
-                className={cn(
-                  'rounded-full px-2.5 py-1 text-[11px] ring-1',
-                  proposeChanges
-                    ? 'bg-ink text-white ring-ink'
-                    : 'text-muted ring-line hover:bg-canvas hover:text-ink',
-                )}
-              >
-                Proponer cambios
-              </button>
-            ) : null}
-          </div>
-          <Button
-            tone="primary"
-            disabled={busy || (!draft.trim() && files.length === 0)}
-            onClick={send}
-            className="h-8 px-3"
-          >
-            <ArrowUp size={13} strokeWidth={2} />
-            Enviar
-          </Button>
-        </div>
-      </div>
-      <input
-        ref={input}
-        type="file"
-        multiple
-        hidden
-        accept=".xlsx,.csv,.json"
-        onChange={(event) => {
-          addFiles([...(event.target.files ?? [])])
-          event.target.value = ''
-        }}
-      />
-      <p className="mt-2 px-1 text-[11px] text-faint">
-        ⌘⏎ para enviar. XLSX, CSV o JSON aportan evidencia; no entran al lote.
-      </p>
     </div>
   )
 }

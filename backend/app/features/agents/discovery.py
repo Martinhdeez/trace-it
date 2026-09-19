@@ -1,6 +1,8 @@
 """One agent discovers a process from tabular evidence, snapshots and user answers."""
 
 import json
+import re
+import unicodedata
 from copy import deepcopy
 from dataclasses import dataclass
 
@@ -19,6 +21,89 @@ class Deps:
 
 agent = Agent(None, output_type=DraftPlan, deps_type=Deps, name="discovery", retries=2)
 discussion = Agent(None, output_type=Discussion, deps_type=Deps, name="discovery", retries=2)
+
+PROTECTED_ATTRIBUTES = (
+    "age",
+    "disability",
+    "ethnicity",
+    "gender",
+    "gender identity",
+    "marital status",
+    "nationality",
+    "pregnancy",
+    "race",
+    "religion",
+    "sex",
+    "sexual orientation",
+    "woman",
+    "women",
+    "man",
+    "men",
+    "edad",
+    "discapacidad",
+    "etnia",
+    "género",
+    "embarazo",
+    "raza",
+    "religión",
+    "sexo",
+    "mujer",
+    "mujeres",
+    "hombre",
+    "hombres",
+)
+ADVERSE_ACTIONS = (
+    "accept",
+    "candidate",
+    "candidates",
+    "disqualif",
+    "exclude",
+    "hire",
+    "hiring",
+    "reject",
+    "screen",
+    "select",
+    "admit",
+    "acept",
+    "candidat",
+    "descart",
+    "exclu",
+    "contrat",
+    "rechaz",
+    "seleccion",
+)
+
+
+def _fold(value: str) -> str:
+    return "".join(
+        char
+        for char in unicodedata.normalize("NFKD", value.casefold())
+        if not unicodedata.combining(char)
+    )
+
+
+def _contains(value: str, terms: tuple[str, ...]) -> bool:
+    folded = _fold(value).replace("_", " ")
+    return any(re.search(rf"\b{re.escape(_fold(term))}\b", folded) for term in terms)
+
+
+def protected_change(plan: DraftPlan) -> str | None:
+    """Reject protected attributes before a discovery plan can become reviewable."""
+    for symbol in plan.symbols:
+        description = getattr(symbol, "description", "") or ""
+        if _contains(f"{symbol.name} {description}", PROTECTED_ATTRIBUTES):
+            return (
+                "Do not propose a protected personal attribute as a process input. "
+                "Use lawful, job-related criteria instead."
+            )
+    for rule in plan.rules:
+        text = f"{rule.text} {rule.summary}"
+        if _contains(text, PROTECTED_ATTRIBUTES) and _contains(text, ADVERSE_ACTIONS):
+            return (
+                "Do not propose an adverse rule based on a protected personal attribute. "
+                "Use lawful, job-related criteria instead."
+            )
+    return None
 
 
 @discussion.tool
@@ -51,6 +136,8 @@ def search_snapshot(ctx: RunContext[Deps], name: str, query: str) -> list[dict]:
 
 @agent.output_validator
 def validate(ctx: RunContext[Deps], plan: DraftPlan) -> DraftPlan:
+    if reason := protected_change(plan):
+        raise ModelRetry(reason)
     allowed = evidence.evidence_references(ctx.deps.data)
     unknown = {
         e.reference

@@ -17,21 +17,22 @@ import type {
   DiscoveryPlan,
   DiscoverySession,
   DiscoverySessionSummary,
+  Proposal,
   ValidationChange,
 } from '../../api/contracts'
-import { keys } from '../../api/queries'
+import { families, keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
 import { paths } from '../../lib/paths'
-import { Button, Segmented, Select, Textarea } from '../shell/Controls'
+import { Button, Select, Textarea } from '../shell/Controls'
 import { EmptyState, ErrorNotice, Notice } from '../shell/Notice'
 import { Markdown } from '../shell/Markdown'
 import { TerminalLoader } from '../shell/TerminalLoader'
 import { NestedCard } from '../shell/Well'
 import { FileChip, revokePreview, toPreview, type FilePreview } from './FileChip'
 import { ValidationImpact } from './ValidationImpact'
+import { t } from '../../i18n'
 
 type Attachment = FilePreview & { file: File }
-type ChatMode = 'discuss' | 'revise'
 
 type ReviewItem = {
   key: string
@@ -202,7 +203,6 @@ export function ProcessDraftChat({
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
-  const [mode, setMode] = useState<ChatMode>(processId == null ? 'revise' : 'discuss')
   const [files, setFiles] = useState<Attachment[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -227,6 +227,12 @@ export function ProcessDraftChat({
     queryKey: keys.execution(processId ?? 0),
     queryFn: () => api.getExecution(processId as number),
     enabled: processId != null,
+  })
+  const openProposals = useQuery({
+    queryKey: keys.proposals(processId ?? 0, 'open'),
+    queryFn: () => api.listProposals(processId as number, 'open'),
+    enabled: processId != null,
+    select: (items) => items.filter((item) => item.channel !== 'escalation'),
   })
 
   const cache = (next: DiscoverySession) => {
@@ -259,7 +265,7 @@ export function ProcessDraftChat({
         next.id,
         next.revision,
         message,
-        files.length > 0 ? 'revise' : mode,
+        'revise',
       )
       return next
     },
@@ -332,7 +338,9 @@ export function ProcessDraftChat({
   })
   const items = current ? reviewItems(current.plan) : []
   const pending = items.filter((item) => current?.reviews[item.key] !== 'accepted')
-  const hasRevision = messages.some((message) => message.role === 'user' && message.mode === 'revise')
+  // A question is sent through the authoring endpoint so it can stay in this conversation, but
+  // it is not a revision unless the saved configuration actually differs from the baseline.
+  const hasRevision = current != null && changesOf(current).length > 0
   const questions = [...new Set(current?.plan.questions ?? [])]
   const allAccepted = items.length > 0 && pending.length === 0
   const missingPlan = current
@@ -355,6 +363,7 @@ export function ProcessDraftChat({
     sessions.error ??
     session.error ??
     versionDraft.error ??
+    openProposals.error ??
     start.error ??
     send.error ??
     review.error ??
@@ -364,7 +373,6 @@ export function ProcessDraftChat({
 
   const addFiles = (incoming: File[]) => {
     setFiles((existing) => [...existing, ...incoming.map(toPreview)])
-    setMode('revise')
   }
   const removeFile = (id: string) => {
     setFiles((existing) => {
@@ -457,8 +465,9 @@ export function ProcessDraftChat({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           {messages.length === 0 ? (
             <EmptyState title="Cuéntame qué tiene que decidir">
-              Puedes pegar la política, explicar casos límite o adjuntar XLSX, CSV y JSON como
-              evidencia. El asistente preguntará lo que falte.
+              Pregunta algo o pide cambios. El mismo chat puede revisar el contexto, los inputs,
+              las salidas, las fuentes, los conectores, las reglas y los criterios del revisor.
+              Puedes pegar la política o adjuntar XLSX, CSV y JSON como evidencia.
             </EmptyState>
           ) : (
             <ol className="space-y-4">
@@ -528,11 +537,7 @@ export function ProcessDraftChat({
                 if (draft.trim() || files.length) send.mutate()
               }
             }}
-            placeholder={
-              mode === 'revise'
-                ? 'Describe el proceso o pide un cambio concreto.'
-                : 'Pregunta por una regla, un dato o una decisión.'
-            }
+            placeholder="Pregunta algo o pide un cambio en el proceso."
           />
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -544,14 +549,6 @@ export function ProcessDraftChat({
               >
                 <Paperclip size={14} strokeWidth={1.6} />
               </button>
-              <Segmented
-                value={mode}
-                onChange={setMode}
-                options={[
-                  { value: 'discuss', label: 'Preguntar' },
-                  { value: 'revise', label: 'Proponer cambios' },
-                ]}
-              />
             </div>
             <Button
               tone="primary"
@@ -580,12 +577,29 @@ export function ProcessDraftChat({
         <div className="space-y-5">
           {processId != null ? (
             <p className="text-[12px] text-muted">
-              Chat es la vía principal. El{' '}
-              <Link to={paths.definition(processId)} className="underline hover:text-ink">
+              Este chat propone cualquier cambio de definición. Nada se publica sin revisar y
+              probarlo. El{' '}
+              <Link to={paths.definitionManual(processId)} className="underline hover:text-ink">
                 editor manual
               </Link>{' '}
               sigue disponible para cambios puntuales.
             </p>
+          ) : null}
+
+          {openProposals.data?.length ? (
+            <section className="space-y-2">
+              <div>
+                <h2 className="text-[15px] font-medium text-ink">Propuestas pendientes</h2>
+                <p className="text-[11px] text-faint">
+                  También puedes resolver aquí propuestas del chat y del aprendizaje.
+                </p>
+              </div>
+              <ul className="space-y-2">
+                {openProposals.data.map((proposal) => (
+                  <ProcessProposalCard key={proposal.id} proposal={proposal} />
+                ))}
+              </ul>
+            </section>
           ) : null}
 
           {processId != null && blockedByVersionDraft ? (
@@ -612,7 +626,6 @@ export function ProcessDraftChat({
                       className="text-left hover:text-ink"
                       onClick={() => {
                         setDraft(`Sobre "${question}": `)
-                        setMode('revise')
                       }}
                     >
                       {question}
@@ -775,6 +788,67 @@ export function ProcessDraftChat({
         </div>
       </aside>
     </div>
+  )
+}
+
+function ProcessProposalCard({ proposal }: { proposal: Proposal }) {
+  const queryClient = useQueryClient()
+  const [rejecting, setRejecting] = useState(false)
+  const [reason, setReason] = useState('')
+
+  const settle = useMutation({
+    mutationFn: (accept: boolean) =>
+      accept ? api.acceptProposal(proposal.id) : api.rejectProposal(proposal.id, reason.trim()),
+    onSuccess: async () => {
+      for (const name of families.proposals) {
+        await queryClient.invalidateQueries({ queryKey: [name] })
+      }
+      await queryClient.invalidateQueries({ queryKey: ['process-draft'] })
+    },
+  })
+  const settled = settle.data?.status
+
+  return (
+    <li className="rounded-[14px] bg-surface px-3.5 py-3 ring-1 ring-line">
+      <div className="flex items-start justify-between gap-3">
+        <p className="font-mono text-[10px] tracking-[0.1em] text-faint">
+          {t(`proposalKind.${proposal.kind}`)} · {t(`proposalChannel.${proposal.channel}`)}
+        </p>
+        {settled ? (
+          <span className={cn('text-[11px]', settled === 'accepted' ? 'text-pagar' : 'text-muted')}>
+            {settled === 'accepted' ? 'Aceptada' : 'Rechazada'}
+          </span>
+        ) : (
+          <div className="flex gap-1.5">
+            <Button
+              tone="soft"
+              disabled={settle.isPending || (rejecting && !reason.trim())}
+              onClick={() => (rejecting ? settle.mutate(false) : setRejecting(true))}
+            >
+              Rechazar
+            </Button>
+            <Button tone="primary" disabled={settle.isPending} onClick={() => settle.mutate(true)}>
+              Aceptar
+            </Button>
+          </div>
+        )}
+      </div>
+      <p className="mt-2 text-[12px] leading-5 text-ink">{proposal.summary}</p>
+      {proposal.rationale ? <p className="mt-1 text-[11px] text-muted">{proposal.rationale}</p> : null}
+      {proposal.evidence.length ? (
+        <p className="mt-1 font-mono text-[10px] text-faint">{proposal.evidence.join(' · ')}</p>
+      ) : null}
+      {rejecting && !settled ? (
+        <Textarea
+          rows={2}
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="Por qué no"
+          className="mt-2"
+        />
+      ) : null}
+      {settle.isError ? <div className="mt-2"><ErrorNotice error={settle.error} /></div> : null}
+    </li>
   )
 }
 

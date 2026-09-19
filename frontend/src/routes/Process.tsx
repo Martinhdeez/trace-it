@@ -397,7 +397,7 @@ function Alerts({
       : null,
     compiling > 0
       ? {
-          to: paths.definition(processId),
+          to: paths.definitionManual(processId),
           text: `${compiling} regla${compiling === 1 ? '' : 's'} compilando. El motor no arranca hasta que terminen.`,
         }
       : null,

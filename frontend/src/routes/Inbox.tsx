@@ -474,7 +474,7 @@ function useDrop(processId: number, today: Date) {
 function NoRules({ processId, drop }: { processId: number; drop: ReturnType<typeof useDrop> }) {
   const see = (label: string) => (
     <Link
-      to={paths.definition(processId)}
+      to={paths.processChat(processId)}
       className="inline-flex items-center rounded-full bg-canvas px-3 py-1.5 text-[12px] font-medium text-ink ring-1 ring-line hover:bg-well"
     >
       {label}
