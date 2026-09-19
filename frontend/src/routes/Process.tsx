@@ -102,10 +102,12 @@ export function Process() {
     queryFn: () => api.listAlerts(processId, 'open'),
     refetchInterval: 10_000,
   })
+  // Escalation proposals live on their case and count as documents waiting for a person.
   const proposals = useQuery({
     queryKey: keys.proposals(processId, 'open'),
     queryFn: () => api.listProposals(processId, 'open'),
     enabled: isManager,
+    select: (items) => items.filter((item) => item.channel !== 'escalation'),
   })
   const findings = useQuery({
     queryKey: keys.findings(processId),
@@ -307,16 +309,22 @@ export function Process() {
           proposals={proposals.data?.length ?? 0}
         />
 
-        <Metrics summary={summary.data} />
+        {summary.data?.instances === 0 ? (
+          <EmptyPanel processId={processId} published={currentVersion > 0} onRun={openRun} />
+        ) : (
+          <>
+            <Metrics summary={summary.data} />
 
-        <Split summary={summary.data} process={process.data} />
+            <Split summary={summary.data} process={process.data} />
 
-        <Runs
-          processId={processId}
-          runs={runs.data ?? []}
-          error={runs.error}
-          documentCount={summary.data?.instances ?? 0}
-        />
+            <Runs
+              processId={processId}
+              runs={runs.data ?? []}
+              error={runs.error}
+              documentCount={summary.data?.instances ?? 0}
+            />
+          </>
+        )}
 
         <TechnicalDetails>
           <Pipeline
@@ -644,56 +652,80 @@ function Split({
       : outcomes
   }, [summary, process])
 
+  if (cells.length === 0) return null
+
   return (
-    <section className="overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
-      <div className="flex items-start justify-between gap-4 px-5 py-4">
-        <div>
-          <h2 className="text-[18px] font-medium tracking-[-0.03em]">Cómo se han decidido</h2>
-          <p className="mt-1 text-[12.5px] text-muted">
-            Cada cuadrado es un documento, coloreado por su decisión.
-          </p>
-        </div>
-        <span className="font-mono text-[12px] text-muted">{summary?.instances ?? 0} total</span>
+    <section className="rounded-[16px] bg-surface px-5 py-4 ring-1 ring-line">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <h2 className="text-[15px] font-medium tracking-[-0.02em]">Decisiones</h2>
+        <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {cells.map((cell) => (
+            <li key={cell.label} className="flex items-center gap-1.5 text-[12.5px]">
+              <span className={cn('h-2.5 w-2.5 rounded-[3px]', TONE_DOT[cell.tone])} />
+              <span className="text-muted">{humanize(cell.label)}</span>
+              <span className="font-mono tabular-nums text-ink">{cell.value}</span>
+            </li>
+          ))}
+        </ul>
       </div>
-      {cells.length === 0 ? (
-        <p className="px-5 pb-5 text-[13px] text-muted">
-          Aún no hay documentos. Pulsa Ejecutar y suelta el lote.
-        </p>
-      ) : (
-        <div className="grid gap-px bg-rule md:grid-cols-[minmax(0,1fr)_1.4fr]">
-          <div className="bg-surface px-5 py-4">
-            <div className="space-y-4">
-              {cells.map((cell) => (
-                <div key={cell.label} className="flex items-center gap-3">
-                  <span className={cn('h-2.5 w-2.5 shrink-0 rounded-[3px]', TONE_DOT[cell.tone])} />
-                  <span className="min-w-0 flex-1 text-[12.5px] text-muted">
-                    {cell.label.replaceAll('_', ' ')}
-                  </span>
-                  <span className="font-mono text-[18px] tracking-[-0.04em] tabular-nums">
-                    {cell.value}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="flex min-h-[150px] items-center bg-surface px-5 py-5">
-            <div className="flex w-full flex-wrap content-center gap-1">
-              {cells.flatMap((cell) =>
-                Array.from({ length: cell.value }, (_, index) => (
-                  <span
-                    key={`${cell.label}-${index}`}
-                    title={cell.label}
-                    className={cn(
-                      'h-3 w-3 rounded-[3px] transition-transform hover:scale-125',
-                      TONE_DOT[cell.tone],
-                    )}
-                  />
-                )),
+      <div className="mt-4 flex flex-wrap gap-1">
+        {cells.flatMap((cell) =>
+          Array.from({ length: cell.value }, (_, index) => (
+            <span
+              key={`${cell.label}-${index}`}
+              title={humanize(cell.label)}
+              className={cn(
+                'h-3 w-3 rounded-[3px] transition-transform hover:scale-125',
+                TONE_DOT[cell.tone],
               )}
-            </div>
-          </div>
-        </div>
-      )}
+            />
+          )),
+        )}
+      </div>
+    </section>
+  )
+}
+
+/** NO_PAGAR reads as "No pagar". */
+function humanize(label: string): string {
+  const words = label.replaceAll('_', ' ').toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/** A process with no documents yet: one next step, nothing to read around it. */
+function EmptyPanel({
+  processId,
+  published,
+  onRun,
+}: {
+  processId: number
+  published: boolean
+  onRun: () => void
+}) {
+  return (
+    <section className="flex flex-col items-center rounded-[16px] bg-surface px-6 py-12 text-center ring-1 ring-line">
+      <FileText size={20} strokeWidth={1.4} className="text-faint" />
+      <h2 className="mt-3 text-[16px] font-medium tracking-[-0.02em]">Aún no hay documentos</h2>
+      <p className="mt-1 max-w-sm text-[13px] leading-5 text-muted">
+        {published
+          ? 'Sube un lote y el proceso decide cada documento con la versión publicada.'
+          : 'Define las reglas y publica una versión. Después, sube un lote.'}
+      </p>
+      <div className="mt-5">
+        {published ? (
+          <Button tone="primary" onClick={onRun}>
+            <Play size={12} strokeWidth={2} />
+            Ejecutar un lote
+          </Button>
+        ) : (
+          <Link
+            to={paths.definition(processId)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-[12px] font-medium text-on-ink hover:bg-ink/90"
+          >
+            Ir a Definición
+          </Link>
+        )}
+      </div>
     </section>
   )
 }
