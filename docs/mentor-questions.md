@@ -30,10 +30,47 @@ until a mentor answers (2026-09-19):
 | 7 | VAT rate other than 21 % (reduced VAT, `notas_alberto`) | 0 | Hand-written R09: `ESCALAR`. Norm-driven: only a miscalculation fails | Add or remove the check | Low in batch 1 |
 | 8 | Same purchase order on two invoices (PO-2026-0492: `factura_41082` + `2026-0233-A_catering`) | 2 | `ESCALAR` both, awaiting a mentor. A genuine doubt: we cannot tell which invoice is the legitimate one. Hand-written R16: `ESCALAR`. Norm-driven: item 5 "nunca pagar dos veces" gives a `doubt` check on `others` (platform prompt + invoice guidance), which gets the escalation type in code, not the policy (ADR 0017) | Decision of R16; norm-driven: mark that check a `violation` in the normalizer guidance, so the policy (`NO_PAGAR`) decides it | **High** (2 files) |
 | 9 | ERP status `PAGADA` on the invoiced order | 9 | `NO_PAGAR` (item 5) | Decision of R15 / the policy | **High** |
-| 10 | Scans (no text layer): read by local OCR, Gemini and Jev | 29 | Decided on what OCR corroborates: 17 `PAGAR`, 6 `NO_PAGAR`, 6 `ESCALAR` (`MISSING_DATA`: NIF, IBAN or order not corroborated) with the frozen set (rehearsal 2026-09-19). A value OCR reads but marks unverified or ambiguous is still used | If the reference escalates every scan, or every scan with a doubtful field: a rule or an ingestion switch that empties unverified fields | **High** (29 files) |
+| 10 | Scans (no text layer): read by local OCR, Gemini and Jev | 29 | Decided only on confirmed data (answer 1, ADR 0025): 10 `PAGAR`, 0 `NO_PAGAR`, 19 `ESCALAR` (`MISSING_DATA`, `UNVERIFIED_DATA` or `SCAN_REVIEW`). Before: 17 / 6 / 6 with the frozen set (rehearsal 2026-09-19), unverified values used | If the reference escalates every scan: one more engine branch in `_combine` | **High** (29 files) |
 | 11 | Sheet `pendiente_revisar` (PO-2026-0007 -> FA-8488, PO-2026-0141 -> 2026-79712): a source of truth? | 2 | Ignored: a note, not the norm. Both invoices are clean -> `PAGAR` | A rule reading that sheet (source + check) with `ESCALAR` or `NO_PAGAR` | **High** (2 files) |
 | 12 | Invoice total different from the order total | 5 (+8 also caught by other rules) | `NO_PAGAR` (item 2) | Decision of R07 / the policy | **High** |
 | 13 | Order of another supplier | 2 | `NO_PAGAR` (item 2) | Decision of R06 / the policy | **High** |
+
+## Answers (product owner, 2026-09-19)
+
+Binding until a mentor says otherwise; they replace the "current handling" above where they
+differ.
+
+1. **Scans are read and decided.** A scan whose required data is all confirmed and passes
+   every rule is `PAGAR`. A failed check on scanned data is `ESCALAR`, not `NO_PAGAR`: a
+   mismatch on OCR data cannot be told apart from a misread (`SCAN_REVIEW: <rule>`). A null
+   or illegible field is `ESCALAR` (`MISSING_DATA`), and so is a required value the readers
+   did not confirm (`UNVERIFIED_DATA`). Text PDFs are unaffected. [ADR 0025](adr/0025-scan-decision-policy.md);
+   batch 1 scans: 10 `PAGAR` / 0 `NO_PAGAR` / 19 `ESCALAR`.
+2. **An illegible field always means `ESCALAR`.**
+3. **Duplicate PO and every other case are deterministic.** If the rules determine that a
+   rule rejects, `NO_PAGAR`; if the invoice complies with every rule, `PAGAR`; if the active
+   rules cannot determine it, `ESCALAR`. There is no guessing at "doubt": an undetermined
+   case is always `ESCALAR`. The duplicate order of question 8 is whatever the frozen rules
+   determine; no change in this PR.
+4. **A decision later found wrong is flagged to the manager, who acts.** (The ERP says
+   `PAGADA` afterwards, or a datum changes.) Our decisions are never silently rewritten.
+   What exists:
+   - `POST /processes/{id}/reprocess?dry_run=true` re-decides the decided instances with
+     the latest sources and the active rules and lists what would change (`changes`) and
+     where a person's decision would be contradicted (`conflicts`), without writing. Run
+     without `dry_run`, it appends a new engine row for each change, keeps the old one, and
+     never replaces a person's decision. It is started by a person, never automatically.
+   - Audit findings (`GET /processes/{id}/findings`, table `findings`) record a past engine
+     decision a newer process version or adopted norm would decide differently. A notice,
+     never a correction (ADR 0008).
+
+   What is missing: findings are recorded only for rule changes (publishing a version,
+   adopting a norm), not for a source change. Nothing runs the dry run after an ERP sync
+   or stores its result as findings, and nothing notifies the manager. Not built now.
+5. **The reference has one valid result per file for our system.** Always exactly one
+   decision per file, and `ESCALAR` when it cannot be determined (answers question 1).
+6. **Norm v4 (Saturday) is loaded by replacing the norm only**: the rules process, no code
+   change.
 
 Where each decision of the hand-written process comes from:
 [invoice-payment-rules.md](invoice-payment-rules.md). How the norm-driven process chooses a

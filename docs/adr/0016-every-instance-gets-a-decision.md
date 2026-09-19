@@ -76,7 +76,9 @@ frontend, and a second answer to "what does this case need from me".
   `MISSING_DATA` (the invoice pack marks the eight symbols R01 checks as required; R01
   stays, redundant), which is the honest answer until OCR fills them
   (`features/ingestion`). A process whose rules were generated from the client's norm gets
-  the same guarantee without a completeness rule.
+  the same guarantee without a completeness rule. OCR now fills them (ADR 0022); ADR 0025
+  adds two escalations for scans only: a required value the readers did not confirm
+  (`UNVERIFIED_DATA`) and a rejection on scanned data (`SCAN_REVIEW: <rule>`).
 
 ## Evidence
 - `decisions/engine.py` (`Outcomes`, `decide`); `decisions/service.py` (`outcomes`, `run`,

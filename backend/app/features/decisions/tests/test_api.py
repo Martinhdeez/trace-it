@@ -338,6 +338,36 @@ async def test_a_required_symbol_missing_escalates(fake_sandbox: None) -> None:
         assert detail["decisions"][0]["reason"] == "MISSING_DATA: nif"
 
 
+async def test_a_scan_the_rules_would_reject_escalates(fake_sandbox: None) -> None:
+    """ADR 0025: a scanned copy of an already paid invoice escalates; its text twin does not."""
+    async with client() as api:
+        process_id, _ = await create_process(api, "operator")
+        async with session_factory() as session:
+            digest = uuid.uuid4().hex
+            session.add(File(hash=digest, name="scan_paid.pdf", content=b"%PDF"))
+            values = INVOICES["FA-1016_papelería.pdf"]
+            symbols = {k: {"value": v, "origin": "scan:r1"} for k, v in values.items()}
+            scan = Instance(
+                process_id=process_id, file_hash=digest, name="scan_paid.pdf", symbols=symbols
+            )
+            session.add(scan)
+            from tests.support.rows import publish_fixture
+
+            await publish_fixture(session, process_id)
+            scan_id = scan.id
+
+        r = await api.post(f"/processes/{process_id}/run")
+        assert r.json()["by_decision"] == {"PAGAR": 1, "NO_PAGAR": 1, "ESCALAR": 2}
+        detail = (await api.get(f"/instances/{scan_id}")).json()
+        [decision] = detail["decisions"]
+        assert (decision["decision"], decision["reason"]) == (
+            "ESCALAR",
+            "SCAN_REVIEW: order_already_paid",
+        )
+        [event] = [e for e in detail["events"] if e["step"] == "decision"]
+        assert event["data"]["reason"] == "SCAN_REVIEW: order_already_paid"
+
+
 @pytest.mark.parametrize(
     ("status", "message"),
     [("compiling", "rules are still compiling"), ("retired", "has no active rules")],

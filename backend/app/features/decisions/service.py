@@ -29,7 +29,7 @@ from app.features.decisions.schemas import (
     SourceSummary,
 )
 from app.features.ingestion.model import Instance
-from app.features.ingestion.symbols import flatten_symbols
+from app.features.ingestion.symbols import flatten_symbols, scan
 from app.features.processes.service import get as get_process
 from app.features.rules.model import Rule
 from app.features.sources import service as sources
@@ -134,8 +134,11 @@ async def decide_all(
         if i.symbols is not None
     ]
     dataset = [(i.id, flatten_symbols(i.symbols)) for i in selected]
+    scans = {i.id: u for i in selected if (u := scan(i.symbols)) is not None}
     # One subprocess per rule, off the event loop.
-    return await asyncio.to_thread(decide, rules, out, dataset, sources, population, _traced(rules))
+    return await asyncio.to_thread(
+        decide, rules, out, dataset, sources, population, _traced(rules), scans
+    )
 
 
 def _traced(rules: list[Rule]) -> RunDataset:
@@ -156,11 +159,11 @@ def _traced(rules: list[Rule]) -> RunDataset:
 
 def _causes(verdicts: list[Verdict]) -> dict[str, dict[str, int]]:
     """Escalations by cause: MISSING_DATA, RULE_ERROR, RULE_NEEDS_DATA, RULE_COMPILE_FAILED,
-    RULE_CONFLICT."""
+    RULE_CONFLICT, UNVERIFIED_DATA, SCAN_REVIEW."""
     causes: Counter[str] = Counter()
     for verdict in verdicts:
         causes.update(r.reason.split(" ", 1)[0] for r in verdict.results if r.fires is None)
-        for cause in ("MISSING_DATA", "RULE_CONFLICT"):
+        for cause in ("MISSING_DATA", "RULE_CONFLICT", "UNVERIFIED_DATA", "SCAN_REVIEW"):
             if verdict.reason.startswith(cause):
                 causes[cause] += 1
     return {"failures": dict(causes)}
