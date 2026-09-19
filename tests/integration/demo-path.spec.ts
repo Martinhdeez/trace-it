@@ -136,7 +136,7 @@ test('the console acts as the manager, with no login screen', async () => {
 test('the process inbox opens its real console panel', async () => {
   await page.getByRole('link', { name: PROCESS }).first().click()
   await expect(page).toHaveURL(new RegExp(`/processes/${processId}$`))
-  await expect(page.getByText('Todo al día', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Sin revisiones pendientes', exact: true })).toBeVisible()
   await realAndClean()
   await page.getByRole('link', { name: 'Consola', exact: true }).click()
   await expect(page).toHaveURL(new RegExp(`/processes/${processId}/panel$`))
