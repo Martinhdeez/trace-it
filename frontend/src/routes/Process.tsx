@@ -226,6 +226,9 @@ export function Process() {
       {runPanelOpen ? (
         <Overlay onClose={closeRun} size="lg">
           <BatchRunPanel
+            processId={processId}
+            process={process.data}
+            runId={run.isSuccess && !runs.isFetching ? runs.data?.[0]?.id : undefined}
             queue={queue}
             running={run.isPending}
             uploading={upload.isPending}
@@ -237,6 +240,7 @@ export function Process() {
             result={run.data}
             onFiles={addToQueue}
             onRemove={removeFromQueue}
+            onClear={clearQueue}
             onStart={() => void startRun()}
             onClose={closeRun}
           />
