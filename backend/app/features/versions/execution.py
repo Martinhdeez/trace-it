@@ -9,7 +9,7 @@ from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
 from app.features.agents import compiler, sandbox
 from app.features.decisions.engine import decide
-from app.features.decisions.model import Decision, DecisionReview
+from app.features.decisions.model import ENGINE, Decision, DecisionReview
 from app.features.ingestion.model import Instance
 from app.features.ingestion.symbols import flatten_symbols, scan
 from app.features.sources import service as sources
@@ -36,14 +36,26 @@ async def capture(session, process_id: int) -> dict:
         )
     )
     latest = {d.instance_id: d for d in decisions}
+    engine = {d.instance_id: d for d in decisions if d.author == ENGINE}
     pending = set(
         await session.scalars(
             select(DecisionReview.decision_id).where(
-                DecisionReview.decision_id.in_([d.id for d in latest.values()]),
+                DecisionReview.decision_id.in_(
+                    [d.id for d in [*latest.values(), *engine.values()]]
+                ),
                 DecisionReview.requires_human,
             )
         )
     )
+
+    def row(d):
+        return {
+            "id": d.id,
+            "decision": d.decision,
+            "author": d.author,
+            "pending_review": d.id in pending,
+        }
+
     return {
         "instances": [
             {
@@ -51,16 +63,8 @@ async def capture(session, process_id: int) -> dict:
                 "name": i.name,
                 "file_hash": i.file_hash,
                 "symbols": i.symbols,
-                "decision": (
-                    {
-                        "id": latest[i.id].id,
-                        "decision": latest[i.id].decision,
-                        "author": latest[i.id].author,
-                        "pending_review": latest[i.id].id in pending,
-                    }
-                    if i.id in latest
-                    else None
-                ),
+                "decision": row(latest[i.id]) if i.id in latest else None,
+                "engine_decision": row(engine[i.id]) if i.id in engine else None,
             }
             for i in instances
         ],

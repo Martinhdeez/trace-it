@@ -120,7 +120,7 @@ async def test_activating_records_findings_and_leaves_the_past_alone() -> None:
         assert len(detail["decisions"]) == 1
 
 
-async def test_a_human_decision_blocks_the_rule() -> None:
+async def test_a_human_decision_is_reported_but_does_not_block_the_version() -> None:
     """The rules do not overrule a person, and a person does not silently veto a rule."""
     async with client() as api:
         process_id, headers = await prepare(api)
@@ -143,10 +143,10 @@ async def test_a_human_decision_blocks_the_rule() -> None:
         report = (
             await api.post(f"/processes/{process_id}/draft/validate", headers=headers)
         ).json()["validation"]
-        assert not report["valid"]
-        assert report["conflicts"][0]["name"] == "factura_1217.pdf"
-        assert (await api.get(f"/rules/{rule_id}")).json()["status"] == "draft"
-        assert (await api.get(f"/processes/{process_id}/findings")).json() == []
+        # A person's resolution never blocks the version (R01): reported, not rewritten.
+        assert report["valid"] and not report["conflicts"], report
+        assert [c["name"] for c in report["resolved_by_person"]] == ["factura_1217.pdf"]
+        assert [c["name"] for c in report["changes"]] == ["FA-1016_papelería.pdf"]
 
 
 async def test_retiring_is_checked_like_activating() -> None:
