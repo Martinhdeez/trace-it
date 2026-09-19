@@ -127,7 +127,7 @@ export function Sources() {
                 }}
               />
               {workbook.isError ? <ErrorNotice error={workbook.error} /> : null}
-              <div className="flex items-center justify-between gap-3 rounded-[12px] bg-well px-3 py-3 ring-1 ring-black/[0.04]">
+              <div className="flex items-center justify-between gap-3 rounded-[12px] bg-well px-3 py-3 ring-1 ring-line">
                 <div className="min-w-0">
                   <p className="text-[13px] text-ink">Conector del ERP</p>
                   <p className="truncate text-[11px] text-muted">

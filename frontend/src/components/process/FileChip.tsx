@@ -31,7 +31,7 @@ export function FileChip({
 
   if (isImage(file) && file.previewUrl) {
     return (
-      <div className="group relative h-14 w-14 overflow-hidden rounded-[10px] bg-canvas ring-1 ring-black/[0.06]">
+      <div className="group relative h-14 w-14 overflow-hidden rounded-[10px] bg-canvas ring-1 ring-line">
         <img src={file.previewUrl} alt="" className="h-full w-full object-cover" />
         {onRemove ? <RemoveButton onRemove={onRemove} inset /> : null}
       </div>
@@ -45,13 +45,13 @@ export function FileChip({
     <div
       className={cn(
         'group relative flex max-w-[11rem] items-center gap-2 rounded-[10px] py-1.5 pl-1.5 pr-2 ring-1',
-        dark ? 'bg-white/8 ring-white/10' : 'bg-canvas ring-black/[0.06]',
+        dark ? 'bg-white/8 ring-white/10' : 'bg-canvas ring-line',
       )}
     >
       <span
         className={cn(
           'grid h-8 w-8 shrink-0 place-items-center rounded-[7px] ring-1',
-          dark ? 'bg-white/10 text-white/70 ring-white/10' : 'bg-white text-muted ring-black/[0.04]',
+          dark ? 'bg-white/10 text-white/70 ring-white/10' : 'bg-surface text-muted ring-line',
         )}
       >
         <Icon size={14} strokeWidth={1.6} />
@@ -85,7 +85,7 @@ function RemoveButton({ onRemove, inset }: { onRemove: () => void; inset?: boole
       type="button"
       onClick={onRemove}
       className={cn(
-        'absolute grid h-4 w-4 place-items-center rounded-full bg-ink text-white opacity-0 transition-opacity group-hover:opacity-100',
+        'absolute grid h-4 w-4 place-items-center rounded-full bg-ink text-on-ink opacity-0 transition-opacity group-hover:opacity-100',
         inset ? 'right-1 top-1 bg-ink/80' : '-right-1 -top-1',
       )}
       title="Quitar"

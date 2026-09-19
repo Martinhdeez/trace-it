@@ -10,6 +10,14 @@
       name="description"
       content="Escribes las reglas de pago en una frase y el programa decide cada factura con ellas. Cada decisión guarda su regla, su dato y su versión de la norma. Lo que no cuadra sube a tu bandeja."
     />
+    <script>
+      try {
+        if (localStorage.getItem('trace.tema') === 'dark') {
+          document.documentElement.dataset.theme = 'dark'
+          document.documentElement.style.colorScheme = 'dark'
+        }
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

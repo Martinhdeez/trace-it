@@ -20,7 +20,7 @@ export function DocumentPopup({
 
   return (
     <Overlay onClose={onClose} size="xl">
-      <div className="flex h-full min-h-0 overflow-hidden rounded-[20px] bg-white shadow-[0_16px_50px_rgba(19,19,19,0.12)] ring-1 ring-black/[0.06]">
+      <div className="flex h-full min-h-0 overflow-hidden rounded-[20px] bg-surface shadow-pop ring-1 ring-line">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <header className="flex shrink-0 items-center justify-between gap-3 border-b border-hairline px-4 py-3">
             <div className="min-w-0">

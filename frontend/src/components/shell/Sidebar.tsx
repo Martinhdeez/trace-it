@@ -30,8 +30,8 @@ function NavItem({
         cn(
           'flex items-center justify-between rounded-[10px] py-[7px] pr-2.5 pl-2.5 text-[13px] tracking-[-0.01em]',
           (active ?? isActive)
-            ? 'bg-white text-ink shadow-[0_1px_2px_rgba(19,19,19,0.06)]'
-            : 'text-ink/80 hover:bg-white/60 hover:text-ink',
+            ? 'bg-surface text-ink shadow-lift'
+            : 'text-ink/80 hover:bg-surface/60 hover:text-ink',
         )
       }
     >
@@ -66,11 +66,11 @@ export function Sidebar() {
         <button
           type="button"
           onClick={() => setPaletteOpen(true)}
-          className="flex w-full items-center gap-2 rounded-full bg-white px-3 py-1.5 text-left text-[13px] text-muted shadow-[0_1px_2px_rgba(19,19,19,0.05)] ring-1 ring-black/[0.06]"
+          className="flex w-full items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-left text-[13px] text-muted shadow-lift ring-1 ring-line"
         >
           <Search size={14} strokeWidth={1.5} />
           <span className="flex-1">{t('nav.filter')}</span>
-          <kbd className="grid h-5 min-w-5 place-items-center rounded-[6px] bg-canvas font-mono text-[10px] text-faint ring-1 ring-black/[0.06]">
+          <kbd className="grid h-5 min-w-5 place-items-center rounded-[6px] bg-canvas font-mono text-[10px] text-faint ring-1 ring-line">
             ⌘K
           </kbd>
         </button>
@@ -84,7 +84,7 @@ export function Sidebar() {
           <NavLink
             to={paths.newProcess}
             title={t('nav.newProcess')}
-            className="grid h-6 w-6 place-items-center rounded-full text-ink/70 ring-1 ring-black/[0.06] hover:bg-white hover:text-ink"
+            className="grid h-6 w-6 place-items-center rounded-full text-ink/70 ring-1 ring-line hover:bg-surface hover:text-ink"
           >
             <Plus size={13} strokeWidth={1.75} />
           </NavLink>

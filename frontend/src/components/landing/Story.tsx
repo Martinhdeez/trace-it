@@ -464,13 +464,13 @@ function Desk({ play, reduce }: { play: Play; reduce: boolean }) {
     <section className="flex min-h-[calc(100dvh-3.5rem)] items-center px-3 py-5 sm:px-6 md:px-8">
       <div
         ref={play.frame}
-        className="relative mx-auto w-full max-w-[1120px] overflow-hidden rounded-[14px] bg-canvas shadow-[0_24px_80px_rgba(19,19,19,0.10)] ring-1 ring-black/[0.08] sm:rounded-[18px]"
+        className="relative mx-auto w-full max-w-[1120px] overflow-hidden rounded-[14px] bg-canvas shadow-pop ring-1 ring-line sm:rounded-[18px]"
       >
         <Titlebar phase={play.phase} />
         <div className="pointer-events-none flex h-[min(70dvh,720px)] w-full min-w-0 sm:h-[min(78vh,720px)]">
           <MiniSidebar phase={play.phase} />
           <div className="flex min-w-0 flex-1 flex-col p-2">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[16px] bg-shell shadow-[0_1px_2px_rgba(19,19,19,0.04),0_8px_24px_rgba(19,19,19,0.04)] ring-1 ring-black/[0.06]">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[16px] bg-shell shadow-shell ring-1 ring-line">
               <Screen play={play} />
             </div>
           </div>
@@ -484,7 +484,7 @@ function Desk({ play, reduce }: { play: Play; reduce: boolean }) {
 function Titlebar({ phase }: { phase: Phase }) {
   const path = phase === 'write' || phase === 'compile' ? 'procesos/1/reglas' : 'procesos/1'
   return (
-    <div className="flex h-10 items-center gap-3 border-b border-black/[0.06] bg-white px-3">
+    <div className="flex h-10 items-center gap-3 border-b border-line bg-surface px-3">
       <span className="flex gap-1.5">
         <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
         <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
@@ -506,10 +506,10 @@ function MiniSidebar({ phase }: { phase: Phase }) {
         </p>
       </div>
       <div className="px-3 pb-3">
-        <div className="flex items-center gap-2 rounded-full bg-white px-2.5 py-1 text-[12px] text-muted ring-1 ring-black/[0.06]">
+        <div className="flex items-center gap-2 rounded-full bg-surface px-2.5 py-1 text-[12px] text-muted ring-1 ring-line">
           <Search size={12} strokeWidth={1.5} />
           Filtrar
-          <kbd className="ml-auto grid h-4 min-w-4 place-items-center rounded-[5px] bg-canvas font-mono text-[9px] text-faint ring-1 ring-black/[0.06]">
+          <kbd className="ml-auto grid h-4 min-w-4 place-items-center rounded-[5px] bg-canvas font-mono text-[9px] text-faint ring-1 ring-line">
             ⌘K
           </kbd>
         </div>
@@ -518,7 +518,7 @@ function MiniSidebar({ phase }: { phase: Phase }) {
         <p className="px-2.5 pb-1.5 text-[10px] font-medium tracking-[0.14em] text-muted uppercase">
           Procesos
         </p>
-        <div className="rounded-[10px] bg-white px-2.5 py-1.5 text-[12px] shadow-[0_1px_2px_rgba(19,19,19,0.06)]">
+        <div className="rounded-[10px] bg-surface px-2.5 py-1.5 text-[12px] shadow-lift">
           Invoice payment
         </div>
         <div className="ml-2 mt-2 border-l border-black/[0.08] pl-2">
@@ -537,7 +537,7 @@ function SideLink({ active, children }: { active?: boolean; children: string }) 
     <div
       className={cn(
         'rounded-[8px] px-2 py-[5px] text-[12px]',
-        active ? 'bg-white text-ink shadow-[0_1px_2px_rgba(19,19,19,0.06)]' : 'text-ink/70',
+        active ? 'bg-surface text-ink shadow-lift' : 'text-ink/70',
       )}
     >
       {children}
@@ -565,7 +565,7 @@ function Screen({ play }: { play: Play }) {
             ref={play.action}
             type="button"
             tabIndex={-1}
-            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3 py-1 text-[12px] font-medium text-white"
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3 py-1 text-[12px] font-medium text-on-ink"
           >
             {play.phase === 'write' ? (
               'Compilar'
@@ -583,7 +583,7 @@ function Screen({ play }: { play: Play }) {
             ref={play.runBtn}
             type="button"
             tabIndex={-1}
-            className="inline-flex items-center gap-1.5 rounded-full bg-canvas px-3 py-1 text-[12px] font-medium ring-1 ring-black/[0.06]"
+            className="inline-flex items-center gap-1.5 rounded-full bg-canvas px-3 py-1 text-[12px] font-medium ring-1 ring-line"
           >
             <Play size={11} strokeWidth={2} />
             {play.phase === 'run' ? 'Ejecutando…' : 'Ejecutar'}
@@ -600,7 +600,7 @@ function Screen({ play }: { play: Play }) {
 function RulesScreen({ play }: { play: Play }) {
   return (
     <div className="grid h-full min-w-0 grid-cols-1 gap-3 p-px lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-      <div className="min-w-0 overflow-hidden rounded-[14px] bg-white ring-1 ring-black/[0.06]">
+      <div className="min-w-0 overflow-hidden rounded-[14px] bg-surface ring-1 ring-line">
         <div className="flex items-center justify-between px-3 py-1.5">
           <span className="font-mono text-[11px] text-faint">Norma_Pagos_v3</span>
           <span className="font-mono text-[10px] text-faint">
@@ -623,7 +623,7 @@ function RulesScreen({ play }: { play: Play }) {
             return (
               <li
                 key={rule.id}
-                className="flex items-center gap-2 rounded-[10px] bg-white px-2.5 py-1.5 ring-1 ring-black/[0.06]"
+                className="flex items-center gap-2 rounded-[10px] bg-surface px-2.5 py-1.5 ring-1 ring-line"
               >
                 <span className="w-4 shrink-0 font-mono text-[10px] text-faint">
                   {String(index + 1).padStart(2, '0')}
@@ -652,7 +652,7 @@ function RunScreen({ play }: { play: Play }) {
   return (
     <div className="grid h-full min-w-0 grid-cols-1 gap-3 p-px lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
       <div className="flex min-h-0 min-w-0 flex-col gap-3">
-        <div className="flex items-center justify-between rounded-[14px] bg-white px-3.5 py-2.5 ring-1 ring-black/[0.06]">
+        <div className="flex items-center justify-between rounded-[14px] bg-surface px-3.5 py-2.5 ring-1 ring-line">
           <div>
             <p className="text-[13px] font-medium tracking-[-0.03em]">{PACK.name}</p>
             <p className="font-mono text-[10px] text-faint">
@@ -661,7 +661,7 @@ function RunScreen({ play }: { play: Play }) {
           </div>
           <StatusBadge value="activa">{PACK.version}</StatusBadge>
         </div>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[14px] bg-well/80 ring-1 ring-black/[0.04]">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[14px] bg-well/80 ring-1 ring-line">
           <p className="shrink-0 px-3 py-2 text-[12px] text-muted">
             {play.landed === 0 ? 'Suelta PDF o una carpeta' : `${play.landed} documentos`}
           </p>
@@ -678,7 +678,7 @@ function RunScreen({ play }: { play: Play }) {
                     type="button"
                     tabIndex={-1}
                     className={cn(
-                      'flex w-full min-w-0 items-center gap-2 rounded-[10px] bg-white px-2.5 py-1.5 text-left ring-1 ring-black/[0.05]',
+                      'flex w-full min-w-0 items-center gap-2 rounded-[10px] bg-surface px-2.5 py-1.5 text-left ring-1 ring-line',
                       play.openDoc === index && play.phase === 'run' && 'ring-ink/20',
                     )}
                   >
@@ -718,7 +718,7 @@ function Inspect({
   const done = live.stage > STAGES.length
   const shown = running || done ? invoice.checks.slice(0, Math.max(0, live.checkAt)) : []
   return (
-    <aside className="min-h-0 min-w-0 overflow-y-auto rounded-[14px] bg-white ring-1 ring-black/[0.06]">
+    <aside className="min-h-0 min-w-0 overflow-y-auto rounded-[14px] bg-surface ring-1 ring-line">
       <div className="px-3.5 py-3">
         <p className="truncate font-mono text-[11px]">{invoice.file}</p>
         <p

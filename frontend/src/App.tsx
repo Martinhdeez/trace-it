@@ -20,10 +20,7 @@ export default function App() {
         <Route path="/processes" element={<Processes />} />
         <Route path="/processes/new" element={<NewProcess />} />
         <Route path="/processes/:processId" element={<Process />} />
-        <Route path="/processes/:processId/definition" element={<Definition />} />
-        <Route path="/processes/:processId/definition/contexto" element={<Definition />} />
-        <Route path="/processes/:processId/definition/inputs" element={<Definition />} />
-        <Route path="/processes/:processId/definition/fuentes" element={<Definition />} />
+        <Route path="/processes/:processId/definition/*" element={<Definition />} />
         <Route path="/processes/:processId/review" element={<Queue />} />
         <Route path="/processes/:processId/settings" element={<ProcessSettings />} />
         <Route path="/processes/:processId/instances" element={<Instances />} />
