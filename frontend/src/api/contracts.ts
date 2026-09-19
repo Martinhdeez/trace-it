@@ -33,6 +33,7 @@ export type AgentSettings = Schemas['AgentSettings']
 export type ExtractionSettings = Schemas['ExtractionSettings']
 export type DecisionReview = Schemas['DecisionReviewConfig']
 export type RunSummary = Schemas['RunSummary']
+export type ReprocessSummary = Schemas['ReprocessSummary']
 export type InstanceOut = Schemas['InstanceOut']
 export type InstanceDetail = Schemas['InstanceDetail']
 export type DecisionOut = Schemas['DecisionOut']
@@ -100,12 +101,23 @@ export type HistoricalCaseWithoutCoverage = {
 export type ValidationReport = {
   valid: boolean
   hash: string
+  unchanged?: number
+  changes?: ValidationChange[]
   coverage?: HistoricalCoverage
   not_evaluable?: HistoricalCaseWithoutCoverage[]
-  conflicts?: { instance_id: number; reason?: string }[]
-  errors?: { instance_id: number; reason?: string }[]
+  conflicts?: ValidationChange[]
+  errors?: { instance_id: number; name?: string; reason?: string }[]
   error?: string
   [key: string]: unknown
+}
+
+export type ValidationChange = {
+  instance_id: number
+  decision_id?: number
+  name: string
+  before: string
+  after: string
+  reason?: string
 }
 
 export type ProcessOut = Schemas['ProcessOut']
@@ -207,11 +219,13 @@ export interface ApiClient {
   getDraft(processId: number): Promise<VersionDraft>
   validateDraft(processId: number): Promise<VersionDraft>
   publishDraft(processId: number, body: PublishIn): Promise<VersionOut>
+  discardDraft(processId: number, revision: number): Promise<void>
   listVersions(processId: number): Promise<VersionOut[]>
   getExecution(processId: number): Promise<ExecutionOut>
   saveDraft(processId: number, body: DraftIn): Promise<VersionDraft>
 
   run(processId: number): Promise<RunSummary>
+  reprocess(processId: number, dryRun: boolean): Promise<ReprocessSummary>
   /** Every run of the process, newest first. */
   listRuns(processId: number): Promise<RunOut[]>
   /** One run and the decisions it appended. */

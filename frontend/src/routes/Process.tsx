@@ -16,6 +16,7 @@ import { api, ApiError } from '../api/client'
 import { keys } from '../api/queries'
 import { MetricCells, PlaneDashboards } from '../components/process/PlaneDashboards'
 import { PublishDraft } from '../components/process/PublishDraft'
+import { ReprocessAfterPublish } from '../components/process/ReprocessAfterPublish'
 import { ExportButton } from '../components/process/ExportButton'
 import {
   revokePreview,
@@ -26,7 +27,7 @@ import { ProcessScreen } from '../components/process/ProcessScreen'
 import { BatchRunPanel } from '../components/run/BatchRunPanel'
 import { Button } from '../components/shell/Controls'
 import { Overlay } from '../components/shell/Overlay'
-import { ErrorNotice, Notice } from '../components/shell/Notice'
+import { ErrorNotice } from '../components/shell/Notice'
 import { ExpandableText } from '../components/shell/ExpandableText'
 import { NestedCard } from '../components/shell/Well'
 import { cn } from '../lib/cn'
@@ -275,7 +276,11 @@ export function Process() {
       <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
         {published != null ? (
           <div className="mb-6">
-            <Notice tone="neutral" title={`Versión v${published} publicada`} />
+            <ReprocessAfterPublish
+              processId={processId}
+              version={published}
+              onClose={() => setPublished(null)}
+            />
           </div>
         ) : null}
         <header className="mb-6">

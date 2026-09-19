@@ -31,6 +31,7 @@ import type {
   RunDetail,
   RunOut,
   RunSummary,
+  ReprocessSummary,
   SourceDetail,
   SourceOut,
   Suggestion,
@@ -42,7 +43,7 @@ import type {
   VersionOut,
   WorkbookUpload,
 } from './contracts'
-import { BASE, get, getText, post, put, query, upload } from './http'
+import { BASE, del, get, getText, post, put, query, upload } from './http'
 
 const UPLOAD_CONCURRENCY = 4
 
@@ -93,11 +94,15 @@ export const liveClient: ApiClient = {
   validateDraft: (processId) => post<VersionDraft>(`/processes/${processId}/draft/validate`),
   publishDraft: (processId, body: PublishIn) =>
     post<VersionOut>(`/processes/${processId}/draft/publish`, body),
+  discardDraft: (processId, revision) =>
+    del(`/processes/${processId}/draft${query({ revision })}`),
   listVersions: (processId) => get<VersionOut[]>(`/processes/${processId}/versions`),
   getExecution: (processId) => get<ExecutionOut>(`/processes/${processId}/execution`),
   saveDraft: (processId, body: DraftIn) => put<VersionDraft>(`/processes/${processId}/draft`, body),
 
   run: (processId) => post<RunSummary>(`/processes/${processId}/run`),
+  reprocess: (processId, dryRun) =>
+    post<ReprocessSummary>(`/processes/${processId}/reprocess${query({ dry_run: String(dryRun) })}`, {}),
   listRuns: (processId) => get<RunOut[]>(`/processes/${processId}/runs`),
   getRun: (id) => get<RunDetail>(`/runs/${id}`),
   listInstances: (processId, filters) =>
