@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -33,6 +33,11 @@ import { ValidationImpact } from './ValidationImpact'
 import { t } from '../../i18n'
 
 type Attachment = FilePreview & { file: File }
+
+type Submission = {
+  message: string
+  files: Attachment[]
+}
 
 type ReviewItem = {
   key: string
@@ -212,6 +217,7 @@ export function ProcessDraftChat({
   const [draft, setDraft] = useState('')
   const [files, setFiles] = useState<Attachment[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
+  const history = useRef<HTMLDivElement>(null)
 
   const sessions = useQuery({
     queryKey: keys.discoverySessions,
@@ -271,27 +277,33 @@ export function ProcessDraftChat({
   })
 
   const send = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (submission: Submission) => {
       let next = current ?? (await api.startDiscoverySession(processId, processName))
       cache(next)
-      for (const file of files) {
+      for (const file of submission.files) {
         if (!TABULAR_EVIDENCE.test(file.name)) continue
         next = await api.uploadDraftEvidence(next.id, next.revision, file.file)
         cache(next)
       }
-      const message = draft.trim() || 'Revisa la evidencia adjunta y propón los cambios necesarios.'
       next = await api.messageDiscoverySession(
         next.id,
         next.revision,
-        message,
+        submission.message,
         'revise',
       )
       return next
     },
-    onSuccess: async (next) => {
+    onMutate: (submission) => {
       setDraft('')
-      files.forEach(revokePreview)
       setFiles([])
+      return submission
+    },
+    onError: (_error, submission) => {
+      setDraft((value) => value || submission.message)
+      setFiles((value) => [...submission.files, ...value])
+    },
+    onSuccess: async (next, submission) => {
+      submission.files.forEach(revokePreview)
       await store(next)
       selectDraft(next.id)
       if (processId != null) {
@@ -356,6 +368,9 @@ export function ProcessDraftChat({
     const message = messageOf(value)
     return message ? [message] : []
   })
+  const visibleMessages = send.isPending && send.variables
+    ? [...messages, { role: 'user' as const, text: send.variables.message }]
+    : messages
   const items = current ? reviewItems(current.plan) : []
   const pending = items.filter((item) => current?.reviews[item.key] !== 'accepted')
   // A question is sent through the authoring endpoint so it can stay in this conversation, but
@@ -390,6 +405,18 @@ export function ProcessDraftChat({
     syncSource.error ??
     prepare.error ??
     publish.error
+
+  useEffect(() => {
+    history.current?.scrollTo({ top: history.current.scrollHeight, behavior: 'smooth' })
+  }, [visibleMessages.length, send.isPending])
+
+  const submit = () => {
+    if (send.isPending || (!draft.trim() && files.length === 0)) return
+    send.mutate({
+      message: draft.trim() || 'Revisa la evidencia adjunta y propón los cambios necesarios.',
+      files,
+    })
+  }
 
   const addFiles = (incoming: File[]) => {
     setFiles((existing) => [...existing, ...incoming.map(toPreview)])
@@ -509,8 +536,8 @@ export function ProcessDraftChat({
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-          {messages.length === 0 ? (
+        <div ref={history} className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          {visibleMessages.length === 0 ? (
             <EmptyState title="Cuéntame qué tiene que decidir">
               Pregunta algo o pide cambios. El mismo chat puede revisar el contexto, los inputs,
               las salidas, las fuentes, los conectores, las reglas y los criterios del revisor.
@@ -518,7 +545,7 @@ export function ProcessDraftChat({
             </EmptyState>
           ) : (
             <ol className="space-y-4">
-              {messages.map((message, index) => (
+              {visibleMessages.map((message, index) => (
                 <li
                   key={`${index}:${message.text}`}
                   className={cn('flex', message.role === 'user' ? 'justify-end' : 'justify-start')}
@@ -576,12 +603,12 @@ export function ProcessDraftChat({
           <Textarea
             rows={3}
             value={draft}
-            disabled={busy}
+            disabled={review.isPending || syncSource.isPending || prepare.isPending}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                 event.preventDefault()
-                if (draft.trim() || files.length) send.mutate()
+                submit()
               }
             }}
             placeholder="Pregunta algo o pide un cambio en el proceso."
@@ -600,7 +627,7 @@ export function ProcessDraftChat({
             <Button
               tone="primary"
               disabled={busy || (!draft.trim() && files.length === 0)}
-              onClick={() => send.mutate()}
+              onClick={submit}
             >
               <ArrowUp size={13} strokeWidth={2} />
               Enviar
