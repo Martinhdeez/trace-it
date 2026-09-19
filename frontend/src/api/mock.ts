@@ -26,7 +26,6 @@ import type {
 } from './contracts'
 import { ApiError } from './http'
 import { classifiedInvoices } from '../data/invoices.generated'
-import { imageOnlyFiles } from '../data/documents.generated'
 import {
   LLM_ROLES,
   invoiceOutcomes,
@@ -38,6 +37,8 @@ import {
 /** A stored rule plus the hints the fake compiler needs to write code. */
 type StoredRule = RuleDetail & Partial<RuleHints>
 
+/** Lote 1 files with no text layer. */
+const imageOnlyFiles = ["copia_2026_0518.pdf", "fax_2026_0411.pdf", "reimpresion_0712.pdf", "scan_001.pdf", "scan_002.pdf", "scan_003.pdf", "scan_004.pdf", "scan_005.pdf", "scan_006.pdf", "scan_007.pdf", "scan_008.pdf", "scan_009.pdf", "scan_010.pdf", "scan_011.pdf", "scan_012.pdf", "scan_013.pdf", "scan_014.pdf", "scan_015.pdf", "scan_016.pdf", "scan_017.pdf", "scan_018.pdf", "scan_021.pdf", "scan_022.pdf", "scan_023.pdf", "scan_025.pdf", "scan_026.pdf", "scan_027.pdf", "scan_028.pdf", "scan_029.pdf"]
 const imageOnly = new Set(imageOnlyFiles)
 const NOW = '2026-09-18T11:39:00'
 
@@ -557,7 +558,9 @@ export const mockClient: ApiClient = {
 
   getInstance: noMock,
 
-  getDocument: () => wait(null),
+  getDocument: noMock,
+  getTrace: noMock,
+  fileUrl: () => '',
 
   queue: noMock,
 

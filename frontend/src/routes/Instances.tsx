@@ -39,11 +39,6 @@ export function Instances() {
     queryKey: keys.summary(processId),
     queryFn: () => api.summary(processId),
   })
-  // The engine stores rule ids, not their text: the list puts the words back.
-  const rules = useQuery({
-    queryKey: keys.rules(processId),
-    queryFn: () => api.listRules(processId),
-  })
 
   const rows = useMemo(() => instances.data ?? [], [instances.data])
   const total = summary.data?.instances ?? rows.length
@@ -59,6 +54,11 @@ export function Instances() {
   const detail = useQuery({
     queryKey: keys.instance(selectedId ?? 0),
     queryFn: () => api.getInstance(selectedId!),
+    enabled: Boolean(selectedId),
+  })
+  const trace = useQuery({
+    queryKey: keys.trace(selectedId ?? 0),
+    queryFn: () => api.getTrace(selectedId!),
     enabled: Boolean(selectedId),
   })
 
@@ -116,7 +116,7 @@ export function Instances() {
             </div>
           }
         />
-        <TracePane instance={detail.data} rules={rules.data ?? []} />
+        <TracePane instance={detail.data} trace={trace.data} />
       </div>
     </ProcessScreen>
   )
