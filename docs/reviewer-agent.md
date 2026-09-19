@@ -9,7 +9,7 @@ Endpoints and payloads: [api.md, Proposals](api.md#proposals).
 
 Status: backend done (#152). Frontend: FE-1, FE-2, FE-3 and FE-6 built on Carlos's patterns
 (see [Frontend implementation and merge notes](#frontend-implementation-and-merge-notes));
-FE-4 and FE-5 on a separate branch.
+FE-4 and FE-5 in #162 ([their merge notes](#fe-4fe-5-merge-notes)).
 
 ## Target flow
 
@@ -183,7 +183,7 @@ Definition inbox's "Rechazar needs a reason" (`InboxCard`). Every changed block 
   Panel → Publicar.
 - `rejected` (the manager's no, with a reason) is shown apart from `superseded` and its
   `outcome.cause` (`ignored`, `version_published`, `case_changed`, `superseded`).
-- Publish is blocked while a rule is compiling (FE-4, on the other branch).
+- Publish is blocked while a rule is compiling (FE-4, #162).
 - The manager can edit the rule before accepting; the edit is what compiles, and the
   outcome records `edited` and `original_text`.
 - The existing decision accept/reject stays: the assistant's decision proposal keeps
