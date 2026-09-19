@@ -8,6 +8,8 @@ import pytest
 from app.core.database import session_factory
 from app.features.ingestion.model import Instance
 from app.features.processes.model import Symbol
+from app.features.users.model import User
+from tests.support import rows
 
 from .conftest import VALID, pdf_bytes
 from .test_payment_api import payment_api as payment_api
@@ -19,6 +21,23 @@ pytestmark = [
         os.getenv("TRACEPAY_TEST_POSTGRES") != "1", reason="Requires test PostgreSQL"
     ),
 ]
+
+
+async def publish_draft(client, process_id):
+    validated = await client.post(f"/processes/{process_id}/draft/validate")
+    assert validated.status_code == 200, validated.text
+    draft = validated.json()
+    assert draft["validation"]["valid"], draft
+    published = await client.post(
+        f"/processes/{process_id}/draft/publish",
+        json={
+            "revision": draft["revision"],
+            "validation_hash": draft["validation"]["hash"],
+            "reason": "Approve extraction contract",
+        },
+    )
+    assert published.status_code == 201, published.text
+    return published.json()
 
 
 async def test_new_definition_fields_are_used_without_restarting_and_history_is_preserved(
@@ -37,6 +56,11 @@ async def test_new_definition_fields_are_used_without_restarting_and_history_is_
     loaded = await client.post("/processes/definition", json=definition)
     assert loaded.status_code == 200, loaded.text
     process_id = loaded.json()["process"]["id"]
+    async with session_factory() as session:
+        user = await session.get(User, int(client.headers["X-User-Id"]))
+        user.role = "manager"
+        await session.commit()
+    await publish_draft(client, process_id)
     endpoint = f"/processes/{process_id}/files"
     content = pdf_bytes("Holder: Ana\nExpiry: 21/04/2027\nRenewed: false")
     first = await client.post(endpoint, files={"file": ("certificate.pdf", content)})
@@ -57,17 +81,24 @@ async def test_new_definition_fields_are_used_without_restarting_and_history_is_
     )
     loaded = await client.post("/processes/definition", json=definition)
     assert loaded.status_code == 200, loaded.text
+    staged = (await client.get(f"/processes/{process_id}/extraction-plan")).json()
+    assert staged["fingerprint"] == before["fingerprint"]
+    await publish_draft(client, process_id)
     after = (await client.get(f"/processes/{process_id}/extraction-plan")).json()
     assert after["fingerprint"] != before["fingerprint"]
     assert any(field["labels"] == ["Expiry"] for field in after["fields"])
     instance_id = original["instance_id"]
-    # A duplicate upload is audited, but its new readings cannot overwrite the instance.
+    # A pending duplicate refreshes its symbols under the newly published contract.
     duplicate = (await client.post(endpoint, files={"file": ("certificate.pdf", content)})).json()
     assert not duplicate["created"]
-    assert "expires_on" not in duplicate["symbols"]
+    assert duplicate["symbols"]["expires_on"]["value"] == "2027-04-21"
+    assert duplicate["symbols"]["renewed"]["value"] is False
+    assert duplicate["extraction"]["id"] != original["extraction"]["id"]
     refreshed = await client.post(f"/instances/{instance_id}/extract", json={"vlm": False})
     assert refreshed.status_code == 200, refreshed.text
     fresh = refreshed.json()
+    assert fresh["extraction"]["id"] == duplicate["extraction"]["id"]
+    assert fresh["extraction"]["cache_hit"] is True
     assert fresh["symbols"]["expires_on"]["value"] == "2027-04-21"
     assert fresh["symbols"]["renewed"]["value"] is False
     assert fresh["extraction"]["data"]["extraction_plan"]["fingerprint"] == after["fingerprint"]
@@ -96,6 +127,12 @@ async def test_invoice_extension_preserves_default_fields_and_adds_new_symbol(pa
             )
         )
         await session.commit()
+    inert = await client.post(f"/instances/{initial['instance_id']}/extract", json={})
+    assert inert.status_code == 200, inert.text
+    assert "expires_on" not in inert.json()["symbols"]
+    assert inert.json()["extraction"]["id"] == initial["extraction"]["id"]
+    async with session_factory() as session:
+        await rows.publish_fixture(session, process_id)
     response = await client.post(f"/instances/{initial['instance_id']}/extract", json={})
     assert response.status_code == 200, response.text
     extended = response.json()

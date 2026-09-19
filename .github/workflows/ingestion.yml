@@ -64,3 +64,4 @@ jobs:
       - run: >-
           uv run pytest -q app/features/ingestion/tests/test_process_api.py
           app/features/ingestion/tests/test_payment_api.py
+          app/features/ingestion/tests/test_schema_api.py
