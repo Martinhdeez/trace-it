@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from app.common.exceptions import TraceError
 from app.core.events import configure_observability
 from app.features.agents.router import router as agents_router
+from app.features.alerts.router import router as alerts_router
 from app.features.decisions.router import router as decisions_router
 from app.features.ingestion.process_router import router as ingestion_router
 from app.features.ingestion.router import create_router as create_extraction_router
@@ -75,6 +76,7 @@ for router in (
     use_cases_router,
     traces_router,
     learning_router,
+    alerts_router,
 ):
     app.include_router(router)
 

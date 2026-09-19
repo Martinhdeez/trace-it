@@ -8,6 +8,7 @@ from filelock import FileLock, Timeout
 
 from app.common.exceptions import TraceError
 from app.features.ingestion.config import Settings
+from app.features.ingestion.quality import validate_quality_profile
 from app.features.ingestion.router import create_router
 from app.features.ingestion.service import ExtractionService
 
@@ -22,6 +23,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app):
+        await run_in_threadpool(validate_quality_profile, settings)
         lock = FileLock(settings.data_dir / "server.lock")
         try:
             lock.acquire(timeout=0)

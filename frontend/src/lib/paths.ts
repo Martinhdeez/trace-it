@@ -3,15 +3,23 @@ export const paths = {
   processes: '/processes',
   newProcess: '/processes/new',
   process: (id: number | string) => `/processes/${id}`,
-  rules: (id: number | string) => `/processes/${id}/rules`,
+  definition: (id: number | string) => `/processes/${id}/definition`,
+  definitionContext: (id: number | string) => `/processes/${id}/definition/contexto`,
+  definitionInputs: (id: number | string) => `/processes/${id}/definition/inputs`,
+  definitionSources: (id: number | string) => `/processes/${id}/definition/fuentes`,
+  knowledge: (id: number | string) => `/processes/${id}/definition/fuentes`,
+  versions: (id: number | string) => `/processes/${id}/definition`,
+  review: (id: number | string) => `/processes/${id}/review`,
+  processSettings: (id: number | string) => `/processes/${id}/settings`,
+  rules: (id: number | string) => `/processes/${id}/definition`,
   rule: (processId: number | string, ruleId: number | string) =>
     `/processes/${processId}/rules/${ruleId}`,
   instances: (id: number | string) => `/processes/${id}/instances`,
   instance: (processId: number | string, instanceId: number | string) =>
     `/processes/${processId}/instances?i=${instanceId}`,
-  queue: (id: number | string) => `/processes/${id}/queue`,
-  audit: (id: number | string) => `/processes/${id}/audit`,
-  sources: (id: number | string) => `/processes/${id}/sources`,
+  queue: (id: number | string) => `/processes/${id}/review`,
+  audit: (id: number | string) => `/processes/${id}/definition`,
+  sources: (id: number | string) => `/processes/${id}/definition/fuentes`,
   settings: '/settings',
 } as const
 

@@ -1,12 +1,13 @@
 """One agent discovers a process from workbook evidence, snapshots and user answers."""
 
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 
 from pydantic_ai import Agent, ModelRetry, RunContext
 
 from app.features.agents import llm
-from app.features.processes.draft_schemas import DraftPlan
+from app.features.processes.draft_schemas import Discussion, DraftPlan
 from app.features.sources import discovery as evidence
 
 
@@ -17,8 +18,10 @@ class Deps:
 
 
 agent = Agent(None, output_type=DraftPlan, deps_type=Deps, name="discovery", retries=2)
+discussion = Agent(None, output_type=Discussion, deps_type=Deps, name="discovery", retries=2)
 
 
+@discussion.tool
 @agent.tool
 def read_sheet(
     ctx: RunContext[Deps], document: str, sheet: str, first_row: int, last_row: int
@@ -33,6 +36,7 @@ def read_sheet(
         return [{"error": str(error)}]
 
 
+@discussion.tool
 @agent.tool
 def search_snapshot(ctx: RunContext[Deps], name: str, query: str) -> list[dict]:
     """Search an already downloaded complete ERP/source snapshot; return at most 20 rows."""
@@ -48,7 +52,9 @@ def search_snapshot(ctx: RunContext[Deps], name: str, query: str) -> list[dict]:
 @agent.output_validator
 def validate(ctx: RunContext[Deps], plan: DraftPlan) -> DraftPlan:
     allowed = evidence.evidence_references(ctx.deps.data)
-    unknown = {e.reference for p in [*plan.sources, *plan.rules] for e in p.evidence} - allowed
+    unknown = {
+        e.reference for p in [*plan.sources, *plan.rules, *plan.guidance] for e in p.evidence
+    } - allowed
     if unknown:
         raise ModelRetry(f"Cite existing evidence references only: {sorted(unknown)}")
     decisions = {t.name for t in plan.decision_types}
@@ -57,8 +63,8 @@ def validate(ctx: RunContext[Deps], plan: DraftPlan) -> DraftPlan:
     return plan
 
 
-async def discover(data: dict, setup: llm.Setup | None) -> DraftPlan:
-    context = {
+def context(data: dict) -> dict:
+    return {
         "existing_process": data.get("base_fingerprint") is not None,
         "current_plan": data["plan"],
         "reviews": data["reviews"],
@@ -69,13 +75,42 @@ async def discover(data: dict, setup: llm.Setup | None) -> DraftPlan:
             for name, s in data["snapshots"].items()
         },
         "base_references": data.get("base_references", []),
+        "past_cases": data.get("case_context"),
+        "editable_version_draft": data.get("version_draft"),
     }
+
+
+async def discover(data: dict, setup: llm.Setup | None) -> DraftPlan:
     result, _ = await llm.run(
         agent,
         "discovery",
-        json.dumps(context, ensure_ascii=False),
+        json.dumps(context(data), ensure_ascii=False, default=str),
         instructions=llm.prompt("discovery"),
         setup=setup,
         deps=Deps(data),
+    )
+    return result
+
+
+@discussion.output_validator
+def valid_discussion(ctx: RunContext[Deps], result: Discussion) -> Discussion:
+    unknown = set(result.evidence) - evidence.evidence_references(ctx.deps.data)
+    if unknown:
+        raise ModelRetry(f"Cite supplied references only: {sorted(unknown)}")
+    return result
+
+
+async def discuss(data: dict, setup: llm.Setup | None) -> Discussion:
+    discussion_context = context(data)
+    if setup:
+        discussion_context["authoring_guidance"] = setup.settings.instructions
+        setup = llm.Setup(setup.settings.model_copy(update={"instructions": ""}), setup.config_id)
+    result, _ = await llm.run(
+        discussion,
+        "discovery",
+        json.dumps(discussion_context, ensure_ascii=False, default=str),
+        instructions=llm.prompt("process_chat"),
+        setup=setup,
+        deps=Deps(deepcopy(data)),
     )
     return result

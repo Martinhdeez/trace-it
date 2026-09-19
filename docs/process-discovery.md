@@ -4,8 +4,8 @@ The backend accepts workbooks and a conversation to propose sources and rules. E
 operation below requires a manager's `X-User-Id`. Discovery never creates live rules;
 publication follows review, compilation, acceptance examples and version validation.
 Discovery conversations use separate storage from the single editable process version draft.
-Finish an existing version draft before starting discovery; a draft created later blocks
-discovery publication rather than being overwritten.
+A separate editable version draft can be discussed, but must be finished before preparing
+or publishing discovery proposals. It is never overwritten.
 
 ## Start or resume
 
@@ -30,9 +30,10 @@ edit or published draft returns 409. Use the returned revision for the next requ
 - `POST /process-drafts/{id}/sources/{name}/sync`: `{ "revision": 2 }`. Uses only a
   configured connector listed in the draft. The ERP is read through the existing client;
   only a complete download replaces the draft snapshot. No live process source changes.
-- `POST /process-drafts/{id}/messages`: `{ "revision": 3, "message": "Read the workbook
+- `POST /process-drafts/{id}/messages`: `{ "revision": 3, "mode": "revise", "message": "Read the workbook
   and ask me about unclear rules. Escalate incorrect VAT rather than rejecting it." }`.
-  This runs discovery and returns the complete proposed plan and outstanding questions.
+  Revision mode runs discovery and returns the complete proposed plan and outstanding
+  questions. Without this mode, messages discuss the proposal without changing it.
 
 Upload and sync retain evidence; send a message to have the agent interpret it. The agent
 can read further workbook ranges and search downloaded ERP records. It proposes table
@@ -56,7 +57,7 @@ Answering a question revises the proposal; it does not approve it or publish liv
 }
 ```
 
-Proposal keys are `setup`, `source:<name>`, `rule:<name>` and `example:<name>`. Disposition
+Proposal keys are `setup`, `source:<name>`, `rule:<name>`, `guidance:<name>` and `example:<name>`. Disposition
 is `accepted` or `rejected`. The explanation also enters the conversation; follow a
 rejection with a message to revise the draft or resolve the ambiguity. Chat revisions,
 new uploads and source refreshes clear the reviews and preview. No LLM marks a proposal
@@ -91,9 +92,9 @@ started, start a fresh draft so the manager reviews current evidence and impact.
 ## Initial scope
 
 This is a backend rule import workflow. It does not include a frontend or replace the
-existing manual rule endpoints. Existing process names, descriptions, fields and outcomes
-are preserved; changing those structures is outside this first import implementation.
-New processes can define them freely, subject to the existing engine contract.
+existing manual rule endpoints. Existing process identity is preserved. [Process chat](process-chat.md) supports proposing
+changes to context, fields, outcomes and reviewer guidance as well as rules and sources.
+All configurations remain subject to the existing engine contract.
 Documents currently means XLSX plus text pasted in the conversation. ERP access uses
 configured connections and snapshot search, not arbitrary websites or generated connectors.
 New processes receive copied agent settings; their ERP snapshot is imported, but ongoing

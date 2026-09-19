@@ -303,4 +303,7 @@ async def publish(
     row = await publish_snapshot(session, process, draft.snapshot, author, reason, validation)
     await session.delete(draft)
     await session.commit()
+    from app.features.alerts.service import after_publish
+
+    await after_publish(process_id, row.id)
     return row

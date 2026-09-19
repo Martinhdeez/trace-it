@@ -17,7 +17,7 @@ extractions and decisions; no cache refresh requires deleting the database.
 | Excel limits or Excel reader | Refresh workbook extraction, independently of OCR configuration. |
 | Source rows or symbol schema/payment adapter | Refresh pending process symbols and source-triggered verification; document OCR stays reusable. |
 | New source snapshot with identical rows | Reuse evidence and retain the original snapshot IDs in its provenance. |
-| Rules only | Evaluate rules against evidence through the decision workflow; do not rerun OCR just for a rule change. |
+| Published rules only | Refresh the pending process contract and evaluate rules against the existing document evidence; do not rerun OCR just for a rule change. |
 
 Final extraction keys include source-code fingerprints, effective options, relevant limits,
 reader configurations and model file hashes. File contents are hashed once per observed
@@ -40,6 +40,21 @@ does not imply a new OCR experiment, and redeploying an alias under the same mod
 cannot be detected remotely from these inputs.
 
 ## Process evidence and history
+
+The process extraction plan reads the active published version on each request. Before
+the first publication it reads the live symbols and enforced rules. Unpublished drafts
+do not affect an active process. Declared symbols, their extraction hints, and the
+literal subscript or `.get(...)` references through the first two parameters of
+`evaluate(...)` are inspected deterministically with Python's AST;
+no LLM is called to discover fields. Rule references are diagnostic metadata:
+undeclared symbols produce a warning and are not silently added as extraction fields.
+
+An in-process analysis cache avoids parsing unchanged rule code again. It keys the
+complete process, field and rule-code snapshot, so a new publication or changed code
+is analyzed on the next request without restarting the server. The field fingerprint
+separates document mapping from rule metadata. A rule-only change can make a pending
+instance's recorded plan stale and append a refreshed extraction event, while the
+underlying PDF reading comes from its unchanged reader/final-extraction cache.
 
 Uploading an existing pending file or calling `POST /instances/{id}/extract` first checks
 the recorded request key, source contents and symbol/adapter schema. An unchanged request

@@ -49,7 +49,8 @@ The corpus should contain 500 PDFs under
 
 ## 2. Download both local OCR readers
 
-Local and hybrid modes use these weights. API-only mode can skip this section;
+Local and hybrid modes use these weights. API-only mode with the explicit
+`experimental` profile can skip this section;
 see [execution modes](providers-and-modes.md). Run this from the repository root
 before starting a server that uses local OCR:
 
@@ -89,7 +90,10 @@ The public Hugging Face model repositories do not require a paid API key.
 The four ONNX files occupy approximately 102 MB together; allow additional space
 for download caches, Python dependencies and Docker images. `.models/` is ignored
 by Git and mounted read-only at `/srv/.models` in the running backend. Model
-loading is lazy: a healthy API does not by itself prove the weights are present.
+loading is lazy. By default, both API applications verify the pinned weights,
+detector configuration and dictionaries at startup, and require the evaluated
+Gemini/Jev model IDs and credentials. Missing or different components stop startup
+with a configuration error. This checks configuration, not provider availability.
 
 Do not use `--no-verifier`, `v6-small`, or a different primary profile when
 reproducing this setup. Those switches are for experiments. The API never
@@ -117,6 +121,7 @@ every provider account has access to them:
 GEMINI_API_KEY=your_gemini_key
 TYPESAFE_API_KEY=your_typesafe_key
 TRACEPAY_GEMINI_MODEL=gemini-3.1-flash-lite
+TRACEPAY_OCR_PROFILE=verified
 TRACEPAY_JEV_MODEL=jev-1.13.0
 TRACEPAY_WORKERS=2
 TRACEPAY_OCR_THREADS=4
@@ -137,12 +142,16 @@ HELMCODE_API_KEY=your_helmcode_key
 
 The OCR adapter specifically reads `GEMINI_API_KEY`; setting only
 `GOOGLE_API_KEY` does not enable it. Jev never sees pixels and is not another
-visual verifier. `load --activate` uses the supplied hand-written rules without
+visual verifier. `load --activate --manager-id 1` uses the supplied hand-written rules without
 calling rule agents. Agent settings in `processes/invoice-payment/use-case.json`
 are separate from `TRACEPAY_*`; changing the compiler model does not change OCR.
 
-Without provider keys, native PDF/XLSX extraction and the two local OCR readers
-still work, but that is a different configuration with different coverage.
+For local-only operation or a different model, explicitly set
+`TRACEPAY_OCR_PROFILE=experimental` before starting the API. Native PDF/XLSX
+extraction and available local readers still work in that mode, but it has
+different coverage. The default `verified` profile never silently drops those
+providers. `make setup` installs both pinned local readers and runs `make ocr-check`
+before starting Docker. You can run `make ocr-check` separately after editing `.env`.
 Focused local/visual corroboration requires an enabled visual provider. Requests
 omit `vlm` and `jev` to permit configured providers automatically; `vlm=false`
 and `jev=false` explicitly disable them, even when keys exist.
@@ -168,11 +177,14 @@ From the root, in PowerShell or a POSIX shell:
 
 ```text
 docker compose up -d --build --wait
-docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json --activate
+docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json --activate --manager-id 1
 ```
 
-The container runs database migrations at startup. Record the process ID printed
-by `load`; do not assume it is 1 in an existing database. The API is at
+The container runs database migrations at startup. `--activate` publishes the pack's
+hand-written rules as a process version and needs a manager's user id: on a fresh
+database the seeded manager is 1 (`curl -s localhost:8000/users`). `make setup` then
+`make activate MANAGER_ID=1` does the same. Record the process ID printed by `load`; do
+not assume it is 1 in an existing database. The API is at
 `http://127.0.0.1:8000/docs`. `BACKEND_PORT` in `.env` changes its host port.
 
 Check configuration inside the container without revealing keys:
@@ -192,7 +204,8 @@ uv run --project backend --locked python .context/500-sombras-de-alberto/alberto
 ```
 
 Leave it running on port 8009. Compose points the backend at
-`http://host.docker.internal:8009`. Docker Desktop supplies that hostname. On
+`http://host.docker.internal:8009` (`ERP_PORT=<port>` for both `make erp` and `make setup`
+if 8009 is taken). Docker Desktop supplies that hostname. On
 Linux Docker Engine, add `extra_hosts: ["host.docker.internal:host-gateway"]` to
 the backend in a local Compose override if the name does not resolve. Allow the
 container to reach the host ERP. The challenge credentials in `.env.example`
@@ -258,7 +271,8 @@ and ERP. From the repository root, after steps 1-4:
 make demo
 ```
 
-It activates the hand-written rules, logs in as the seeded manager, uploads the
+It needs the published rules of step 4 (`make activate MANAGER_ID=1`); without them the
+run answers 409. It logs in as the seeded manager, uploads the
 workbook, syncs the ERP, uploads PDFs with `ocr=true`, runs pending decisions and
 writes `output/outcomes.jsonl` and `output/detail.json`. For a small local-only
 check, run `make demo DEMO_ARGS="--limit 5 --local-only"`. This disables

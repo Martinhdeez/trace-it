@@ -341,6 +341,8 @@ export interface ApiClient {
   listFiles(processId: number): Promise<IngestedFile[]>
   uploadFiles(processId: number, files: File[]): Promise<IngestedFile[]>
   listSources(processId: number): Promise<SourceLoad[]>
+  /** Excel of suppliers / orders / parameters. Same call as the live demo. */
+  uploadWorkbook(processId: number, file: File, cutOffDate?: string): Promise<SourceLoad[]>
   uploadSource(processId: number, name: string, file: File): Promise<SourceLoad>
   syncErp(processId: number): Promise<SourceLoad>
 

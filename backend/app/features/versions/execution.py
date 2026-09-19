@@ -21,7 +21,10 @@ from app.features.versions.model import Execution, ProcessVersion
 async def capture(session, process_id: int) -> dict:
     instances = list(
         await session.scalars(
-            select(Instance).where(Instance.process_id == process_id).order_by(Instance.id)
+            select(Instance)
+            .where(Instance.process_id == process_id)
+            .order_by(Instance.id)
+            .execution_options(populate_existing=True)
         )
     )
     decisions = list(

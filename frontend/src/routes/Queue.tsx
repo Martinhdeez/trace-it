@@ -5,10 +5,10 @@ import { FileText, Sparkles } from 'lucide-react'
 import { api } from '../api/client'
 import { families, keys } from '../api/queries'
 import type { ProcessDetail, RuleKind, Suggestion } from '../api/contracts'
+import { ProcessScreen } from '../components/process/ProcessScreen'
 import { Button, Field, Segmented, Select, Textarea } from '../components/shell/Controls'
 import { Empty, ErrorNotice, Notice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
-import { Topbar } from '../components/shell/Topbar'
 import { PageIntro } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { paths } from '../lib/paths'
@@ -47,30 +47,30 @@ export function Queue() {
   const current = items.find((item) => item.id === selectedId) ?? items[0]
 
   return (
-    <>
-      <Topbar
-        crumbs={[
-          { label: process.data?.nombre ?? '…', to: paths.process(processId) },
-          { label: 'Cola' },
-        ]}
-        actions={
-          tabs.length > 1 ? (
-            <Segmented value={tab} onChange={(next) => setParams({ tipo: next })} options={tabs} />
-          ) : null
-        }
-      />
-
+    <ProcessScreen
+      processId={processId}
+      crumbs={[
+        { label: 'Procesos', to: paths.processes },
+        { label: process.data?.nombre ?? '…', to: paths.process(processId) },
+        { label: 'Revisión' },
+      ]}
+      actions={
+        tabs.length > 1 ? (
+          <Segmented value={tab} onChange={(next) => setParams({ tipo: next })} options={tabs} />
+        ) : null
+      }
+    >
       <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
         <PageIntro
-          kicker="Cola"
-          title={tab.replaceAll('_', ' ')}
-          description="El proceso marcó esta salida como algo que decide una persona. Lo que resuelvas entra en el histórico como una decisión nueva, y la regla que escribas cierra los casos parecidos que vengan después."
+          kicker="Revisión"
+          title={tab.replaceAll('_', ' ') || 'Cola'}
+          description="Excepciones que el proceso no cierra. Tu decisión queda en el histórico y puede volverse una regla nueva, desde Definición."
         />
 
         {escalated.isError ? <ErrorNotice error={escalated.error} /> : null}
 
         <div className="grid gap-3 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <ul className="max-h-[560px] overflow-y-auto rounded-[16px] bg-well p-1 ring-1 ring-black/[0.04]">
+          <ul className="max-h-[560px] overflow-y-auto rounded-[16px] bg-white p-1 ring-1 ring-black/[0.06]">
             {items.length === 0 ? (
               <li>
                 <Empty>
@@ -86,8 +86,8 @@ export function Queue() {
                     className={cn(
                       'mb-0.5 flex w-full items-center gap-2 rounded-[12px] px-2.5 py-2 text-left',
                       item.id === current?.id
-                        ? 'bg-white shadow-[0_1px_2px_rgba(19,19,19,0.06)]'
-                        : 'hover:bg-white/70',
+                        ? 'bg-canvas'
+                        : 'hover:bg-canvas/70',
                     )}
                   >
                     <FileText size={13} strokeWidth={1.5} className="shrink-0 text-faint" />
@@ -111,7 +111,7 @@ export function Queue() {
           ) : null}
         </div>
       </div>
-    </>
+    </ProcessScreen>
   )
 }
 
@@ -305,7 +305,7 @@ function Suggested({
   loading: boolean
 }) {
   return (
-    <div className="rounded-[16px] bg-well px-4 py-3.5 ring-1 ring-black/[0.04]">
+    <div className="rounded-[16px] bg-white px-4 py-3.5 ring-1 ring-black/[0.06]">
       <p className="flex items-center gap-1.5 text-[13px] font-medium">
         <Sparkles size={13} strokeWidth={1.75} className="text-faint" />
         El asistente propone
@@ -318,7 +318,7 @@ function Suggested({
             <StatusBadge value={suggestion.decision} className="mt-0.5 shrink-0" />
             <span className="text-muted">{suggestion.razonamiento}</span>
           </p>
-          <p className="mt-2 rounded-[10px] bg-white px-3 py-2 text-[13px] ring-1 ring-black/[0.05]">
+          <p className="mt-2 rounded-[10px] bg-canvas px-3 py-2 text-[13px] ring-1 ring-black/[0.05]">
             {suggestion.regla_propuesta}
           </p>
         </>

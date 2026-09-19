@@ -80,9 +80,11 @@ async def test_upload_persists_original_and_evidence_without_approving_symbols(p
         instance = await session.get(Instance, result["instance_id"])
         assert original.content == content and "F26-1234" in original.text
         assert instance.symbols is None
+        # Upload and ingestion both emit spans; SQL does not guarantee their row order.
         event = await session.scalar(
             select(Event).where(Event.instance_id == instance.id, Event.step == "ingest_document")
         )
+        assert event is not None
         assert event.step == "ingest_document"
         assert event.data["extraction"]["sha256"] == result["file_hash"]
     # Recovery uses PostgreSQL, not the standalone SQLite result cache.

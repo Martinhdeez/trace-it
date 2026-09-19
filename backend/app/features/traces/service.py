@@ -18,6 +18,7 @@ from app.core.database import session_factory
 from app.core.events import Event
 from app.features.agents import decision_reviewer
 from app.features.agents.llm import TRUNCATED
+from app.features.alerts import service as alerts
 from app.features.decisions import service as decisions
 from app.features.decisions.model import ENGINE, Decision
 from app.features.decisions.schemas import DecisionOut
@@ -90,6 +91,7 @@ PLANES: dict[str, Plane] = {
     "norm": _AGENTS,
     "normalize_norm": _AGENTS,
     "discover_process": _AGENTS,
+    "discuss_process": _AGENTS,
     "compile_process_draft": _AGENTS,
     "publish_process_draft": _AGENTS,
     "compile_rules": _AGENTS,
@@ -115,6 +117,8 @@ PLANES: dict[str, Plane] = {
     "suggest_escalation": _EXECUTION,
     "resolution": _EXECUTION,
     "export_outcomes": _EXECUTION,
+    "detect_stale_decisions": _EXECUTION,  # ADR 0026
+    "ack_alert": _EXECUTION,
 }
 STREAM_POLL_S = 1.0
 
@@ -790,6 +794,7 @@ async def _execution(session: AsyncSession, where: list, base: dict) -> Executio
         resolutions_by_author=authors,
         resolution_p50_s=round(statistics.median(waits), 1) if waits else None,
         resolution_p95_s=round(_quantile(waits, 0.95), 1) if waits else None,
+        open_alerts=await alerts.open_count(session, process_id),
     )
 
 
@@ -821,7 +826,9 @@ async def health(session: AsyncSession) -> list[PlaneHealth]:
         rate = errors / spans if spans else None
         limit = settings.health_p95_ms.get(p)
         status, reason = "ok", None
-        if rate is not None and rate >= settings.health_down_error_rate:
+        if 0 < spans < settings.health_min_spans:
+            reason = f"not enough data: {spans} spans, {settings.health_min_spans} needed"
+        elif rate is not None and rate >= settings.health_down_error_rate:
             status, reason = "down", f"{errors}/{spans} spans failed"
         elif rate is not None and rate >= settings.health_degraded_error_rate:
             status, reason = "degraded", f"{errors}/{spans} spans failed"

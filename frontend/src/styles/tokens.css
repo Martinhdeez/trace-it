@@ -118,4 +118,26 @@
     text-transform: uppercase;
     color: var(--color-faint);
   }
+
+  .caret {
+    display: inline-block;
+    width: 1.5px;
+    height: 0.9em;
+    margin-left: 1px;
+    vertical-align: -0.08em;
+    background: var(--color-ink);
+    animation: caret 1.05s steps(1) infinite;
+  }
+
+  @keyframes caret {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .caret {
+      animation: none;
+    }
+  }
 }

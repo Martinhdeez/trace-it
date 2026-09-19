@@ -139,3 +139,31 @@ both models struggled with the poor fax image. This small qualitative probe
 supports Qwen as the first fallback, not a general accuracy claim or permission
 to bypass corroboration. Raw probe requests' safe metadata/transcripts are in
 `helmcode-probes.jsonl` beside the baseline artifacts.
+
+## Mode integration smoke tests
+
+Separate HTTP extraction tests exercised the implementation after the baseline,
+using real providers and `scan_001.pdf`. These are single-document integration
+checks, not another 500-document accuracy evaluation:
+
+| Mode | Cold request | Accepted fields / 10 | Actual remote requests |
+|---|---:|---:|---|
+| Local | 6.820 s | 8 | 0 |
+| Hybrid, default readers | 28.620 s | 10 | 1 Gemini |
+| API, Helmcode only | 12.248 s | 3 | 4 image requests + 1 candidate judge |
+
+Each repeated request hit the result cache and made zero new reader calls.
+API mode loaded no local OCR weights. Its conflicting Qwen/Gemma readings left
+seven fields unconfirmed: successful API access does not establish equivalent
+coverage to the evaluated hybrid committee.
+
+A separate generic-field test extracted `expiry=2027-04-21` in 4.205 s with
+two image requests and one grounded schema-mapping request. This exposed a
+missing per-request schema-call counter, subsequently fixed and covered by a
+regression test that distinguishes three network calls, journal replay and a
+result-cache hit. Its original captured response predates that counter fix.
+
+These smoke tests made eight additional Helmcode network requests and one Gemini
+request (1,189 input / 182 output tokens, USD 0.00057025 at the rates above).
+They are excluded from both the baseline table and the six-request Helmcode probe.
+Artifacts: `mode-smoke.json`, `mode-smoke-events.json`, and `smoke_modes.py`.

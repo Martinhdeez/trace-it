@@ -23,10 +23,24 @@ Set the server default in the ignored root `.env`:
 
 ```dotenv
 TRACEPAY_OCR_MODE=hybrid
+TRACEPAY_OCR_PROFILE=verified
 ```
 
 For an offline reader, use `TRACEPAY_OCR_MODE=local`. For hosted image models without
-local weights, use `TRACEPAY_OCR_MODE=api`. Restart the server after editing `.env`
+local weights, use `TRACEPAY_OCR_MODE=api`. Both alternative server configurations
+also require `TRACEPAY_OCR_PROFILE=experimental`. The default `verified` profile
+checks the evaluated local weights and Gemini/Jev primary readers before startup;
+it cannot certify a different committee. For example, an API-only Helmcode server uses:
+
+```dotenv
+TRACEPAY_OCR_PROFILE=experimental
+TRACEPAY_OCR_MODE=api
+TRACEPAY_VISION_PROVIDERS=helmcode
+TRACEPAY_TEXT_PROVIDERS=helmcode
+HELMCODE_API_KEY=your_private_key
+```
+
+Restart the server after editing `.env`
 (or recreate the Docker backend). This is separate from process field/rule updates,
 which are read from the published process version on each request. Unpublished
 edits do not change an active process's extraction contract.
@@ -161,5 +175,5 @@ not blindly sent again; fallback uses another configured reader. Saved responses
 do not become additional independent evidence. Keep originals, proposal values
 and conflicts available for review, including after a provider fails.
 
-See [ADR 0026](../adr/0026-ocr-execution-modes-and-provider-fallback.md), the
+See [ADR 0027](../adr/0027-ocr-execution-modes-and-provider-fallback.md), the
 [API contract](api.md), and the [measured 500-document run](benchmark-2026-09-19.md).

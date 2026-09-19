@@ -1,7 +1,8 @@
 # Process-driven document extraction
 
-Each process PDF upload loads the current symbols and enforced (`active` and `blocked`)
-rules from PostgreSQL. The plan retains **every declared symbol**, including optional
+Each process PDF upload loads symbols and enforced (`active` and `blocked`) rules
+from the active published version in PostgreSQL. Before the first publication it
+uses the live definition tables. The plan retains **every declared symbol**, including optional
 audit fields and names accessed through computed variables. Static analysis also reports
 literal rule references and warns about undeclared symbols. It does not invent a type or
 meaning for a field missing from the process definition. No LLM call is needed to discover
@@ -9,8 +10,8 @@ the declared field contract.
 
 Inspect it with `GET /processes/{id}/extraction-plan` and `X-User-Id`. The response includes
 fields, rule dependencies, warnings and a content fingerprint. A change in a local rule
-file takes effect after the definition is loaded and the new rule is activated through
-the existing rule lifecycle; this is not a filesystem watcher.
+file takes effect after the definition is loaded and its new version is published
+through the existing process lifecycle; this is not a filesystem watcher.
 
 ## Configure a field
 
@@ -45,10 +46,12 @@ uv run python -m app.cli load ../processes/my-process.json
 
 The loader upserts symbols; omitting an existing symbol does not delete it. Set its
 extraction source to `none` to stop reading it, and update any rules that require it.
-New rules still follow compilation and activation. Definition changes apply to the next
-upload or `POST /instances/{id}/extract` without restarting. Existing instances are not
-automatically re-extracted. Duplicate uploads do not replace attached evidence, and only
-PENDING instances can be re-extracted. Historical decisions remain immutable.
+New rules still follow compilation and publication. Published changes apply to the next
+upload or `POST /instances/{id}/extract` without restarting. Unpublished edits cannot
+alter an active version. Existing instances are not automatically re-extracted.
+Pending duplicate uploads refresh stale evidence and reuse unchanged readings; decided
+duplicates retain their attached evidence. Only PENDING instances can be re-extracted.
+Historical decisions remain immutable.
 
 ## Invoice compatibility and evidence
 
@@ -59,14 +62,15 @@ are extracted as an extension. Other processes with symbols use the generic read
 Processes without symbols and standalone `/v1/extractions` keep their original behavior.
 
 The generic reader first matches labels in native text or OCR. If configured, the existing
-Gemini or OpenAI-compatible vision endpoint can locate remaining fields from their
+Gemini, Helmcode or OpenAI-compatible provider can locate remaining fields from their
 descriptions. It must return exact quotations with line identifiers; values and types are
 validated locally. It never evaluates rules or chooses an outcome. `vlm: false` disables
 this model assistance as well as visual transcription. No new provider calls are added
 to the unchanged invoice pack.
 
-Native text and sufficiently confident local OCR can supply accepted values. Visual
-model text alone remains a proposal. Conflicting, invalid and uncertain readings stay
+Native text and sufficiently confident local OCR can supply accepted values. A single
+visual model supplies a proposal; in API mode two distinct visual models can corroborate
+a value. Conflicting, invalid and uncertain readings stay
 null, with candidates and provenance retained. A required null symbol escalates when the
 deterministic engine runs. Semantic interpretation remains model-assisted extraction,
 not a guarantee that every arbitrary layout or description can be read. Give explicit
@@ -81,7 +85,8 @@ invoice result format. Origins continue to use `document:<extraction_id>`.
 
 ## Cost and cache behavior
 
-1. Current database rows are read on each request. A bounded, 128-entry process-local
+1. The active version pointer and its snapshot are read on each request (live tables
+   before the first publication). A bounded, 128-entry process-local
    cache reuses rule analysis when the actual code, status and symbol metadata match.
    It checks actual code content, even if a stored rule hash was not updated. After a
    restart, deterministic analysis runs once again; it does not call a provider.
@@ -103,7 +108,8 @@ Before serving this version, apply the additive database migration from `backend
 uv run alembic upgrade head
 ```
 
-Migration `0011` adds nullable JSON extraction metadata to symbols. Existing definitions
-need no changes. No new provider key is required: the reader uses `GEMINI_API_KEY` with
+Migration `0014` adds nullable JSON extraction metadata to symbols. Existing definitions
+need no changes. No new provider key is required: the reader can use `GEMINI_API_KEY` with
 `TRACEPAY_GEMINI_MODEL`, or `TRACEPAY_VLM_URL`, `TRACEPAY_VLM_MODEL` and the optional
-`TRACEPAY_VLM_API_KEY`, as the existing visual reader does.
+`TRACEPAY_VLM_API_KEY`, as the existing visual reader does. Helmcode and execution modes
+are described in the [provider guide](ingestion/providers-and-modes.md).

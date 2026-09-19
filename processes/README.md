@@ -6,7 +6,7 @@ Each JSON file in this folder defines a complete decision process (a process pac
 
 ```bash
 make setup                                                          # loads invoice-payment.json
-make activate                                                       # activates its hand-written rules
+make activate MANAGER_ID=1                                          # publishes its hand-written rules
 cd backend && uv run python -m app.cli load ../processes/travel-expenses.json
 cd backend && uv run python -m app.cli load ../processes/invoice-payment.json --compile  # needs LLM keys
 ```
@@ -35,6 +35,15 @@ Loading is idempotent (`backend/app/features/processes/definition.py`):
 | `users` | no | `[{name, email, role}]`, `role`: `manager` or `operator` |
 
 Rejected: repeated types, symbols or rule texts; no default type or more than one; a default that requires a human; two types sharing a priority; no `requires_human` type; a rule whose decision does not exist.
+
+The document extraction contract comes from declared symbols and their optional
+`extraction` hints. The backend also inspects literal symbol and source references in
+enforced rule code with Python's AST and reports undeclared symbols; it does not infer
+new extraction fields or call an LLM for this analysis. The plan is available at
+`GET /processes/{id}/extraction-plan`. Once a process has an active published version,
+that version supplies the contract. Unpublished draft edits have no effect until
+publication. Each request reads the current version; unchanged rule analysis is cached
+in memory, and publication changes its cache identity without a server restart.
 
 When a required symbol is missing, a rule's code fails at runtime, or two fired types tie on priority, the engine decides the highest-priority `requires_human` type with the reason (`MISSING_DATA ...` / `RULE_ERROR ...` / `RULE_CONFLICT ...`), so a person sees the case and the default is never produced with a rule unevaluated (ADR 0016). That is why every process needs such a type.
 

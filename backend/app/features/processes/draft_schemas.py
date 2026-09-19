@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal, Self
 from pydantic import BaseModel, Field, model_validator
 
 from app.features.processes.definition import Definition
-from app.features.processes.schemas import DecisionTypeIO, SymbolIO
+from app.features.processes.schemas import DecisionReviewConfig, DecisionTypeIO, SymbolIO
 
 
 class Evidence(BaseModel):
@@ -39,6 +39,12 @@ class RuleProposal(BaseModel):
     evidence: list[Evidence] = Field(min_length=1)
 
 
+class GuidanceProposal(BaseModel):
+    name: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    evidence: list[Evidence] = Field(min_length=1)
+
+
 class AcceptanceExample(BaseModel):
     name: str = Field(min_length=1)
     instance: dict[str, Any]
@@ -55,13 +61,15 @@ class DraftPlan(BaseModel):
     symbols: list[SymbolIO] = []
     sources: list[SourceProposal] = []
     rules: list[RuleProposal] = []
+    decision_review: DecisionReviewConfig | None = None
+    guidance: list[GuidanceProposal] = []
     examples: list[AcceptanceExample] = []
     questions: list[str] = []
     summary: str = "Describe the decision you want this process to make."
 
     @model_validator(mode="after")
     def unique_names(self) -> Self:
-        for field in ("sources", "rules", "examples", "symbols", "decision_types"):
+        for field in ("sources", "rules", "guidance", "examples", "symbols", "decision_types"):
             names = [item.name for item in getattr(self, field)]
             if len(names) != len(set(names)):
                 raise ValueError(f"Duplicate {field} names")
@@ -73,6 +81,7 @@ class DraftPlan(BaseModel):
             description=self.description,
             decision_types=self.decision_types,
             symbols=self.symbols,
+            decision_review=self.decision_review,
             rules=[r.model_dump(exclude={"name", "evidence"}) for r in self.rules],
         )
 
@@ -88,6 +97,7 @@ class RevisionIn(BaseModel):
 
 
 class MessageIn(RevisionIn):
+    mode: Literal["discuss", "revise"] = "discuss"
     message: str = Field(min_length=1, max_length=16000)
 
 
@@ -109,3 +119,10 @@ class DraftOut(BaseModel):
     snapshots: list[dict[str, Any]]
     connectors: list[str]
     preview: dict[str, Any] | None
+    changes: list[dict[str, Any]] = []
+
+
+class Discussion(BaseModel):
+    message: str = Field(min_length=1)
+    evidence: list[str] = []
+    questions: list[str] = []

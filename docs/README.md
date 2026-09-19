@@ -4,6 +4,7 @@ Start with the [root README](../README.md) for what the system does, then:
 
 | Document | What it is |
 |---|---|
+| [defense.md](defense.md) | The 6-8 minute demo for the jury, step by step against the rubric, with commands and evidence |
 | [CONVENTIONS.md](CONVENTIONS.md) | Language, naming and the contracts every feature shares |
 | [team-guide.md](team-guide.md) | Git flow, backend layout, running and testing locally |
 | [api.md](api.md) | The API, screen by screen, for whoever builds the console |
@@ -26,3 +27,5 @@ Superseded plans and analyses are archived under [`.artifacts/`](../.artifacts/)
 history, not guidance.
 
 [Process versions and replay](process-versions.md): draft, validate, approve, publish and reproduce a decision.
+
+- [Process chat](process-chat.md): discuss existing processes, propose edits and preview their impact.

@@ -63,6 +63,32 @@ def test_gemini_failure_falls_back_to_helm_image(settings, monkeypatch, status):
     assert requests == ["generativelanguage.googleapis.com", "api.helmcode.com"]
 
 
+def test_uncertain_first_provider_replays_blocked_and_falls_back(settings, monkeypatch):
+    requests = []
+
+    def respond(request):
+        requests.append(request.url.host)
+        if request.url.host == "generativelanguage.googleapis.com":
+            raise httpx.ReadTimeout("delivery uncertain")
+        return httpx.Response(
+            200,
+            json={"choices": [{"finish_reason": "stop", "message": {"content": "Lote: 12345"}}]},
+        )
+
+    mock_client(monkeypatch, respond)
+    model = VisionFallback(
+        replace(
+            settings,
+            gemini_api_key="secret",
+            helmcode_api_key="secret",
+            helmcode_vision_models=("qwen3.6",),
+        )
+    )
+    assert model.transcribe(b"image", 1, (595, 842))[0].raw == "Lote: 12345"
+    assert model.transcribe(b"image", 1, (595, 842))[0].raw == "Lote: 12345"
+    assert requests == ["generativelanguage.googleapis.com", "api.helmcode.com"]
+
+
 def test_two_helm_models_have_distinct_visual_votes(settings, monkeypatch):
     def respond(request):
         return httpx.Response(

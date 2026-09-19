@@ -32,7 +32,9 @@ Invoice fields expose `value`, `proposed_value`, `proposed_by`, `verification`,
 clear native evidence or reader corroboration for `value`; an unresolved conflict
 returns `value=null` and preserves `proposed_value` and candidates. Jev can propose
 an existing reading but cannot verify these identifiers. `selected_by=null` when
-no value is accepted. The other fields retain the best-reading v2.0 policy.
+no value is accepted. In local/hybrid modes, the other fields retain the
+best-reading v2.0 policy. API mode requires native evidence or independent visual
+corroboration for every accepted field; a lone visual proposal remains unconfirmed.
 Verification concerns transcription, not business validity: a clearly printed IBAN
 that differs from the master remains a document observation for the rules to reject.
 Raw text remains available when normalization fails. No reading means `null`, not an error.
@@ -61,10 +63,12 @@ Original bytes/text are stored in PostgreSQL. New instances are `PENDING`. Proce
 declaring the invoice-payment symbols (`issuer_nif`, `iban`, `purchase_order`, `date`,
 `base`, `vat_rate`, `vat_amount`, `total`) automatically receive document-derived symbols
 in the current dev format: `{name: {value, origin}}`. Other processes extract their
-current declared fields through the schema adapter; invoice processes can add
+published declared fields through the schema adapter; invoice processes can add
 fields while preserving the default invoice parser. Missing readings never create
-a REVIEW state. Field/rule definitions update the extraction contract on the next
-request; environment settings require a restart. See [process fields](../../processes/README.md).
+a REVIEW state. Publishing field/rule changes updates the extraction contract on
+the next request; drafts do not affect an active version. Before the first
+publication, the adapter can read the initial process definition. Environment
+settings require a restart. See [process fields](../../processes/README.md).
 Re-uploading the same process,
 filename and content preserves the instance and any existing downstream decisions.
 Pending duplicates check extraction, source and symbol-schema freshness before reusing
