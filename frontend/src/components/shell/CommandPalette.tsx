@@ -58,6 +58,7 @@ export function CommandPalette() {
         { id: 'inputs', label: 'Inputs', hint: 'definición', to: paths.definitionInputs(processId) },
         { id: 'fuentes', label: 'Fuentes de verdad', hint: 'ERP y maestros', to: paths.definitionSources(processId) },
         { id: 'inst', label: 'Ejecuciones', hint: 'histórico del lote', to: paths.instances(processId) },
+        { id: 'reception', label: 'Recepción', hint: 'correos y adjuntos', to: paths.reception(processId) },
         { id: 'review', label: 'Revisión', hint: 'esperando a una persona', to: paths.review(processId) },
         { id: 'psettings', label: 'Ajustes del proceso', hint: 'OCR y modelos', to: paths.processSettings(processId) },
       )

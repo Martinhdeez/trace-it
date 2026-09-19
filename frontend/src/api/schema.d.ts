@@ -185,6 +185,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mail-ingestion/{process_id}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Heartbeat */
+        post: operations["heartbeatMailWorker"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/mail-ingestion/{process_id}/initialize": {
         parameters: {
             query?: never;
@@ -287,6 +304,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mail-ingestion/{process_id}/messages/{message_id}/attachments/{attachment_id}/reading": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reading */
+        post: operations["startMailAttachmentReading"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/mail-ingestion/{process_id}/messages/{message_id}/attachments/{attachment_id}/failure": {
         parameters: {
             query?: never;
@@ -347,6 +381,74 @@ export interface paths {
         };
         /** Overview */
         get: operations["getMailOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/mail-ingestion/attachments/{attachment_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Attachment */
+        post: operations["retryMailAttachment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/mail-ingestion/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mail Activity */
+        get: operations["getMailActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/mail-ingestion/activity/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read Activity */
+        post: operations["readMailActivity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/mail-ingestion/messages/{message_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** History */
+        get: operations["getMailMessageHistory"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2105,6 +2207,26 @@ export interface components {
             /** Note */
             note?: string | null;
         };
+        /** ActivityOut */
+        ActivityOut: {
+            /** Id */
+            id: number;
+            /** Message Id */
+            message_id: number;
+            /** Attachment Id */
+            attachment_id: number | null;
+            /** Kind */
+            kind: string;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** AdoptionOut */
         AdoptionOut: {
             /** Id */
@@ -2346,6 +2468,22 @@ export interface components {
             decision_id: number | null;
             /** Decision */
             decision?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Requires Review
+             * @default false
+             */
+            requires_review: boolean;
+            /**
+             * Can Retry
+             * @default false
+             */
+            can_retry: boolean;
+            /** Reading At */
+            reading_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
         };
         /** AuthConfig */
         AuthConfig: {
@@ -3705,6 +3843,14 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HeartbeatIn */
+        HeartbeatIn: {
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "polling" | "processing" | "waiting" | "stopped";
+        };
         /** HttpSourceConfig */
         HttpSourceConfig: {
             /**
@@ -3922,6 +4068,20 @@ export interface components {
             pending: components["schemas"]["Pending"];
             version: components["schemas"]["VersionRef"] | null;
         };
+        /** LegacyMailAudit */
+        LegacyMailAudit: {
+            /** Id */
+            id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+        };
         /** LlmStats */
         LlmStats: {
             /** Model */
@@ -3993,6 +4153,24 @@ export interface components {
             /** Email */
             email: string;
         };
+        /** MailActivityFeed */
+        MailActivityFeed: {
+            /** Items */
+            items: components["schemas"]["ActivityOut"][];
+            /** Latest Id */
+            latest_id: number;
+            /** Through Id */
+            through_id: number;
+            /** Initialized */
+            initialized: boolean;
+            /** Unread */
+            unread: number;
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+        };
         /** MailFailureIn */
         MailFailureIn: {
             /**
@@ -4006,17 +4184,26 @@ export interface components {
              */
             permanent: boolean;
         };
+        /** MailHistory */
+        MailHistory: {
+            /** Activities */
+            activities: components["schemas"]["ActivityOut"][];
+            /** Operator Audit */
+            operator_audit: components["schemas"]["LegacyMailAudit"][];
+        };
         /** MailOverview */
         MailOverview: {
             account: components["schemas"]["MailState"] | null;
             /** Messages */
             messages: components["schemas"]["MessageOut"][];
+            /** Next Before Id */
+            next_before_id?: number | null;
         };
         /** MailState */
         MailState: {
             /**
              * Protocol Version
-             * @default 1
+             * @default 2
              */
             protocol_version: number;
             /** Id */
@@ -4039,6 +4226,10 @@ export interface components {
             next_uid: number | null;
             /** Last Poll At */
             last_poll_at: string | null;
+            /** Heartbeat At */
+            heartbeat_at?: string | null;
+            /** Worker Phase */
+            worker_phase?: string | null;
             /** Retry At */
             retry_at: string | null;
             /** Error */
@@ -4643,6 +4834,11 @@ export interface components {
              */
             max_retry_after_seconds: number;
         };
+        /** ReadActivityIn */
+        ReadActivityIn: {
+            /** Through Id */
+            through_id: number;
+        };
         /** ReadingLocation */
         ReadingLocation: {
             /** Candidate */
@@ -4730,6 +4926,11 @@ export interface components {
             reason: string;
             /** Proposal Id */
             proposal_id?: number | null;
+        };
+        /** RetryAttachmentIn */
+        RetryAttachmentIn: {
+            /** Expected Attempts */
+            expected_attempts: number;
         };
         /** RetryConfig */
         RetryConfig: {
@@ -6267,6 +6468,41 @@ export interface operations {
             };
         };
     };
+    heartbeatMailWorker: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     initializeMailCursor: {
         parameters: {
             query?: never;
@@ -6478,6 +6714,41 @@ export interface operations {
             };
         };
     };
+    startMailAttachmentReading: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Mail-Lease": string;
+            };
+            path: {
+                message_id: number;
+                attachment_id: number;
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rejectMailAttachment: {
         parameters: {
             query?: never;
@@ -6593,6 +6864,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                before_id?: number | null;
             };
             header?: {
                 "x-user-id"?: number | null;
@@ -6611,6 +6883,151 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MailOverview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retryMailAttachment: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+                attachment_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryAttachmentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getMailActivity: {
+        parameters: {
+            query?: {
+                after_id?: number | null;
+                limit?: number;
+            };
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailActivityFeed"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readMailActivity: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadActivityIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailActivityFeed"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getMailMessageHistory: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+                message_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailHistory"];
                 };
             };
             /** @description Validation Error */

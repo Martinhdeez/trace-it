@@ -10,6 +10,8 @@ import { Queue } from './routes/Queue'
 import { Rule } from './routes/Rule'
 import { Settings } from './routes/Settings'
 import { Definition } from './routes/Definition'
+import { Reception } from './routes/Reception'
+import { MailNotifications } from './components/process/MailNotifications'
 import { ProcessSettings } from './routes/ProcessSettings'
 import { paths } from './lib/paths'
 import { useSession } from './state/session'
@@ -25,6 +27,7 @@ export default function App() {
         <Route path="/processes/:processId" element={<Process />} />
         <Route path="/processes/:processId/definition/*" element={<Definition />} />
         <Route path="/processes/:processId/review" element={<Queue />} />
+        <Route path="/processes/:processId/reception" element={<Reception />} />
         <Route path="/processes/:processId/settings" element={<ProcessSettings />} />
         <Route path="/processes/:processId/instances" element={<Instances />} />
         <Route path="/processes/:processId/rules/:ruleId" element={<Rule />} />
@@ -46,6 +49,7 @@ function Console() {
   return (
     <AppShell>
       <div className="relative flex min-h-0 flex-1 flex-col">
+        <MailNotifications />
         {user ? <Outlet /> : identityError ? <ErrorNotice error={identityError} /> : null}
       </div>
     </AppShell>

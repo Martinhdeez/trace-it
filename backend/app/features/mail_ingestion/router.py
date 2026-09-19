@@ -6,27 +6,35 @@ from sqlalchemy import select
 from app.common.exceptions import ConflictError
 from app.core import events
 from app.core.database import Session
+from app.core.events import Event
 from app.features.ingestion import process_service
 from app.features.ingestion.process_router import Service
 from app.features.processes.model import Process
 from app.features.users.dependencies import CurrentUser, Manager
 from app.features.versions.service import lock
 
-from . import service
+from . import activity, service
 from .auth import MailIdentity
 from .config import MailSettings
-from .model import MailAccount, MailMessage
+from .model import MailAccount, MailActivity, MailMessage
 from .schemas import (
+    ActivityOut,
     AttachmentOut,
     ClaimedMessage,
     DiscoverIn,
     GatheringSettings,
+    HeartbeatIn,
     InitializeIn,
+    LegacyMailAudit,
+    MailActivityFeed,
     MailFailureIn,
+    MailHistory,
     MailOverview,
     MailState,
     ManifestIn,
     MessageOut,
+    ReadActivityIn,
+    RetryAttachmentIn,
 )
 
 router = APIRouter(tags=["mail ingestion"])
@@ -80,6 +88,13 @@ async def state(account: MailIdentity) -> MailState:
     return MailState.model_validate(account)
 
 
+@router.post(ROOT + "/heartbeat", operation_id="heartbeatMailWorker")
+async def heartbeat(body: HeartbeatIn, session: Session, account: MailIdentity) -> MailState:
+    account.heartbeat_at, account.worker_phase = service.now(), body.phase
+    await session.commit()
+    return MailState.model_validate(account)
+
+
 @router.post(ROOT + "/initialize", operation_id="initializeMailCursor")
 async def initialize(body: InitializeIn, session: Session, account: MailIdentity) -> MailState:
     return await service.initialize(session, account, body)
@@ -130,7 +145,7 @@ async def import_pdf(
 ) -> AttachmentOut:
     message = await service.leased(session, account, message_id, lease)
     row = await service.attachment(session, message, attachment_id)
-    if row.state != "discovered":
+    if row.state not in ("discovered", "reading"):
         return AttachmentOut.model_validate(row)
     content = bytearray()
     limit = MailSettings().max_pdf_bytes
@@ -141,6 +156,22 @@ async def import_pdf(
             return AttachmentOut.model_validate(row)
         content.extend(chunk)
     return await service.import_pdf(session, account, message, row, bytes(content), extraction)
+
+
+@router.post(
+    ROOT + "/messages/{message_id}/attachments/{attachment_id}/reading",
+    operation_id="startMailAttachmentReading",
+)
+async def reading(
+    message_id: int, attachment_id: int, session: Session, account: MailIdentity, lease: Lease
+) -> AttachmentOut:
+    message = await service.leased(session, account, message_id, lease)
+    row = await service.attachment(session, message, attachment_id)
+    if row.state == "discovered":
+        row.state, row.reading_at = "reading", service.now()
+        activity.record(session, account, message, "reading", row, original_name=row.original_name)
+        await session.commit()
+    return AttachmentOut.model_validate(row)
 
 
 @router.post(
@@ -157,8 +188,9 @@ async def reject(
 ) -> AttachmentOut:
     message = await service.leased(session, account, message_id, lease)
     row = await service.attachment(session, message, attachment_id)
-    if row.state == "discovered":
+    if row.state in ("discovered", "reading"):
         row.state, row.error = "failed", body.error
+        activity.record(session, account, message, "attachment_failed", row, error=row.error)
     await session.commit()
     return AttachmentOut.model_validate(row)
 
@@ -192,7 +224,9 @@ async def overview(
     session: Session,
     user: CurrentUser,
     limit: int = Query(default=50, ge=1, le=200),
+    before_id: int | None = Query(default=None, ge=1),
 ) -> MailOverview:
+    await process_service.require_process(session, process_id)
     account = await session.scalar(select(MailAccount).where(MailAccount.process_id == process_id))
     messages = (
         []
@@ -200,11 +234,86 @@ async def overview(
         else await session.scalars(
             select(MailMessage)
             .where(MailMessage.account_id == account.id)
+            .where(MailMessage.id < before_id if before_id else True)
             .order_by(MailMessage.id.desc())
-            .limit(limit)
+            .limit(limit + 1)
         )
     )
+    messages = list(messages)
     return MailOverview(
         account=MailState.model_validate(account) if account else None,
-        messages=[await service.message_out(session, message) for message in messages],
+        messages=[await service.message_out(session, message) for message in messages[:limit]],
+        next_before_id=messages[limit - 1].id if len(messages) > limit else None,
+    )
+
+
+@router.post(
+    "/processes/{process_id}/mail-ingestion/attachments/{attachment_id}/retry",
+    operation_id="retryMailAttachment",
+)
+async def retry_attachment(
+    process_id: int, attachment_id: int, body: RetryAttachmentIn, session: Session, user: Manager
+) -> MessageOut:
+    return await activity.retry(session, process_id, attachment_id, body.expected_attempts, user)
+
+
+@router.get("/processes/{process_id}/mail-ingestion/activity", operation_id="getMailActivity")
+async def mail_activity(
+    process_id: int,
+    session: Session,
+    user: CurrentUser,
+    after_id: int | None = Query(default=None, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
+) -> MailActivityFeed:
+    await process_service.require_process(session, process_id)
+    return await activity.feed(session, process_id, user.id, after_id, limit)
+
+
+@router.post(
+    "/processes/{process_id}/mail-ingestion/activity/read", operation_id="readMailActivity"
+)
+async def read_activity(
+    process_id: int, body: ReadActivityIn, session: Session, user: CurrentUser
+) -> MailActivityFeed:
+    await process_service.require_process(session, process_id)
+    return await activity.mark_read(session, process_id, user.id, body.through_id)
+
+
+@router.get(
+    "/processes/{process_id}/mail-ingestion/messages/{message_id}/history",
+    operation_id="getMailMessageHistory",
+)
+async def history(
+    process_id: int, message_id: int, session: Session, user: CurrentUser
+) -> MailHistory:
+    from app.common.exceptions import NotFoundError
+
+    message = await session.scalar(
+        select(MailMessage)
+        .join(MailAccount)
+        .where(MailMessage.id == message_id, MailAccount.process_id == process_id)
+    )
+    if message is None:
+        raise NotFoundError("Message does not belong to this process")
+    rows = await session.scalars(
+        select(MailActivity)
+        .where(MailActivity.message_id == message_id)
+        .order_by(MailActivity.id)
+        .limit(500)
+    )
+    old = await session.scalars(
+        select(Event)
+        .where(
+            Event.process_id == process_id,
+            Event.step == "mail_operator",
+            Event.data["message_id"].as_integer() == message_id,
+        )
+        .order_by(Event.id)
+        .limit(100)
+    )
+    return MailHistory(
+        activities=[ActivityOut.model_validate(r) for r in rows],
+        operator_audit=[
+            LegacyMailAudit(id=e.id, created_at=e.created_at, data=e.data or {}) for e in old
+        ],
     )

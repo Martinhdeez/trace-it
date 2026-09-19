@@ -210,7 +210,7 @@ async def test_recoverable_pdf_uses_process_extraction_and_decision(pipeline):
     assert before == (server.messages, server.flags)
 
 
-@pytest.mark.parametrize("lost_path", ["/manifest", "/attachments/", "/finish"])
+@pytest.mark.parametrize("lost_path", ["/manifest", "/reading", "/attachments/", "/finish"])
 async def test_server_committed_but_client_lost_response(pipeline, lost_path):
     server, worker, human = pipeline
     await worker.initialize()
@@ -221,7 +221,7 @@ async def test_server_committed_but_client_lost_response(pipeline, lost_path):
     async def lose_once(method, path="", **kwargs):
         nonlocal lost
         result = await request(method, path, **kwargs)
-        if not lost and lost_path in path:
+        if not lost and lost_path in path and (lost_path != "/attachments/" or method == "PUT"):
             lost = True
             raise httpx.ReadTimeout("Synthetic lost response")
         return result
@@ -502,7 +502,7 @@ async def test_committed_import_finishes_independently_of_mailbox_availability(p
     async def lose_import_response(method, path="", **kwargs):
         nonlocal lost
         result = await request(method, path, **kwargs)
-        if "/attachments/" in path and not lost:
+        if method == "PUT" and "/attachments/" in path and not lost:
             lost = True
             raise httpx.ReadTimeout("Synthetic lost import response")
         return result

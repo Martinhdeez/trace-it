@@ -21,6 +21,8 @@ class MailAccount(Base):
     initial_uid: Mapped[int | None] = mapped_column(BigInteger)
     next_uid: Mapped[int | None] = mapped_column(BigInteger)
     last_poll_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    worker_phase: Mapped[str | None]
     retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     failures: Mapped[int] = mapped_column(default=0)
     error: Mapped[str | None]
@@ -63,7 +65,29 @@ class MailAttachment(Base):
     instance_id: Mapped[int | None] = mapped_column(ForeignKey("instances.id"))
     execution_id: Mapped[int | None] = mapped_column(ForeignKey("executions.id"))
     decision_id: Mapped[int | None] = mapped_column(ForeignKey("decisions.id"))
+    reading_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[created_at]
+
+
+class MailActivity(Base):
+    """Durable reception transitions, committed with their message/attachment state."""
+
+    __tablename__ = "mail_activity"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    process_id: Mapped[int] = mapped_column(ForeignKey("processes.id"), index=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("mail_messages.id"), index=True)
+    attachment_id: Mapped[int | None] = mapped_column(ForeignKey("mail_attachments.id"))
+    kind: Mapped[str]
+    data: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[created_at]
+
+
+class MailActivityRead(Base):
+    __tablename__ = "mail_activity_reads"
+    process_id: Mapped[int] = mapped_column(ForeignKey("processes.id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    through_id: Mapped[int] = mapped_column(BigInteger, default=0)
 
 
 class RunOperation(Base):
