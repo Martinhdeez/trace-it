@@ -61,6 +61,31 @@ def consistent_examples(plan: DraftPlan) -> None:
                 )
 
 
+def usable_extraction(plan: DraftPlan) -> None:
+    """A symbol's `extraction.source` says where its value comes from: `document` (default,
+    the labels are matched in the page), `filename`, `text` (the WHOLE transcript, for one
+    free-text symbol) or `none`. Asking for the whole transcript while declaring labels, or
+    for anything that is not text, produces a symbol that can only be the entire page or
+    null. Observed with the hiring pack: every symbol was published as `text`, so each case
+    escalated on data the reader had in front of it."""
+    for symbol in plan.symbols:
+        extraction = symbol.extraction
+        if extraction is None or extraction.source != "text":
+            continue
+        if symbol.type not in {"text", "string"}:
+            raise ConflictError(
+                f"Symbol `{symbol.name}` is a {symbol.type} but reads the whole transcript "
+                '(extraction.source "text"), which can only be null. Use "document" to match '
+                "its labels in the page"
+            )
+        if extraction.labels:
+            raise ConflictError(
+                f"Symbol `{symbol.name}` declares labels but reads the whole transcript "
+                '(extraction.source "text"), so the labels are ignored and its value is the '
+                'entire page. Use "document" to match them'
+            )
+
+
 def ready(plan: DraftPlan, reviews: dict):
     if plan.questions:
         raise ConflictError("Answer the outstanding questions before compiling")
@@ -76,6 +101,7 @@ def ready(plan: DraftPlan, reviews: dict):
     if any(e.decision not in known for e in plan.examples):
         raise ConflictError("An acceptance example names an unknown outcome")
     consistent_examples(plan)
+    usable_extraction(plan)
 
 
 def compiled_rules(compilations: list[dict]) -> list[Rule]:

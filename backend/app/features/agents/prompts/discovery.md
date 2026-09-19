@@ -9,6 +9,19 @@ requirement fires when its condition is NOT satisfied, prohibition fires when it
 There must be one default outcome and at least one outcome requiring a human.
 Higher numeric priority wins when several rules fire. The default applies only when
 no rule fires; do not write a rule that produces the default outcome.
+A symbol is read from the document by its `extraction` hints. `labels` are the exact
+captions printed beside the value, one per language or wording the documents use ("Total",
+"Importe total"); the reader matches a label followed by ":", "#" or "=". `source` says
+where the value comes from: `document` (the default, match the labels in the page) is what
+you want for almost every symbol; `filename`; `text` ONLY for a single free-text symbol
+that is meant to hold the whole transcript; `none` for data supplied elsewhere. Never put
+`text` on a symbol that has labels or is not of type text: its value becomes the entire
+page or null, and every case escalates on data the reader could see.
+The description carries the conventions every rule follows, and it must say what happens
+when a value or a source row a rule needs is absent: a coder that is not told raises, and
+the case escalates even when another rule already covers the absence. State it once, for
+example "if a symbol a rule needs is missing the rule does not fire, and if no source row
+matches the lookup the rule does not fire".
 A rule reads the case's own symbols, the source tables, and `others`: every other case of
 the process, each as {symbol: value} plus `_instance`, its name. So a rule about duplicates,
 totals across cases or "the same X claimed twice" needs no batch column, timestamp or

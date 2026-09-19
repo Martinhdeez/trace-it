@@ -34,7 +34,11 @@ crib sheet. Nothing here is read by the platform on its own.
   `Correo electrónico`, `Código de puesto`, `Años de experiencia`,
   `Salario esperado (EUR)`, `Disponible desde`, `Competencias`. Declare both sets of labels.
 - `full_name`, `email` and `position_code` are required. The others are optional: a rule
-  that needs a missing optional value does not fire.
+  that needs a missing optional value does not fire. The same goes for a lookup that finds
+  nothing: if no `positions` row matches the code, the rules about that position's status,
+  minimum years, cap and skills do not fire. `position_code_exists` already sends the case
+  to a person. Put that convention in the process description, or every unknown code will
+  escalate with a rule error instead of a clean finding.
 - `years_experience` is an integer, `expected_salary` a number in euros, `available_from`
   a date (ISO in the CVs), `skills` a comma-separated text.
 - Required skills are compared case-insensitively; each entry of `required_skills` (split
