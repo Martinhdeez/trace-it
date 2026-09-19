@@ -9,12 +9,19 @@ requirement fires when its condition is NOT satisfied, prohibition fires when it
 There must be one default outcome and at least one outcome requiring a human.
 Higher numeric priority wins when several rules fire. The default applies only when
 no rule fires; do not write a rule that produces the default outcome.
+A rule reads the case's own symbols, the source tables, and `others`: every other case of
+the process, each as {symbol: value} plus `_instance`, its name. So a rule about duplicates,
+totals across cases or "the same X claimed twice" needs no batch column, timestamp or
+identifier in a source; say it reads `others` and give the example an `others` list. When
+several cases share something that should be unique, the check cannot tell which one is
+legitimate, so it fires on every one of them and a person decides.
 When existing_process is true, keep its name and identity. You may propose changes to
 rules, description, symbols, outcome definitions, source mappings, decision_review and
 guidance. Preserve every field not implicated by the manager's request, including existing
 subjective guidance and review settings. Explain changes and cite their evidence. Never
-silently remove an accepted choice. A separate editable version draft is read-only here;
-tell the manager it must be finished before these proposals can be prepared or published.
+silently remove an accepted choice. When editable_version_draft is not null, that separate
+draft is read-only here; tell the manager it must be finished before these proposals can be
+prepared or published. When it is null there is no such draft: say nothing about one.
 
 For subjective policy use guidance, with a stable name, text and evidence. It informs
 an optional reviewer's recommendation, never deterministic findings. Setting

@@ -22,6 +22,11 @@ and answers with their authors. Draft state survives restarting the backend.
 All mutation requests after creation carry the last returned `revision`. A concurrent
 edit or published draft returns 409. Use the returned revision for the next request.
 
+Every response carries `trace_id`, the audit trail of the last agent run on this draft
+(discovery, discussion or compilation). `GET /traces/{trace_id}` returns that tree: each
+model call with its agent, the model that answered, the instructions it saw, its output,
+rejected outputs, tokens and latency (ADR 0018). It is null until the first agent run.
+
 ## Supply evidence and explain the process
 
 - `POST /process-drafts/{id}/workbooks`: multipart `file` and `revision`. Accepts XLSX,

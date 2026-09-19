@@ -14,7 +14,7 @@ from app.core.database import session_factory
 from app.features.agents import llm
 from app.features.decisions.model import Decision, Finding
 from app.features.ingestion.model import File, Instance
-from app.features.processes.draft_compilation import proposals
+from app.features.processes.draft_compilation import proposals, ready
 from app.features.processes.draft_schemas import DraftPlan
 from app.features.processes.model import Process
 from app.features.rules.model import Rule
@@ -595,3 +595,40 @@ async def test_discovery_does_not_overwrite_a_process_draft(api, monkeypatch):
     assert result.status_code == 409
     unchanged = (await api.get(f"/processes/{pid}/draft")).json()
     assert unchanged == staged.json()
+
+
+async def test_a_revision_that_omits_the_name_keeps_the_one_the_manager_gave(api, monkeypatch):
+    """Observed with the hiring pack: the third revision returned the whole plan with an
+    empty name, and preparation then refused the draft for a reason the manager could not
+    act on. The name is identity, not a proposal."""
+    proposed = plan()
+    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [proposed]}))
+    draft = (await api.post("/process-drafts", json={"name": proposed["name"]})).json()
+    draft = await post(api, draft, "messages", message="Discover the amount policy.")
+    assert draft["plan"]["name"] == proposed["name"]
+
+    nameless = plan(proposed["name"]) | {"name": ""}
+    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [nameless]}))
+    draft = await post(api, draft, "messages", message="Where my notes are silent, escalate.")
+    assert draft["plan"]["name"] == proposed["name"]
+    assert draft["plan"]["rules"], "the rest of the revision is kept as proposed"
+
+    draft = await accept(api, draft)
+    ready(DraftPlan.model_validate(draft["plan"]), draft["reviews"])  # no 409 about the name
+
+
+async def test_a_revision_returns_the_trace_of_the_agent_run_it_performed(api, monkeypatch):
+    """Observability: the caller gets a handle on what the agent just did, instead of
+    scanning recent spans and guessing which ones were its own."""
+    proposed = plan()
+    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [proposed]}))
+    draft = (await api.post("/process-drafts", json={"name": proposed["name"]})).json()
+    assert draft["trace_id"] is None
+    draft = await post(api, draft, "messages", message="Discover the amount policy.")
+
+    trace_id = draft["trace_id"]
+    assert trace_id and len(trace_id) == 32
+    spans = (await api.get(f"/traces/{trace_id}")).json()
+    steps = {s["step"] for s in spans} | {c["step"] for s in spans for c in s["children"]}
+    assert "discover_process" in steps and "llm_run" in steps
+    assert (await api.get(f"/process-drafts/{draft['id']}")).json()["trace_id"] == trace_id

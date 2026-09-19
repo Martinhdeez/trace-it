@@ -79,6 +79,10 @@ Loading never overrides what was changed at runtime: a role with no stored versi
 
 A pack may carry `<pack-name>/sources.json` with the connector configuration of its sources of truth. The invoice pack configures `erp` as an HTTP source: login, paged XML, field mapping, retries, rate limit. `make erp-sync` or `POST /processes/{id}/sources/erp/sync` download it into a new snapshot. The connectors belong to the pack's use case: any process of "Invoice payment", whatever its name, syncs with this file (ADR 0013). Format and behaviour: `docs/sources-http.md`.
 
+## `hiring-screening/`: a second problem, born on stage
+
+Not a pack: the raw inputs of a hiring screening (CVs, the client's policy as an email thread, the manager's notes, a workbook of sources) and an answer key. Discovery creates the process from them live; `make hiring-demo` drives it and writes the evaluation report. See [its README](hiring-screening/README.md).
+
 ## Minimal example: travel expenses
 
 `travel-expenses.json`, another problem with other decisions:

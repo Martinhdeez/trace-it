@@ -115,6 +115,9 @@ class ReviewIn(RevisionIn):
 
 class DraftOut(BaseModel):
     execution: ExecutionSettings | None = None
+    # The audit trail of the last agent run on this draft: `GET /traces/{trace_id}` returns
+    # its tree, every model call with the instructions it saw and the output it gave.
+    trace_id: str | None = None
     id: int
     revision: int
     process_id: int | None
