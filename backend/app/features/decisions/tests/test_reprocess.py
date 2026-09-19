@@ -99,7 +99,9 @@ async def test_reprocess_and_export_a_named_batch() -> None:
     async with session_factory() as session:
         body, duplicates = await decisions.export(session, process_id, batch)
     assert duplicates == []
-    assert [json.loads(line) for line in body.splitlines()] == [
+    assert [
+        {k: v for k, v in json.loads(line).items() if k != "reason"} for line in body.splitlines()
+    ] == [
         {"file_id": "factura_1217.pdf", "result": "PAGAR"},  # not reprocessed
         {"file_id": "FA-1016_papelería.pdf", "result": "NO_PAGAR"},
     ]

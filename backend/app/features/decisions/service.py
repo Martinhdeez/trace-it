@@ -656,8 +656,17 @@ async def _export(
     undecided = [i.name for i in instances if i.id not in exported]
     if undecided:
         raise ConflictError(f"{len(undecided)} undecided instances: {', '.join(undecided[:5])}")
+    # `reason` is the rule's own reason code, as the engine recorded it (ADR 0002): no model
+    # is asked for it. The challenge allows trace fields beside the two required ones.
     body = "\n".join(
-        json.dumps({"file_id": i.name, "result": exported[i.id].decision}, ensure_ascii=False)
+        json.dumps(
+            {
+                "file_id": i.name,
+                "result": exported[i.id].decision,
+                "reason": exported[i.id].reason or "NO_FINDING",
+            },
+            ensure_ascii=False,
+        )
         for i in instances
     )
     return body, duplicates
