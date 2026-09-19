@@ -7,6 +7,7 @@ from app.features.ingestion.ocr.vision import VisionFallback
 from app.features.ingestion.schemas import ExtractOptions
 
 from .committee import POLICY_VERSION, reconcile
+from .focused import verify_identifiers
 from .invoice import parse_invoice, unresolved
 from .native import native_pages, render
 
@@ -121,6 +122,14 @@ def extract_pdf(
             failure("JEV_ERROR", "text_judge", exc)
     # Jev recommendations never overwrite image evidence or become another vote.
     fields, decisions, final_warnings = reconcile(readers, settings.ocr_min_confidence)
+    focused = verify_identifiers(
+        content, fields, readers, pages, settings, ocr, vlm, options, vision_enabled, metrics
+    )
+    for name, report in focused.items():
+        if report["errors"]:
+            warnings.append({"code": "FOCUSED_READER_ERROR", "field": name})
+        if report["value"] is None:
+            warnings.append({"code": "FOCUSED_UNRESOLVED", "field": name})
     warnings.extend(final_warnings)
     for lines in readers.values():
         warnings.extend(parse_invoice(lines, settings.ocr_min_confidence)[1])
@@ -155,6 +164,7 @@ def extract_pdf(
                 "fields": decisions,
                 "text_judge": judgment,
             },
+            "focused_verification": focused,
         },
         warnings,
         page_reports,

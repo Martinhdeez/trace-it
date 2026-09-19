@@ -57,12 +57,15 @@ def test_visual_auto_escalation_recovers_corroborated_fields_and_jev_cannot_vote
     result = service.extract(
         service.ingest(io.BytesIO(pdf_bytes("")), "scan.pdf"), ExtractOptions()
     )
-    assert result.metrics["vlm_calls"] == result.metrics["jev_calls"] == 1
+    assert result.metrics["jev_calls"] == 1
+    assert result.metrics["vlm_calls"] >= 1
     assert result.fields["supplier_tax_id"].value == "B98120774"
     assert result.fields["gross_amount"].value == "1802.90"
-    assert result.fields["payment_iban"].value == "ES4414650100951704302211"
-    assert result.fields["payment_iban"].selected_by == "text_judge"
-    assert result.fields["payment_iban"].agreeing_readers == ["visual"]
+    assert result.fields["payment_iban"].value is None
+    assert result.fields["payment_iban"].proposed_value == "ES4414650100951704302211"
+    assert result.fields["payment_iban"].selected_by is None
+    assert result.fields["payment_iban"].proposed_by == "text_judge"
+    assert result.fields["payment_iban"].agreeing_readers == []
     assert result.data["committee"]["text_judge"]["visual_vote"] is False
 
 

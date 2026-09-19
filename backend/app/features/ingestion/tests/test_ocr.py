@@ -89,7 +89,7 @@ def test_vlm_proposals_remain_unverified(settings):
         pdf_bytes(""), ExtractOptions(vlm=True), settings, OCR(), VLM()
     )
     assert fields["payment_iban"].status == "UNVERIFIED"
-    assert metrics["vlm_calls"] == 1
+    assert metrics["vlm_calls"] == 4  # Whole page plus three bounded identifier crops.
 
 
 @pytest.mark.ocr

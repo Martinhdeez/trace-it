@@ -17,7 +17,9 @@ async def require_process(session, process_id):
         raise NotFoundError(f"Process {process_id} does not exist")
 
 
-async def attach_document(session, process_id, user_id, content, result):
+async def attach_document(
+    session, process_id, user_id, content, result, symbols=None, context=None
+):
     await require_process(session, process_id)
     text = result.text
     await session.execute(
@@ -34,7 +36,7 @@ async def attach_document(session, process_id, user_id, content, result):
             file_hash=result.sha256,
             name=result.file_id,
             status="PENDING",
-            symbols=None,
+            symbols=symbols,
         )
         .on_conflict_do_nothing(
             index_elements=[Instance.process_id, Instance.name, Instance.file_hash]
@@ -59,6 +61,8 @@ async def attach_document(session, process_id, user_id, content, result):
             "user_id": user_id,
             "created": created_id is not None,
             "extraction": result.model_dump(mode="json"),
+            "symbols": symbols,
+            **(context or {}),
         },
         latency_ms=round(result.metrics.get("extraction_ms", 0)),
     )
@@ -71,6 +75,7 @@ async def attach_document(session, process_id, user_id, content, result):
         "status": instance.status,
         "created": created_id is not None,
         "extraction": result,
+        "symbols": instance.symbols,
     }
 
 
@@ -79,7 +84,10 @@ async def document_result(session, instance_id):
         raise NotFoundError(f"Instance {instance_id} does not exist")
     event = await session.scalar(
         select(Event)
-        .where(Event.instance_id == instance_id, Event.step == "ingest_document")
+        .where(
+            Event.instance_id == instance_id,
+            Event.step.in_(("ingest_document", "extract_document")),
+        )
         .order_by(Event.id.desc())
         .limit(1)
     )

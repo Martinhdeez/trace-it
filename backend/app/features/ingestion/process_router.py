@@ -2,27 +2,47 @@
 
 import logging
 import mimetypes
+import zipfile
+from datetime import date
 from typing import Annotated
 from urllib.parse import quote
+from xml.etree.ElementTree import ParseError
 
 import pymupdf
 from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import BaseModel
 
 from app.common.exceptions import TraceError
 from app.core.database import Session
+from app.features.sources.workbook import load_workbook
 from app.features.users.dependencies import CurrentUser
 
 from . import process_service
 from .errors import InvalidDocumentError
+from .process_extraction import read_document, reextract_document
 from .runtime import current_service
-from .schemas import ExtractionResult, ExtractOptions
+from .schemas import CriticalField, ExtractionResult, ExtractOptions
 from .service import ExtractionService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["ingestion"])
 Service = Annotated[ExtractionService, Depends(current_service)]
+
+
+class LoadedSource(BaseModel):
+    id: int
+    name: str
+    rows: int
+
+
+class WorkbookUpload(BaseModel):
+    process_id: int
+    file_hash: str
+    extraction_id: str
+    sources: list[LoadedSource]
+    warnings: list[dict]
 
 
 class DocumentUpload(BaseModel):
@@ -33,6 +53,7 @@ class DocumentUpload(BaseModel):
     status: str
     created: bool
     extraction: ExtractionResult
+    symbols: dict | None = None
 
 
 @router.post(
@@ -51,6 +72,7 @@ async def upload_document(
     ocr: Annotated[bool, Form()] = True,
     vlm: Annotated[bool | None, Form()] = None,
     jev: Annotated[bool | None, Form()] = None,
+    verify_fields: Annotated[list[CriticalField] | None, Form()] = None,
 ):
     try:
         await process_service.require_process(session, process_id)
@@ -60,8 +82,12 @@ async def upload_document(
                 raise InvalidDocumentError(
                     "Process documents must be PDF; use /v1/extractions to inspect a workbook"
                 )
-            result = await run_in_threadpool(
-                service.extract, item, ExtractOptions(ocr=ocr, vlm=vlm, jev=jev)
+            result, symbols, context = await read_document(
+                session,
+                process_id,
+                service,
+                item,
+                ExtractOptions(ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or []),
             )
         except (ValueError, pymupdf.FileDataError) as exc:
             raise InvalidDocumentError("Invalid or unsupported PDF document") from exc
@@ -71,7 +97,9 @@ async def upload_document(
             logger.exception("Document extraction failed")
             raise TraceError("Document extraction failed; inspect server logs") from exc
         content = await run_in_threadpool((service.objects / item["sha256"]).read_bytes)
-        return await process_service.attach_document(session, process_id, user.id, content, result)
+        return await process_service.attach_document(
+            session, process_id, user.id, content, result, symbols, context
+        )
     finally:
         await file.close()
 
@@ -84,6 +112,54 @@ async def upload_document(
 )
 async def get_document(instance_id: int, session: Session, user: CurrentUser):
     return await process_service.document_result(session, instance_id)
+
+
+@router.post(
+    "/instances/{instance_id}/extract",
+    operation_id="extractInstanceDocument",
+    summary="Re-extract a pending document using the latest source snapshots",
+    response_model=DocumentUpload,
+    responses={409: {"description": "The instance is already decided"}},
+)
+async def extract_instance(
+    instance_id: int,
+    session: Session,
+    user: CurrentUser,
+    service: Service,
+    options: ExtractOptions,
+):
+    return await reextract_document(session, instance_id, user.id, service, options)
+
+
+@router.post(
+    "/processes/{process_id}/sources/workbook",
+    status_code=201,
+    operation_id="uploadProcessWorkbook",
+    response_model=WorkbookUpload,
+    summary="Load supplier and order snapshots from an XLSX workbook",
+)
+async def upload_workbook(
+    process_id: int,
+    session: Session,
+    user: CurrentUser,
+    service: Service,
+    file: Annotated[UploadFile, File()],
+    cut_off_date: Annotated[date | None, Form()] = None,
+):
+    try:
+        await process_service.require_process(session, process_id)
+        item = await run_in_threadpool(service.ingest, file.file, file.filename)
+        if item["kind"] != "workbook":
+            raise InvalidDocumentError("Reference sources must be an XLSX workbook")
+        result = await run_in_threadpool(
+            service.extract, item, ExtractOptions(ocr=False, vlm=False, jev=False)
+        )
+        content = await run_in_threadpool((service.objects / item["sha256"]).read_bytes)
+        return await load_workbook(session, process_id, user.id, result, content, cut_off_date)
+    except (ValueError, zipfile.BadZipFile, InvalidFileException, ParseError) as exc:
+        raise InvalidDocumentError("Invalid or unsupported workbook") from exc
+    finally:
+        await file.close()
 
 
 @router.get(

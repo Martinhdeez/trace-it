@@ -2,8 +2,8 @@
 
 The backend is the contract; this page is the map. Live and exact: `make setup`, then
 http://localhost:8000/docs (OpenAPI). Every response is JSON in English; errors are
-`{"code", "message"}`. Identify with `X-User-Id` (from `POST /login`); only resolving and
-activating rules need it. CORS is open.
+`{"code", "message"}`. Identify with `X-User-Id` (from `POST /login`); resolving,
+activating rules, document extraction and source uploads need it. CORS is open.
 
 ## One screen, one call
 
@@ -30,7 +30,9 @@ activating rules need it. CORS is open.
 | Findings | `GET /processes/{id}/findings` | past decisions a later rule says were wrong |
 | Run | `POST /processes/{id}/run` | decides every PENDING instance with symbols |
 | Export | `GET /processes/{id}/export` | `outcomes.jsonl`; 409 while anything is undecided |
-| Upload | `POST /processes/{id}/files` (multipart `file`) | stores the PDF and creates the instance |
+| Upload | `POST /processes/{id}/files` (multipart `file`) | stores the PDF and fills declared invoice-payment symbols from verified readings |
+| Workbook | `POST /processes/{id}/sources/workbook` (multipart `file`, optional `cut_off_date`) | appends supplier/order snapshots; never replaces ERP |
+| Re-extract | `POST /instances/{id}/extract` (JSON `{}` or reader options) | pending documents only; current snapshots, preserved evidence; 409 if already decided |
 | Users | `GET /users`, `POST /users`, `POST /login`, `GET /me` | roles `manager`, `operator` |
 
 ## Shapes worth knowing

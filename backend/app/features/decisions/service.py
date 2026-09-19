@@ -142,8 +142,16 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
     rules = await active_rules(session, process_id)
     pending = [
         i
-        for i in await instances_of(session, process_id)
-        if i.status == "PENDING" and i.symbols is not None
+        for i in await session.scalars(
+            select(Instance)
+            .where(
+                Instance.process_id == process_id,
+                Instance.status == "PENDING",
+            )
+            .order_by(Instance.id)
+            .with_for_update()
+        )
+        if i.symbols is not None
     ]
     verdicts = await decide_all(session, process_id, rules, pending)
 

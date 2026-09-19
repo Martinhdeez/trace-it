@@ -19,7 +19,7 @@ from app.features.ingestion.schemas import ExtractionResult, ExtractOptions
 from app.features.ingestion.store import Store
 from app.features.sources.excel import extract_workbook
 
-PIPELINE_VERSION = "invoice-v2.0.0+xlsx-v1.3"
+PIPELINE_VERSION = "invoice-v2.1.4+xlsx-v1.3"
 logger = logging.getLogger(__name__)
 
 
@@ -168,7 +168,8 @@ class ExtractionService:
                     pipeline_version=PIPELINE_VERSION,
                 )
                 transient = any(
-                    w["code"] in {"OCR_ERROR", "VLM_ERROR", "JEV_ERROR"} for w in warnings
+                    w["code"] in {"OCR_ERROR", "VLM_ERROR", "JEV_ERROR", "FOCUSED_READER_ERROR"}
+                    for w in warnings
                 )
                 self.store.save(result, None if transient else key)
                 return result
