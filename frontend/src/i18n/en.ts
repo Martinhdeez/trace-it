@@ -20,6 +20,11 @@ export const en: Messages = {
     signIn: 'Sign in',
     anonymous: 'anonymous',
   },
+  processes: {
+    delete: 'Delete process',
+    confirmDelete: 'Delete this process?',
+    deleting: 'Deleting…',
+  },
   planes: {
     ingestion: 'Reading',
     agents: 'Agents',
@@ -171,6 +176,7 @@ export const en: Messages = {
     loading: 'Loading…',
     empty: 'Nothing here yet.',
     cancel: 'Cancel',
+    confirm: 'Confirm',
     save: 'Save',
     close: 'Close',
     copy: 'Copy',

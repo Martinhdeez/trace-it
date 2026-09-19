@@ -681,7 +681,11 @@ export interface paths {
         get: operations["getProcess"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete an unpublished process without runtime history
+         * @description A process with cases, source loads, published versions or other append-only history is kept.
+         */
+        delete: operations["deleteProcess"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7563,6 +7567,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProcessDetail"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deleteProcess: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

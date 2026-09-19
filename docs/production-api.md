@@ -258,6 +258,7 @@ all request/response schemas and examples and is updated together with the deplo
 - `GET /me` — The current user
 - `GET /processes` — All processes
 - `POST /processes/definition` — Create or update a whole process from its JSON definition (idempotent)
+- `DELETE /processes/{process_id}` — Delete an unpublished process without runtime history
 - `GET /processes/{process_id}` — A process with its setup
 - `GET /process-drafts` — List Drafts
 - `POST /process-drafts` — Start
