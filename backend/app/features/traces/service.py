@@ -79,6 +79,7 @@ PLANES: dict[str, Plane] = {
     "upload_workbook": _INGESTION,
     "load_workbook": _INGESTION,
     "sync_source": _INGESTION,
+    "discover_source": _INGESTION,
     # Agents writing the rules' code, and what defines and gates it.
     "load_use_case": _AGENTS,
     "load_definition": _AGENTS,
@@ -87,6 +88,9 @@ PLANES: dict[str, Plane] = {
     "save_rule": _AGENTS,
     "norm": _AGENTS,
     "normalize_norm": _AGENTS,
+    "discover_process": _AGENTS,
+    "compile_process_draft": _AGENTS,
+    "publish_process_draft": _AGENTS,
     "compile_rules": _AGENTS,
     "compile_rule": _AGENTS,
     "coder_attempt": _AGENTS,

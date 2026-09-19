@@ -1,0 +1,453 @@
+"""Saved discovery conversations. A reviewed import publishes all rules in one transaction."""
+
+import asyncio
+import copy
+import hashlib
+
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+
+from app.common.exceptions import ConflictError, NotFoundError, PermissionDeniedError
+from app.core import events
+from app.features.agents import discovery
+from app.features.decisions import service as decisions
+from app.features.ingestion.model import File
+from app.features.processes import draft_compilation as compilation
+from app.features.processes import service
+from app.features.processes.draft_schemas import (
+    DraftOut,
+    DraftPlan,
+    DraftStart,
+    Evidence,
+    RuleProposal,
+    SourceProposal,
+)
+from app.features.processes.model import (
+    DecisionType,
+    DiscoveryRevision,
+    DiscoverySession,
+    Process,
+    Symbol,
+)
+from app.features.rules.model import NormRule, Rule
+from app.features.sources import discovery as workbooks
+from app.features.sources import service as sources
+from app.features.sources.http_connector import HttpConnector, SourcesFile, SyncError
+from app.features.sources.model import Source
+from app.features.use_cases import service as use_cases
+from app.features.use_cases.model import AgentConfig, UseCase
+from app.features.versions import configuration as config
+from app.features.versions import execution
+from app.features.versions import service as versions
+from app.features.versions.model import ProcessDraft
+
+
+def manager(user):
+    if user.role != "manager":
+        raise PermissionDeniedError("Only a manager can configure a process")
+
+
+async def read(session, draft_id, revision=None, *, lock=False):
+    query = (
+        select(DiscoverySession)
+        .where(DiscoverySession.id == draft_id)
+        .execution_options(populate_existing=True)
+    )
+    draft = await session.scalar(query.with_for_update() if lock else query)
+    if draft is None:
+        raise NotFoundError(f"Draft {draft_id} does not exist")
+    if revision is not None and (draft.revision != revision or draft.published_process_id):
+        raise ConflictError("Draft changed or was published; reload before continuing")
+    stored = await session.get(DiscoveryRevision, (draft.id, draft.revision))
+    return draft, copy.deepcopy(stored.data)
+
+
+async def connectors(session, draft):
+    if draft.use_case_id is None:
+        return {}
+    use_case = await session.get(UseCase, draft.use_case_id)
+    try:
+        path = sources.pack_sources_file(sources.find_pack(use_case.name))
+    except NotFoundError:
+        return {}
+    if not path.exists():
+        return {}
+    return SourcesFile.model_validate_json(path.read_text()).sources
+
+
+async def output(session, draft_id):
+    draft, data = await read(session, draft_id)
+    return DraftOut(
+        id=draft.id,
+        revision=draft.revision,
+        process_id=draft.process_id,
+        published_process_id=draft.published_process_id,
+        plan=data["plan"],
+        reviews=data["reviews"],
+        messages=data["messages"],
+        documents=workbooks.inventory(data["documents"]),
+        snapshots=[
+            {"name": n, "origin": s["origin"], "rows": len(s["rows"])}
+            for n, s in data["snapshots"].items()
+        ],
+        connectors=list(await connectors(session, draft)),
+        preview=data.get("preview"),
+    )
+
+
+async def save(session, draft_id, revision, data, user, step):
+    draft, _ = await read(session, draft_id, revision, lock=True)
+    draft.revision += 1
+    session.add(
+        DiscoveryRevision(draft_id=draft.id, number=draft.revision, author_id=user.id, data=data)
+    )
+    events.record(
+        session,
+        step,
+        process_id=draft.process_id,
+        data={"draft_id": draft.id, "revision": draft.revision, "author": user.name},
+    )
+    await session.commit()
+    return await output(session, draft.id)
+
+
+async def fingerprint(session, process_id):
+    if process_id is None:
+        return None
+    process = await service.get(session, process_id)
+    state = {
+        "process": process.model_dump(),
+        "inputs": await execution.capture(session, process_id),
+    }
+    return config.digest(state)
+
+
+async def start(session, body: DraftStart, user):
+    manager(user)
+    plan = DraftPlan(name=body.name)
+    snapshots, base_references = {}, []
+    base = None
+    if body.process_id is not None:
+        await versions.lock(session, body.process_id)
+        if await session.get(ProcessDraft, body.process_id):
+            raise ConflictError("Publish or discard the existing process draft before discovery")
+        current = await service.get(session, body.process_id)
+        base = copy.deepcopy((await versions.active(session, body.process_id)).snapshot)
+        body.use_case_id = current.use_case_id
+        plan = DraftPlan(**current.model_dump(exclude={"id", "use_case_id"}))
+        for rule in await decisions.active_rules(session, body.process_id):
+            ref = f"rule:{rule.id}"
+            base_references.append(ref)
+            plan.rules.append(
+                RuleProposal(
+                    name=f"rule-{rule.id}",
+                    text=rule.text,
+                    type=rule.type,
+                    decision=rule.decision,
+                    evidence=[Evidence(reference=ref, explanation="Existing active rule")],
+                )
+            )
+        for source in await sources.current_loads(session, body.process_id):
+            snapshots[source.name] = {"origin": source.origin, "rows": source.rows}
+            plan.sources.append(
+                SourceProposal(
+                    name=source.name,
+                    kind="snapshot",
+                    snapshot=source.name,
+                    explanation="Existing source snapshot",
+                    evidence=[
+                        Evidence(
+                            reference=f"snapshot:{source.name}",
+                            explanation="Current process source",
+                        )
+                    ],
+                )
+            )
+    if body.use_case_id and await session.get(UseCase, body.use_case_id) is None:
+        raise NotFoundError("Use case does not exist")
+    draft = DiscoverySession(process_id=body.process_id, use_case_id=body.use_case_id, revision=1)
+    session.add(draft)
+    await session.flush()
+    data = {
+        "plan": plan.model_dump(),
+        "reviews": {},
+        "messages": [],
+        "documents": {},
+        "snapshots": snapshots,
+        "base_references": base_references,
+        "base_configuration": base,
+        "preview": None,
+        "base_fingerprint": await fingerprint(session, body.process_id),
+    }
+    session.add(DiscoveryRevision(draft_id=draft.id, number=1, author_id=user.id, data=data))
+    await session.commit()
+    return await output(session, draft.id)
+
+
+def invalidate(data):
+    data["reviews"] = {}
+    data["preview"] = None
+
+
+async def message(session, draft_id, body, user):
+    manager(user)
+    draft, data = await read(session, draft_id, body.revision)
+    data["messages"].append({"role": "user", "text": body.message, "author": user.name})
+    setups = await use_cases.setups(session, draft.use_case_id) if draft.use_case_id else {}
+    with events.span("discover_process", draft_id=draft_id, author=user.name):
+        plan = await discovery.discover(data, setups.get("discovery"))
+    data["plan"] = plan.model_dump()
+    data["messages"].append({"role": "assistant", "text": plan.summary})
+    invalidate(data)
+    return await save(session, draft_id, body.revision, data, user, "revise_process_draft")
+
+
+async def upload(session, draft_id, revision, name, content, user):
+    manager(user)
+    _, data = await read(session, draft_id, revision)
+    if len(content) > 20 * 1024 * 1024:
+        raise ConflictError("Workbook exceeds 20 MB")
+    if len(data["documents"]) >= 5:
+        raise ConflictError("A draft supports up to five workbooks")
+    workbook = await asyncio.to_thread(workbooks.read_workbook, content)
+    digest = hashlib.sha256(content).hexdigest()
+    await session.execute(
+        insert(File)
+        .values(hash=digest, name=name, content=content, text=None)
+        .on_conflict_do_nothing(index_elements=[File.hash])
+    )
+    data["documents"][digest] = {"name": name, "workbook": workbook}
+    data["messages"].append(
+        {
+            "role": "user",
+            "text": f"Uploaded workbook {name}, reference {digest}",
+            "author": user.name,
+        }
+    )
+    invalidate(data)
+    return await save(session, draft_id, revision, data, user, "upload_draft_workbook")
+
+
+async def sync(session, draft_id, revision, name, user):
+    manager(user)
+    draft, data = await read(session, draft_id, revision)
+    configs = await connectors(session, draft)
+    if name not in configs:
+        raise NotFoundError("This source is not a configured connector for the draft")
+    connector = HttpConnector(configs[name])
+    with events.span("discover_source", draft_id=draft_id, source=name, author=user.name) as span:
+        try:
+            rows = await connector.download()
+        except SyncError as error:
+            raise sources.SourceUnavailableError(str(error)) from error
+        span.set(**connector.stats.__dict__)
+    data["snapshots"][name] = {
+        "origin": f"discovery:{name}:{sources.rows_hash(rows)}",
+        "rows": rows,
+    }
+    data["messages"].append(
+        {"role": "user", "text": f"Loaded complete source snapshot:{name}", "author": user.name}
+    )
+    invalidate(data)
+    return await save(session, draft_id, revision, data, user, "load_draft_source")
+
+
+async def review(session, draft_id, body, user):
+    manager(user)
+    _, data = await read(session, draft_id, body.revision)
+    if body.proposal not in compilation.proposals(DraftPlan.model_validate(data["plan"])):
+        raise NotFoundError("Proposal does not exist in this revision")
+    data["reviews"][body.proposal] = body.disposition
+    data["preview"] = None
+    data["messages"].append(
+        {
+            "role": "user",
+            "text": f"{body.disposition}: {body.proposal}. {body.explanation}",
+            "author": user.name,
+        }
+    )
+    return await save(session, draft_id, body.revision, data, user, "review_draft_proposal")
+
+
+async def check_base(session, draft, data, plan):
+    if await fingerprint(session, draft.process_id) != data["base_fingerprint"]:
+        raise ConflictError(
+            "The process, sources or decisions changed; start a fresh draft to review their impact"
+        )
+    if draft.process_id:
+        if await session.get(ProcessDraft, draft.process_id, populate_existing=True):
+            raise ConflictError(
+                "A process draft was created; finish it before discovery publication"
+            )
+        if await session.scalar(
+            select(Rule.id)
+            .where(Rule.process_id == draft.process_id, Rule.status == "compiling")
+            .limit(1)
+        ):
+            raise ConflictError("Wait for the process's existing rule compilations to finish")
+        current = await service.get(session, draft.process_id)
+        for field in ("name", "description", "decision_types", "symbols"):
+            before = current.model_dump()[field]
+            after = plan.model_dump()[field]
+            if isinstance(before, list):
+                before, after = (
+                    sorted(before, key=lambda x: x["name"]),
+                    sorted(after, key=lambda x: x["name"]),
+                )
+            if before != after:
+                raise ConflictError(
+                    f"This import revises rules and sources; keep existing {field}. "
+                    "New processes can define their own setup"
+                )
+
+
+async def prepare(session, draft_id, revision, user):
+    manager(user)
+    draft, data = await read(session, draft_id, revision)
+    plan = DraftPlan.model_validate(data["plan"])
+    compilation.ready(plan, data["reviews"])
+    await check_base(session, draft, data, plan)
+    tables = workbooks.materialize(plan, data)
+    setups = await use_cases.setups(session, draft.use_case_id) if draft.use_case_id else {}
+    with events.span("compile_process_draft", draft_id=draft_id, author=user.name):
+        compiled = await compilation.compile_plan(plan, tables, setups)
+        data["preview"] = await compilation.preview(
+            session, draft.process_id, plan, tables, compiled, data["base_configuration"]
+        )
+    return await save(session, draft_id, revision, data, user, "preview_process_draft")
+
+
+async def publish(session, draft_id, revision, user):
+    manager(user)
+    draft, _ = await read(session, draft_id, revision)
+    if draft.process_id:
+        await versions.lock(session, draft.process_id)
+    draft, data = await read(session, draft_id, revision, lock=True)
+    plan = DraftPlan.model_validate(data["plan"])
+    compilation.ready(plan, data["reviews"])
+    if not (data.get("preview") or {}).get("valid"):
+        raise ConflictError(
+            "Compile and pass the acceptance examples and backtest before publishing"
+        )
+    await check_base(session, draft, data, plan)
+    tables = workbooks.materialize(plan, data)
+    if draft.process_id:
+        process = await session.get(Process, draft.process_id)
+    else:
+        if await session.scalar(select(Process.id).where(Process.name == plan.name)):
+            raise ConflictError("A process with this name already exists")
+        # New process owns its description; using an existing use case only supplies
+        # model settings and configured connectors during discovery.
+        use_case = UseCase(name=f"discovery-{draft.id}-{plan.name}", description=plan.description)
+        session.add(use_case)
+        await session.flush()
+        if draft.use_case_id:
+            for role, setup in (await use_cases.setups(session, draft.use_case_id)).items():
+                session.add(
+                    AgentConfig(
+                        use_case_id=use_case.id,
+                        role=role,
+                        version=1,
+                        active=True,
+                        author=user.name,
+                        config=setup.settings.model_dump(),
+                        note="From discovery setup",
+                    )
+                )
+        process = Process(name=plan.name, use_case_id=use_case.id)
+        session.add(process)
+        await session.flush()
+        session.add_all(
+            DecisionType(process_id=process.id, **t.model_dump()) for t in plan.decision_types
+        )
+        session.add_all(Symbol(process_id=process.id, **s.model_dump()) for s in plan.symbols)
+        await session.flush()
+    old = await decisions.active_rules(session, process.id) if draft.process_id else []
+    published = []
+    norms = {}
+    for number, proposal in enumerate(plan.rules, 1):
+        norm = NormRule(process_id=process.id, number=number, text=proposal.text, policies=[])
+        session.add(norm)
+        await session.flush()
+        norms[proposal.name] = norm.id
+    for item in data["preview"]["compilations"]:
+        rule = Rule(
+            process_id=process.id,
+            norm_rule_id=norms[item["proposal"]],
+            text=item["text"],
+            type=item["type"],
+            decision=item["decision"],
+            code=item["code"],
+            tests=item["tests"],
+            hash=item["hash"],
+            status="draft",
+            report={
+                **item["report"],
+                "discovery": {
+                    "draft_id": draft.id,
+                    "revision": revision,
+                    "proposal": item["proposal"],
+                    "author": user.name,
+                },
+            },
+        )
+        session.add(rule)
+        published.append(rule)
+    await session.flush()
+    base = data["base_configuration"] or await config.workspace(session, process.id)
+    snapshot = compilation.candidate(plan, data["preview"]["compilations"], base)
+    snapshot["rules"] = [config.artifact(rule) for rule in published]
+    impact = await versions.inspect(
+        session,
+        snapshot,
+        await execution.capture(session, process.id),
+        tables=tables,
+    )
+    if not impact["valid"]:
+        raise ConflictError("The candidate failed version validation; prepare and review again")
+    version = await versions.publish_snapshot(
+        session,
+        process,
+        snapshot,
+        user.name,
+        f"Approved discovery {draft.id} revision {revision}",
+        {
+            **impact,
+            "discovery_id": draft.id,
+            "revision": revision,
+            "examples": data["preview"]["examples"],
+        },
+    )
+    data["published_version_id"] = version.id
+    # Empty snapshots retire source names omitted from the proposal without deleting history.
+    previous_names = {s.name for s in await sources.current_loads(session, process.id)}
+    session.add_all(
+        Source(
+            process_id=process.id,
+            name=name,
+            rows=tables.get(name, []),
+            origin=f"draft:{draft.id}:revision:{revision}",
+        )
+        for name in previous_names | tables.keys()
+    )
+    data["published_rule_ids"] = [r.id for r in published]
+    data["retired_rule_ids"] = [r.id for r in old]
+    draft.published_process_id = process.id
+    draft.revision += 1
+    session.add(
+        DiscoveryRevision(draft_id=draft.id, number=draft.revision, author_id=user.id, data=data)
+    )
+    events.record(
+        session,
+        "publish_process_draft",
+        process_id=process.id,
+        data={
+            "draft_id": draft.id,
+            "approved_revision": revision,
+            "author": user.name,
+            "published_rules": data["published_rule_ids"],
+            "retired_rules": data["retired_rule_ids"],
+        },
+    )
+    await session.commit()
+    return await output(session, draft.id)

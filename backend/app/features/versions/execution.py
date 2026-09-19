@@ -65,12 +65,16 @@ async def capture(session, process_id: int) -> dict:
     }
 
 
-async def evaluate(session, snapshot: dict, inputs: dict, selected_ids: list[int]):
-    source_rows = list(
-        await session.scalars(select(Source).where(Source.id.in_(inputs["source_ids"])))
-    )
-    if len(source_rows) != len(inputs["source_ids"]):
-        raise ConflictError("An execution source snapshot is missing")
+async def evaluate(
+    session, snapshot: dict, inputs: dict, selected_ids: list[int], *, tables: dict | None = None
+):
+    if tables is None:
+        source_rows = list(
+            await session.scalars(select(Source).where(Source.id.in_(inputs["source_ids"])))
+        )
+        if len(source_rows) != len(inputs["source_ids"]):
+            raise ConflictError("An execution source snapshot is missing")
+        tables = {s.name: s.rows for s in source_rows}
     selected = set(selected_ids)
     population = [
         (i["id"], {**flatten_symbols(i["symbols"]), "_instance": i["name"]})
@@ -98,7 +102,7 @@ async def evaluate(session, snapshot: dict, inputs: dict, selected_ids: list[int
         config.rules(snapshot),
         config.outcomes(snapshot),
         dataset,
-        {s.name: s.rows for s in source_rows},
+        tables,
         population,
         run_dataset,
     )

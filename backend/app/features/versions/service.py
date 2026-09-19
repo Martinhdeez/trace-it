@@ -153,7 +153,7 @@ def check_configuration(snapshot: dict) -> None:
     config.setups(snapshot)
 
 
-async def inspect(session, snapshot: dict, inputs: dict) -> dict:
+async def inspect(session, snapshot: dict, inputs: dict, *, tables: dict | None = None) -> dict:
     # Validate artifacts even if the process has no past cases.
     import asyncio
 
@@ -162,7 +162,9 @@ async def inspect(session, snapshot: dict, inputs: dict) -> dict:
     except (ValueError, sandbox.SandboxError) as error:
         return {"valid": False, "error": str(error)}
     selected = [i for i in inputs["instances"] if i["decision"] and i["symbols"] is not None]
-    verdicts = await execution.evaluate(session, snapshot, inputs, [i["id"] for i in selected])
+    verdicts = await execution.evaluate(
+        session, snapshot, inputs, [i["id"] for i in selected], tables=tables
+    )
     changes, conflicts, errors = [], [], []
     unchanged = 0
     for instance in selected:

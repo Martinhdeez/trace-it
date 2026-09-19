@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field
 # compiler: writes a rule's code; tester: writes its tests and reviews disputes;
 # assistant: suggests how to resolve an escalated case; normalizer: turns a norm in
 # natural language into rule texts.
-Role = Literal["compiler", "tester", "assistant", "normalizer", "decision_reviewer", "learner"]
+Role = Literal[
+    "compiler", "tester", "assistant", "normalizer", "decision_reviewer", "learner", "discovery"
+]
 ROLES: tuple[Role, ...] = (
     "compiler",
     "tester",
@@ -14,6 +16,7 @@ ROLES: tuple[Role, ...] = (
     "normalizer",
     "decision_reviewer",
     "learner",
+    "discovery",
 )
 
 

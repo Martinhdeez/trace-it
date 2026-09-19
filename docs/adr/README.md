@@ -31,6 +31,7 @@ wins over any other document. Superseded plans live in `.artifacts/archive/`.
 | [0021](0021-optional-decision-review.md) | Review engine decisions with optional advice and human approval | accepted | Off by default; disagreements enter the human queue; failed reviews retain the engine outcome; reviewed exports respect approval |
 | [0022](0022-ocr-evidence-and-provider-tracing.md) | Preserve OCR evidence and trace each provider operation | accepted | Production demo uses OCR; immutable attached readings; model/request provenance, journal replay, sanitized provider spans and network-only usage totals |
 | [0023](0023-fal-visual-fallback-evaluation.md) | Evaluate fal.ai visual readers before selecting a production fallback | proposed | Compare Moondream and a fixed OpenRouter model; bounded opt-in queue/journal adapter only after measured evaluation |
+| [0024](0024-discover-processes-through-documents-and-conversation.md) | Build process drafts through documents and conversation before approval | accepted | Create or revise through workbook discovery and chat; review proposals, compile and backtest, then publish under the same process identity |
 
 | [0022](0022-publish-approved-process-versions.md) | Require manager publication of complete process versions | accepted | One draft, validated approval, atomic publication and deterministic replay; replaces automatic rule activation |
 
