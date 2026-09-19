@@ -5,19 +5,16 @@
  * that are not mounted answer 404; the client then falls back to the mock.
  */
 
-export type Role = 'responsable' | 'operador'
+import type { components } from './schema'
 
-export type User = {
-  id: number
-  nombre: string
-  email: string
-  rol: Role
-}
+export type User = components['schemas']['UserOut']
+
+export type Role = User['role']
 
 export type UserInput = {
   nombre: string
   email: string
-  rol: Role
+  rol: 'responsable' | 'operador'
 }
 
 export type ProcessSymbol = {
@@ -307,6 +304,7 @@ export interface ApiClient {
   health(): Promise<boolean>
 
   login(email: string): Promise<User>
+  me(): Promise<User>
   listUsers(): Promise<User[]>
 
   listProcesses(): Promise<Process[]>
