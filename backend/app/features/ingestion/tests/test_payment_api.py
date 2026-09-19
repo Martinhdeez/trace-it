@@ -137,6 +137,10 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
     assert data["symbols"]["total"]["value"] == "1802.90"
     assert data["symbols"]["total"]["origin"] == "document:" + data["extraction"]["id"]
     instance_id = data["instance_id"]
+    locations = (await client.get(f"/instances/{instance_id}/document/locations")).json()
+    assert locations["symbol_fields"]["total"] == "gross_amount"
+    assert locations["symbol_fields"]["issuer_nif"] == "supplier_tax_id"
+    assert locations["fields"]["gross_amount"][0]["boxes"]
     trace = (await client.get(f"/instances/{instance_id}")).json()["events"]
     assert trace[0]["data"]["source_ids"]["erp"] == erp_id
     original = await client.get(f"/instances/{instance_id}/file")

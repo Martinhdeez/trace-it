@@ -270,6 +270,25 @@ export type IngestedFile = {
   ingerido: string
 }
 
+export type ReadingLocation = {
+  candidate: number
+  page: number | null
+  raw: string
+  value: string | null
+  method: string
+  locator: string
+  precision: 'text' | 'ocr' | 'region' | 'page' | 'unavailable'
+  boxes: number[][]
+}
+
+export type DocumentLocations = {
+  extraction_id: string
+  sha256: string
+  pages: { number: number; width: number; height: number }[]
+  fields: Record<string, ReadingLocation[]>
+  symbol_fields: Record<string, string>
+}
+
 export type DocumentEvidence = {
   id: string
   file_id: string
@@ -282,6 +301,8 @@ export type DocumentEvidence = {
       text: string | null
       selected_by: string | null
       confidence: number | null
+      proposed_value?: string | null
+      verification?: string
     }
   >
   text: string

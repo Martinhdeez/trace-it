@@ -31,6 +31,11 @@ class ExtractedField(BaseModel):
     origin: str = "DOCUMENT"
 
 
+class TextSpan(BaseModel):
+    text: str
+    bbox: list[float]
+
+
 class TextLine(BaseModel):
     id: str
     page: int
@@ -40,3 +45,4 @@ class TextLine(BaseModel):
     method: str = "native"
     confidence: float | None = None
     preprocessing: list[str] = Field(default_factory=list)
+    spans: list[TextSpan] = Field(default_factory=list)

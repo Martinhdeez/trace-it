@@ -46,6 +46,8 @@ activating rules, document extraction and source uploads need it. CORS is open.
 | Upload | `POST /processes/{id}/files` (multipart `file`) | stores the PDF and fills symbols from the current extraction plan; existing invoice defaults are retained |
 | Workbook | `POST /processes/{id}/sources/workbook` (multipart `file`, optional `cut_off_date`) | appends supplier/order snapshots; never replaces ERP |
 | Re-extract | `POST /instances/{id}/extract` (JSON `{}` or reader options) | pending documents only; current symbol schema, rules and source snapshots, preserved evidence; 409 if already decided |
+| Locate readings | `GET /instances/{id}/document/locations` | needs `X-User-Id`; source quotes and normalized rectangles per candidate, including dynamic fields; see [PDF traceability](ingestion/pdf-traceability.md) |
+| Original page | `GET /instances/{id}/document/pages/{page}` | needs `X-User-Id`; PNG of the original PDF page (one-based), including its rotation; 404 for a missing page |
 | Users | `GET /users`, `POST /users`, `POST /login`, `GET /me` | roles `manager`, `operator` |
 | Metrics | `GET /processes/{id}/metrics?since=` | runs, step durations, LLM tokens by model and role, outcomes (unchanged) |
 | Monitoring: ingestion | `GET /processes/{id}/metrics/ingestion?since=`, `GET /metrics/ingestion` (all processes) | `files`, `files_per_second`, `pages`, `ocr_calls`, `vision_calls`, `judge_calls`, `focused_reads`, `cache_hits`, `abstentions`, `abstentions_by_field`, `steps[]` |
