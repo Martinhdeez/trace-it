@@ -1367,6 +1367,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/{instance_id}/proposal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The assistant proposes a decision for an escalated instance; a manager settles it
+         * @description Why the case escalated, the options with their consequence, the proposed one and its evidence, in `payload`. Only a proposal: no decision is taken until a manager accepts it (or resolves the instance with its `proposal_id`). A new one supersedes the instance's open proposal.
+         */
+        post: operations["proposeDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Proposals from the escalation assistant, the process chat and learning
+         * @description Newest first. `kind` is decision, rule, context, input or source.
+         */
+        get: operations["listProposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/proposals/{proposal_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The manager accepts a proposal; its channel's own workflow applies it
+         * @description decision: resolves the instance with the proposed decision. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.
+         */
+        post: operations["acceptProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/proposals/{proposal_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The manager rejects a proposal; nothing it proposed is applied */
+        post: operations["rejectProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ocr/config": {
         parameters: {
             query?: never;
@@ -2889,6 +2966,58 @@ export interface components {
             /** Email */
             email: string;
         };
+        /**
+         * ManagerProposalOut
+         * @description One thing an agent proposes; only a manager accepts or rejects it.
+         */
+        ManagerProposalOut: {
+            /** Id */
+            id: number;
+            /** Process Id */
+            process_id: number;
+            /** Instance Id */
+            instance_id: number | null;
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "escalation" | "chat" | "learning";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "decision" | "rule" | "context" | "input" | "source";
+            /** Summary */
+            summary: string;
+            /** Rationale */
+            rationale: string;
+            /** Evidence */
+            evidence: string[];
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "accepted" | "rejected" | "superseded";
+            /** Author */
+            author: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Resolved By */
+            resolved_by: string | null;
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Outcome */
+            outcome: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** MessageIn */
         MessageIn: {
             /** Revision */
@@ -2954,6 +3083,13 @@ export interface components {
             rules_activated: number;
             /** Seconds To Active */
             seconds_to_active: number | null;
+        };
+        /** Option */
+        Option: {
+            /** Decision */
+            decision: string;
+            /** Consequence */
+            consequence: string;
         };
         /**
          * Plane
@@ -3293,6 +3429,8 @@ export interface components {
             decision: string;
             /** Reason */
             reason: string;
+            /** Proposal Id */
+            proposal_id?: number | null;
         };
         /** ReviewIn */
         ReviewIn: {
@@ -3688,6 +3826,14 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** SettleIn */
+        SettleIn: {
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
         /** SourceDetail */
         SourceDetail: {
             /** Id */
@@ -3924,6 +4070,12 @@ export interface components {
             decision: string;
             /** Reasoning */
             reasoning: string;
+            /** Why */
+            why: string[];
+            /** Options */
+            options: components["schemas"]["Option"][];
+            /** Evidence */
+            evidence: string[];
             /** Proposed Rule */
             proposed_rule: string;
             /**
@@ -7010,6 +7162,176 @@ export interface operations {
                 };
             };
             /** @description Already acknowledged */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proposeDecision: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                instance_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagerProposalOut"];
+                };
+            };
+            /** @description Instance not escalated */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The assistant's model failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listProposals: {
+        parameters: {
+            query?: {
+                status?: ("open" | "accepted" | "rejected" | "superseded") | null;
+            };
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagerProposalOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acceptProposal: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                proposal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SettleIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagerProposalOut"];
+                };
+            };
+            /** @description Not open, stale, or not validated yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rejectProposal: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                proposal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SettleIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagerProposalOut"];
+                };
+            };
+            /** @description Not open */
             409: {
                 headers: {
                     [name: string]: unknown;

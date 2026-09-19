@@ -27,4 +27,11 @@ def validate(ctx: RunContext[Deps], result: LearningOutput) -> LearningOutput:
         if text in texts or text in ctx.deps.existing:
             raise ModelRetry("Do not repeat an existing norm or another proposal")
         texts.add(text)
+    for change in result.definition_changes:
+        if set(change.evidence) - ctx.deps.references:
+            raise ModelRetry("Cite only evidence references supplied in the analysis context")
+        if change.kind != "context" and not change.name:
+            raise ModelRetry(f"A {change.kind} change needs its snake_case name")
+        if change.kind == "input" and not change.type:
+            raise ModelRetry("An input change needs the symbol's type")
     return result

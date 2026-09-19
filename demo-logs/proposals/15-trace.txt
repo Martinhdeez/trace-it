@@ -1,0 +1,17 @@
+2026-09-19T12:24:06 llm_run                ok    {"model": "deepseek/deepseek-v4.1-flash"}
+2026-09-19T12:24:06 suggest_escalation     ok    {"model": "deepseek/deepseek-v4.1-flash", "decision": "NO_PAGAR"}
+2026-09-19T12:24:06 propose_decision       ok    {"proposal_id": 1}
+2026-09-19T12:24:11 resolution             ok    {"author": "Mart\u00edn", "decision": "NO_PAGAR", "proposal_id": 1}
+2026-09-19T12:24:11 accept_proposal        ok    {"kind": "decision", "author": "Mart\u00edn", "channel": "escalation", "proposal_id": 1}
+2026-09-19T12:24:19 revise_process_draft   ok    {"author": "Mart\u00edn", "draft_id": 1, "revision": 2}
+2026-09-19T12:25:55 review_draft_proposal  ok    {"author": "Mart\u00edn", "draft_id": 1, "revision": 3}
+2026-09-19T12:25:55 accept_proposal        ok    {"kind": "context", "author": "Mart\u00edn", "channel": "chat", "proposal_id": 2}
+2026-09-19T12:25:56 review_draft_proposal  ok    {"author": "Mart\u00edn", "draft_id": 1, "revision": 4}
+2026-09-19T12:25:56 reject_proposal        ok    {"kind": "source", "author": "Mart\u00edn", "channel": "chat", "proposal_id": 3}
+2026-09-19T12:26:01 revise_process_draft   ok    {"author": "Mart\u00edn", "draft_id": 1, "revision": 5}
+2026-09-19T12:27:43 review_draft_proposal  ok    {"author": "Mart\u00edn", "draft_id": 1, "revision": 6}
+2026-09-19T12:27:43 accept_proposal        ok    {"kind": "rule", "author": "Mart\u00edn", "channel": "chat", "proposal_id": 5}
+2026-09-19T12:27:43 review_draft_proposal  ok    {"author": "Mart\u00edn", "draft_id": 1, "revision": 7}
+2026-09-19T12:27:43 accept_proposal        ok    {"kind": "context", "author": "Mart\u00edn", "channel": "chat", "proposal_id": 4}
+chat draft 1 revision 7 reviews {"setup": "accepted", "rule:rule-30": "accepted"}
+process 2 active_version_id 1 (unchanged)

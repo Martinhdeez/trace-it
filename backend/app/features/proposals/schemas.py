@@ -1,0 +1,34 @@
+from datetime import datetime
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
+Channel = Literal["escalation", "chat", "learning"]
+Kind = Literal["decision", "rule", "context", "input", "source"]
+Status = Literal["open", "accepted", "rejected", "superseded"]
+
+
+class ManagerProposalOut(BaseModel):
+    """One thing an agent proposes; only a manager accepts or rejects it."""
+
+    id: int
+    process_id: int
+    instance_id: int | None  # the escalated case, for `kind: decision`
+    channel: Channel
+    kind: Kind
+    summary: str
+    rationale: str
+    evidence: list[str]  # references: symbol:<name>, rule:<id>, case:<id>, chat:<n>...
+    # decision: {proposed, why, options[{decision, consequence}], escalation_reason, ...}
+    # chat: {draft_id, revision, review_key, before, after}; learning: {analysis_id, ...}
+    payload: dict[str, Any]
+    status: Status
+    author: str  # the agent role: assistant, discovery, learner
+    created_at: datetime
+    resolved_by: str | None
+    resolved_at: datetime | None
+    outcome: dict[str, Any] | None  # decision_id, draft revision, adoption or version
+
+
+class SettleIn(BaseModel):
+    reason: str = Field(default="", max_length=8000)
