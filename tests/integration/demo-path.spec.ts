@@ -129,7 +129,7 @@ test('upload two text PDFs and run', async ({ request }) => {
 })
 
 // The run dialog is still open. Exact text: the run-history row reads "2 ESCALAR · Martín".
-test.fixme('pkg 3: the run shows real progress and `by_decision`', async () => {
+test('pkg 3: the run shows real progress and `by_decision`', async () => {
   await expect(page.getByText('100%', { exact: true })).toBeVisible()
   await expect(page.getByText(`${ESCALATED.length} ESCALAR`, { exact: true })).toBeVisible()
 })
