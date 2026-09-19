@@ -4,12 +4,22 @@ on:
   pull_request:
     branches: [dev, main]
   push:
-    branches: [dev]
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      TRACEPAY_TEST_POSTGRES: '1'
     services:
       db:
         image: postgres:16
@@ -23,11 +33,13 @@ jobs:
           --health-interval 2s
           --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive  # the challenge data the golden tests run on
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
+          version: '0.10.10'
+          python-version: '3.12'
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
       - name: Install
@@ -37,3 +49,120 @@ jobs:
       # LLM tests (`-m llm`) are never run here.
       - name: make check
         run: make check
+
+  production-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      backend_digest: ${{ steps.publish.outputs.backend_digest }}
+      frontend_digest: ${{ steps.publish.outputs.frontend_digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Build the production images
+        env:
+          REVISION: ${{ github.sha }}
+        run: |
+          docker build --build-arg REVISION="$REVISION" -f deploy/backend.Dockerfile -t trace-it-backend:ci .
+          docker build --build-arg REVISION="$REVISION" -f deploy/frontend.Dockerfile -t trace-it-frontend:ci .
+      - name: Start the isolated stack and migrate its empty database
+        run: bash deploy/ci-stack.sh up
+      - name: Verify a PostgreSQL backup can be restored in isolation
+        run: bash deploy/ci-stack.sh backup-check
+      - name: Browser, proxy, authentication, PDF, decisions and export
+        working-directory: frontend
+        run: npx playwright test
+      - name: Publish the exact tested images (main only)
+        id: publish
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_ACTOR: ${{ github.actor }}
+          REVISION: ${{ github.sha }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          for component in backend frontend; do
+            image="ghcr.io/martinhdeez/trace-it/$component:$REVISION"
+            docker tag "trace-it-$component:ci" "$image"
+            docker push "$image"
+            digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image")
+            echo "${component}_digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+          done
+      - name: Collect stack logs
+        if: failure()
+        run: bash deploy/ci-stack.sh logs > stack.log 2>&1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: production-stack-evidence
+          retention-days: 7
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+            stack.log
+      - name: Remove only this job's disposable stack
+        if: always()
+        run: bash deploy/ci-stack.sh down
+
+  deploy:
+    needs: [backend, production-stack]
+    # The independent kill switch stays unset until root bootstrap and app integration pass.
+    if: >-
+      github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
+      vars.TRACE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    environment:
+      name: trace-it-production
+      url: https://gex-dashboard.hopto.org/nexia/trace-it/
+    concurrency:
+      group: trace-it-production
+      cancel-in-progress: false
+    steps:
+      - name: Configure the restricted deployment identity
+        env:
+          SSH_KEY: ${{ secrets.TRACE_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.TRACE_SSH_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/trace-it
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          test -s ~/.ssh/trace-it
+          test -s ~/.ssh/known_hosts
+      - name: Deploy digests, back up, migrate, verify and roll back code on failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_ACTOR: ${{ github.actor }}
+          REVISION: ${{ github.sha }}
+          BACKEND_DIGEST: ${{ needs.production-stack.outputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ needs.production-stack.outputs.frontend_digest }}
+        run: |
+          current=$(gh api repos/Martinhdeez/trace-it/git/ref/heads/main --jq '.object.sha')
+          if [ "$current" != "$REVISION" ]; then
+            echo 'A newer main commit exists; this superseded release will not deploy.'
+            exit 0
+          fi
+          printf '%s' "$GH_TOKEN" | ssh -T -i ~/.ssh/trace-it \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            kripta@gex-dashboard.hopto.org \
+            "deploy $REVISION $BACKEND_DIGEST $FRONTEND_DIGEST $GH_ACTOR"
+      - name: Remove the temporary SSH identity
+        if: always()
+        run: rm -f ~/.ssh/trace-it

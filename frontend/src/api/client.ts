@@ -6,7 +6,8 @@ import { mockClient } from './mock'
 export type Mode = 'mock' | 'live' | 'auto'
 export type Source = 'live' | 'mock'
 
-export const mode: Mode = (import.meta.env.VITE_API_MODE as Mode) ?? 'auto'
+export const mode: Mode = (import.meta.env.VITE_API_MODE as Mode) ??
+  (import.meta.env.PROD ? 'live' : 'auto')
 
 type Method = keyof ApiClient
 

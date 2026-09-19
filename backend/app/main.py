@@ -4,8 +4,10 @@ import logfire
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.common.exceptions import TraceError
+from app.core.database import Session
 from app.core.events import configure_observability
 from app.features.agents.router import router as agents_router
 from app.features.alerts.router import router as alerts_router
@@ -60,6 +62,13 @@ async def trace_error(_: Request, error: TraceError) -> JSONResponse:
 
 @app.get("/health", tags=["system"], operation_id="health")
 async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/ready", tags=["system"], operation_id="ready")
+async def ready(session: Session) -> dict[str, str]:
+    """Readiness includes PostgreSQL; liveness alone must not approve a release."""
+    await session.execute(text("SELECT 1"))
     return {"status": "ok"}
 
 
