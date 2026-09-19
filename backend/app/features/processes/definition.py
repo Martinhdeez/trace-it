@@ -159,6 +159,10 @@ async def _load(session: AsyncSession, data: Definition, base: Path | None) -> L
         .order_by(Rule.id)
     )
     candidate["rules"] = [version_config.artifact(r) for r in selected]
+    if data.execution is not None:
+        from app.features.processes.execution import write
+
+        write(candidate, data.execution)
     existing = await session.get(ProcessDraft, process.id, populate_existing=True)
     published = await versions.active(session, process.id, required=False)
     if published:

@@ -105,8 +105,14 @@ def extract_for_payment(service, item, options: ExtractOptions, sources: dict) -
         options = options.normalized(service.settings)
     initial = service.extract(item, options)
     triggers = verification_triggers(initial, sources)
-    enabled = (options.ocr or options.mode == "api") and (
-        options.vlm is True or (options.vlm is None and getattr(service.vlm, "configured", False))
+    enabled = (
+        options.source_verification
+        and options.focused_verification
+        and (options.ocr or options.mode == "api")
+        and (
+            options.vlm is True
+            or (options.vlm is None and getattr(service.vlm, "configured", False))
+        )
     )
     if not triggers or not enabled:
         return PaymentReading(initial, initial, triggers)

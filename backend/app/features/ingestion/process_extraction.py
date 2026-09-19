@@ -239,6 +239,9 @@ async def reextract_document(session, instance_id, user_id, service, options):
     if existing is None:
         raise NotFoundError(f"Instance {instance_id} does not exist")
     await lock(session, existing.process_id)
+    from .runtime import for_process
+
+    service, options = await for_process(session, existing.process_id, service, options)
     # The decision run takes the same row lock before reading symbols. Neither
     # operation can change the evidence after the other has decided the instance.
     instance = await session.scalar(

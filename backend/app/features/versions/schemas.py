@@ -3,6 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.features.processes.execution import ExecutionSettings
 from app.features.processes.schemas import DecisionReviewConfig, DecisionTypeIO, SymbolIO
 
 
@@ -16,6 +17,7 @@ class DraftIn(BaseModel):
     guidance: dict[str, str] | None = None
     restore_version_id: int | None = None
     refresh_agents: bool = False
+    execution: ExecutionSettings | None = None
     expected_revision: int | None = None
 
 

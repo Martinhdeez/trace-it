@@ -8,6 +8,7 @@ from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
 from app.features.agents import compiler, sandbox
 from app.features.decisions.model import Finding
+from app.features.processes import execution as execution_config
 from app.features.processes.model import Process
 from app.features.processes.schemas import ProcessDetail
 from app.features.rules.model import Rule
@@ -115,6 +116,30 @@ async def edit(session, process_id: int, body: DraftIn, author: str) -> ProcessD
         snapshot["guidance"] = body.guidance
     if body.refresh_agents:
         snapshot["agents"] = await config.agents(session, snapshot["process"]["use_case_id"])
+    if body.execution is not None:
+        selected = body.execution.model_copy(deep=True)
+        if selected.preset != "custom":
+            try:
+                current = execution_config.read(snapshot)
+                expected = execution_config.preset(current, selected.preset)
+            except (ValueError, TypeError, KeyError):
+                selected.preset = "custom"
+            else:
+                if selected != expected and selected != current:
+                    selected.preset = "custom"
+        execution_config.write(snapshot, selected)
+    elif "execution" in body.model_fields_set:
+        raise ConflictError("execution cannot be null")
+    elif "execution" not in snapshot:
+        execution_config.write(snapshot, execution_config.read(snapshot))
+    elif body.refresh_agents:
+        snapshot["execution"]["preset"] = "custom"
+        try:
+            execution_config.read(snapshot)
+        except ValueError as error:
+            raise ConflictError(
+                "Refreshed defaults conflict with this execution configuration"
+            ) from error
     result = await stage(session, process_id, snapshot, author)
     await session.commit()
     return result
@@ -151,6 +176,8 @@ def check_configuration(snapshot: dict) -> None:
         ):
             raise ValueError(f"Rule {rule['id']} fails its stored tests")
     config.setups(snapshot)
+    if "execution" in snapshot:
+        execution_config.read(snapshot)
 
 
 async def inspect(session, snapshot: dict, inputs: dict, *, tables: dict | None = None) -> dict:

@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # Helmcode, an OpenAI-compatible API: select it with `helmcode:<model>` (e.g.
     # `helmcode:deepseek-v4-flash`). Its key is read like every provider's: HELMCODE_API_KEY.
     helmcode_base_url: str = "https://api.helmcode.com/v1"
+    # The deployment's trusted local OpenAI-compatible server. Key: LOCAL_LLM_API_KEY.
+    local_base_url: str = "http://localhost:11434/v1"
+    # Optional per-preset model/effort overrides. No credentials in this JSON.
+    execution_presets: dict[str, dict] = {}
     # A compiled rule activates by itself when it would change at most this share of the
     # decisions already taken and contradicts no decision a person took (ADR 0004).
     auto_activate_max_change: float = 0.05

@@ -70,7 +70,9 @@ def extract_pdf(
         metrics["native_pages"] += int(bool(chars))
         if needs_ocr and options.ocr:
             for reader, method in (("primary", "recognize"), ("secondary", "verify")):
-                if not hasattr(ocr, method):
+                if (reader == "secondary" and not options.secondary_ocr) or not hasattr(
+                    ocr, method
+                ):
                     continue
                 try:
                     metrics["ocr_calls"] += 1
