@@ -24,6 +24,7 @@ import {
 } from '../../lib/urgency'
 import { DocumentPane } from '../run/DocumentPane'
 import { DocumentPopup } from '../run/DocumentPopup'
+import { SenderContact } from '../run/SenderContact'
 import { Button, Textarea } from '../shell/Controls'
 import { ErrorNotice } from '../shell/Notice'
 import { Overlay } from '../shell/Overlay'
@@ -168,6 +169,7 @@ export function CaseDetail({
             <Technical processId={process.id} instance={instance.data} error={instance.error} />
           ) : null}
         </section>
+        {instance.data ? <SenderContact instance={instance.data} /> : null}
       </div>
 
       </div>
@@ -250,7 +252,7 @@ function FiredRules({ processId, fired }: { processId: number; fired: RuleResult
 
 /**
  * The manager's call. The options are the outcomes the process can close a case with;
- * the reason is required, because it is what the assistant learns from. A suggestion is
+ * an optional reason adds context to the history. A suggestion is
  * asked for, never fetched on its own: it is a model call.
  */
 function Decide({
@@ -297,7 +299,7 @@ function Decide({
     mutationFn: async (chosen: string) => {
       const text = reason.trim()
       if (proposal?.status === 'open' && payload?.proposed === chosen) {
-        return api.acceptProposal(proposal.id, text)
+        return api.acceptProposal(proposal.id, text || undefined)
       }
       return api.resolve(instanceId, {
         decision: chosen,
@@ -316,7 +318,6 @@ function Decide({
    * decides. An armed option disarms itself after a few seconds or on Escape.
    */
   const [armed, setArmed] = useState<string | null>(null)
-  const ready = Boolean(reason.trim()) && !resolve.isPending
   const choose = (name: string) => {
     if (armed !== name) return setArmed(name)
     setArmed(null)
@@ -347,6 +348,7 @@ function Decide({
       window.setTimeout(onResolved, 900)
     },
   })
+  const ready = !resolve.isPending && !apply.isPending
   const openSuggestion = () => {
     setSuggesting(true)
     if (!proposal && !ask.isPending) ask.mutate()
@@ -385,7 +387,7 @@ function Decide({
             </div>
 
             <label className="mt-3 block">
-              <span className="text-[12px] text-muted">Por qué</span>
+              <span className="text-[12px] text-muted">{t('reviewUi.optionalReason')}</span>
               <Textarea
                 rows={3}
                 value={reason}
@@ -393,6 +395,7 @@ function Decide({
                 placeholder="Ej.: el proveedor confirmó por teléfono que el pedido es correcto."
                 className="mt-1"
               />
+              <span className="mt-1.5 block text-[11px] text-muted">{t('reviewUi.reasonHint')}</span>
             </label>
 
             {resolve.isError ? (
@@ -598,7 +601,7 @@ function Technical({
                 className={cn(
                   'mt-0.5 shrink-0 rounded-full px-1.5 font-mono text-[10px]',
                   result.fires === true
-                    ? 'bg-escalar-soft text-escalar'
+                    ? 'bg-canvas text-ink'
                     : result.fires === false
                       ? 'bg-pagar-soft text-pagar'
                       : 'bg-ocr-soft text-ocr',
