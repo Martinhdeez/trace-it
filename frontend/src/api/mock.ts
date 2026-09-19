@@ -571,6 +571,9 @@ export const mockClient: ApiClient = {
 
   listFindings: (processId) => wait(processId === 1 ? [...findings] : []),
 
+  listAlerts: noMock,
+  ackAlert: noMock,
+
   exportOutcomes: async (processId) => {
     const batch = ofProcess(processId)
     const blocked = batch.filter((item) => item.decisions.length === 0)

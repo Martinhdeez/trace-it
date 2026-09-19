@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileText, Sparkles } from 'lucide-react'
 import { api } from '../api/client'
 import { families, keys } from '../api/queries'
-import type { InstanceDetail, ProcessDetail, RuleIn, RuleResult, Suggestion } from '../api/contracts'
+import type { AlertOut, InstanceDetail, ProcessDetail, RuleIn, RuleResult, Suggestion } from '../api/contracts'
 import { ProcessScreen } from '../components/process/ProcessScreen'
 import { Button, Field, Segmented, Select, Textarea } from '../components/shell/Controls'
 import { Empty, ErrorNotice, Notice } from '../components/shell/Notice'
@@ -12,7 +12,7 @@ import { StatusBadge } from '../components/shell/StatusBadge'
 import { PageIntro } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { t } from '../i18n'
-import { paths } from '../lib/paths'
+import { ALERTS_TAB, paths } from '../lib/paths'
 import { byPriority, humanOutcomes } from '../lib/process'
 
 const REVIEW_TAB = 'review'
@@ -33,6 +33,11 @@ export function Queue() {
     queryKey: keys.queue(processId, 'all'),
     queryFn: () => api.queue(processId),
   })
+  const alerts = useQuery({
+    queryKey: keys.alerts(processId, 'open'),
+    queryFn: () => api.listAlerts(processId, 'open'),
+  })
+  const openAlerts = useMemo(() => alerts.data ?? [], [alerts.data])
   const human = byPriority(humanOutcomes(process.data))
   const queued = useMemo(() => escalated.data ?? [], [escalated.data])
   // A case the reviewer disagreed with keeps its decision but still waits for a person,
@@ -45,10 +50,12 @@ export function Queue() {
         .length,
     }))
     const review = queued.filter((item) => item.review_pending).length
-    return review > 0
-      ? [...outcomes, { value: REVIEW_TAB, label: t('queue.review'), count: review }]
-      : outcomes
-  }, [human, queued])
+    return [
+      ...outcomes,
+      ...(review > 0 ? [{ value: REVIEW_TAB, label: t('queue.review'), count: review }] : []),
+      { value: ALERTS_TAB, label: 'Alertas', count: openAlerts.length },
+    ]
+  }, [human, queued, openAlerts])
 
   const tab = params.get('tipo') ?? human[0]?.nombre ?? ''
   const items = queued.filter((item) =>
@@ -56,6 +63,8 @@ export function Queue() {
   )
   const selectedId = params.get('i') ? Number(params.get('i')) : undefined
   const current = items.find((item) => item.id === selectedId) ?? items[0]
+  const showAlerts = tab === ALERTS_TAB
+  const alert = openAlerts.find((item) => item.id === selectedId) ?? openAlerts[0]
 
   return (
     <ProcessScreen
@@ -79,10 +88,40 @@ export function Queue() {
         />
 
         {escalated.isError ? <ErrorNotice error={escalated.error} /> : null}
+        {alerts.isError ? <ErrorNotice error={alerts.error} /> : null}
 
         <div className="grid gap-3 lg:grid-cols-[300px_minmax(0,1fr)]">
           <ul className="max-h-[560px] overflow-y-auto rounded-[16px] bg-surface p-1 ring-1 ring-line">
-            {items.length === 0 ? (
+            {showAlerts ? (
+              openAlerts.length === 0 ? (
+                <li>
+                  <Empty>Ninguna decisión pasada cambiaría con los datos y reglas de hoy.</Empty>
+                </li>
+              ) : (
+                openAlerts.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => setParams({ tipo: tab, i: String(item.id) })}
+                      className={cn(
+                        'mb-0.5 flex w-full items-center gap-2 rounded-[12px] px-2.5 py-2 text-left',
+                        item.id === alert?.id
+                          ? 'bg-canvas'
+                          : 'hover:bg-canvas/70',
+                      )}
+                    >
+                      <FileText size={13} strokeWidth={1.5} className="shrink-0 text-faint" />
+                      <span className="min-w-0 flex-1 truncate font-mono text-[12px]">
+                        {item.name}
+                      </span>
+                      <StatusBadge value={item.before} decisionTypes={process.data?.tipos_decision} />
+                      →
+                      <StatusBadge value={item.after} decisionTypes={process.data?.tipos_decision} />
+                    </button>
+                  </li>
+                ))
+              )
+            ) : items.length === 0 ? (
               <li>
                 <Empty>
                   Nada esperando. Las reglas cierran todos los casos.
@@ -111,7 +150,9 @@ export function Queue() {
             )}
           </ul>
 
-          {current && process.data ? (
+          {showAlerts ? (
+            alert ? <AlertDetail key={alert.id} processId={processId} alert={alert} /> : null
+          ) : current && process.data ? (
             <Resolve
               key={current.id}
               process={process.data}
@@ -411,6 +452,73 @@ function Suggested({
           Sin sugerencia. Decide tú y escribe la regla que lo resuelva.
         </p>
       )}
+    </div>
+  )
+}
+
+/** What changed, why, and a note to mark it seen. Resolving the case closes it on its own. */
+function AlertDetail({ processId, alert }: { processId: number; alert: AlertOut }) {
+  const queryClient = useQueryClient()
+  const [note, setNote] = useState('')
+  const trigger = String(alert.trigger.kind ?? '')
+  const evidence = alert.evidence as {
+    before?: { author?: string; reason?: string | null }
+    after?: { author?: string; reason?: string | null }
+  }
+
+  const ack = useMutation({
+    mutationFn: () => api.ackAlert(alert.id, note.trim()),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['alerts'] })
+    },
+  })
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="font-mono text-[13px]">{alert.name}</p>
+          <Link
+            to={paths.instance(processId, alert.instance_id)}
+            className="shrink-0 text-[12px] text-muted hover:text-ink"
+          >
+            Ver traza →
+          </Link>
+        </div>
+        <div className="mt-3">
+          <Notice
+            tone="warning"
+            title={`${alert.before} → ${alert.after} · ${t(`alertTrigger.${trigger}`)}`}
+          >
+            <p>
+              Antes ({evidence.before?.author ?? '—'}): {evidence.before?.reason || '—'}
+            </p>
+            <p>Ahora (motor): {evidence.after?.reason || '—'}</p>
+          </Notice>
+        </div>
+      </div>
+
+      <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
+        <Field label="Nota" hint="Queda en la alerta junto a tu nombre.">
+          <Textarea
+            rows={2}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Por qué no hace falta cambiarla, o qué vas a hacer"
+            className="mt-1"
+          />
+        </Field>
+        {ack.isError ? (
+          <div className="mt-3">
+            <ErrorNotice error={ack.error} />
+          </div>
+        ) : null}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button tone="primary" onClick={() => ack.mutate()} disabled={ack.isPending}>
+            {ack.isPending ? 'Guardando…' : 'Marcar como vista'}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

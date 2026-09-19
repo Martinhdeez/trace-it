@@ -27,7 +27,7 @@ import { Overlay } from '../components/shell/Overlay'
 import { ErrorNotice, Notice } from '../components/shell/Notice'
 import { NestedCard } from '../components/shell/Well'
 import { cn } from '../lib/cn'
-import { paths } from '../lib/paths'
+import { ALERTS_TAB, paths } from '../lib/paths'
 import type { RunOut, UploadProgress, ExecutionMetrics, NormRule, ProcessDetail, ProcessMetrics, ProcessSummary, Rule } from '../api/contracts'
 import { t } from '../i18n'
 import { formatEuro, formatMs, formatRunDate } from '../lib/format'
@@ -91,6 +91,12 @@ export function Process() {
   const runs = useQuery({
     queryKey: keys.runs(processId),
     queryFn: () => api.listRuns(processId),
+  })
+  // A sync or a publication opens alerts in the background, so look again every 10 s.
+  const alerts = useQuery({
+    queryKey: keys.alerts(processId, 'open'),
+    queryFn: () => api.listAlerts(processId, 'open'),
+    refetchInterval: 10_000,
   })
   const findings = useQuery({
     queryKey: keys.findings(processId),
@@ -278,6 +284,7 @@ export function Process() {
           compiling={compiling}
           findings={findings.data?.length ?? 0}
           draftVersion={hasDraft && draft.data ? nextVersion : undefined}
+          alerts={alerts.data?.length ?? 0}
         />
 
         <Metrics summary={summary.data} plane={plane.data} providers={providers.data} />
@@ -318,12 +325,14 @@ function Alerts({
   compiling,
   findings,
   draftVersion,
+  alerts,
 }: {
   processId: number
   waiting: number
   compiling: number
   findings: number
   draftVersion: number | undefined
+  alerts: number
 }) {
   const items = [
     waiting > 0
@@ -336,6 +345,12 @@ function Alerts({
       ? {
           to: paths.definition(processId),
           text: `${compiling} regla${compiling === 1 ? '' : 's'} compilando. El motor no arranca hasta que terminen.`,
+        }
+      : null,
+    alerts > 0
+      ? {
+          to: `${paths.review(processId)}?tipo=${ALERTS_TAB}`,
+          text: `${alerts} decisi${alerts === 1 ? 'ón podría' : 'ones podrían'} cambiar`,
         }
       : null,
     draftVersion != null
