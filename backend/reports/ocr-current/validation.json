@@ -1,0 +1,228 @@
+{
+  "outcomes_sha256": "2f897e0f824feca9c738fa75f41ecd13ac4f816884177ac6a6843576529b0653",
+  "api_matches_independent_evaluator": 500,
+  "scan_policy": "ADR 0025: unconfirmed required scan fields and rejected scans escalate",
+  "scan_policy_changes": [
+    {
+      "file_id": "reimpresion_0712.pdf",
+      "before": "NO_PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": []
+    },
+    {
+      "file_id": "scan_002.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": [
+        "total"
+      ]
+    },
+    {
+      "file_id": "scan_008.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": [
+        "base",
+        "vat_rate",
+        "vat_amount"
+      ]
+    },
+    {
+      "file_id": "scan_010.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": [
+        "base",
+        "vat_rate",
+        "vat_amount"
+      ]
+    },
+    {
+      "file_id": "scan_011.pdf",
+      "before": "NO_PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": []
+    },
+    {
+      "file_id": "scan_012.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": [
+        "total"
+      ]
+    },
+    {
+      "file_id": "scan_013.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": [
+        "base",
+        "vat_rate",
+        "vat_amount",
+        "total"
+      ]
+    },
+    {
+      "file_id": "scan_014.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": [
+        "base",
+        "vat_rate",
+        "vat_amount",
+        "total"
+      ]
+    },
+    {
+      "file_id": "scan_015.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": [
+        "base"
+      ]
+    },
+    {
+      "file_id": "scan_016.pdf",
+      "before": "NO_PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": []
+    },
+    {
+      "file_id": "scan_018.pdf",
+      "before": "NO_PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": []
+    },
+    {
+      "file_id": "scan_022.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": [
+        "base",
+        "vat_amount"
+      ]
+    },
+    {
+      "file_id": "scan_029.pdf",
+      "before": "NO_PAGAR",
+      "after": "ESCALAR",
+      "unconfirmed_required_fields": []
+    }
+  ],
+  "changes_from_previous_improved_run": [
+    {
+      "file_id": "reimpresion_0712.pdf",
+      "before": "NO_PAGAR",
+      "after": "ESCALAR"
+    },
+    {
+      "file_id": "scan_002.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR"
+    },
+    {
+      "file_id": "scan_008.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR"
+    },
+    {
+      "file_id": "scan_010.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR"
+    },
+    {
+      "file_id": "scan_011.pdf",
+      "before": "NO_PAGAR",
+      "after": "ESCALAR"
+    },
+    {
+      "file_id": "scan_012.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR"
+    },
+    {
+      "file_id": "scan_013.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR"
+    },
+    {
+      "file_id": "scan_014.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR"
+    },
+    {
+      "file_id": "scan_015.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR"
+    },
+    {
+      "file_id": "scan_016.pdf",
+      "before": "NO_PAGAR",
+      "after": "ESCALAR"
+    },
+    {
+      "file_id": "scan_018.pdf",
+      "before": "NO_PAGAR",
+      "after": "ESCALAR"
+    },
+    {
+      "file_id": "scan_022.pdf",
+      "before": "PAGAR",
+      "after": "ESCALAR"
+    },
+    {
+      "file_id": "scan_029.pdf",
+      "before": "NO_PAGAR",
+      "after": "ESCALAR"
+    }
+  ],
+  "native_field_checks": 4239,
+  "native_field_changes": 0,
+  "workbook_data_unchanged": true,
+  "deterministic_replay_identical": true,
+  "accepted_field_errors_after": [],
+  "previously_validated_decision_regressions": [],
+  "field_coverage_losses": [
+    {
+      "file_id": "fax_2026_0411.pdf",
+      "field": "purchase_order",
+      "before": "PO-2026-0718",
+      "after": null,
+      "visual_reference": "PO-2026-0718"
+    },
+    {
+      "file_id": "scan_017.pdf",
+      "field": "iban",
+      "before": "ES2100491500051234567890",
+      "after": null,
+      "visual_reference": "ES2100491500051234567890"
+    }
+  ],
+  "remaining_visual_disagreements": [
+    {
+      "file_id": "scan_004.pdf",
+      "before": "NO_PAGAR",
+      "after": "ESCALAR",
+      "assessment_before": "INCORRECTO_POR_OCR",
+      "visual_recommendation": "PAGAR",
+      "field_changes": {
+        "purchase_order": {
+          "before": "PO-2028-0480",
+          "after": null,
+          "visual_reference": "PO-2026-0480"
+        }
+      },
+      "findings": [
+        "MISSING_SYMBOL: purchase_order"
+      ],
+      "visual_evidence": [
+        {
+          "page": 1,
+          "image": "../corpus-audit-20260919/pages/477-p1.png"
+        }
+      ],
+      "sha256": "3a2e5eea5d254f7c62f9ed831d246673de70d305c0b74a70e22fe3e906a66e97"
+    }
+  ],
+  "reference": "Prior assistant visual audit; not the official challenge answers"
+}

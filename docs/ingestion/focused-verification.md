@@ -1,5 +1,10 @@
 # Focused OCR verification
 
+This document describes the historical `invoice-v2.1.4` evaluation. The refreshed
+export and its actual extraction version are in
+[`backend/reports/ocr-current/`](../../backend/reports/ocr-current/); use that
+directory for the current shared outcomes.
+
 Pipeline `invoice-v2.1.4+xlsx-v1.3`, evaluated on the 500 PDFs and workbook on
 19 September 2026. The implementation improves accepted readings and decisions,
 with an explicit coverage tradeoff: two previously correct fields become proposals
