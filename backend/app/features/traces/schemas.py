@@ -54,6 +54,20 @@ class DecisionTrace(DecisionOut):
     rule_results: list[RuleResultOut]
 
 
+class SourceRead(BaseModel):
+    """The latest `sync_source` span of one source before the instance's latest decision."""
+
+    source: str
+    status: str = Field(examples=["ok", "error"])
+    started_at: datetime
+    duration_ms: int | None
+    requests: int
+    retries: int
+    rate_limited: int  # 429 responses
+    timeouts: int
+    trace_id: str  # `GET /traces/{trace_id}`: the sync's tree
+
+
 class InstanceTrace(BaseModel):
     """The journey of one instance: its file, how it was read, its symbols, every decision
     with each rule's answer, what people did, and what the export writes for it."""
@@ -67,6 +81,7 @@ class InstanceTrace(BaseModel):
     decisions: list[DecisionTrace]  # oldest first; the engine's and people's
     exported_decision: str | None  # what `GET /processes/{id}/export` writes (ADR 0016)
     spans: list[SpanNode]  # ingestion, runs (with per-rule spans), resolutions, exports
+    sources_read: list[SourceRead] = []  # by source name; empty before any decision
 
 
 class RuleRuntime(BaseModel):
@@ -147,6 +162,20 @@ class ProviderStats(BaseModel):
     priced_requests: int = 0
     included_requests: int = 0
     unpriced_requests: int = 0
+    rate_limited: int = 0  # calls the provider refused with HTTP 429
+    traces: str | None = None  # `GET /traces?...`: the spans behind this row
+
+
+class SourceStats(BaseModel):
+    """`sync_source` spans of one source of truth, with its connector's stats."""
+
+    source: str | None
+    syncs: int
+    errors: int
+    requests: int
+    retries: int
+    rate_limited: int  # 429 responses
+    p95_ms: float | None
     traces: str | None = None  # `GET /traces?...`: the spans behind this row
 
 
@@ -158,11 +187,14 @@ class ProcessMetrics(BaseModel):
     steps: list[StepStats]  # every step type: rule compilations, LLM runs, rules, syncs...
     llm: list[LlmStats]  # by model and role
     providers: list[ProviderStats]  # by provider, model and operation
+    # Each instance's latest decision, the engine's or a person's.
     decisions_by_outcome: dict[str, int] = Field(examples=[{"PAGAR": 433, "ESCALAR": 31}])
     # Decisions that escalated because a required symbol was missing, a rule failed, needed
     # data or tied.
     failures: dict[str, int] = Field(examples=[{"MISSING_DATA": 29, "RULE_ERROR": 0}])
     escalated: int  # instances whose latest decision waits for a person
+    # The escalated instances by their first reason code (`OTHER` if none); adds up to it.
+    escalation_reasons: dict[str, int] = Field(examples=[{"MISSING_DATA": 20, "OTHER": 1}])
     pending: int  # instances not decided yet
 
 
@@ -199,6 +231,7 @@ class IngestionMetrics(PlaneMetrics):
     # Declared symbols a reading left null: extraction abstained instead of guessing.
     abstentions: int
     abstentions_by_field: dict[str, int] = Field(examples=[{"iban": 12, "date": 3}])
+    sources: list[SourceStats]  # syncs of the sources of truth, by source
 
 
 class TokenStats(BaseModel):
@@ -282,9 +315,10 @@ class ExecutionMetrics(PlaneMetrics):
     instances_decided: int
     instances_per_second: float | None
     rules: list[RuleRunStats]
-    decisions_by_outcome: dict[str, int]
+    decisions_by_outcome: dict[str, int]  # each instance's latest decision
     failures: dict[str, int]  # escalations by cause (MISSING_DATA, RULE_ERROR...)
     escalated: int  # the human queue now
+    escalation_reasons: dict[str, int]  # the queue by first reason code (`OTHER` if none)
     pending: int  # instances not decided yet
     resolutions: int  # decisions people took
     resolutions_by_author: dict[str, int]

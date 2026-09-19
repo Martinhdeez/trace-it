@@ -23,14 +23,23 @@ def steps(nodes: list[dict]) -> list:
 async def test_run_journey_and_metrics(fake_sandbox: None) -> None:
     async with client() as api:
         process_id, headers = await create_process(api, "manager")
+        # Two syncs of the ERP before the decisions: the latest one is what they read.
+        for retries in (0, 2):
+            with events.span("sync_source", process_id=process_id, source="erp") as sync:
+                sync.set(requests=5, retries=retries, rate_limited=1, timeouts=0)
         assert (await api.post(f"/processes/{process_id}/run")).status_code == 200
         [escalated] = (await api.get(f"/processes/{process_id}/queue")).json()
+        metrics = (await api.get(f"/processes/{process_id}/metrics/execution")).json()
+        assert metrics["escalated"] == 1
+        assert sum(metrics["escalation_reasons"].values()) == 1
         r = await api.post(
             f"/instances/{escalated['id']}/resolve",
             json={"decision": "NO_PAGAR", "reason": "checked by phone"},
             headers=headers,
         )
         assert r.status_code == 200, r.text
+        with events.span("sync_source", process_id=process_id, source="erp"):
+            pass  # after every decision: not read by any
 
         # The run: one span, one span per rule with its counts, one point per decision.
         [run] = (
@@ -52,6 +61,9 @@ async def test_run_journey_and_metrics(fake_sandbox: None) -> None:
         fired = [r for r in engine["rule_results"] if r["fires"]]
         assert [r["rule_text"] for r in fired] == ["iban_mismatch"]
         assert person["author"] == "Ana" and journey["exported_decision"] == "ESCALAR"
+        [erp] = journey["sources_read"]
+        assert (erp["source"], erp["status"], erp["trace_id"]) == ("erp", "ok", sync.trace_id)
+        assert (erp["requests"], erp["retries"], erp["rate_limited"]) == (5, 2, 1)
         roots = steps(journey["spans"])
         assert ("resolution", []) in roots
         [run_tree] = [c for s, c in roots if s == "run_process"]
@@ -65,8 +77,10 @@ async def test_run_journey_and_metrics(fake_sandbox: None) -> None:
         assert metrics["runs"] == 1 and metrics["instances_decided"] == 3
         by_step = {s["step"]: s for s in metrics["steps"]}
         assert by_step["evaluate_rule"]["count"] == 2 and by_step["run_process"]["errors"] == 0
-        assert metrics["decisions_by_outcome"] == {"PAGAR": 1, "NO_PAGAR": 2, "ESCALAR": 1}
-        assert metrics["escalated"] == 0 and metrics["pending"] == 1
+        # Each instance counts once, by its latest decision: the person's NO_PAGAR.
+        assert metrics["decisions_by_outcome"] == {"PAGAR": 1, "NO_PAGAR": 2}
+        assert metrics["escalated"] == 0 and metrics["escalation_reasons"] == {}
+        assert metrics["pending"] == 1
         assert metrics["providers"] == []
         assert set(metrics["failures"].values()) == {0}
 

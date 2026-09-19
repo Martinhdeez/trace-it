@@ -47,6 +47,12 @@ def test_every_span_name_has_exactly_one_plane() -> None:
     assert set(service.PLANES) - steps == set(), "planes for spans nothing emits"
 
 
+def test_assistant_spans_are_agents_not_execution() -> None:
+    """LLM suggestions take seconds; in execution they would drag its p95 (and health)."""
+    assert service.PLANES["suggest_escalation"] == Plane.agents
+    assert service.PLANES["propose_decision"] == Plane.agents
+
+
 class Answer(BaseModel):
     text: str
 
@@ -93,6 +99,18 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
                     output_tokens=4,
                 ):
                     pass
+                with events.span(
+                    "provider_call",
+                    provider="gemini",
+                    model=provider_model,
+                    operation="image_transcription",
+                    network_attempted=True,
+                    outcome="error",
+                    http_status_code=429,
+                ) as refused:
+                    refused.status = "error"
+        with events.span("sync_source", process_id=process_id, source="erp") as sync:
+            sync.set(requests=7, retries=3, rate_limited=2, timeouts=0)
         async with session_factory() as session:
             symbols = {"iban": {"value": None, "origin": "d"}, "nif": {"value": "B", "origin": "d"}}
             events.record(
@@ -121,6 +139,7 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
 
         url = f"/processes/{process_id}/metrics"
         ingestion = (await api.get(f"{url}/ingestion")).json()
+        erp_spans = (await api.get(ingestion["sources"][0]["traces"])).json()
         agents = (await api.get(f"{url}/agents")).json()
         execution = (await api.get(f"{url}/execution")).json()
         ingestion_everywhere = (await api.get("/metrics/ingestion")).json()
@@ -136,6 +155,7 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
         "ocr",
         "provider_call",
         "ingest_document",
+        "sync_source",
     }
     assert (ingestion["files"], ingestion["pages"], ingestion["ocr_calls"]) == (1, 2, 1)
     expected_providers = [
@@ -143,12 +163,13 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
             "provider": "gemini",
             "model": provider_model,
             "operation": "image_transcription",
-            "attempts": 2,
-            "network_requests": 1,
+            "attempts": 3,
+            "network_requests": 2,
             "replays": 1,
-            "errors": 0,
+            "errors": 1,
             "input_tokens": 12,
             "output_tokens": 4,
+            "rate_limited": 1,
         }
     ]
     assert [
@@ -160,7 +181,11 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
     assert everywhere_row | {"traces": None} == ingestion["providers"][0] | {"traces": None}
     assert "process_id" not in everywhere_row["traces"]
     assert ingestion["cache_hits"] == 1 and ingestion["abstentions_by_field"] == {"iban": 1}
-    assert ingestion["providers"][0]["unpriced_requests"] == 1  # no tariff for this model
+    assert ingestion["providers"][0]["unpriced_requests"] == 2  # no tariff for this model
+    [erp] = ingestion["sources"]
+    assert (erp["source"], erp["syncs"], erp["errors"]) == ("erp", 1, 0)
+    assert (erp["requests"], erp["retries"], erp["rate_limited"]) == (7, 3, 2)
+    assert [s["span_id"] for s in erp_spans] == [sync.span_id]
     assert ingestion["providers"][0]["traces"].startswith(
         f"/traces?process_id={process_id}&name=provider_call&provider=gemini&model={provider_model}"
     )

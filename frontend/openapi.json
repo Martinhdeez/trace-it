@@ -3889,7 +3889,7 @@
           "traces"
         ],
         "summary": "Recent spans, newest first",
-        "description": "Every step the system took, as spans of the audit trail (ADR 0018). Filter by process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, `sync_source`, `upload_document`...), status (`ok`, `error`), plane, time window (`since` <= start < `until`), rule, norm rule, use case, or a span's `model`, `role`, `agent` (the agents plane's `by_role` key), `provider` and `operation`. Every row of `/metrics/{plane}` carries its drill-down here as `traces`.",
+        "description": "Every step the system took, as spans of the audit trail (ADR 0018). Filter by process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, `sync_source`, `upload_document`...), status (`ok`, `error`), plane, time window (`since` <= start < `until`), rule, norm rule, use case, or a span's `model`, `role`, `agent` (the agents plane's `by_role` key), `provider`, `operation` and `source` (a `sync_source` span's source). Every row of `/metrics/{plane}` carries its drill-down here as `traces`.",
         "operationId": "listSpans",
         "parameters": [
           {
@@ -4116,6 +4116,22 @@
                 }
               ],
               "title": "Operation"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -8542,6 +8558,13 @@
             "type": "integer",
             "title": "Escalated"
           },
+          "escalation_reasons": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Escalation Reasons"
+          },
           "pending": {
             "type": "integer",
             "title": "Pending"
@@ -8599,6 +8622,7 @@
           "decisions_by_outcome",
           "failures",
           "escalated",
+          "escalation_reasons",
           "pending",
           "resolutions",
           "resolutions_by_author",
@@ -9465,6 +9489,13 @@
                 "iban": 12
               }
             ]
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceStats"
+            },
+            "type": "array",
+            "title": "Sources"
           }
         },
         "type": "object",
@@ -9485,7 +9516,8 @@
           "providers",
           "cache_hits",
           "abstentions",
-          "abstentions_by_field"
+          "abstentions_by_field",
+          "sources"
         ],
         "title": "IngestionMetrics",
         "description": "Tokens and USD cost per provider in `providers`; no LLM run of the agents counts."
@@ -9750,6 +9782,14 @@
             },
             "type": "array",
             "title": "Spans"
+          },
+          "sources_read": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRead"
+            },
+            "type": "array",
+            "title": "Sources Read",
+            "default": []
           }
         },
         "type": "object",
@@ -10505,6 +10545,19 @@
             "type": "integer",
             "title": "Escalated"
           },
+          "escalation_reasons": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Escalation Reasons",
+            "examples": [
+              {
+                "MISSING_DATA": 20,
+                "OTHER": 1
+              }
+            ]
+          },
           "pending": {
             "type": "integer",
             "title": "Pending"
@@ -10522,6 +10575,7 @@
           "decisions_by_outcome",
           "failures",
           "escalated",
+          "escalation_reasons",
           "pending"
         ],
         "title": "ProcessMetrics"
@@ -10885,6 +10939,11 @@
           "unpriced_requests": {
             "type": "integer",
             "title": "Unpriced Requests",
+            "default": 0
+          },
+          "rate_limited": {
+            "type": "integer",
+            "title": "Rate Limited",
             "default": 0
           },
           "traces": {
@@ -12563,6 +12622,141 @@
           "kind"
         ],
         "title": "SourceProposal"
+      },
+      "SourceRead": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "examples": [
+              "ok",
+              "error"
+            ]
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "requests": {
+            "type": "integer",
+            "title": "Requests"
+          },
+          "retries": {
+            "type": "integer",
+            "title": "Retries"
+          },
+          "rate_limited": {
+            "type": "integer",
+            "title": "Rate Limited"
+          },
+          "timeouts": {
+            "type": "integer",
+            "title": "Timeouts"
+          },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "status",
+          "started_at",
+          "duration_ms",
+          "requests",
+          "retries",
+          "rate_limited",
+          "timeouts",
+          "trace_id"
+        ],
+        "title": "SourceRead",
+        "description": "The latest `sync_source` span of one source before the instance's latest decision."
+      },
+      "SourceStats": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "syncs": {
+            "type": "integer",
+            "title": "Syncs"
+          },
+          "errors": {
+            "type": "integer",
+            "title": "Errors"
+          },
+          "requests": {
+            "type": "integer",
+            "title": "Requests"
+          },
+          "retries": {
+            "type": "integer",
+            "title": "Retries"
+          },
+          "rate_limited": {
+            "type": "integer",
+            "title": "Rate Limited"
+          },
+          "p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Ms"
+          },
+          "traces": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traces"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "syncs",
+          "errors",
+          "requests",
+          "retries",
+          "rate_limited",
+          "p95_ms"
+        ],
+        "title": "SourceStats",
+        "description": "`sync_source` spans of one source of truth, with its connector's stats."
       },
       "SourceSummary": {
         "properties": {

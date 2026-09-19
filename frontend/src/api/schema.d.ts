@@ -1119,7 +1119,7 @@ export interface paths {
         };
         /**
          * Recent spans, newest first
-         * @description Every step the system took, as spans of the audit trail (ADR 0018). Filter by process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, `sync_source`, `upload_document`...), status (`ok`, `error`), plane, time window (`since` <= start < `until`), rule, norm rule, use case, or a span's `model`, `role`, `agent` (the agents plane's `by_role` key), `provider` and `operation`. Every row of `/metrics/{plane}` carries its drill-down here as `traces`.
+         * @description Every step the system took, as spans of the audit trail (ADR 0018). Filter by process, step name (`compile_rule`, `llm_run`, `run_process`, `evaluate_rule`, `sync_source`, `upload_document`...), status (`ok`, `error`), plane, time window (`since` <= start < `until`), rule, norm rule, use case, or a span's `model`, `role`, `agent` (the agents plane's `by_role` key), `provider`, `operation` and `source` (a `sync_source` span's source). Every row of `/metrics/{plane}` carries its drill-down here as `traces`.
          */
         get: operations["listSpans"];
         put?: never;
@@ -2619,6 +2619,10 @@ export interface components {
             };
             /** Escalated */
             escalated: number;
+            /** Escalation Reasons */
+            escalation_reasons: {
+                [key: string]: number;
+            };
             /** Pending */
             pending: number;
             /** Resolutions */
@@ -2986,6 +2990,8 @@ export interface components {
             abstentions_by_field: {
                 [key: string]: number;
             };
+            /** Sources */
+            sources: components["schemas"]["SourceStats"][];
         };
         /** InstanceDetail */
         InstanceDetail: {
@@ -3077,6 +3083,11 @@ export interface components {
             exported_decision: string | null;
             /** Spans */
             spans: components["schemas"]["SpanNode"][];
+            /**
+             * Sources Read
+             * @default []
+             */
+            sources_read: components["schemas"]["SourceRead"][];
         };
         /** LlmStats */
         LlmStats: {
@@ -3366,6 +3377,16 @@ export interface components {
             };
             /** Escalated */
             escalated: number;
+            /**
+             * Escalation Reasons
+             * @example {
+             *       "MISSING_DATA": 20,
+             *       "OTHER": 1
+             *     }
+             */
+            escalation_reasons: {
+                [key: string]: number;
+            };
             /** Pending */
             pending: number;
         };
@@ -3542,6 +3563,11 @@ export interface components {
              * @default 0
              */
             unpriced_requests: number;
+            /**
+             * Rate Limited
+             * @default 0
+             */
+            rate_limited: number;
             /** Traces */
             traces?: string | null;
         };
@@ -4161,6 +4187,59 @@ export interface components {
             rows: {
                 [key: string]: unknown;
             }[];
+        };
+        /**
+         * SourceRead
+         * @description The latest `sync_source` span of one source before the instance's latest decision.
+         */
+        SourceRead: {
+            /** Source */
+            source: string;
+            /**
+             * Status
+             * @example ok
+             * @example error
+             */
+            status: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Requests */
+            requests: number;
+            /** Retries */
+            retries: number;
+            /** Rate Limited */
+            rate_limited: number;
+            /** Timeouts */
+            timeouts: number;
+            /** Trace Id */
+            trace_id: string;
+        };
+        /**
+         * SourceStats
+         * @description `sync_source` spans of one source of truth, with its connector's stats.
+         */
+        SourceStats: {
+            /** Source */
+            source: string | null;
+            /** Syncs */
+            syncs: number;
+            /** Errors */
+            errors: number;
+            /** Requests */
+            requests: number;
+            /** Retries */
+            retries: number;
+            /** Rate Limited */
+            rate_limited: number;
+            /** P95 Ms */
+            p95_ms: number | null;
+            /** Traces */
+            traces?: string | null;
         };
         /** SourceSummary */
         SourceSummary: {
@@ -6941,6 +7020,7 @@ export interface operations {
                 agent?: string | null;
                 provider?: string | null;
                 operation?: string | null;
+                source?: string | null;
                 limit?: number;
             };
             header?: never;
