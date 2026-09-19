@@ -10,7 +10,9 @@ import {
   Cpu,
   Download,
   FileText,
+  PencilLine,
   Play,
+  Rocket,
 } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import { keys } from '../api/queries'
@@ -783,20 +785,31 @@ function VersionChips({
           <span>en vigor</span>
           <span className="text-pagar/60">· {formatRunDate(published.created_at)}</span>
         </span>
-      ) : (
+      ) : draft == null ? (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-canvas px-2.5 py-1 text-[11.5px] text-muted ring-1 ring-line">
           <span className="h-1.5 w-1.5 rounded-full bg-faint/60" />
           Sin versión publicada
         </span>
-      )}
+      ) : null}
       {draft != null ? (
-        <Link
-          to={`${paths.panel(processId)}?publicar=1`}
-          className="inline-flex items-center gap-1.5 rounded-full bg-escalar-soft px-2.5 py-1 text-[11.5px] text-escalar hover:opacity-80"
-        >
-          <span className="font-mono font-medium">v{draft}</span>
-          borrador · publicar
-        </Link>
+        <>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-escalar-soft py-1 pl-2 pr-2.5 text-[11.5px] text-escalar">
+            <PencilLine size={11} strokeWidth={2} />
+            <span className="font-mono font-medium">v{draft}</span>
+            Borrador
+          </span>
+          <Link
+            to={`${paths.panel(processId)}?publicar=1`}
+            className="group inline-flex items-center gap-1.5 rounded-full bg-ink py-1 pl-2.5 pr-3 text-[11.5px] font-medium text-on-ink hover:bg-ink/90"
+          >
+            <Rocket
+              size={11}
+              strokeWidth={2}
+              className="transition-transform duration-200 group-hover:-translate-y-px group-hover:translate-x-px motion-reduce:transition-none"
+            />
+            Publicar
+          </Link>
+        </>
       ) : null}
     </div>
   )

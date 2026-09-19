@@ -24,16 +24,6 @@ export function ProcessSettings() {
       ]}
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
-        <header className="mb-6">
-          <p className="text-[13px] text-muted">Ajustes del proceso</p>
-          <h1 className="mt-1 text-[32px] font-medium leading-[1.1] tracking-[-0.045em]">
-            Ajustes del proceso
-          </h1>
-          <p className="mt-2 max-w-2xl text-[14.5px] leading-6 text-muted">
-            Elige un perfil o ajusta OCR, modelos, reintentos y revisión. Los cambios se
-            guardan en un borrador y se aplican al publicar.
-          </p>
-        </header>
         <div className="max-w-3xl">
           <MailGathering processId={processId} />
           <ProcessExecutionSettings processId={processId} />

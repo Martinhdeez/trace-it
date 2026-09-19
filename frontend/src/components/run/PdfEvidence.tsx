@@ -1,17 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Download, Minus, Plus, RotateCw } from 'lucide-react'
+import { AnimatePresence, motion } from 'motion/react'
+import { ChevronLeft, ChevronRight, Download, Minus, Plus, RotateCw, ScanText } from 'lucide-react'
 import type { DocumentEvidence, DocumentLocations } from '../../api/contracts'
 import { get, getBlob } from '../../api/http'
 import { cn } from '../../lib/cn'
-
-const precisionLabel = {
-  text: 'Exact text',
-  ocr: 'OCR text',
-  region: 'Approximate source region',
-  page: 'Source page only; precise location unavailable',
-  unavailable: 'Location unavailable',
-}
 
 export function PdfEvidence({
   instanceId,
@@ -25,12 +18,14 @@ export function PdfEvidence({
   initialSymbol?: string
 }) {
   const [fieldName, setFieldName] = useState<string | null>(null)
-  const [candidateOverride, setCandidate] = useState<number | null>(null)
   const [focusRequest, setFocusRequest] = useState(0)
   const [pageOverride, setPageOverride] = useState<number | null>(null)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
   const [query, setQuery] = useState('')
+  // The readings panel is a tool for digging, not the first thing to see: folded unless
+  // the caller asked for a specific field.
+  const [showFields, setShowFields] = useState(Boolean(initialSymbol))
   const [downloadError, setDownloadError] = useState('')
   const highlight = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
@@ -53,13 +48,14 @@ export function PdfEvidence({
     : null)
   const readings = selectedField ? (locations.data?.fields[selectedField] ?? []) : []
   const field = selectedField ? evidence.fields?.[selectedField] : undefined
-  const candidate =
-    candidateOverride ??
-    Math.max(
-      0,
-      readings.findIndex((reading) => reading.value === (field?.value ?? field?.proposed_value)),
-    )
-  const source = readings[candidate]
+  // Every reader's reading is drawn at once, text layer and scanner alike. The page to open
+  // is the one of the best reading: the value that was kept, and one that has a box.
+  const kept = field?.value ?? field?.proposed_value
+  const source =
+    readings.find((reading) => reading.value === kept && reading.boxes.length) ??
+    readings.find((reading) => reading.boxes.length) ??
+    readings.find((reading) => reading.value === kept) ??
+    readings[0]
   const page = pageOverride ?? source?.page ?? 1
   const pageImage = useQuery({
     queryKey: ['document-page', instanceId, evidence.sha256, page],
@@ -77,7 +73,12 @@ export function PdfEvidence({
   const width = (dimensions?.width ?? 595) * zoom
   const height = (dimensions?.height ?? 842) * zoom
   const sideways = rotation % 180 !== 0
-  const shown = source?.page === page ? source : undefined
+  // The best reading first, so the view centres on it; two readers boxing the same spot
+  // draw one box.
+  const shown = [...(source ? [source] : []), ...readings.filter((reading) => reading !== source)]
+    .filter((reading) => reading.page === page)
+    .flatMap((reading) => reading.boxes.map((box) => ({ reading, box, key: box.join(',') })))
+    .filter((item, index, all) => all.findIndex((other) => other.key === item.key) === index)
 
   function changeZoom(next: number, point?: { x: number; y: number }) {
     next = Math.max(0.5, Math.min(3, next))
@@ -142,6 +143,19 @@ export function PdfEvidence({
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-hairline px-3 py-2 text-[12px]">
         <button
+          title={showFields ? 'Hide extracted fields' : 'Show extracted fields'}
+          aria-label={showFields ? 'Hide extracted fields' : 'Show extracted fields'}
+          aria-pressed={showFields}
+          onClick={() => setShowFields((open) => !open)}
+          className={cn(
+            'flex items-center gap-1.5 rounded-full px-2.5 py-1 ring-1 transition-colors',
+            showFields ? 'bg-ocr-soft text-ink ring-ocr' : 'text-muted ring-line hover:bg-canvas hover:text-ink',
+          )}
+        >
+          <ScanText size={14} strokeWidth={1.75} />
+          Fields
+        </button>
+        <button
           title="Previous page"
           aria-label="Previous page"
           disabled={page <= 1}
@@ -203,13 +217,22 @@ export function PdfEvidence({
         </p>
       )}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <aside
+        <AnimatePresence initial={false}>
+        {showFields ? (
+        <motion.aside
+          key="fields"
           aria-label="Extracted fields"
-          className="max-h-52 shrink-0 overflow-auto border-b border-hairline p-3 lg:max-h-none lg:w-56 lg:border-r lg:border-b-0"
+          initial={{ opacity: 0, width: 0 }}
+          animate={{ opacity: 1, width: 'auto' }}
+          exit={{ opacity: 0, width: 0 }}
+          transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+          className="max-h-52 shrink-0 overflow-hidden border-b border-hairline lg:max-h-none lg:border-r lg:border-b-0"
         >
+        <div className="h-full overflow-auto p-3 lg:w-56">
           <label className="mb-3 block text-[11px] text-muted">
             Find a field or value
             <input
+              autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search readings…"
@@ -241,7 +264,6 @@ export function PdfEvidence({
                 aria-pressed={selectedField === name}
                 onClick={() => {
                   setFieldName(name)
-                  setCandidate(null)
                   setFocusRequest((value) => value + 1)
                   setPageOverride(null)
                 }}
@@ -262,58 +284,11 @@ export function PdfEvidence({
                 </span>
               </button>
             ))}
-        </aside>
+        </div>
+        </motion.aside>
+        ) : null}
+        </AnimatePresence>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div
-            aria-live="polite"
-            className="shrink-0 border-b border-hairline px-3 py-2 text-[11px] text-muted"
-          >
-            {selectedField ? (
-              <>
-                <span className="font-mono text-ink">{selectedField}</span>
-                {source ? (
-                  <>
-                    <span>
-                      {' '}
-                      · {precisionLabel[source.precision]} · {source.method}
-                    </span>
-                    <p className="mt-1 break-words text-ink">“{source.raw}”</p>
-                    {(locations.data?.fields[selectedField]?.length ?? 0) > 1 && (
-                      <label className="mt-2 block">
-                        Reading{' '}
-                        <select
-                          aria-label="Source reading"
-                          value={candidate}
-                          onChange={(event) => {
-                            setCandidate(Number(event.target.value))
-                            setPageOverride(null)
-                          }}
-                          className="ml-1 max-w-full rounded bg-canvas p-1"
-                        >
-                          {locations.data!.fields[selectedField].map((reading, index) => (
-                            <option key={index} value={index}>
-                              {index + 1} · {reading.method} · page {reading.page ?? '?'} ·{' '}
-                              {reading.raw}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    )}
-                  </>
-                ) : (
-                  <span>
-                    {' '}
-                    ·{' '}
-                    {locations.isPending
-                      ? 'Locating…'
-                      : 'No document location recorded for this field'}
-                  </span>
-                )}
-              </>
-            ) : (
-              'Select a field to see where it was read in the original PDF.'
-            )}
-          </div>
           <div
             ref={scroller}
             className="min-h-0 flex-1 overflow-auto bg-canvas p-5"
@@ -346,15 +321,15 @@ export function PdfEvidence({
                   }}
                 >
                   <OriginalPageImage blob={pageImage.data} alt={`${name}, page ${page}`} />
-                  {shown?.boxes.map(([x0, y0, x1, y1], index) => (
+                  {shown.map(({ reading, box: [x0, y0, x1, y1], key }, index) => (
                     <div
-                      key={`${selectedField}-${candidate}-${index}`}
+                      key={key}
                       ref={index === 0 ? highlight : undefined}
                       data-testid="source-box"
-                      title={`${selectedField}: ${shown.raw}`}
+                      title={`${selectedField}: ${reading.raw}`}
                       className={cn(
                         'pointer-events-none absolute bg-amber-300/20 outline-2 outline-offset-1',
-                        shown.precision === 'region'
+                        reading.precision === 'region'
                           ? 'outline-dashed outline-amber-600'
                           : 'outline-solid outline-amber-500',
                       )}
