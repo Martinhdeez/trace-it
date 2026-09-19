@@ -137,6 +137,8 @@ jobs:
       - name: Browser, proxy, authentication, PDF, decisions and export
         working-directory: frontend
         run: npx playwright test
+      - name: Keep the gateway available while the backend is replaced
+        run: bash deploy/ci-stack.sh maintenance-check
       - name: Publish the exact tested images (main only)
         id: publish
         if: github.ref == 'refs/heads/main'
@@ -199,9 +201,8 @@ jobs:
           echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
 
   deploy:
-    # Emergency release gate: image and ERP checks remain required; backend/e2e diagnostics
-    # continue running independently while the merged-main failures are repaired.
-    needs: [production-stack, erp]
+    # Every validation must pass before any production service is changed.
+    needs: [backend, e2e-integration, production-stack, erp]
     # The independent kill switch stays unset until root bootstrap and app integration pass.
     if: >-
       github.ref == 'refs/heads/main' &&

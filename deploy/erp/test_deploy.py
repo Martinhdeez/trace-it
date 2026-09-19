@@ -10,7 +10,9 @@ import pytest
 HERE = Path(__file__).resolve().parent
 
 
-@pytest.mark.parametrize("failure", ["none", "canary", "promote", "public"])
+@pytest.mark.parametrize(
+    "failure", ["none", "unchanged", "canary", "promote", "public"]
+)
 def test_deploy_failure_keeps_previous_image_and_success_records_release(
     tmp_path, failure
 ):
@@ -41,7 +43,8 @@ elif cmd == "curl":
     if failure == "public": sys.exit(22)
     print(json.dumps({**manifest, "rows": manifest["expected_rows"]}))
 elif args[:2] == ["image", "inspect"]:
-    print("a" * 40)
+    if "revision" in args[3]: print("a" * 40)
+    else: print(("c" if failure == "unchanged" or args[-1].startswith("sha256:") else "b") * 64)
 elif args[0] == "run":
     print("canary-id")
 elif args[:3] == ["exec", "canary-id", "cat"]:
@@ -81,6 +84,12 @@ elif args[0] == "compose" and "up" in args and failure == "promote" and os.envir
         if call[0] == "docker" and call[1][0] == "compose" and "up" in call[1]
     ]
     assert "fake-token" not in result.stdout + result.stderr
+    if failure == "unchanged":
+        assert result.returncode == 0, result.stderr
+        assert not promotions
+        assert (erp / "current.env").read_text() == previous
+        assert not any(call[1][0] == "run" for call in calls)
+        return
     if failure == "none":
         assert result.returncode == 0, result.stderr
         assert (

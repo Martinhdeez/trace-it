@@ -1,5 +1,9 @@
 FROM python:3.12-slim-bookworm
 ARG REVISION=local
+ARG CRIMINAL_HASH
+LABEL org.trace-it.criminal-hash=$CRIMINAL_HASH
+ARG SOURCE_HASH
+LABEL org.trace-it.source-hash=$SOURCE_HASH
 LABEL org.opencontainers.image.source="https://github.com/Martinhdeez/trace-it" \
       org.opencontainers.image.revision=$REVISION
 RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 poppler-utils \
