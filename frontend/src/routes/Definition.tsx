@@ -11,6 +11,7 @@ import type {
   Rule,
   RuleInput,
   RuleKind,
+  VersionOut,
 } from '../api/contracts'
 import { DefinitionSwitch } from '../components/process/DefinitionSwitch'
 import {
@@ -117,6 +118,10 @@ export function Definition() {
     queryKey: keys.findings(processId),
     queryFn: () => api.listFindings(processId),
   })
+  const versions = useQuery({
+    queryKey: keys.versions(processId),
+    queryFn: () => api.listVersions(processId),
+  })
   const rules = useQuery({
     queryKey: keys.rules(processId),
     queryFn: () => api.listRules(processId),
@@ -125,18 +130,11 @@ export function Definition() {
   })
 
   const all = rules.data ?? []
-  const active = all.filter((rule) => rule.estado === 'activa')
   const outcomes = process.data?.tipos_decision.map((outcome) => outcome.nombre) ?? []
-  const versionStamp = active
-    .map((rule) => rule.activada)
-    .filter((value): value is string => Boolean(value))
-    .sort()
-    .at(-1)
-  const versionHash = active
-    .map((rule) => rule.hash)
-    .filter(Boolean)
-    .join('')
-    .slice(0, 8)
+  const latestVersion = versions.data?.reduce<VersionOut | undefined>(
+    (latest, version) => (!latest || version.number > latest.number ? version : latest),
+    undefined,
+  )
 
   const create = useMutation({
     mutationFn: (body: RuleInput) => api.createRule(processId, body),
@@ -338,9 +336,9 @@ export function Definition() {
           <header className="flex shrink-0 items-start justify-between gap-3 border-b border-hairline px-5 py-3">
             <DefinitionSwitch processId={processId} />
             <VersionChip
-              label={versionName(active)}
-              hash={versionHash}
-              stamp={versionStamp}
+              label={latestVersion ? `v${latestVersion.number}` : 'borrador'}
+              hash={latestVersion?.content_hash.slice(0, 8) ?? ''}
+              stamp={latestVersion?.created_at}
               findings={findings.data ?? []}
             />
           </header>
@@ -1102,17 +1100,6 @@ function Composer({
       </p>
     </div>
   )
-}
-
-function versionName(active: Rule[]): string {
-  const stamps = [
-    ...new Set(
-      active
-        .map((rule) => rule.activada?.slice(0, 10))
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ]
-  return stamps.length ? `v${stamps.length}` : 'borrador'
 }
 
 function proposalsFrom(
