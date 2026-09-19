@@ -26,6 +26,41 @@ def proposals(plan: DraftPlan) -> list[str]:
     ]
 
 
+def source_fields(plan: DraftPlan) -> dict[str, set[str]]:
+    """The field names each proposed source will actually carry. A snapshot's rows come from
+    a connector, so the plan alone does not say."""
+    known = {}
+    for source in plan.sources:
+        if source.kind == "workbook":
+            known[source.name] = set(source.columns)
+        elif source.kind == "constant":
+            known[source.name] = {key for row in source.rows for key in row}
+    return known
+
+
+def consistent_examples(plan: DraftPlan) -> None:
+    """An example's rows replace the real table for that check, so a row written with the
+    spreadsheet's own header instead of the name the source maps breaks every rule reading
+    that table. Without this the mismatch only shows up as sandbox errors, after compiling
+    and testing every rule."""
+    known = source_fields(plan)
+    proposed = {s.name for s in plan.sources}
+    for example in plan.examples:
+        for table, rows in example.sources.items():
+            if table not in proposed:
+                raise ConflictError(
+                    f"Example `{example.name}` supplies rows for `{table}`, which is not a "
+                    f"proposed source ({', '.join(sorted(proposed)) or 'none proposed'})"
+                )
+            unknown = {key for row in rows for key in row} - known.get(table, set())
+            if table in known and unknown:
+                raise ConflictError(
+                    f"Example `{example.name}` gives `{table}` the field(s) "
+                    f"{', '.join(sorted(unknown))}, which its source does not map. Rules read "
+                    f"{', '.join(sorted(known[table]))}; write the example with those names"
+                )
+
+
 def ready(plan: DraftPlan, reviews: dict):
     if plan.questions:
         raise ConflictError("Answer the outstanding questions before compiling")
@@ -40,6 +75,7 @@ def ready(plan: DraftPlan, reviews: dict):
     known = {t.name for t in plan.decision_types}
     if any(e.decision not in known for e in plan.examples):
         raise ConflictError("An acceptance example names an unknown outcome")
+    consistent_examples(plan)
 
 
 def compiled_rules(compilations: list[dict]) -> list[Rule]:

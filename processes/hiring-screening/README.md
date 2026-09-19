@@ -50,7 +50,8 @@ make hiring-demo HIRING_ARGS="--process 7 --skip-learning"   # rerun the batch o
 The run of 19 September is in
 [docs/evaluations/hiring-screening-2026-09-19.md](../../docs/evaluations/hiring-screening-2026-09-19.md):
 discovery settled every question in three rounds and proposed twelve rules that match the
-policy, then preparation refused the candidate for the reason below.
+policy, then preparation refused the candidate over the fifth gap below, which is now
+caught before compilation instead.
 
 `tools/hiring_demo.py` starts a discovery draft, uploads the workbook, pastes `policy.md`,
 relays questions and answers until none remain, reviews every proposal, prepares (the agents
@@ -64,7 +65,7 @@ scripted manager for reruns.
 
 ## What the experiment changed so far
 
-Four gaps showed up the first time a problem that was not invoices went through discovery.
+Five gaps showed up the first time a problem that was not invoices went through discovery.
 Each is fixed here, with a regression test:
 
 - **A revision could blank the process name.** The third answer came back with the whole
@@ -84,20 +85,14 @@ Each is fixed here, with a regression test:
   the discovery responses returned no trace id, so a console or a script had to list recent
   spans and guess which were its own. `DraftOut` now carries `trace_id`, the last agent run
   on that draft, and `GET /process-drafts/{id}` reports it too.
-
-### Still open: a rule may name a source column that does not exist
-
-The run of 19 September stopped at preparation. The agent proposed the `positions` source
-with a `code` column, then wrote its rules against `positions.position_code`, so the coder
-produced lookups on a key no row has and every acceptance example failed with `RULE_ERROR`.
-The platform behaved correctly: the preview refused the candidate and nothing was published.
-But the mismatch is only discovered after compiling and testing twelve rules, and the
-manager sees a wall of sandbox errors rather than "no such column".
-
-Nothing checks a rule's literal `<source>.<field>` references against the columns the same
-proposal maps. Every dotted reference in the invoice pack's rule texts does resolve against
-`processes/invoice-payment/schema.json`, so a deterministic check before compilation looks
-feasible and cheap. It is not in this change.
+- **An acceptance example could describe a table that cannot exist.** The `positions` source
+  mapped column A to `position_code`, so the rules read `position_code`, but the examples
+  supplied rows keyed `code`, the spreadsheet's own header. An example's rows replace the
+  real table for that check, so every rule reading `positions` raised in the sandbox and the
+  candidate was refused: correct, but only after compiling and testing twelve rules, and the
+  manager saw a wall of sandbox errors rather than "no such field". `ready` now refuses an
+  example whose rows use a field its source does not map, or that invents a table, before
+  anything is compiled, and the prompt says which names to use.
 
 ## What the agents did, in the report
 

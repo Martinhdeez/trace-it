@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 from openpyxl import Workbook
 from sqlalchemy import func, select
 
+from app.common.exceptions import ConflictError
 from app.core.database import session_factory
 from app.features.agents import llm
 from app.features.decisions.model import Decision, Finding
@@ -632,3 +633,46 @@ async def test_a_revision_returns_the_trace_of_the_agent_run_it_performed(api, m
     steps = {s["step"] for s in spans} | {c["step"] for s in spans for c in s["children"]}
     assert "discover_process" in steps and "llm_run" in steps
     assert (await api.get(f"/process-drafts/{draft['id']}")).json()["trace_id"] == trace_id
+
+
+def workbook_plan():
+    """A plan whose source renames a spreadsheet column, as discovery's own proposals do."""
+    proposal = plan()
+    proposal["sources"] = [
+        {
+            "name": "positions",
+            "kind": "workbook",
+            "explanation": "Open roles",
+            "evidence": [{"reference": "abc:positions!A1", "explanation": "header"}],
+            "document": "abc",
+            "sheet": "positions",
+            "first_row": 2,
+            "last_row": 9,
+            "columns": {"position_code": "A", "status": "D"},
+        }
+    ]
+    return proposal
+
+
+def test_an_example_keyed_by_the_spreadsheet_header_is_refused_before_compiling():
+    """Observed with the hiring pack: the source mapped column A to `position_code`, the
+    examples supplied rows keyed `code`, and because an example's rows replace the real
+    table every rule failed in the sandbox after four minutes of compilation."""
+    proposal = workbook_plan()
+    proposal["examples"][0]["sources"] = {"positions": [{"code": "BE-1", "status": "open"}]}
+    reviews = dict.fromkeys(proposals(DraftPlan.model_validate(proposal)), "accepted")
+    with pytest.raises(ConflictError) as error:
+        ready(DraftPlan.model_validate(proposal), reviews)
+    assert "code" in str(error.value) and "position_code" in str(error.value)
+
+    proposal["examples"][0]["sources"] = {"positions": [{"position_code": "BE-1"}]}
+    ready(DraftPlan.model_validate(proposal), reviews)  # the mapped name is accepted
+
+
+def test_an_example_inventing_a_table_is_refused():
+    proposal = workbook_plan()
+    proposal["examples"][0]["sources"] = {"applicants": [{"email": "a@b"}]}
+    reviews = dict.fromkeys(proposals(DraftPlan.model_validate(proposal)), "accepted")
+    with pytest.raises(ConflictError) as error:
+        ready(DraftPlan.model_validate(proposal), reviews)
+    assert "applicants" in str(error.value)

@@ -71,7 +71,10 @@ and every example. When policy questions remain, start with at most four represe
 examples; add the other boundary cases after the answers. Never omit rules to save space.
 Each example's sources is a map of table names to ARRAYS OF ROW OBJECTS, including
 single-row parameters: {"parameters": [{"cut_off_date": "2026-01-01"}]}, never
-{"cut_off_date": "2026-01-01"}. Dates above are format examples, not policy evidence.
+{"cut_off_date": "2026-01-01"}. Write those rows with the field names YOUR source proposal
+maps, never the spreadsheet's own header: the example's rows replace the real table, so a
+row keyed by the header breaks every rule that reads it. Dates above are format examples,
+not policy evidence.
 Every non-missing-data example must supply all required instance fields and the complete
 source rows needed to isolate the intended check. Constants belong in source rows, not
 required instance symbols. Do not invent an unanswered parameter in the proposed sources.
