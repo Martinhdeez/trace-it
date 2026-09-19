@@ -1,9 +1,11 @@
 import io
 from dataclasses import replace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.features.ingestion.application import create_app
+from app.features.ingestion.config import Settings
 from app.features.ingestion.extraction_plan import ExtractionField, ExtractionPlan
 from app.features.ingestion.pdf.committee import reconcile
 from app.features.ingestion.schemas import ExtractOptions, FieldReading
@@ -56,6 +58,28 @@ class ForbiddenJudge:
 
     def signature(self):
         raise AssertionError("Mode must not inspect text judge")
+
+
+def test_default_api_reads_without_local_models_or_an_explicit_request_mode(settings, monkeypatch):
+    monkeypatch.delenv("TRACEPAY_OCR_MODE", raising=False)
+    configured = replace(settings, ocr_mode=Settings().ocr_mode)
+    service = ExtractionService(
+        configured, ForbiddenLocal(), TwoVisuals({"a": VALID, "b": VALID}), ForbiddenJudge()
+    )
+    result = service.extract(
+        service.ingest(io.BytesIO(pdf_bytes("")), "scan.pdf"), ExtractOptions(jev=False)
+    )
+    assert result.data["provenance"]["options"]["mode"] == "api"
+    assert result.metrics["ocr_calls"] == 0
+    assert result.metrics["vlm_calls"] > 0
+    assert result.fields["supplier_tax_id"].value == "B98120774"
+    assert result.fields["supplier_tax_id"].verification == "verified"
+
+
+@pytest.mark.parametrize("mode", ["local", "hybrid", "api"])
+def test_explicit_server_mode_is_preserved(monkeypatch, mode):
+    monkeypatch.setenv("TRACEPAY_OCR_MODE", mode)
+    assert ExtractOptions().normalized(Settings()).mode == mode
 
 
 def test_api_mode_never_inspects_local_models_and_two_visuals_verify(settings):
