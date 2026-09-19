@@ -23,6 +23,14 @@ VITE_API_TARGET=http://127.0.0.1:8001 npm run dev
 | unset (default) | Only the backend. Errors surface as they are ("El backend no responde" when it is down) |
 | `mock` | Only the in-memory mock, with the Caja lote 1 loaded. No backend needed. A "MOCK DATA" badge stays on screen |
 
+## Identity
+
+There is no login screen: the console is local. On start it calls `POST /login` with
+`VITE_DEFAULT_USER_EMAIL` (default `martin@trace-it.local`, the pack's manager) and sends
+that id as `X-User-Id` on every request, so each action keeps its author in the trace.
+A 401 or 403 asks for the identity again and the screen shows the backend's message.
+Ajustes can switch to another user of the process.
+
 ## Typed API
 
 `src/api/schema.d.ts` holds the backend's types, generated from `openapi.json`. After a

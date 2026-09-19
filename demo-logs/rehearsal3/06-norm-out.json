@@ -1,0 +1,26 @@
+{
+  "norm_rules": [
+    {
+      "number": 1,
+      "text": "An invoice whose total is above 10,000 EUR is reviewed by a person before it is paid.",
+      "checks": [
+        {
+          "text": "The invoice's total is not above 10,000 EUR, i.e. cents(total) <= 1000000 (total compared in whole cents with Decimal(str(total)) * 100, ROUND_HALF_UP); if the total is above 10,000 EUR the invoice must be reviewed by a person before it is paid.",
+          "type": "requirement",
+          "decision": "ESCALAR",
+          "decision_source": "explicit",
+          "quote": "is reviewed by a person before it is paid",
+          "kind": "doubt",
+          "kind_reason": "The data is clear (the total is above 10,000 EUR), but the norm does not forbid the payment: it requires a human review, so the system cannot determine the outcome by itself and a person must resolve it.",
+          "interpretation": "I read 'total' as the invoice symbol total (the printed TOTAL/IMPORTE TOTAL, not base or vat_amount) and 'above 10,000 EUR' as strictly greater than 10,000.00 EUR, compared in whole cents per the conventions (cents(total) > 1000000). The sentence names the outcome of the failure ('reviewed by a person before it is paid'), which maps to the human-review decision ESCALAR; since the norm does not declare such an invoice invalid, the check is a doubt rather than a violation.",
+          "rule_id": 33
+        }
+      ],
+      "policies": [
+        "An invoice above 10,000 EUR must be reviewed by a person before it is paid; the review is a human step, not an automatic rejection."
+      ],
+      "covered": [],
+      "id": 1
+    }
+  ]
+}

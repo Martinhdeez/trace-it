@@ -2,7 +2,6 @@ from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, status
 
-from app.common.exceptions import PermissionDeniedError
 from app.core import events
 from app.core.database import Session
 from app.features.agents import normalizer
@@ -10,16 +9,11 @@ from app.features.agents.normalizer import NormIn, NormOut
 from app.features.decisions.schemas import ImpactOut
 from app.features.rules import service
 from app.features.rules.schemas import NormRuleOut, RuleDetail, RuleIn, RuleOut
-from app.features.users.dependencies import CurrentUser, OptionalUser
+from app.features.users.dependencies import Manager
 
 router = APIRouter(tags=["rules"])
 
 Status = Literal["compiling", "draft", "active", "blocked", "retired"]
-
-
-def _manager_only(user: CurrentUser) -> None:
-    if user.role != "manager":
-        raise PermissionDeniedError("Only a manager can change the rules")
 
 
 @router.get("/processes/{process_id}/rules", operation_id="listRules", summary="Rules")
@@ -40,10 +34,9 @@ async def create_rule(
     body: RuleIn,
     session: Session,
     background: BackgroundTasks,
-    user: OptionalUser,
+    user: Manager,
 ) -> RuleDetail:
-    author = user.name if user else None
-    with events.span("save_rule", process_id=process_id, author=author) as span:
+    with events.span("save_rule", process_id=process_id, author=user.name) as span:
         rule = await service.create(session, process_id, body)
         span.set(rule_id=rule.id)
     background.add_task(service.compile_all_in_background, [rule.id], span)
@@ -67,10 +60,9 @@ async def normalize_norm(
     process_id: int,
     body: NormIn,
     session: Session,
-    user: CurrentUser,
+    user: Manager,
     background: BackgroundTasks,
 ) -> NormOut:
-    _manager_only(user)
     # One trace: the normalizer, then every check's compilation in the background.
     with events.span("norm", process_id=process_id, author=user.name) as span:
         out = await normalizer.normalize_norm(session, process_id, body.text)
@@ -98,8 +90,8 @@ async def get_rule(rule_id: int, session: Session) -> RuleDetail:
     operation_id="compileRule",
     summary="Recompile a draft or blocked rule: tests, code, validation; waits for it",
 )
-async def compile_rule(rule_id: int, session: Session, user: OptionalUser) -> RuleDetail:
-    return await service.compile_rule(session, rule_id, user.name if user else service.AUTO)
+async def compile_rule(rule_id: int, session: Session, user: Manager) -> RuleDetail:
+    return await service.compile_rule(session, rule_id, user.name)
 
 
 @router.get(
@@ -122,8 +114,7 @@ async def get_impact(rule_id: int, session: Session) -> ImpactOut:
         }
     },
 )
-async def activate_rule(rule_id: int, session: Session, user: CurrentUser) -> RuleDetail:
-    _manager_only(user)
+async def activate_rule(rule_id: int, session: Session, user: Manager) -> RuleDetail:
     return await service.activate(session, rule_id, user.name)
 
 
@@ -133,6 +124,5 @@ async def activate_rule(rule_id: int, session: Session, user: CurrentUser) -> Ru
     summary="Stage removal of a rule; validate and publish the process draft to retire it",
     responses={409: {"description": "It would contradict a decision a person took"}},
 )
-async def retire_rule(rule_id: int, session: Session, user: CurrentUser) -> RuleDetail:
-    _manager_only(user)
+async def retire_rule(rule_id: int, session: Session, user: Manager) -> RuleDetail:
     return await service.retire(session, rule_id, user.name)
