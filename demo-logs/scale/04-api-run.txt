@@ -1,0 +1,8 @@
+API pid 52870, RSS before: 219824 KB
+POST /processes/1/run (population 5000, 4500 pending):
+http 200, 13.517699 s
+{"decided":4500,"by_decision":{"NO_PAGAR":4221,"ESCALAR":279}}
+POST /processes/1/reprocess?dry_run=true (5000):
+http 200, 13.490981 s
+{"unchanged":5000,"changes":[],"conflicts":[]}
+API peak RSS during both: 348352 KB

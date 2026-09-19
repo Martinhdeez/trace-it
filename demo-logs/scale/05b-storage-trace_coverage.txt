@@ -1,0 +1,66 @@
+ANALYZE
+    relname    | rows | total_bytes | bytes_per_row 
+---------------+------+-------------+---------------
+ events        |  315 |      729088 |          2314
+ files         |   21 |      499712 |         23795
+ rules         |   28 |      229376 |          8192
+ instances     |   26 |      147456 |          5671
+ decisions     |   27 |      122880 |          4551
+ sources       |    8 |      122880 |         15360
+ agent_configs |    5 |       98304 |         19660
+ processes     |    2 |       65536 |         32768
+(8 rows)
+
+         step          | count | avg_row_bytes | max_row_bytes 
+-----------------------+-------+---------------+---------------
+ llm_run               |    26 |          6297 |          8552
+ load_workbook         |     1 |        133464 |        133464
+ ingest_document       |    26 |          4183 |          9424
+ extraction            |    21 |           638 |           648
+ evaluate_rule         |    50 |           237 |           240
+ activate_rule         |    28 |           325 |           336
+ decision              |    26 |           309 |           384
+ upload_document       |    20 |           200 |           200
+ native_text           |    20 |           184 |           184
+ impact_check          |    13 |           268 |           272
+ store_file            |    20 |           160 |           160
+ normalize_norm        |     1 |          3008 |          3008
+ compile_rule          |    12 |           248 |           248
+ coder_attempt         |    12 |           240 |           240
+ run_tests             |    12 |           208 |           208
+ sync_source           |     3 |           797 |           808
+ export_outcomes       |     4 |           216 |           216
+ ocr                   |     4 |           216 |           216
+ run_process           |     3 |           269 |           312
+ configure_agent       |     1 |           672 |           672
+ load_definition       |     2 |           316 |           320
+ load_use_case         |     1 |           504 |           504
+ reprocess             |     1 |           328 |           328
+ retire_rule           |     1 |           316 |           316
+ activate_agent_config |     1 |           304 |           304
+ resolution            |     1 |           288 |           288
+ suggest_escalation    |     1 |           216 |           216
+ upload_workbook       |     1 |           192 |           192
+ compile_rules         |     1 |           184 |           184
+ demo_ingest           |     1 |           168 |           168
+ norm                  |     1 |           160 |           160
+(31 rows)
+
+ llm_run_role | count | avg_row_bytes | max_row_bytes 
+--------------+-------+---------------+---------------
+ assistant    |     1 |          4640 |          4640
+ compiler     |    12 |          7652 |          8064
+ normalizer   |     1 |          8552 |          8552
+ tester       |    12 |          4893 |          5264
+(4 rows)
+
+ spans | heap_bytes | index_bytes | total_bytes_per_span 
+-------+------------+-------------+----------------------
+   315 |     106496 |      114688 |                 2314
+(1 row)
+
+ database_bytes 
+----------------
+       10412559
+(1 row)
+
