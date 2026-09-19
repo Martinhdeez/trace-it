@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileText, Sparkles } from 'lucide-react'
 import { api } from '../api/client'
 import { families, keys } from '../api/queries'
-import type { ProcessDetail, RuleKind, Suggestion } from '../api/contracts'
+import type { InstanceDetail, ProcessDetail, RuleIn, RuleResult, Suggestion } from '../api/contracts'
 import { ProcessScreen } from '../components/process/ProcessScreen'
 import { Button, Field, Segmented, Select, Textarea } from '../components/shell/Controls'
 import { Empty, ErrorNotice, Notice } from '../components/shell/Notice'
@@ -142,12 +142,18 @@ function Resolve({
   const [decision, setDecision] = useState(currentDecision ?? outcomes[0] ?? '')
   const [note, setNote] = useState('')
   const [ruleText, setRuleText] = useState('')
-  const [ruleKind, setRuleKind] = useState<RuleKind>('requisito')
+  const [ruleKind, setRuleKind] = useState<RuleIn['type']>('requirement')
   const [edited, setEdited] = useState(false)
 
+  const instance = useQuery({
+    queryKey: keys.instance(instanceId),
+    queryFn: () => api.getInstance(instanceId),
+  })
+  // The assistant is an LLM call: a 502 will not fix itself, so do not retry it.
   const suggestion = useQuery({
     queryKey: keys.suggestion(instanceId),
     queryFn: () => api.suggestion(instanceId),
+    retry: false,
   })
 
   // The assistant's proposal is the starting point; the person can overwrite it.
@@ -155,23 +161,30 @@ function Resolve({
     const data = suggestion.data
     if (!data || edited) return
     setDecision(data.decision)
-    setRuleText(data.regla_propuesta)
-    setRuleKind(data.tipo_propuesto)
+    setRuleText(data.proposed_rule)
+    setRuleKind(data.proposed_type)
   }, [suggestion.data, edited])
 
   /**
-   * Two calls, because the backend keeps them apart: resolving writes a decision
-   * row, and the rule is a separate draft that still has to be compiled.
+   * Accepting the proposal, or choosing by hand. Creating a rule is a second call,
+   * because the backend keeps them apart: the rule is a draft that still has to compile.
    */
   const resolve = useMutation({
-    mutationFn: async ({ withRule }: { withRule: boolean }) => {
+    mutationFn: async ({ mode }: { mode: 'accept' | 'manual' | 'rule' }) => {
+      if (mode === 'accept' && suggestion.data) {
+        await api.resolve(instanceId, {
+          decision: suggestion.data.decision,
+          reason: note.trim() || suggestion.data.reasoning,
+        })
+        return null
+      }
       await api.resolve(instanceId, {
         decision,
-        motivo: note.trim() || 'Resuelta por una persona',
+        reason: note.trim() || 'Resuelta por una persona',
       })
       const text = ruleText.trim()
-      if (!withRule || !text) return null
-      return api.createRule(process.id, { texto: text, tipo: ruleKind, decision })
+      if (mode !== 'rule' || !text) return null
+      return api.createRule(process.id, { text, type: ruleKind, decision })
     },
     onSuccess: () => {
       for (const name of [...families.decisions, ...families.rules]) {
@@ -199,9 +212,20 @@ function Resolve({
             <StatusBadge value={currentDecision} decisionTypes={process.tipos_decision} />
           </p>
         ) : null}
+        <div className="mt-3">
+          {instance.isError ? (
+            <ErrorNotice error={instance.error} />
+          ) : instance.data ? (
+            <WhyEscalated instance={instance.data} />
+          ) : null}
+        </div>
       </div>
 
-      <Suggested suggestion={suggestion.data} loading={suggestion.isPending} />
+      <Suggested
+        suggestion={suggestion.data}
+        loading={suggestion.isPending}
+        error={suggestion.isError ? suggestion.error : null}
+      />
 
       <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
         <p className="text-[13px] font-medium">Tu decisión</p>
@@ -257,8 +281,8 @@ function Resolve({
                 setRuleKind(value)
               }}
               options={[
-                { value: 'requisito', label: 'Requisito' },
-                { value: 'prohibicion', label: 'Prohibición' },
+                { value: 'requirement', label: t('ruleType.requirement') },
+                { value: 'prohibition', label: t('ruleType.prohibition') },
               ]}
             />
           </div>
@@ -290,17 +314,24 @@ function Resolve({
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             tone="primary"
-            onClick={() => resolve.mutate({ withRule: true })}
-            disabled={resolve.isPending || !decision || !ruleText.trim()}
+            onClick={() => resolve.mutate({ mode: 'accept' })}
+            disabled={resolve.isPending || !suggestion.data}
           >
-            {resolve.isPending ? 'Guardando…' : 'Resolver y crear la regla'}
+            {resolve.isPending ? 'Guardando…' : 'Aceptar la propuesta'}
           </Button>
           <Button
             tone="soft"
-            onClick={() => resolve.mutate({ withRule: false })}
+            onClick={() => resolve.mutate({ mode: 'manual' })}
             disabled={resolve.isPending || !decision}
           >
             Resolver sin regla
+          </Button>
+          <Button
+            tone="soft"
+            onClick={() => resolve.mutate({ mode: 'rule' })}
+            disabled={resolve.isPending || !decision || !ruleText.trim()}
+          >
+            Resolver y crear la regla
           </Button>
         </div>
       </div>
@@ -308,12 +339,49 @@ function Resolve({
   )
 }
 
+/** The escalation code keeps its name visible, with its Spanish label in front of it. */
+function escalationReason(reason: string): string {
+  const code = reason.match(/^(RULE_ERROR|RULE_CONFLICT|SOURCE_UNAVAILABLE)/)?.[1]
+  return code ? `${t(`escalation.${code}`)} · ${reason}` : reason
+}
+
+/** What the engine said, which rules fired and, when there was one, what the reviewer thought. */
+function WhyEscalated({ instance }: { instance: InstanceDetail }) {
+  const results = (instance.decisions.at(-1)?.results ?? []) as RuleResult[]
+  const fired = results.filter((result) => result.fires === true)
+  const review = instance.reviews.at(-1)
+
+  return (
+    <Notice tone="warning" title="Por qué se escaló">
+      <p>{instance.reason ? escalationReason(instance.reason) : 'El motor no dejó un motivo.'}</p>
+      {fired.length ? (
+        <ul className="mt-1 list-disc space-y-0.5 pl-4">
+          {fired.map((result) => (
+            <li key={result.rule_id}>
+              {result.rule_text ?? `Regla ${result.rule_id}`}
+              <span className="font-mono text-[11px]"> · {result.reason}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {instance.review_pending && review ? (
+        <p className="mt-1">
+          Revisor ({t(`reviewStatus.${review.status}`)}): {review.recommendation ?? '—'}
+          {review.reasoning ? `. ${review.reasoning}` : ''}
+        </p>
+      ) : null}
+    </Notice>
+  )
+}
+
 function Suggested({
   suggestion,
   loading,
+  error,
 }: {
   suggestion: Suggestion | undefined
   loading: boolean
+  error: unknown
 }) {
   return (
     <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
@@ -323,14 +391,19 @@ function Suggested({
       </p>
       {loading ? (
         <p className="mt-2 text-[13px] text-muted">Pensando…</p>
+      ) : error ? (
+        <div className="mt-2">
+          <ErrorNotice error={error} />
+          <p className="mt-2 text-[13px] text-muted">Puedes resolver el caso a mano.</p>
+        </div>
       ) : suggestion ? (
         <>
           <p className="mt-2 flex items-start gap-2 text-[13px]">
             <StatusBadge value={suggestion.decision} className="mt-0.5 shrink-0" />
-            <span className="text-muted">{suggestion.razonamiento}</span>
+            <span className="text-muted">{suggestion.reasoning}</span>
           </p>
           <p className="mt-2 rounded-[10px] bg-canvas px-3 py-2 text-[13px] ring-1 ring-line">
-            {suggestion.regla_propuesta}
+            {suggestion.proposed_rule}
           </p>
         </>
       ) : (

@@ -1,8 +1,8 @@
 import { X } from 'lucide-react'
-import type { InstanceDetail, TraceEvent } from '../../api/contracts'
+import type { InstanceDetail, InstanceEvent } from '../../api/contracts'
 import { extractedDocuments } from '../../data/documents.generated'
 import { formatMs } from '../../lib/format'
-import { detailLabel } from '../../lib/status'
+import { label } from '../../lib/status'
 import { Overlay } from '../shell/Overlay'
 import { StatusBadge } from '../shell/StatusBadge'
 import { DocumentPane } from './DocumentPane'
@@ -14,9 +14,9 @@ export function DocumentPopup({
   instance: InstanceDetail
   onClose: () => void
 }) {
-  const doc = extractedDocuments[instance.nombre]
-  const cost = processingCost(instance.eventos)
-  const current = detailLabel(instance)
+  const doc = extractedDocuments[instance.name]
+  const cost = processingCost(instance.events)
+  const current = label(instance)
 
   return (
     <Overlay onClose={onClose} size="xl">
@@ -25,7 +25,7 @@ export function DocumentPopup({
           <header className="flex shrink-0 items-center justify-between gap-3 border-b border-hairline px-4 py-3">
             <div className="min-w-0">
               <p className="text-[11px] text-muted">Documento</p>
-              <h2 className="truncate font-mono text-[13px]">{instance.nombre}</h2>
+              <h2 className="truncate font-mono text-[13px]">{instance.name}</h2>
             </div>
             <button
               type="button"
@@ -36,7 +36,7 @@ export function DocumentPopup({
               <X size={14} strokeWidth={1.75} />
             </button>
           </header>
-          <DocumentPane instanceId={instance.id} name={instance.nombre} embedded />
+          <DocumentPane instanceId={instance.id} name={instance.name} embedded />
         </div>
 
         <aside className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-hairline px-4 py-4">
@@ -45,7 +45,7 @@ export function DocumentPopup({
               <span className="text-[12px] text-muted">Resultado</span>
               <StatusBadge value={current} />
             </div>
-            <Row label="hash" value={instance.fichero_hash.slice(0, 12)} mono />
+            <Row label="hash" value={instance.file_hash.slice(0, 12)} mono />
             {doc ? (
               <>
                 <Row label="origen" value={doc.inputKind} />
@@ -55,7 +55,7 @@ export function DocumentPopup({
             ) : null}
             <Row
               label="símbolos"
-              value={String(Object.keys(instance.simbolos ?? {}).length)}
+              value={String(Object.keys(instance.symbols ?? {}).length)}
             />
           </Section>
 
@@ -75,30 +75,30 @@ export function DocumentPopup({
             ) : null}
           </Section>
 
-          <Section title={`Runs · ${instance.eventos.length}`}>
-            {instance.eventos.length === 0 ? (
+          <Section title={`Runs · ${instance.events.length}`}>
+            {instance.events.length === 0 ? (
               <p className="text-[12px] text-muted">Este documento aún no tiene pasos.</p>
             ) : (
               <ol className="-mx-1">
-                {instance.eventos.map((event, index) => (
+                {instance.events.map((event, index) => (
                   <li
-                    key={`${event.paso}-${index}`}
+                    key={`${event.step}-${index}`}
                     className="flex items-baseline justify-between gap-2 rounded-[8px] px-1 py-1.5"
                   >
-                    <span className="min-w-0 truncate font-mono text-[11px] text-ink">{event.paso}</span>
+                    <span className="min-w-0 truncate font-mono text-[11px] text-ink">{event.step}</span>
                     <span className="shrink-0 font-mono text-[10.5px] text-faint">
-                      {event.latencia_ms == null ? '—' : formatMs(event.latencia_ms)}
+                      {event.duration_ms == null ? '—' : formatMs(event.duration_ms)}
                     </span>
                   </li>
                 ))}
               </ol>
             )}
-            {instance.decisiones.length > 1 ? (
+            {instance.decisions.length > 1 ? (
               <ul className="mt-2 border-t border-hairline pt-2">
-                {instance.decisiones.map((decision) => (
+                {instance.decisions.map((decision) => (
                   <li key={decision.id} className="flex items-baseline justify-between gap-2 py-1">
                     <StatusBadge value={decision.decision} />
-                    <span className="truncate text-[10.5px] text-faint">{decision.autor}</span>
+                    <span className="truncate text-[10.5px] text-faint">{decision.author}</span>
                   </li>
                 ))}
               </ul>
@@ -136,14 +136,14 @@ function Row({
   )
 }
 
-function processingCost(events: TraceEvent[]) {
+function processingCost(events: InstanceEvent[]) {
   let totalMs = 0
   let input = 0
   let output = 0
   let usd = 0
   for (const event of events) {
-    totalMs += event.latencia_ms ?? 0
-    const data = event.datos
+    totalMs += event.duration_ms ?? 0
+    const data = event.data
     if (!data) continue
     input += asNumber(data.input_tokens)
     output += asNumber(data.output_tokens)
