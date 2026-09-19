@@ -50,7 +50,7 @@ type Turn = {
   answer?: string
   /** The checks a norm produced; each one is already a draft rule compiling. */
   checks?: CreatedCheck[]
-  /** Attachments that were not uploaded, because only Excel teaches a process. */
+  /** Attachments that were not uploaded because they are not supported evidence. */
   skipped?: string[]
   error?: unknown
 }
@@ -90,7 +90,7 @@ const PANE_CHAT = {
   },
 } as const
 
-const EXCEL = /\.xlsx$/i
+const TABULAR_EVIDENCE = /\.(xlsx|csv|json)$/i
 
 /** The conversation for this process: the one still open, or a new one. */
 async function processConversation(processId: number, name: string): Promise<DiscoverySession> {
@@ -187,9 +187,17 @@ export function Definition() {
   const [viewing, setViewing] = useState<number | null>(null)
   const viewed = history.find((version) => version.id === viewing)
 
-  /** Normas: the normalizer. Anywhere else: the process chat, in discuss mode. */
+  /** Normas uses the normalizer. Other panes share the reviewed discovery draft. */
   const send = useMutation({
-    mutationFn: async ({ prompt, files }: { prompt: string; files: Attachment[] }) => {
+    mutationFn: async ({
+      prompt,
+      files,
+      mode,
+    }: {
+      prompt: string
+      files: Attachment[]
+      mode: 'discuss' | 'revise'
+    }) => {
       if (pane === 'normas') {
         const out = await api.normalizeNorm(processId, prompt)
         return { checks: out.norm_rules.flatMap((item) => item.checks) }
@@ -197,20 +205,21 @@ export function Definition() {
       if (!session.current) {
         session.current = await processConversation(processId, process.data?.name ?? 'Definición')
       }
-      const excel = files.filter((item) => EXCEL.test(item.name))
-      for (const file of excel) {
-        const next = await api.uploadDraftWorkbook(session.current.id, session.current.revision, file.file)
+      const evidence = files.filter((item) => TABULAR_EVIDENCE.test(item.name))
+      for (const file of evidence) {
+        const next = await api.uploadDraftEvidence(session.current.id, session.current.revision, file.file)
         session.current = { id: next.id, revision: next.revision }
       }
       const next = await api.messageDiscoverySession(
         session.current.id,
         session.current.revision,
         prompt,
+        mode,
       )
       session.current = { id: next.id, revision: next.revision }
       return {
         answer: lastAnswer(next),
-        skipped: files.filter((item) => !EXCEL.test(item.name)).map((item) => item.name),
+        skipped: files.filter((item) => !TABULAR_EVIDENCE.test(item.name)).map((item) => item.name),
       }
     },
     onMutate: ({ prompt, files }) => {
@@ -341,8 +350,9 @@ export function Definition() {
             onDraft={setDraft}
             focusTick={focusTick}
             busy={send.isPending}
-            onSend={(text, files) => {
-              send.mutate({ prompt: text, files })
+            allowChanges={pane !== 'normas'}
+            onSend={(text, files, mode) => {
+              send.mutate({ prompt: text, files, mode })
               setDraft('')
             }}
           />
@@ -1254,6 +1264,7 @@ function Composer({
   onDraft,
   focusTick,
   busy,
+  allowChanges,
   onSend,
 }: {
   placeholder: string
@@ -1261,12 +1272,14 @@ function Composer({
   onDraft: (text: string) => void
   focusTick: number
   busy: boolean
-  onSend: (text: string, files: Attachment[]) => void
+  allowChanges: boolean
+  onSend: (text: string, files: Attachment[], mode: 'discuss' | 'revise') => void
 }) {
   const input = useRef<HTMLInputElement>(null)
   const box = useRef<HTMLDivElement>(null)
   const [files, setFiles] = useState<Attachment[]>([])
   const [over, setOver] = useState(false)
+  const [proposeChanges, setProposeChanges] = useState(false)
 
   useEffect(() => {
     if (!focusTick) return
@@ -1280,7 +1293,11 @@ function Composer({
   const send = () => {
     const prompt = draft.trim()
     if (busy || (!prompt && files.length === 0)) return
-    onSend(prompt || 'Revisa los adjuntos y propone cambios.', files)
+    onSend(
+      prompt || 'Revisa los adjuntos y propón cambios.',
+      files,
+      proposeChanges || files.length > 0 ? 'revise' : 'discuss',
+    )
     onDraft('')
     setFiles([])
   }
@@ -1339,14 +1356,31 @@ function Composer({
           className="border-0 bg-transparent ring-0"
         />
         <div className="flex items-center justify-between px-1 pb-0.5">
-          <button
-            type="button"
-            onClick={() => input.current?.click()}
-            className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-canvas hover:text-ink"
-            title="Adjuntar"
-          >
-            <Paperclip size={14} strokeWidth={1.6} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => input.current?.click()}
+              className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-canvas hover:text-ink"
+              title="Adjuntar evidencia"
+            >
+              <Paperclip size={14} strokeWidth={1.6} />
+            </button>
+            {allowChanges ? (
+              <button
+                type="button"
+                aria-pressed={proposeChanges}
+                onClick={() => setProposeChanges((value) => !value)}
+                className={cn(
+                  'rounded-full px-2.5 py-1 text-[11px] ring-1',
+                  proposeChanges
+                    ? 'bg-ink text-white ring-ink'
+                    : 'text-muted ring-line hover:bg-canvas hover:text-ink',
+                )}
+              >
+                Proponer cambios
+              </button>
+            ) : null}
+          </div>
           <Button
             tone="primary"
             disabled={busy || (!draft.trim() && files.length === 0)}
@@ -1363,14 +1397,14 @@ function Composer({
         type="file"
         multiple
         hidden
-        accept=".xlsx"
+        accept=".xlsx,.csv,.json"
         onChange={(event) => {
           addFiles([...(event.target.files ?? [])])
           event.target.value = ''
         }}
       />
       <p className="mt-2 px-1 text-[11px] text-faint">
-        ⌘⏎ para enviar. Solo Excel: enseña al proceso, no entra al lote.
+        ⌘⏎ para enviar. XLSX, CSV o JSON aportan evidencia; no entran al lote.
       </p>
     </div>
   )

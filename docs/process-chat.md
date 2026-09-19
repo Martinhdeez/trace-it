@@ -18,16 +18,17 @@ proposals and prepared preview. Only the saved conversation revision advances. T
 includes evidence references and clarification questions. Use the returned revision for
 subsequent requests, including publication of an unchanged prepared proposal.
 
-The assistant sees published rules, this conversation's proposals, recent cases and their
+The assistant sees the published process definition, this conversation's proposals, recent cases and their
 human resolutions, reviewer recommendations and bounded trace evidence. Sampling includes
 up to 30 cases, favoring a mix of human resolutions and ordinary cases; it is not a complete
-statistical analysis. Workbook and source inspection remain read-only. A separate editable
+statistical analysis. Evidence and source inspection remain read-only. A separate editable
 version draft is visible for discussion but cannot be overwritten by chat publication.
 Finish that draft before preparing this conversation's proposals.
 
 ## Propose changes explicitly
 
-Use `mode: "revise"` when asking for edits:
+Use `mode: "revise"` when asking for edits. The manager console exposes this as **Proponer
+cambios** and selects it automatically when evidence is attached:
 
 ```json
 {
@@ -75,7 +76,8 @@ through the existing immutable version workflow, saves the validation and review
 and leaves past decisions intact. Changed configuration, source snapshots or case history
 makes approval stale. Start a fresh conversation to review the new baseline.
 
-New-process discovery remains available through its existing endpoints. Conversational
+The same draft supports new-process discovery when it is started without `process_id`.
+Conversational
 connector generation, arbitrary backend operations and model-setting edits are outside
 this extension.
 

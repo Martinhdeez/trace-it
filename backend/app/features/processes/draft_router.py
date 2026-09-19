@@ -88,8 +88,13 @@ async def message(
     return await drafts.message(session, draft_id, body, user)
 
 
-@router.post("/{draft_id}/workbooks", operation_id="uploadDraftWorkbook")
-async def workbook(
+@router.post("/{draft_id}/evidence", operation_id="uploadDraftEvidence")
+@router.post(
+    "/{draft_id}/workbooks",
+    operation_id="uploadDraftWorkbook",
+    deprecated=True,
+)
+async def evidence_asset(
     draft_id: int,
     session: Session,
     user: CurrentUser,
@@ -100,7 +105,7 @@ async def workbook(
         session,
         draft_id,
         revision,
-        file.filename or "workbook.xlsx",
+        file.filename or "evidence.xlsx",
         await file.read(20 * 1024 * 1024 + 1),
         user,
     )

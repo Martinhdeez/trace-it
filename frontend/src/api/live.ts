@@ -76,13 +76,13 @@ export const liveClient: ApiClient = {
   listDiscoverySessions: () => get<DiscoverySessionSummary[]>('/process-drafts'),
   startDiscoverySession: (processId, name) =>
     post<DiscoverySession>('/process-drafts', { process_id: processId, name }),
-  messageDiscoverySession: (id, revision, message) =>
-    post<DiscoverySession>(`/process-drafts/${id}/messages`, { revision, message, mode: 'discuss' }),
-  uploadDraftWorkbook: (id, revision, file) => {
+  messageDiscoverySession: (id, revision, message, mode = 'discuss') =>
+    post<DiscoverySession>(`/process-drafts/${id}/messages`, { revision, message, mode }),
+  uploadDraftEvidence: (id, revision, file) => {
     const form = new FormData()
     form.append('file', file)
     form.append('revision', String(revision))
-    return upload<DiscoverySession>(`/process-drafts/${id}/workbooks`, form)
+    return upload<DiscoverySession>(`/process-drafts/${id}/evidence`, form)
   },
 
   summary: (processId) => get<ProcessSummary>(`/processes/${processId}/summary`),

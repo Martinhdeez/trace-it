@@ -1,4 +1,4 @@
-"""One agent discovers a process from workbook evidence, snapshots and user answers."""
+"""One agent discovers a process from tabular evidence, snapshots and user answers."""
 
 import json
 from copy import deepcopy
@@ -26,7 +26,7 @@ discussion = Agent(None, output_type=Discussion, deps_type=Deps, name="discovery
 def read_sheet(
     ctx: RunContext[Deps], document: str, sheet: str, first_row: int, last_row: int
 ) -> list[dict]:
-    """Read up to 100 rows from a workbook, preserving cell addresses and raw values."""
+    """Read up to 100 rows from a tabular asset, preserving cell addresses and raw values."""
     ctx.deps.reads += 1
     if ctx.deps.reads > 30 or first_row < 1 or not 0 <= last_row - first_row < 100:
         return [{"error": "Read limit reached; ask the user to narrow the material"}]

@@ -50,7 +50,7 @@ flowchart LR
 | ![E](https://img.shields.io/badge/-E-db2777?style=for-the-badge) | [Change without code, recover without loss](E-change-without-code-recover-without-loss.md) | Resilience (10) and bonus (10) | Atomic versions the manager publishes, append-only history, fallback chains, stale-decision alerts |
 
 <details>
-<summary>Supporting ADRs (35)</summary>
+<summary>Supporting ADRs (36)</summary>
 
 ADR 0001 is the founding decision and wins over any other document. Superseded plans live
 in `.artifacts/archive/`.
@@ -92,6 +92,7 @@ in `.artifacts/archive/`.
 | [0033](detail/0033-one-proposals-contract.md) | Send every agent proposal to the manager through one contract | accepted | E |
 | [0034](detail/0034-per-plane-dashboards.md) | Show one dashboard per monitoring plane, never a mixed total | accepted | C, D |
 | [0035](detail/0035-learn-from-resolved-escalations.md) | Let the reviewer agent learn a resolved escalation by amending the rule that escalated it | accepted | A |
+| [0036](detail/0036-route-all-process-changes-through-reviewed-drafts.md) | Route every agent-authored process change through a reviewed draft | accepted | E |
 
 ### Glossary
 - **Rule finding:** the result of one rule on one instance (`fires`, `reason`).

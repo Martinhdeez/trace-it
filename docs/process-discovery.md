@@ -1,6 +1,7 @@
 # Discover and revise a process
 
-The backend accepts workbooks and a conversation to propose sources and rules. Every
+The backend accepts evidence assets and a conversation to propose a complete process definition.
+Every
 operation below requires a manager's `X-User-Id`. Discovery never creates live rules;
 publication follows review, compilation, acceptance examples and version validation.
 Discovery conversations use separate storage from the single editable process version draft.
@@ -15,7 +16,7 @@ agent settings and configured source connections for a new process. Without one,
 use the platform environment settings, including `TRACE_DISCOVERY_MODEL`.
 
 `GET /process-drafts` lists saved conversations. `GET /process-drafts/{id}` returns the
-current revision, plan, reviews, messages, workbook inventory, loaded snapshots, available
+current revision, plan, reviews, messages, evidence inventory, loaded snapshots, available
 connectors and preview. `GET /process-drafts/{id}/revisions` preserves earlier proposals
 and answers with their authors. Draft state survives restarting the backend.
 
@@ -29,9 +30,12 @@ rejected outputs, tokens and latency (ADR 0018). It is null until the first agen
 
 ## Supply evidence and explain the process
 
-- `POST /process-drafts/{id}/workbooks`: multipart `file` and `revision`. Accepts XLSX,
-  up to 20 MB per upload and five workbooks per draft. Cell addresses and numeric lexical
-  values are retained. Formula cells cannot silently become authoritative source values.
+- `POST /process-drafts/{id}/evidence`: multipart `file` and `revision`. Accepts XLSX, CSV
+  and JSON, up to 20 MB per upload and five evidence assets per draft. CSV accepts UTF-8
+  comma, semicolon, tab or pipe-delimited tables. JSON accepts an object, a list, or an
+  object of named lists. All formats receive stable sheet and cell references. Excel formula
+  cells cannot silently become authoritative source values. The old `/workbooks` path remains
+  as a deprecated compatibility alias.
 - `POST /process-drafts/{id}/sources/{name}/sync`: `{ "revision": 2 }`. Uses only a
   configured connector listed in the draft. The ERP is read through the existing client;
   only a complete download replaces the draft snapshot. No live process source changes.
@@ -41,7 +45,7 @@ rejected outputs, tokens and latency (ADR 0018). It is null until the first agen
   questions. Without this mode, messages discuss the proposal without changing it.
 
 Upload and sync retain evidence; send a message to have the agent interpret it. The agent
-can read further workbook ranges and search downloaded ERP records. It proposes table
+can read further tabular ranges and search downloaded ERP records. It proposes table
 mappings; ordinary code extracts all mapped rows. Source authority, informal notes,
 evaluation dates and conflicting policies belong in the clarification conversation.
 User instructions can override a document, with the conflict retained for review.
@@ -96,11 +100,12 @@ started, start a fresh draft so the manager reviews current evidence and impact.
 
 ## Initial scope
 
-This is a backend rule import workflow. It does not include a frontend or replace the
-existing manual rule endpoints. Existing process identity is preserved. [Process chat](process-chat.md) supports proposing
+The manager console and API use this same workflow; it does not replace the lower-level
+manual rule endpoints. Existing process identity is preserved. [Process chat](process-chat.md) supports proposing
 changes to context, fields, outcomes and reviewer guidance as well as rules and sources.
 All configurations remain subject to the existing engine contract.
-Documents currently means XLSX plus text pasted in the conversation. ERP access uses
+Tabular evidence currently means XLSX, CSV or JSON plus text pasted in the conversation.
+Other unstructured readers can be added behind the same evidence interface. ERP access uses
 configured connections and snapshot search, not arbitrary websites or generated connectors.
 New processes receive copied agent settings; their ERP snapshot is imported, but ongoing
 connector configuration still uses the existing process-pack mechanism.

@@ -218,8 +218,13 @@ export interface ApiClient {
 
   listDiscoverySessions(): Promise<DiscoverySessionSummary[]>
   startDiscoverySession(processId: number, name: string): Promise<DiscoverySession>
-  messageDiscoverySession(id: number, revision: number, message: string): Promise<DiscoverySession>
-  uploadDraftWorkbook(id: number, revision: number, file: File): Promise<DiscoverySession>
+  messageDiscoverySession(
+    id: number,
+    revision: number,
+    message: string,
+    mode?: 'discuss' | 'revise',
+  ): Promise<DiscoverySession>
+  uploadDraftEvidence(id: number, revision: number, file: File): Promise<DiscoverySession>
 
   summary(processId: number): Promise<ProcessSummary>
   planeMetrics<P extends Plane>(processId: number, plane: P): Promise<PlaneMetrics[P]>

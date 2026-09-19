@@ -33,7 +33,7 @@ from app.features.processes.model import (
     Symbol,
 )
 from app.features.rules.model import NormRule, Rule
-from app.features.sources import discovery as workbooks
+from app.features.sources import discovery as evidence_assets
 from app.features.sources import service as sources
 from app.features.sources.http_connector import HttpConnector, SourcesFile, SyncError
 from app.features.sources.model import Source
@@ -88,7 +88,7 @@ async def output(session, draft_id):
         plan=data["plan"],
         reviews=data["reviews"],
         messages=data["messages"],
-        documents=workbooks.inventory(data["documents"]),
+        documents=evidence_assets.inventory(data["documents"]),
         snapshots=[
             {"name": n, "origin": s["origin"], "rows": len(s["rows"])}
             for n, s in data["snapshots"].items()
@@ -286,10 +286,10 @@ async def upload(session, draft_id, revision, name, content, user):
     manager(user)
     _, data = await read(session, draft_id, revision)
     if len(content) > 20 * 1024 * 1024:
-        raise ConflictError("Workbook exceeds 20 MB")
+        raise ConflictError("Evidence asset exceeds 20 MB")
     if len(data["documents"]) >= 5:
-        raise ConflictError("A draft supports up to five workbooks")
-    workbook = await asyncio.to_thread(workbooks.read_workbook, content)
+        raise ConflictError("A draft supports up to five evidence assets")
+    workbook = await asyncio.to_thread(evidence_assets.read_asset, name, content)
     digest = hashlib.sha256(content).hexdigest()
     await session.execute(
         insert(File)
@@ -300,12 +300,12 @@ async def upload(session, draft_id, revision, name, content, user):
     data["messages"].append(
         {
             "role": "user",
-            "text": f"Uploaded workbook {name}, reference {digest}",
+            "text": f"Uploaded evidence asset {name}, reference {digest}",
             "author": user.name,
         }
     )
     invalidate(data)
-    return await save(session, draft_id, revision, data, user, "upload_draft_workbook")
+    return await save(session, draft_id, revision, data, user, "upload_evidence_asset")
 
 
 async def sync(session, draft_id, revision, name, user):
@@ -378,7 +378,7 @@ async def prepare(session, draft_id, revision, user):
     plan = DraftPlan.model_validate(data["plan"])
     compilation.ready(plan, data["reviews"])
     await check_base(session, draft, data, plan)
-    tables = workbooks.materialize(plan, data)
+    tables = evidence_assets.materialize(plan, data)
     setups = (
         config.setups(data)
         if "agents" in data
@@ -416,7 +416,7 @@ async def publish(session, draft_id, revision, user):
             "Compile and pass the acceptance examples and backtest before publishing"
         )
     await check_base(session, draft, data, plan)
-    tables = workbooks.materialize(plan, data)
+    tables = evidence_assets.materialize(plan, data)
     if draft.process_id:
         process = await session.get(Process, draft.process_id)
     else:
