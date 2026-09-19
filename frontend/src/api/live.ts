@@ -19,6 +19,7 @@ import type {
   NormRule,
   PlaneHealth,
   ProcessDetail,
+  Proposal,
   ProcessMetrics,
   ProcessOut,
   ProcessSummary,
@@ -104,6 +105,11 @@ export const liveClient: ApiClient = {
   queue: (processId) => get<InstanceOut[]>(`/processes/${processId}/queue`),
   suggestion: (instanceId) => get<Suggestion>(`/instances/${instanceId}/suggestion`),
   resolve: (instanceId, body) => post<InstanceDetail>(`/instances/${instanceId}/resolve`, body),
+  proposeDecision: (instanceId) => post<Proposal>(`/instances/${instanceId}/proposal`),
+  listProposals: (processId, status) =>
+    get<Proposal[]>(`/processes/${processId}/proposals${query({ status })}`),
+  acceptProposal: (id, reason) => post<Proposal>(`/proposals/${id}/accept`, { reason: reason ?? '' }),
+  rejectProposal: (id, reason) => post<Proposal>(`/proposals/${id}/reject`, { reason }),
 
   listFindings: async (processId) => {
     const raw = await get<

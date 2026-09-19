@@ -18,6 +18,9 @@ export const keys = {
   run: (id: number) => ['run', id] as const,
   queue: (processId: number, outcome: string) => ['queue', processId, outcome] as const,
   suggestion: (instanceId: number) => ['suggestion', instanceId] as const,
+  /** The open escalation proposal of one case. */
+  caseProposal: (instanceId: number) => ['proposals', 'case', instanceId] as const,
+  proposals: (processId: number, status: string) => ['proposals', processId, status] as const,
   findings: (processId: number) => ['findings', processId] as const,
   sources: (processId: number) => ['sources', processId] as const,
   source: (processId: number, name: string) => ['sources', processId, name] as const,
@@ -36,4 +39,6 @@ export const keys = {
 export const families = {
   decisions: ['instances', 'instance', 'queue', 'findings', 'summary', 'alerts', 'trace'],
   rules: ['rules', 'rule'],
+  /** Settling a proposal can resolve a case or change the draft. */
+  proposals: ['proposals', 'summary', 'draft', 'execution', 'queue', 'instance', 'instances', 'alerts', 'trace'],
 }

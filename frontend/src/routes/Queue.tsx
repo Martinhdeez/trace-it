@@ -1,10 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { hashKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileText, Sparkles } from 'lucide-react'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import { families, keys } from '../api/queries'
-import type { AlertOut, InstanceDetail, ProcessDetail, RuleIn, RuleResult, Suggestion } from '../api/contracts'
+import type {
+  AlertOut,
+  DecisionProposalPayload,
+  InstanceDetail,
+  ProcessDetail,
+  Proposal,
+  RuleIn,
+  RuleResult,
+  Suggestion,
+} from '../api/contracts'
 import { ProcessScreen } from '../components/process/ProcessScreen'
 import { Button, Field, Segmented, Select, Textarea } from '../components/shell/Controls'
 import { Empty, ErrorNotice, Notice } from '../components/shell/Notice'
@@ -190,49 +199,92 @@ function Resolve({
     queryKey: keys.instance(instanceId),
     queryFn: () => api.getInstance(instanceId),
   })
-  // The assistant is an LLM call: a 502 will not fix itself, so do not retry it.
+  // The case's open escalation proposal, or a new one. The assistant is an LLM call:
+  // a 502 will not fix itself, so do not retry it.
+  const proposal = useQuery({
+    queryKey: keys.caseProposal(instanceId),
+    queryFn: async () => {
+      const open = await api.listProposals(process.id, 'open')
+      const current = open.find(
+        (item) => item.instance_id === instanceId && item.channel === 'escalation',
+      )
+      if (current) return current
+      try {
+        return await api.proposeDecision(instanceId)
+      } catch (error) {
+        // An API without proposals: fall back to the plain suggestion below.
+        if (error instanceof ApiError && error.status === 404) return null
+        throw error
+      }
+    },
+    retry: false,
+  })
   const suggestion = useQuery({
     queryKey: keys.suggestion(instanceId),
     queryFn: () => api.suggestion(instanceId),
+    enabled: proposal.data === null,
     retry: false,
   })
+  const payload = proposal.data?.payload as DecisionProposalPayload | undefined
+  const proposalId = proposal.data?.status === 'open' ? proposal.data.id : undefined
 
   // The assistant's proposal is the starting point; the person can overwrite it.
   useEffect(() => {
+    if (edited) return
+    if (payload) {
+      setDecision(payload.proposed)
+      if (payload.proposed_rule) {
+        setRuleText(payload.proposed_rule.text)
+        setRuleKind(payload.proposed_rule.type)
+      }
+      return
+    }
     const data = suggestion.data
-    if (!data || edited) return
+    if (!data) return
     setDecision(data.decision)
     setRuleText(data.proposed_rule)
     setRuleKind(data.proposed_type)
-  }, [suggestion.data, edited])
+  }, [payload, suggestion.data, edited])
+
+  // The case is settled: asking the assistant for it again would only get a 409.
+  const invalidate = () => {
+    const settled = hashKey(keys.caseProposal(instanceId))
+    for (const name of [...families.decisions, ...families.rules, ...families.proposals]) {
+      void queryClient.invalidateQueries({
+        queryKey: [name],
+        predicate: (query) => query.queryHash !== settled,
+      })
+    }
+  }
 
   /**
-   * Accepting the proposal, or choosing by hand. Creating a rule is a second call,
-   * because the backend keeps them apart: the rule is a draft that still has to compile.
+   * Choosing a decision by hand, or another option than the proposed one. With an open
+   * proposal, `proposal_id` tells the backend it was not taken. Creating a rule is a second
+   * call, because the backend keeps them apart: the rule is a draft that still has to compile.
    */
   const resolve = useMutation({
-    mutationFn: async ({ mode }: { mode: 'accept' | 'manual' | 'rule' }) => {
-      if (mode === 'accept' && suggestion.data) {
-        await api.resolve(instanceId, {
-          decision: suggestion.data.decision,
-          reason: note.trim() || suggestion.data.reasoning,
-        })
-        return null
-      }
+    mutationFn: async ({ mode, chosen }: { mode: 'manual' | 'rule'; chosen?: string }) => {
+      const final = chosen ?? decision
       await api.resolve(instanceId, {
-        decision,
+        decision: final,
         reason: note.trim() || 'Resuelta por una persona',
+        proposal_id: proposalId ?? null,
       })
       const text = ruleText.trim()
       if (mode !== 'rule' || !text) return null
-      return api.createRule(process.id, { text, type: ruleKind, decision })
+      return api.createRule(process.id, { text, type: ruleKind, decision: final })
     },
-    onSuccess: () => {
-      for (const name of [...families.decisions, ...families.rules]) {
-        void queryClient.invalidateQueries({ queryKey: [name] })
-      }
-    },
+    onSuccess: invalidate,
   })
+  /** Accepting resolves the case with the proposed decision; rejecting applies nothing. */
+  const settle = useMutation({
+    mutationFn: ({ accept }: { accept: boolean }) =>
+      accept
+        ? api.acceptProposal(proposalId!, note.trim() || undefined)
+        : api.rejectProposal(proposalId!, note.trim()),
+    onSuccess: invalidate,
+  })
+  const busy = resolve.isPending || settle.isPending
 
   const newRule = resolve.data
 
@@ -263,9 +315,15 @@ function Resolve({
       </div>
 
       <Suggested
+        proposal={proposal.data ?? undefined}
         suggestion={suggestion.data}
-        loading={suggestion.isPending}
-        error={suggestion.isError ? suggestion.error : null}
+        loading={proposal.isPending || (proposal.data === null && suggestion.isPending)}
+        error={proposal.error ?? suggestion.error}
+        busy={busy}
+        canReject={Boolean(note.trim())}
+        onAccept={() => settle.mutate({ accept: true })}
+        onReject={() => settle.mutate({ accept: false })}
+        onChoose={(chosen) => resolve.mutate({ mode: 'manual', chosen })}
       />
 
       <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
@@ -329,9 +387,20 @@ function Resolve({
           </div>
         </div>
 
-        {resolve.isError ? (
+        {resolve.isError || settle.isError ? (
           <div className="mt-3">
-            <ErrorNotice error={resolve.error} />
+            <ErrorNotice error={resolve.error ?? settle.error} />
+          </div>
+        ) : null}
+        {settle.isSuccess ? (
+          <div className="mt-3">
+            <Notice
+              title={settle.data.status === 'accepted' ? 'Propuesta aceptada' : 'Propuesta rechazada'}
+            >
+              {settle.data.status === 'accepted'
+                ? 'El caso queda resuelto con la decisión propuesta.'
+                : 'No se aplica nada. Resuelve el caso a mano.'}
+            </Notice>
           </div>
         ) : null}
         {resolve.isSuccess ? (
@@ -354,23 +423,16 @@ function Resolve({
 
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
-            tone="primary"
-            onClick={() => resolve.mutate({ mode: 'accept' })}
-            disabled={resolve.isPending || !suggestion.data}
-          >
-            {resolve.isPending ? 'Guardando…' : 'Aceptar la propuesta'}
-          </Button>
-          <Button
             tone="soft"
             onClick={() => resolve.mutate({ mode: 'manual' })}
-            disabled={resolve.isPending || !decision}
+            disabled={busy || !decision}
           >
             Resolver sin regla
           </Button>
           <Button
             tone="soft"
             onClick={() => resolve.mutate({ mode: 'rule' })}
-            disabled={resolve.isPending || !decision || !ruleText.trim()}
+            disabled={busy || !decision || !ruleText.trim()}
           >
             Resolver y crear la regla
           </Button>
@@ -415,15 +477,44 @@ function WhyEscalated({ instance }: { instance: InstanceDetail }) {
   )
 }
 
+/**
+ * The assistant's proposal: why, and each option with its consequence, the proposed one
+ * first. Accepting the proposed one resolves the case; another option resolves with it and
+ * tells the backend the proposal was not taken. Rejecting takes the reason from "Motivo".
+ */
 function Suggested({
+  proposal,
   suggestion,
   loading,
   error,
+  busy,
+  canReject,
+  onAccept,
+  onReject,
+  onChoose,
 }: {
+  proposal: Proposal | undefined
   suggestion: Suggestion | undefined
   loading: boolean
   error: unknown
+  busy: boolean
+  canReject: boolean
+  onAccept: () => void
+  onReject: () => void
+  onChoose: (decision: string) => void
 }) {
+  const payload = proposal?.payload as DecisionProposalPayload | undefined
+  const open = proposal?.status === 'open'
+  const options = payload
+    ? [
+        ...(payload.options ?? []).filter((option) => option.decision === payload.proposed),
+        ...(payload.options ?? []).filter((option) => option.decision !== payload.proposed),
+      ]
+    : []
+  if (payload && !options.some((option) => option.decision === payload.proposed)) {
+    options.unshift({ decision: payload.proposed, consequence: proposal?.rationale ?? '' })
+  }
+
   return (
     <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
       <p className="flex items-center gap-1.5 text-[13px] font-medium">
@@ -437,6 +528,55 @@ function Suggested({
           <ErrorNotice error={error} />
           <p className="mt-2 text-[13px] text-muted">Puedes resolver el caso a mano.</p>
         </div>
+      ) : payload ? (
+        <>
+          <p className="mt-2 text-[13px] text-muted">{proposal?.rationale}</p>
+          {payload.why?.length ? (
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[13px] text-muted">
+              {payload.why.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+          {options.map((option) => {
+            const proposed = option.decision === payload.proposed
+            return (
+              <div
+                key={option.decision}
+                className="mt-2 rounded-[10px] bg-canvas px-3 py-2 text-[13px] ring-1 ring-line"
+              >
+                <p className="flex items-start gap-2">
+                  <StatusBadge value={option.decision} className="mt-0.5 shrink-0" />
+                  <span className="text-muted">{option.consequence}</span>
+                </p>
+                {open ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      tone={proposed ? 'primary' : 'soft'}
+                      disabled={busy}
+                      onClick={() => (proposed ? onAccept() : onChoose(option.decision))}
+                    >
+                      Aceptar
+                    </Button>
+                    {proposed ? (
+                      <Button
+                        tone="soft"
+                        disabled={busy || !canReject}
+                        title={canReject ? undefined : 'Escribe el motivo en "Motivo"'}
+                        onClick={onReject}
+                      >
+                        Rechazar
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+          {proposal && !open ? (
+            <p className="mt-2 text-[12px] text-faint">{t(`proposalStatus.${proposal.status}`)}</p>
+          ) : null}
+        </>
       ) : suggestion ? (
         <>
           <p className="mt-2 flex items-start gap-2 text-[13px]">

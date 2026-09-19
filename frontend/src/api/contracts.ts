@@ -36,6 +36,17 @@ export type ResolveIn = Schemas['ResolveIn']
 export type RuleIn = Schemas['RuleIn']
 export type RunOut = Schemas['RunOut']
 export type AlertOut = Schemas['AlertOut']
+export type Proposal = Schemas['ManagerProposalOut']
+export type ProposalStatus = Proposal['status']
+/** `payload` of an escalation (`kind: decision`) proposal. */
+export type DecisionProposalPayload = {
+  proposed: string
+  why?: string[]
+  options?: { decision: string; consequence: string }[]
+  escalation_reason?: string | null
+  fired_rules?: number[]
+  proposed_rule?: { text: string; type: RuleIn['type'] }
+}
 export type UseCaseOut = Schemas['UseCaseOut']
 export type UseCaseDetail = Schemas['UseCaseDetail']
 export type AgentConfigOut = Schemas['AgentConfigOut']
@@ -194,6 +205,12 @@ export interface ApiClient {
   queue(processId: number): Promise<InstanceOut[]>
   suggestion(instanceId: number): Promise<Suggestion>
   resolve(instanceId: number, body: ResolveIn): Promise<InstanceDetail>
+  /** The assistant proposes a decision for an escalated case; a new one supersedes the open one. */
+  proposeDecision(instanceId: number): Promise<Proposal>
+  listProposals(processId: number, status?: ProposalStatus): Promise<Proposal[]>
+  /** Applies it through its channel: a decision resolves the case; chat and learning stage it. */
+  acceptProposal(id: number, reason?: string): Promise<Proposal>
+  rejectProposal(id: number, reason: string): Promise<Proposal>
 
   listFindings(processId: number): Promise<Finding[]>
   /** Past decisions that newer data or rules would decide differently. */
