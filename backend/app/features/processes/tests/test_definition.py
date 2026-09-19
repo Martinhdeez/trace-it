@@ -117,7 +117,7 @@ async def test_from_disk_rules_arrive_with_their_code_and_activate() -> None:
         )
         active = await rules.list_all(session, process_id, "active")
 
-    assert len(active) == len(data.rules) == 16
+    assert len(active) == len(data.rules) == 17
     assert all(r.hash for r in active)
 
 

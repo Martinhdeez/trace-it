@@ -1,6 +1,6 @@
 """The hand-written v3 rules, run for real in the sandbox.
 
-One case per rule that must fire, plus an invoice that must leave all sixteen silent. When
+One case per rule that must fire, plus an invoice that must leave all seventeen silent. When
 the compiler starts generating these, this file is what its output has to agree with.
 """
 
@@ -65,6 +65,8 @@ WHAT_MAKES_IT_FIRE: dict[int, tuple[dict[str, Any], dict[str, Any], list[dict[st
     14: ({}, {"erp": [{**ENTRY, "amount": 9999.00}]}, []),
     15: ({}, {"erp": [{**ENTRY, "status": "PAGADA"}]}, []),
     16: ({}, {}, [{**CLEAN, "_instance": "other_invoice.pdf"}]),
+    # One digit away from the master: our misreading far more often than a new account.
+    17: ({"iban": "ES21 0075 2345 6706 0012 3457"}, {}, []),
 }
 
 
@@ -114,6 +116,17 @@ def test_the_whole_process_on_the_three_reference_invoices() -> None:
     assert decide_invoice(CLEAN, SOURCES, []) == "PAGAR"
     assert decide_invoice(CLEAN, {**SOURCES, **already_paid}, []) == "NO_PAGAR"
     assert decide_invoice({**CLEAN, **new_iban}, SOURCES, []) == "NO_PAGAR"
+
+
+def test_an_iban_a_character_away_from_the_master_goes_to_a_person() -> None:
+    """A misread account must not become a refusal. Measured on batch 1: a supplier's new
+    account differs from the master in 15 to 20 of its 24 characters, an OCR slip in one
+    or two, so the two cases never meet."""
+    misread = {"iban": "ES21 0075 2345 6706 0012 3457"}  # the master's, last digit apart
+    another_account = {"iban": "ES39 0081 5290 0700 1234 5678"}
+
+    assert decide_invoice({**CLEAN, **misread}, SOURCES, []) == "ESCALAR"
+    assert decide_invoice({**CLEAN, **another_account}, SOURCES, []) == "NO_PAGAR"
 
 
 def test_escalar_beats_no_pagar() -> None:
