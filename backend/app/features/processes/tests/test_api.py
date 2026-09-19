@@ -14,7 +14,11 @@ INVOICES = {
         {"name": "NO_PAGAR", "priority": 2},
         {"name": "PAGAR", "priority": 1, "is_default": True},
     ],
-    "symbols": [{"name": "amount", "type": "number"}, {"name": "supplier", "type": "text"}],
+    # `required` is optional: `supplier` leaves it out.
+    "symbols": [
+        {"name": "amount", "type": "number", "required": True},
+        {"name": "supplier", "type": "text"},
+    ],
 }
 
 
@@ -39,7 +43,10 @@ async def test_process_rule_flow(monkeypatch: pytest.MonkeyPatch) -> None:
         process = r.json()["process"]
         assert [t["name"] for t in process["decision_types"]] == ["ESCALAR", "NO_PAGAR", "PAGAR"]
         assert [t["requires_human"] for t in process["decision_types"]] == [True, False, False]
-        assert len(process["symbols"]) == 2
+        assert [(s["name"], s["required"]) for s in process["symbols"]] == [
+            ("amount", True),
+            ("supplier", False),
+        ]
         assert (await api.get(f"/processes/{process['id']}")).json() == process
 
         r = await api.post(

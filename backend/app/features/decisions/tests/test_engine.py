@@ -137,6 +137,39 @@ def test_a_priority_tie_between_different_decisions_escalates() -> None:
     assert verdict.reason == "RULE_CONFLICT: ESCALAR, NO_PAGAR share priority 2"
 
 
+REQUIRED = Outcomes(
+    OUTCOMES.priorities, "PAGAR", "ESCALAR", required=("nif", "iban", "purchase_order")
+)
+
+
+def test_a_missing_required_symbol_escalates_whatever_the_rules_say() -> None:
+    """No rule fires on this invoice, yet without an IBAN it is never paid. The rules still
+    ran and their results are kept."""
+    active = rules("order_already_paid")
+
+    verdict = decide_invoice(active, {**CLEAN, "iban": None, "nif": "  "}, REQUIRED)
+
+    assert verdict.decision == "ESCALAR"
+    assert verdict.reason == "MISSING_DATA: nif, iban"
+    assert [(r.rule_id, r.fires) for r in verdict.results] == [(1, False)]
+
+
+def test_an_instance_without_symbols_misses_every_required_one() -> None:
+    """A scanned PDF with no text: every rule errors or passes, the reason names the data."""
+    verdict = decide_invoice(rules("iban_mismatch"), {}, REQUIRED)
+
+    assert verdict.decision == "ESCALAR"
+    assert verdict.reason == "MISSING_DATA: nif, iban, purchase_order"
+    assert verdict.results[0].fires is None
+
+
+def test_required_symbols_present_leave_the_rules_to_decide() -> None:
+    active = rules("iban_mismatch", "order_already_paid")
+
+    assert decide_invoice(active, CLEAN, REQUIRED).decision == "PAGAR"
+    assert decide_invoice(active, ALREADY_PAID, REQUIRED).decision == "NO_PAGAR"
+
+
 def test_the_cut_off_date_comes_from_a_source() -> None:
     """Rules are pure: they never read the clock, so a past decision replays identically."""
     active = rules("future_date")

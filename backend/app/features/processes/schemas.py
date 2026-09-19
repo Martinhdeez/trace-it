@@ -5,6 +5,7 @@ class SymbolIO(BaseModel):
     name: str
     type: str = Field(examples=["text", "number", "date"])
     description: str = ""
+    required: bool = False  # missing, None or blank -> the instance escalates (ADR 0016)
 
 
 class DecisionTypeIO(BaseModel):

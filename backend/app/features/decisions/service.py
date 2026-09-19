@@ -27,7 +27,7 @@ from app.features.decisions.schemas import (
 )
 from app.features.ingestion.model import Instance
 from app.features.ingestion.symbols import flatten_symbols
-from app.features.processes.model import DecisionType
+from app.features.processes.model import DecisionType, Symbol
 from app.features.processes.service import get as get_process
 from app.features.rules.model import ENFORCED, Rule
 from app.features.sources import service as sources
@@ -45,13 +45,19 @@ async def _instance(session: AsyncSession, instance_id: int) -> Instance:
 
 async def outcomes(session: AsyncSession, process_id: int) -> Outcomes:
     """The loader guarantees one default and at least one type that requires a human; the
-    highest-priority one of those is where the engine sends what it cannot decide."""
+    highest-priority one of those is where the engine sends what it cannot decide, including
+    an instance missing a required symbol."""
     types = list(
         await session.scalars(select(DecisionType).where(DecisionType.process_id == process_id))
     )
+    required = await session.scalars(
+        select(Symbol.name)
+        .where(Symbol.process_id == process_id, Symbol.required)
+        .order_by(Symbol.name)
+    )
     default = next(t.name for t in types if t.is_default)
     escalate = max((t for t in types if t.requires_human), key=lambda t: t.priority).name
-    return Outcomes({t.name: t.priority for t in types}, default, escalate)
+    return Outcomes({t.name: t.priority for t in types}, default, escalate, tuple(required))
 
 
 async def human_types(session: AsyncSession, process_id: int) -> list[str]:

@@ -80,6 +80,10 @@ implementation only served as a test oracle, at the price of a second full compi
 - A `blocked` rule that recompiles goes through the impact gate, but the decisions it
   escalated itself (`RULE_NEEDS_DATA <id>`) do not count towards the share: undoing them
   is the point of the recompile. Contradicting a person still blocks it.
+- The invoice pack runs its tester on `helmcode:deepseek-v4-flash`, the coder's family,
+  against point 8: `helmcode:qwen3.6` took about 30 s per rule, deepseek about 3 s. We
+  accept a higher chance of a shared misreading for a compile that fits a demo; the
+  disputes, the review and the impact gate still stand between the two.
 - Background compilation lives in the API process: one server, no queue. Several API
   workers would each re-queue the same `compiling` rules on startup.
 - The report (`rules.report`) holds the tests with their results, the attempts, the

@@ -36,7 +36,7 @@
       ]
     },
     "tester": {
-      "model": "helmcode:qwen3.6",
+      "model": "helmcode:deepseek-v4-flash",
       "model_settings": {
         "temperature": 0
       },

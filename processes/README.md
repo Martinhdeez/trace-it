@@ -30,13 +30,13 @@ Loading is idempotent (`backend/app/features/processes/definition.py`):
 | `use_case` | no | Name of the use case the process belongs to. Its description and agent configuration apply to the process. Give `use_case` or `description`, not both (422) |
 | `description` | no | Only without `use_case`: the description of the process's own use case. Free text the compiler and the assistant receive with every rule: the conventions shared by all rules (normalisation, units, what to do when a value is missing) |
 | `decision_types` | yes | `[{name, priority, is_default, requires_human}]`. The highest `priority` wins when several rules fire. Exactly one `is_default` (applies when none fires) and it cannot be `requires_human`. Priorities must be distinct. At least one type must be `requires_human` |
-| `symbols` | no | `[{name, type, description}]`: what extraction fills in for each instance and the rules read |
+| `symbols` | no | `[{name, type, description, required}]`: what extraction fills in for each instance and the rules read. `required` (default `false`): an instance where the symbol is missing, `None` or blank is always escalated with `MISSING_DATA: <symbols>`, whatever the rules say (ADR 0016) |
 | `rules` | no | `[{text, type, decision, code}]`. `type`: `requirement` (fires if it does not hold) or `prohibition` (fires if it holds). `decision`: one of the `decision_types`. `code` (optional): path, relative to the definition, of a file defining `evaluate(instance, sources, others)`; see `rules-v3/` below |
 | `users` | no | `[{name, email, role}]`, `role`: `manager` or `operator` |
 
 Rejected: repeated types, symbols or rule texts; no default type or more than one; a default that requires a human; two types sharing a priority; no `requires_human` type; a rule whose decision does not exist.
 
-When a rule's code fails at runtime, or two fired types tie on priority, the engine decides the highest-priority `requires_human` type with the reason (`RULE_ERROR ...` / `RULE_CONFLICT ...`), so a person sees the case and the default is never produced with a rule unevaluated (ADR 0016). That is why every process needs such a type.
+When a required symbol is missing, a rule's code fails at runtime, or two fired types tie on priority, the engine decides the highest-priority `requires_human` type with the reason (`MISSING_DATA ...` / `RULE_ERROR ...` / `RULE_CONFLICT ...`), so a person sees the case and the default is never produced with a rule unevaluated (ADR 0016). That is why every process needs such a type.
 
 Names inside a definition (process, decision types, symbols, sources) are the process's own data. Write them in English, except where an external contract fixes them: the invoice process keeps `PAGAR`, `NO_PAGAR` and `ESCALAR` because the challenge's `outcomes.jsonl` requires them verbatim.
 
