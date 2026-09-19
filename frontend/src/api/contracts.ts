@@ -38,6 +38,8 @@ export type ResolveIn = Schemas['ResolveIn']
 export type RuleIn = Schemas['RuleIn']
 export type RuleDetailOut = Schemas['RuleDetail']
 export type RunOut = Schemas['RunOut']
+export type AlertOut = Schemas['AlertOut']
+export type AlertStatus = 'open' | 'acknowledged' | 'resolved'
 export type RunDetail = Schemas['RunDetail']
 export type InstanceTrace = Schemas['InstanceTrace']
 export type SpanNode = Schemas['SpanNode']
@@ -366,6 +368,9 @@ export interface ApiClient {
   resolve(instanceId: number, body: ResolveIn): Promise<InstanceDetail>
 
   listFindings(processId: number): Promise<Finding[]>
+  /** Past decisions that newer data or rules would decide differently. */
+  listAlerts(processId: number, status?: AlertStatus): Promise<AlertOut[]>
+  ackAlert(id: number, note?: string): Promise<AlertOut>
   exportOutcomes(processId: number): Promise<string>
 
   uploadFiles(
