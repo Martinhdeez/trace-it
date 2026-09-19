@@ -5,10 +5,13 @@ import uuid
 
 from app.core.database import session_factory
 from app.features.decisions.tests.test_api import client, stored
+from app.features.ingestion.extraction_plan import load_extraction_plan
 from app.features.ingestion.model import File, Instance
+from app.features.processes.model import Process, Symbol
 from app.features.rules.model import Rule
 from app.features.rules.service import rule_hash
 from app.features.sources.model import Source
+from app.features.versions import configuration
 
 CODE = """def evaluate(instance, sources, others):
     duplicate = any(o.get("order") == instance.get("order") for o in others)
@@ -131,6 +134,53 @@ async def test_initial_approval_replay_and_rollback():
         assert third["number"] == 3 and third["parent_id"] == second["id"]
         assert third["snapshot"] == first["snapshot"]
         assert (await api.get(f"/instances/{cases[0]['id']}")).json()["decisions"] == [original]
+
+
+async def test_extraction_plan_uses_published_symbols_and_preserves_hints():
+    async with client() as api:
+        pid, headers, _, _ = await seed(api)
+        await publish(api, pid, headers)
+        async with session_factory() as session:
+            symbol = await session.get(Symbol, (pid, "order"))
+            symbol.extraction = {"labels": ["Purchase order"], "source": "document"}
+            await session.commit()
+            workspace = await configuration.workspace(session, pid)
+            assert workspace["process"]["symbols"][0]["extraction"]["labels"] == ["Purchase order"]
+
+        async with session_factory() as session:
+            cached_process = await session.get(Process, pid)
+            original = await load_extraction_plan(session, pid)
+            assert original.fields[0].labels == []
+            draft = await api.put(
+                f"/processes/{pid}/draft",
+                headers=headers,
+                json={
+                    "symbols": [
+                        {
+                            "name": "order",
+                            "type": "text",
+                            "extraction": {"labels": ["Purchase order"]},
+                        },
+                        {
+                            "name": "expires_on",
+                            "type": "date",
+                            "extraction": {"labels": ["Valid until"]},
+                        },
+                    ]
+                },
+            )
+            assert draft.status_code == 200, draft.text
+            assert (await load_extraction_plan(session, pid)).fingerprint == original.fingerprint
+            published = await publish(api, pid, headers)
+            revised = await load_extraction_plan(session, pid)
+            assert cached_process.active_version_id != published["id"]
+            assert [field.name for field in revised.fields] == ["expires_on", "order"]
+            assert revised.fields[0].labels == ["Valid until"]
+            assert revised.fields[1].labels == ["Purchase order"]
+            assert revised.field_fingerprint != original.field_fingerprint
+            assert published["snapshot"]["process"]["symbols"][0]["extraction"]["labels"] == [
+                "Purchase order"
+            ]
 
 
 async def test_stale_evidence_and_revision_refuse_publication():

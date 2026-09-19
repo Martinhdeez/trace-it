@@ -90,7 +90,7 @@ def extract_pdf(
                         warnings.append({"code": "OCR_EMPTY", "page": number, "stage": reader})
                 except Exception as exc:
                     failure("OCR_ERROR", reader, exc, number)
-        elif needs_ocr:
+        elif needs_ocr and options.mode != "api":
             warnings.append({"code": "OCR_DISABLED", "page": number})
         page_reports.append(report)
 
@@ -107,11 +107,24 @@ def extract_pdf(
     if vision_enabled and needs_vision:
         for page in pages:
             try:
-                metrics["vlm_calls"] += 1
-                with events.span("vision", page=page["number"]) as span:
-                    generated = vlm.transcribe(image(page), page["number"], page["size"])
-                    span.set(lines=len(generated))
-                readers.setdefault("visual", []).extend(generated)
+                if options.mode == "api":
+                    with events.span("vision", page=page["number"]) as span:
+                        generated_readers = vlm.transcribe_readers(
+                            image(page), page["number"], page["size"]
+                        )
+                        span.set(readers=len(generated_readers))
+                    metrics["vlm_calls"] += len(generated_readers)
+                    for reader, generated in generated_readers.items():
+                        readers.setdefault(reader, []).extend(
+                            line.model_copy(update={"id": reader + ":" + line.id})
+                            for line in generated
+                        )
+                else:
+                    metrics["vlm_calls"] += 1
+                    with events.span("vision", page=page["number"]) as span:
+                        generated = vlm.transcribe(image(page), page["number"], page["size"])
+                        span.set(lines=len(generated))
+                    readers.setdefault("visual", []).extend(generated)
             except Exception as exc:
                 failure("VLM_ERROR", "visual", exc, page["number"])
         fields, decisions, _ = reconcile(readers, settings.ocr_min_confidence)
@@ -139,7 +152,11 @@ def extract_pdf(
         and not focused.get(name, {}).get("value")
         and any(c.value is not None and not c.error for c in field.candidates)
     }
-    if judge_enabled and ("primary" in readers or "visual" in readers) and pending:
+    if (
+        judge_enabled
+        and ("primary" in readers or any(k.startswith("visual") for k in readers))
+        and pending
+    ):
         try:
             metrics["jev_calls"] += 1
             with events.span("text_judge"):

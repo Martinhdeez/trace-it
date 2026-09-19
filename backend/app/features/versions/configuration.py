@@ -106,7 +106,8 @@ async def workspace(session, process_id: int) -> dict:
             for t in types
         ],
         symbols=[
-            {k: getattr(s, k) for k in ("name", "type", "description", "required")} for s in symbols
+            {k: getattr(s, k) for k in ("name", "type", "description", "required", "extraction")}
+            for s in symbols
         ],
         decision_review=process.decision_review,
     )

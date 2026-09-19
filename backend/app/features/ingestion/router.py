@@ -2,7 +2,7 @@
 
 import logging
 import zipfile
-from typing import Annotated
+from typing import Annotated, Literal
 from xml.etree.ElementTree import ParseError
 
 import pymupdf
@@ -26,6 +26,10 @@ def create_router(
 ) -> APIRouter:
     router = APIRouter(tags=["ingestion"])
 
+    @router.get("/v1/ocr/config", operation_id="getOcrConfig")
+    def ocr_config(request: Request):
+        return (service or current_service(request)).settings.summary()
+
     @router.post("/v1/extractions", response_model=ExtractionResult, operation_id="extractDocument")
     async def extract(
         request: Request,
@@ -47,6 +51,7 @@ def create_router(
             Form(description="Allow Jev recommendations; omitted enables the configured judge."),
         ] = None,
         verify_fields: Annotated[list[CriticalField] | None, Form()] = None,
+        mode: Annotated[Literal["local", "api", "hybrid"] | None, Form()] = None,
     ):
         engine = service or current_service(request)
         try:
@@ -54,7 +59,9 @@ def create_router(
             return await run_in_threadpool(
                 engine.extract,
                 item,
-                ExtractOptions(ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or []),
+                ExtractOptions(
+                    mode=mode, ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or []
+                ),
             )
         except ValueError as exc:
             raise InvalidDocumentError(str(exc)) from exc
@@ -95,6 +102,7 @@ def create_router(
             Form(description="Allow Jev recommendations; omitted enables the configured judge."),
         ] = None,
         verify_fields: Annotated[list[CriticalField] | None, Form()] = None,
+        mode: Annotated[Literal["local", "api", "hybrid"] | None, Form()] = None,
     ):
         engine = service or current_service(request)
         try:
@@ -108,7 +116,9 @@ def create_router(
             items = []
             for file in files:
                 items.append(await run_in_threadpool(engine.ingest, file.file, file.filename))
-            options = ExtractOptions(ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or [])
+            options = ExtractOptions(
+                mode=mode, ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or []
+            )
             return await run_in_threadpool(engine.submit_batch, items, options)
         except ValueError as exc:
             raise InvalidDocumentError(str(exc)) from exc

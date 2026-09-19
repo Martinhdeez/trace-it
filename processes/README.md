@@ -30,11 +30,20 @@ Loading is idempotent (`backend/app/features/processes/definition.py`):
 | `use_case` | no | Name of the use case the process belongs to. Its description and agent configuration apply to the process. Give `use_case` or `description`, not both (422) |
 | `description` | no | Only without `use_case`: the description of the process's own use case. Free text the compiler and the assistant receive with every rule: the conventions shared by all rules (normalisation, units, what to do when a value is missing) |
 | `decision_types` | yes | `[{name, priority, is_default, requires_human}]`. The highest `priority` wins when several rules fire. Exactly one `is_default` (applies when none fires) and it cannot be `requires_human`. Priorities must be distinct. At least one type must be `requires_human` |
-| `symbols` | no | `[{name, type, description, required}]`: what extraction fills in for each instance and the rules read. `required` (default `false`): an instance where the symbol is missing, `None` or blank is always escalated with `MISSING_DATA: <symbols>`, whatever the rules say (ADR 0016) |
+| `symbols` | no | `[{name, type, description, required, extraction?}]`: what extraction fills in for each instance and the rules read. `required` (default `false`): an instance where the symbol is missing, `None` or blank is always escalated with `MISSING_DATA: <symbols>`, whatever the rules say (ADR 0016). Optional `extraction` declares labels and a source; see [process-driven extraction](../docs/dynamic-extraction.md) |
 | `rules` | no | `[{text, type, decision, code}]`. `type`: `requirement` (fires if it does not hold) or `prohibition` (fires if it holds). `decision`: one of the `decision_types`. `code` (optional): path, relative to the definition, of a file defining `evaluate(instance, sources, others)`; see `rules-v3/` below |
 | `users` | no | `[{name, email, role}]`, `role`: `manager` or `operator` |
 
 Rejected: repeated types, symbols or rule texts; no default type or more than one; a default that requires a human; two types sharing a priority; no `requires_human` type; a rule whose decision does not exist.
+
+The document extraction contract comes from declared symbols and their optional
+`extraction` hints. The backend also inspects literal symbol and source references in
+enforced rule code with Python's AST and reports undeclared symbols; it does not infer
+new extraction fields or call an LLM for this analysis. The plan is available at
+`GET /processes/{id}/extraction-plan`. Once a process has an active published version,
+that version supplies the contract. Unpublished draft edits have no effect until
+publication. Each request reads the current version; unchanged rule analysis is cached
+in memory, and publication changes its cache identity without a server restart.
 
 When a required symbol is missing, a rule's code fails at runtime, or two fired types tie on priority, the engine decides the highest-priority `requires_human` type with the reason (`MISSING_DATA ...` / `RULE_ERROR ...` / `RULE_CONFLICT ...`), so a person sees the case and the default is never produced with a rule unevaluated (ADR 0016). That is why every process needs such a type.
 

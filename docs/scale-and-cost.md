@@ -5,6 +5,14 @@ grows. Every figure says whether it was **measured** (with the command or log be
 **estimated** (with its arithmetic). Measurements are from 2026-09-19. Raw outputs:
 `demo-logs/scale/`. The decision behind the deployment and scaling plan: ADR 0020.
 
+For a separate Windows run with the full Gemini/Jev OCR committee, see the
+[500-document benchmark](ingestion/benchmark-2026-09-19.md): 19 min 11.7 s end to end,
+73 real provider requests and USD 0.02768012 of attributable token cost, plus one
+failed request with unknown usage. Its CPU, reader configuration and commit differ
+from the measurements below; do not combine their throughput or memory figures.
+Current [OCR modes and billing configuration](ingestion/providers-and-modes.md)
+explain local/API/hybrid operation and Helmcode's account-dependent costs.
+
 **Headline.**
 - Deciding costs **0 tokens** and no LLM runs per invoice (ADR 0002). Tokens are spent when a
   norm changes (**~150k tokens per 6-sentence norm, ~12.4k per rule**) and, optionally, when a

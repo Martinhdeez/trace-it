@@ -28,7 +28,19 @@ def validate_quality_profile(settings: Settings) -> dict:
     """
     if settings.ocr_profile == "experimental":
         return {"profile": "experimental", "verified": False}
+    if settings.ocr_mode != "hybrid":
+        raise RuntimeError(
+            f"TRACEPAY_OCR_MODE={settings.ocr_mode} requires "
+            "TRACEPAY_OCR_PROFILE=experimental; the verified profile requires hybrid mode"
+        )
     problems = []
+    if "gemini" not in settings.vision_providers or (
+        "helmcode" in settings.vision_providers
+        and settings.vision_providers.index("helmcode") < settings.vision_providers.index("gemini")
+    ):
+        problems.append("keep Gemini before Helmcode in TRACEPAY_VISION_PROVIDERS")
+    if not settings.text_providers or settings.text_providers[0] != "jev":
+        problems.append("keep Jev first in TRACEPAY_TEXT_PROVIDERS")
     hashes = {}
     for name, expected in MODEL_FILES.items():
         path = settings.model_dir / name
@@ -43,6 +55,11 @@ def validate_quality_profile(settings: Settings) -> dict:
         problems.append("custom visual providers require the experimental profile")
     if settings.gemini_model != VISUAL_MODEL or not settings.gemini_api_key:
         problems.append(f"configure GEMINI_API_KEY and TRACEPAY_GEMINI_MODEL={VISUAL_MODEL}")
+    elif not settings.visual_chain() or settings.visual_chain()[0] != (
+        "gemini",
+        VISUAL_MODEL,
+    ):
+        problems.append("Gemini must be the primary configured visual reader")
     if settings.jev_model != JUDGE_MODEL or not settings.jev_api_key:
         problems.append(f"configure TYPESAFE_API_KEY and TRACEPAY_JEV_MODEL={JUDGE_MODEL}")
     if problems:

@@ -63,6 +63,58 @@ def test_profile_rejects_missing_or_different_remote_readers(verified_settings, 
         quality.validate_quality_profile(replace(verified_settings, **change))
 
 
+@pytest.mark.parametrize("mode", ["local", "api"])
+def test_verified_rejects_nonhybrid_before_inspecting_weights(settings, monkeypatch, mode):
+    def no_file_scan(*args):
+        pytest.fail("Mode validation must precede OCR model inspection")
+
+    monkeypatch.setattr(quality, "file_identity", no_file_scan)
+    configured = replace(settings, ocr_profile="verified", ocr_mode=mode)
+    with pytest.raises(RuntimeError, match="TRACEPAY_OCR_PROFILE=experimental"):
+        quality.validate_quality_profile(configured)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"vision_providers": ("compatible", "helmcode")},
+        {"vision_providers": ("compatible", "helmcode", "gemini")},
+        {"text_providers": ("helmcode", "jev")},
+        {"text_providers": ("helmcode",)},
+    ],
+)
+def test_verified_requires_primary_gemini_and_jev_order(verified_settings, change):
+    with pytest.raises(RuntimeError, match="Verified OCR profile is unavailable"):
+        quality.validate_quality_profile(replace(verified_settings, **change))
+
+
+def test_verified_allows_appended_helm_fallback(verified_settings):
+    configured = replace(verified_settings, helmcode_api_key="test")
+    assert quality.validate_quality_profile(configured)["verified"]
+
+
+def test_experimental_api_starts_without_inspecting_local_weights(settings, monkeypatch):
+    class NoLocalWeights(NoOCR):
+        def signature(self):
+            pytest.fail("API startup must not inspect local OCR weights")
+
+    monkeypatch.setattr(quality, "file_identity", lambda *args: pytest.fail("No model scan"))
+    configured = replace(settings, ocr_mode="api", ocr_profile="experimental")
+    service = ExtractionService(configured, NoLocalWeights(), NoVLM())
+    with TestClient(create_app(configured, service)) as client:
+        assert client.get("/health").json()["ocr_models"] is None
+        summary = client.get("/v1/ocr/config").json()
+        assert summary["mode"] == "api" and summary["profile"] == "experimental"
+
+
+def test_experimental_local_starts_without_verified_model_manifest(settings):
+    configured = replace(settings, ocr_mode="local", ocr_profile="experimental")
+    service = ExtractionService(configured, NoOCR(), NoVLM())
+    with TestClient(create_app(configured, service)) as client:
+        assert client.get("/health").status_code == 200
+        assert client.get("/v1/ocr/config").json()["mode"] == "local"
+
+
 def test_default_is_verified(settings, monkeypatch):
     monkeypatch.delenv("TRACEPAY_OCR_PROFILE", raising=False)
     from app.features.ingestion.config import Settings

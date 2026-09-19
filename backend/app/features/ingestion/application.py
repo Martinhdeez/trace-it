@@ -60,7 +60,7 @@ def create_app(
         return {
             "status": "ok",
             "workers": settings.workers,
-            "ocr_models": service.ocr.signature(),
+            "ocr_models": service.ocr.signature() if settings.ocr_mode != "api" else None,
             "vlm_configured": getattr(service.vlm, "configured", False),
             "jev_configured": getattr(service.judge, "configured", False),
         }
