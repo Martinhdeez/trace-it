@@ -4,9 +4,27 @@ from app.common.exceptions import NotFoundError
 from app.core.database import Session
 from app.features.processes.model import Process
 from app.features.sources import service
-from app.features.sources.service import Diff, SyncResult
+from app.features.sources.service import Diff, SourceDetail, SourceOut, SyncResult
 
 router = APIRouter(prefix="/processes", tags=["sources"])
+
+
+@router.get(
+    "/{process_id}/sources",
+    operation_id="listSources",
+    summary="The current load of each source of truth",
+)
+async def list_sources(process_id: int, session: Session) -> list[SourceOut]:
+    return await service.list_sources(session, process_id)
+
+
+@router.get(
+    "/{process_id}/sources/{name}",
+    operation_id="getSource",
+    summary="The current load of one source, rows included",
+)
+async def get_source(process_id: int, name: str, session: Session) -> SourceDetail:
+    return await service.get_source(session, process_id, name)
 
 
 @router.post(

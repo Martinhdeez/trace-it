@@ -6,6 +6,7 @@ Start with the [root README](../README.md) for what the system does, then:
 |---|---|
 | [CONVENTIONS.md](CONVENTIONS.md) | Language, naming and the contracts every feature shares |
 | [team-guide.md](team-guide.md) | Git flow, backend layout, running and testing locally |
+| [api.md](api.md) | The API, screen by screen, for whoever builds the console |
 | [adr/README.md](adr/README.md) | Architecture decision records. ADR 0001 wins over everything else |
 | [invoice-payment-rules.md](invoice-payment-rules.md) | Where each of the 16 invoice rules comes from, and the team decisions behind them |
 | [sources-http.md](sources-http.md) | The HTTP source connector (the ERP): configuration and guarantees |

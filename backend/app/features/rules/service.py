@@ -147,7 +147,12 @@ async def compile_in_background(rule_id: int) -> None:
             error = f"{type(e).__name__}: {e}"
             rule.status = "draft"
             rule.report = _kept(rule, {"valid": False, "error": error})
-            events.record(session, "compile_rule", data={"rule_id": rule_id, "error": error})
+            events.record(
+                session,
+                "compile_rule",
+                process_id=rule.process_id,
+                data={"rule_id": rule_id, "error": error},
+            )
             await session.commit()
 
 

@@ -20,7 +20,7 @@ Organised by feature, not by file type (ADR 0012).
 ```
 backend/
   pyproject.toml              # dependencies (uv)
-  alembic/versions/           # 0001_initial_schema.py, 0002_use_cases.py
+  alembic/versions/           # 0001_initial_schema.py (squashed), then one file per change
   app/
     main.py                   # FastAPI app, routers, TraceError -> {"code", "message"}
     models.py                 # imports every model (Alembic needs it)
@@ -112,7 +112,7 @@ Without Docker for the backend (faster loop): `docker compose up db -d`, then in
 
 ## Database and migrations
 
-The migration history starts at `alembic/versions/0001_initial_schema.py` (squashed); a database older than it needs `make reset-db && make setup`. `0004_norm_rules.py` adds `norm_rules` and `rules.norm_rule_id`. `0002_use_cases.py` moves each process's description into a use case of its own, so `alembic upgrade head` is enough from 0001.
+The migration history starts at `alembic/versions/0001_initial_schema.py` (squashed); a database older than it needs `make reset-db && make setup`. `0004_norm_rules.py` adds `norm_rules` and `rules.norm_rule_id`; `0005_events_process_id.py` adds `events.process_id`, backfilled from each event's instance. `0002_use_cases.py` moves each process's description into a use case of its own, so `alembic upgrade head` is enough from 0001.
 
 To change a table: edit the feature's `model.py` (a new table must be imported in `app/models.py`), then in `backend/`: `uv run alembic revision --autogenerate -m "add x to rules"`. Read the generated file before committing. Two branches generating migrations at once leave two heads: `uv run alembic merge heads` and tell the group.
 

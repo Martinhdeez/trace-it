@@ -19,15 +19,18 @@ from app.features.decisions.schemas import (
     FindingOut,
     InstanceDetail,
     InstanceOut,
+    ProcessSummary,
     ResolveIn,
+    RuleSummary,
     RunSummary,
+    SourceSummary,
 )
 from app.features.ingestion.model import Instance
 from app.features.ingestion.symbols import flatten_symbols
 from app.features.processes.model import DecisionType
 from app.features.processes.service import get as get_process
 from app.features.rules.model import ENFORCED, Rule
-from app.features.sources.model import Source
+from app.features.sources import service as sources
 from app.features.users.model import User
 
 log = logging.getLogger(__name__)
@@ -62,10 +65,7 @@ async def human_types(session: AsyncSession, process_id: int) -> list[str]:
 
 async def current_sources(session: AsyncSession, process_id: int) -> dict[str, list[dict]]:
     """The latest load of each source of truth. Every load is kept; only the last one is used."""
-    loads = await session.scalars(
-        select(Source).where(Source.process_id == process_id).order_by(Source.id)
-    )
-    return {load.name: load.rows for load in loads}
+    return {load.name: load.rows for load in await sources.current_loads(session, process_id)}
 
 
 async def instances_of(session: AsyncSession, process_id: int) -> list[Instance]:
@@ -125,6 +125,9 @@ def _out(instance: Instance, decision: Decision | None) -> InstanceOut:
         name=instance.name,
         status=instance.status,
         decision=decision.decision if decision else None,
+        author=decision.author if decision else None,
+        reason=decision.reason if decision else None,
+        decided_at=decision.created_at if decision else None,
     )
 
 
@@ -160,6 +163,7 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
         events.record(
             session,
             "decision",
+            process_id=process_id,
             instance_id=instance.id,
             data={"decision": verdict.decision, "rules_hash": verdict.rules_hash},
         )
@@ -170,12 +174,107 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
 
 
 async def list_instances(
-    session: AsyncSession, process_id: int, status: str | None
+    session: AsyncSession,
+    process_id: int,
+    status: str | None = None,
+    decision: str | None = None,
+    q: str | None = None,
 ) -> list[InstanceOut]:
+    """Every instance, oldest first. `decision` filters on the latest decision; `q` is a
+    case-insensitive match on the name."""
     await get_process(session, process_id)
     instances = await instances_of(session, process_id)
     latest = await latest_decisions(session, instances)
-    return [_out(i, latest.get(i.id)) for i in instances if status is None or i.status == status]
+    rows = [_out(i, latest.get(i.id)) for i in instances]
+    if status is not None:
+        rows = [r for r in rows if r.status == status]
+    if decision is not None:
+        rows = [r for r in rows if r.decision == decision]
+    if q:
+        rows = [r for r in rows if q.casefold() in r.name.casefold()]
+    return rows
+
+
+async def summary(session: AsyncSession, process_id: int) -> ProcessSummary:
+    """The numbers of a process page. Counts come from each instance's latest decision;
+    a rule's `fires` from the latest engine decision only, since a person's carries no
+    rule results."""
+    process = await get_process(session, process_id)
+    instances = await instances_of(session, process_id)
+    latest = await latest_decisions(session, instances)
+    human = set(await human_types(session, process_id))
+
+    by_status = Counter(i.status for i in instances)
+    by_decision = Counter(d.decision for d in latest.values())
+    queue = sum(1 for d in latest.values() if d.decision in human)
+    resolved = sum(1 for d in latest.values() if d.author != ENGINE)
+
+    # The rule results live in the engine's latest row per instance.
+    engine_rows: dict[int, Decision] = {}
+    if instances:
+        rows = await session.scalars(
+            select(Decision)
+            .where(Decision.instance_id.in_([i.id for i in instances]), Decision.author == ENGINE)
+            .order_by(Decision.id)
+        )
+        engine_rows = {row.instance_id: row for row in rows}
+    fires: Counter[int] = Counter()
+    for row in engine_rows.values():
+        fires.update(r["rule_id"] for r in row.results if r.get("fires"))
+    rules = await session.scalars(
+        select(Rule).where(Rule.process_id == process_id).order_by(Rule.id)
+    )
+    last_run = max((row.created_at for row in engine_rows.values()), default=None)
+
+    return ProcessSummary(
+        id=process.id,
+        name=process.name,
+        instances=len(instances),
+        by_status=dict(by_status),
+        by_decision=dict(by_decision),
+        queue=queue,
+        resolved=resolved,
+        rules=[
+            RuleSummary(
+                id=r.id,
+                text=r.text,
+                type=r.type,
+                decision=r.decision,
+                status=r.status,
+                fires=fires[r.id],
+            )
+            for r in rules
+        ],
+        sources=[
+            SourceSummary(
+                id=load.id,
+                name=load.name,
+                origin=load.origin,
+                rows=len(load.rows),
+                loaded_at=load.loaded_at,
+            )
+            for load in await sources.current_loads(session, process_id)
+        ],
+        last_run_at=last_run,
+    )
+
+
+async def list_events(
+    session: AsyncSession,
+    process_id: int,
+    step: str | None = None,
+    instance_id: int | None = None,
+    limit: int = 200,
+) -> list[EventOut]:
+    """The trace of a process, newest first: runs, resolutions, compilations, syncs, uploads."""
+    await get_process(session, process_id)
+    query = select(Event).where(Event.process_id == process_id)
+    if step is not None:
+        query = query.where(Event.step == step)
+    if instance_id is not None:
+        query = query.where(Event.instance_id == instance_id)
+    rows = await session.scalars(query.order_by(Event.id.desc()).limit(limit))
+    return [EventOut.model_validate(e, from_attributes=True) for e in rows]
 
 
 async def queue(session: AsyncSession, process_id: int, type: str | None) -> list[InstanceOut]:
@@ -234,6 +333,7 @@ async def resolve(
     events.record(
         session,
         "resolution",
+        process_id=instance.process_id,
         instance_id=instance.id,
         data={"decision": data.decision, "author": user.name},
     )

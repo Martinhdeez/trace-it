@@ -192,6 +192,7 @@ async def normalize_norm(session: AsyncSession, process_id: int, norm: str) -> N
     events.record(
         session,
         "normalize_norm",
+        process_id=process_id,
         data={"process_id": process_id, "output": output.model_dump(), **trace.as_data()},
         latency_ms=trace.latency_ms,
         cost=trace.cost,

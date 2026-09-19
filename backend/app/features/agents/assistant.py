@@ -146,6 +146,7 @@ async def suggest(session: AsyncSession, instance_id: int) -> Suggestion:
     events.record(
         session,
         "suggest_escalation",
+        process_id=instance.process_id,
         instance_id=instance_id,
         data={"decision": suggestion.decision, **trace.as_data()},
         latency_ms=trace.latency_ms,

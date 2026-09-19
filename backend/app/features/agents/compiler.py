@@ -439,6 +439,7 @@ async def compile_rule(session: AsyncSession, rule: Rule, symbols: list[Symbol])
         events.record(
             session,
             "compile_rule",
+            process_id=rule.process_id,
             data={"rule_id": rule.id, "valid": result.report["valid"], **trace.as_data()},
             latency_ms=trace.latency_ms,
             cost=trace.cost,

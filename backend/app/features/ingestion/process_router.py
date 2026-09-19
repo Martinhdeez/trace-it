@@ -1,10 +1,12 @@
 """Process-facing ingestion routes composed into the main dev application."""
 
 import logging
+import mimetypes
 from typing import Annotated
+from urllib.parse import quote
 
 import pymupdf
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
@@ -82,3 +84,18 @@ async def upload_document(
 )
 async def get_document(instance_id: int, session: Session, user: CurrentUser):
     return await process_service.document_result(session, instance_id)
+
+
+@router.get(
+    "/instances/{instance_id}/file",
+    operation_id="getInstanceFile",
+    summary="The file the instance was made from, byte for byte (usually a PDF)",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+async def get_file(instance_id: int, session: Session) -> Response:
+    name, content = await process_service.document_content(session, instance_id)
+    media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    # RFC 5987: the name may carry accents; `filename*` keeps them for the browser.
+    disposition = f"inline; filename*=UTF-8''{quote(name)}"
+    return Response(content, media_type=media_type, headers={"Content-Disposition": disposition})
