@@ -45,10 +45,10 @@ The first manager comes from the pack (`make setup` loads its `users`).
 | Metrics | `GET /processes/{id}/metrics` | stage timings, agent `llm` usage and separate reader `providers` totals; replay does not count as network usage |
 | Assistant | `GET /instances/{id}/suggestion` | decision, reasoning and a proposed rule. 409 if not escalated, 502 if the model failed |
 | Resolve | `POST /instances/{id}/resolve` `{decision, reason, proposal_id?}` | manager; adds a decision, the engine's stays. With `proposal_id`, the resolution event records it and settles that proposal |
-| Proposals | `GET /processes/{id}/proposals?status=open`, `POST /proposals/{id}/accept`, `POST /proposals/{id}/reject` `{reason?}`, `POST /instances/{id}/proposal` | everything an agent proposes, in one shape; manager-only. See [Proposals](#proposals) |
+| Proposals | `GET /processes/{id}/proposals?status=open`, `POST /proposals/{id}/accept`, `POST /proposals/{id}/reject` `{reason?}`, `POST /instances/{id}/proposal`, `POST /instances/{id}/rule-proposal` (the reviewer agent) | everything an agent proposes, in one shape; manager-only. See [Proposals](#proposals) |
 | Rules | `GET /processes/{id}/rules?status=` | compiling, draft, active, blocked, retired. Show `summary` (one plain line, may be null) in lists and `text` (what compiles) in the detail |
 | Rule | `GET /rules/{id}` | `code`, `tests`, `report` (`valid`, `tests`, `discrepancies`, `attempts`, `reviews`; `needs_data` when blocked) |
-| Norm | `POST /processes/{id}/norm`, `GET /processes/{id}/norm-rules` | the client's norm split into norm rules, each with its rules; the POST needs a manager |
+| Norm | `POST /processes/{id}/norm/preview`, `POST /processes/{id}/norm/accept`, `POST /processes/{id}/norm`, `GET /processes/{id}/norm-rules` | the client's norm split into norm rules, each with its rules. Definición → Normas: `preview` saves nothing and returns `norm_rules` plus `existing` (the rules its `covered` ids name, any status: "ya existe"); send `previous` + `feedback` to revise it; `accept` saves the reviewed `norm_rules` (409 on a default or unknown decision, or a check an existing rule already says) and compiles them. `POST /norm` does both without review (CLI, evals). All POSTs need a manager |
 | Rule lifecycle | `POST /processes/{id}/rules` (compiles in the background), `POST /rules/{id}/compile`, `GET /rules/{id}/impact`, `POST /rules/{id}/activate`, `POST /rules/{id}/retire` | impact = `unchanged`, `changes`, `conflicts`; create, compile, activate and retire need a manager |
 | Learning | `POST /processes/{id}/learning`, `GET /processes/{id}/learning` | Manager-only analysis and proposed norms; [full flow](learning.md) |
 | Norm proposal | `GET /norm-proposals/{id}`, `POST .../validate`, `POST .../approve`, `POST .../reject` | Isolated previews; explicit manager adoption with a validation ID |
@@ -87,14 +87,73 @@ process by itself.
 | Channel | Created by | `kind` | Accepting it |
 |---|---|---|---|
 | `escalation` | `POST /instances/{id}/proposal` on an escalated instance (the assistant) | `decision` | resolves the instance with `payload.proposed`, as `POST /instances/{id}/resolve` with `proposal_id` |
+| `escalation` | `POST /instances/{id}/rule-proposal` on a resolved instance (the reviewer agent, ADR 0035) | `rule` | creates the amended rule in the process draft, retires `payload.replaces` there, compiles it in the background. Publishing stays `/processes/{id}/draft/validate` then `/publish` |
 | `chat` | a `revise` message in a process chat on an existing process (`/process-drafts/{id}/messages`) | `context` (description, decision types, review), `input` (symbols), `rule` (rules, guidance), `source` | accepts that change in the chat draft (`reviews`). `context` and `input` share the draft's `setup` review, which is accepted once all of them are. Publishing stays `/prepare` then `/publish` |
 | `learning` | `POST /processes/{id}/learning` (the learner) | `rule` (a norm), `context`, `input`, `source` | `rule`: adopts the norm's latest valid validation (run `/norm-proposals/{id}/validate` first; 409 otherwise). `context` and `input`: staged in the version draft (`/processes/{id}/draft`), then published separately. `source`: recorded only; load it through Sources |
 
 Rejecting a proposal applies nothing. A chat rejection marks the draft review `rejected`, and a learned
 norm gets its rejection through `/norm-proposals/{id}/reject`, which also settles the
-proposal. A newer escalation proposal for the same instance, or a new chat revision,
-marks the open ones `superseded`. Resolving an instance with a `proposal_id` and another
-decision marks the proposal `rejected`, with that decision in `outcome`.
+proposal. Resolving an instance with a `proposal_id` and another decision marks the
+proposal `rejected`, with that decision in `outcome`.
+
+**Rejected vs ignored.** `rejected` is the manager's explicit no (`outcome: {reason}`).
+A proposal nobody settled ends `superseded` with `outcome: {cause}`, recorded by one
+`expire_proposal` event `{proposal_ids, cause}`:
+
+| `outcome.cause` | When |
+|---|---|
+| `case_changed` | the case got a new decision (a resolution closes every other open proposal on it) |
+| `ignored` | the manager resolved another case of the process while a rule suggestion was open |
+| `version_published` | a process version was published (open rule suggestions) |
+| `superseded` | a newer proposal of the same kind on the same case, or a new chat revision |
+
+If the case gets another decision while the model is answering, nothing is stored and
+the call answers 409 (both `/proposal` and `/rule-proposal`).
+
+### The reviewer agent: `POST /instances/{id}/rule-proposal`
+
+No body. Only after a person resolved the case (the latest decision is theirs, and final).
+A pure gate runs first; when no amendment can learn the case it answers **409** with the
+reason in Spanish in `message`, and no model is called:
+
+| Engine escalation | 409 `message` starts with |
+|---|---|
+| not resolved yet | `Resuelve el caso antes de pedir una regla.` |
+| `MISSING_DATA` | `Faltaba un dato obligatorio (...)` |
+| `UNVERIFIED_DATA` | `Es un escaneo y no se pudo confirmar ...` |
+| `SOURCE_UNAVAILABLE` | `No se pudo consultar ...` |
+| `RULE_CONFLICT` | `Dos reglas con la misma prioridad ...` |
+| `SCAN_REVIEW` | `Las reglas lo rechazaban, pero es un escaneo ...` |
+| `RULE_ERROR`, `RULE_NEEDS_DATA`, `RULE_COMPILE_FAILED` | `Una regla no pudo evaluarse (...)` |
+| no escalation rule, or several | `Ninguna regla de escalado ...` / `Se dispararon varias reglas de escalado ...` |
+| without the rule the engine gives another decision | `Sin la regla N el motor decidiría X, no Y ...` |
+
+201 returns the proposal. `summary` and `rationale` are Spanish; `payload.text` is the
+English rule that gets compiled:
+
+```json
+{
+  "id": 31, "process_id": 3, "instance_id": 418, "channel": "escalation", "kind": "rule",
+  "summary": "Escala un IVA distinto del 21 % y del 10 %",
+  "rationale": "La persona pagó porque la hostelería tributa al 10 %; se escalan los demás.",
+  "evidence": ["symbol:vat_rate", "rule:9", "resolution:9120"],
+  "payload": {
+    "decision_id": 9120, "engine_decision_id": 9004, "replaces": 9,
+    "text": "The printed vat_rate is other than 21 and other than 10.",
+    "summary": "Escala un IVA distinto del 21 % y del 10 %", "type": "prohibition",
+    "decision": "ESCALAR", "resolved_as": "PAGAR", "version_id": 5
+  },
+  "status": "open", "author": "assistant", "created_at": "2026-09-19T18:10:02Z",
+  "resolved_by": null, "resolved_at": null, "outcome": null
+}
+```
+
+`POST /proposals/{id}/accept` on it returns it `accepted` with
+`outcome: {reason, rule_id, retired, draft_revision}`; the new rule is `compiling` until
+the background compile ends (`GET /rules/{rule_id}`), and the compile bumps the draft
+revision once more. 409 if it is no longer open (for example `superseded` by a publish).
+Spans: `suggest_rule` (`learnable`, `replaces`, `why`, `proposal_id`) with its `llm_run`;
+on accept, `accept_proposal` → `save_rule`, `retire_rule`, `compile_rules`.
 
 ```json
 {
@@ -121,10 +180,15 @@ decision marks the proposal `rejected`, with that decision in `outcome`.
 Chat payloads carry `{draft_id, revision, review_key, before, after}`. Learning payloads
 carry `{analysis_id, norm_proposal_id, norm_kind, ...}` for a norm, and
 `{analysis_id, kind, name, type, text}` for a definition change. Spans:
-`propose_decision`, `accept_proposal` and `reject_proposal`, the last two with
-`proposal_id`, `channel` and `kind`.
+`propose_decision`, `suggest_rule`, `accept_proposal`, `reject_proposal` (the last two
+with `proposal_id`, `channel` and `kind`) and `expire_proposal`.
 
 ## Shapes worth knowing
+
+Mail gathering settings and the scoped service API are documented in
+[mail-ingestion.md](mail-ingestion.md). Manual `POST /processes/{id}/run` calls retain the
+no-body behavior; a body can select nonempty `instance_ids` and an `idempotency_key`.
+The mail worker always evaluates only its imported instances.
 
 - **Instance status** is `PENDING` or `DECIDED`. The queue and `summary.queue` include
   decisions whose type has `requires_human` and cases with `review_pending: true`.

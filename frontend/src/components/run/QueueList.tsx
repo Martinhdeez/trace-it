@@ -31,6 +31,9 @@ export function QueueList({
       </div>
       {header ? <div className="px-1 pb-2">{header}</div> : null}
       <ul className="min-h-0 flex-1 overflow-y-auto rounded-[16px] bg-surface p-1 ring-1 ring-line">
+        {items.length === 0 ? (
+          <li className="px-3 py-6 text-center text-[12.5px] text-muted">Nada coincide.</li>
+        ) : null}
         {items.map((item) => (
           <li key={item.id}>
             <button

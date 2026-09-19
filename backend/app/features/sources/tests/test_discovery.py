@@ -79,6 +79,41 @@ def test_excel_dates_keep_iso_values_instead_of_serial_numbers():
     assert rows == [{"id": "2026-09-18T00:00:00", "maximum": "100.01"}]
 
 
+@pytest.mark.parametrize(
+    ("name", "content", "sheet"),
+    [
+        ("suppliers.csv", b"id;name\nSUP-1;Acme\n", "suppliers"),
+        (
+            "sources.json",
+            b'{"suppliers":[{"id":"SUP-1","name":"Acme"}]}',
+            "suppliers",
+        ),
+    ],
+)
+def test_csv_and_json_assets_use_the_reviewed_mapping_path(name, content, sheet):
+    workbook = discovery.read_asset(name, content)
+    source = SourceProposal(
+        name="suppliers",
+        kind="workbook",
+        explanation="Reviewed supplier mapping",
+        document="asset",
+        sheet=sheet,
+        first_row=2,
+        last_row=2,
+        columns={"id": "A", "name": "B"},
+        evidence=[{"reference": f"asset:{sheet}!A1", "explanation": "Header"}],
+    )
+    data = {"documents": {"asset": {"name": name, "workbook": workbook}}}
+    assert discovery.materialize(DraftPlan(sources=[source]), data) == {
+        "suppliers": [{"id": "SUP-1", "name": "Acme"}]
+    }
+
+
+def test_unsupported_evidence_format_is_rejected():
+    with pytest.raises(ConflictError, match="Supported evidence formats"):
+        discovery.read_asset("policy.pdf", b"not a table")
+
+
 def test_real_invoice_workbook_inventory_and_mapping():
     from pathlib import Path
 

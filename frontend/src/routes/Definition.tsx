@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUp, Check, ChevronDown, Hammer, Paperclip, Plus, Sparkles, X } from 'lucide-react'
+import { ArrowUp, BookOpenText, Check, ChevronDown, Hammer, Paperclip, Plus, X } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import { families, keys } from '../api/queries'
 import type {
   CreatedCheck,
+  NormPreview,
+  Normalization,
   DiscoverySession,
   Finding,
   Proposal,
@@ -28,7 +30,9 @@ import { ProcessScreen } from '../components/process/ProcessScreen'
 import { TruthSources } from '../components/process/TruthSources'
 import { ValidationImpact } from '../components/process/ValidationImpact'
 import { Button, Input, Select, Textarea } from '../components/shell/Controls'
-import { ErrorNotice, Empty, Notice } from '../components/shell/Notice'
+import { ErrorNotice, Empty, EmptyState, Notice } from '../components/shell/Notice'
+import { TerminalLoader } from '../components/shell/TerminalLoader'
+import { NormProposal, type ProposalState } from '../components/process/NormProposal'
 import { ExpandableText } from '../components/shell/ExpandableText'
 import { NestedCard } from '../components/shell/Well'
 import { t } from '../i18n'
@@ -48,41 +52,56 @@ type Turn = {
   files: Attachment[]
   /** The chat's answer (discuss mode). */
   answer?: string
-  /** The checks a norm produced; each one is already a draft rule compiling. */
+  /** The rules an accepted proposal created; each one compiles in the background. */
   checks?: CreatedCheck[]
-  /** Attachments that were not uploaded, because only Excel teaches a process. */
+  /** Normas: the norm this proposal reads, kept so a later message can revise it. */
+  norm?: string
+  preview?: NormPreview
+  state?: ProposalState
+  /** Attachments that were not uploaded because they are not supported evidence. */
   skipped?: string[]
   error?: unknown
 }
 
 const PANE_CHAT = {
   normas: {
+    title: 'Empieza por la norma',
+    intro: 'Pega la norma de tu empresa o escribe una regla. La convierto en comprobaciones y tú decides cuáles entran.',
     chips: [
       'El IBAN debe coincidir con el del maestro de proveedores',
       'Si falta el pedido, se escala',
       'El NIF del emisor debe estar dado de alta',
     ],
-    placeholder: 'Pega una norma. Cada frase se vuelve una o varias reglas en borrador.',
-    proposals: 'Reglas creadas · se compilan solas',
+    placeholder: 'Pega una norma. Te propongo las reglas y tú decides.',
+    proposals: 'Propuesta',
   },
   contexto: {
+    title: 'Pregunta sobre el proceso',
+    intro: 'Qué decide, por qué escala un caso o qué reglas usan un dato.',
     chips: ['¿Por qué se escalan estos casos?', '¿Qué reglas usan el IBAN?', '¿Qué falta para decidir?'],
     placeholder: 'Pregunta al asistente sobre este proceso.',
     proposals: 'Respuesta',
   },
   inputs: {
+    title: 'Los datos de cada documento',
+    intro: 'Pregunta qué dato falta para una regla o de dónde sale uno.',
     chips: ['issuer_nif', 'iban', 'purchase_order'],
     placeholder: '¿Qué símbolo falta para esta regla? issuer_nif, iban…',
     proposals: 'Respuesta',
   },
   fuentes: {
+    title: 'Las tablas de referencia',
+    intro: 'Adjunta un Excel o pregunta contra qué se comprueba cada documento.',
     chips: ['Maestro de proveedores', 'Pedidos abiertos', 'Parámetros del ERP'],
     placeholder: 'Adjunta un Excel o pregunta por las fuentes.',
     proposals: 'Respuesta',
   },
 } as const
 
-const EXCEL = /\.xlsx$/i
+const TABULAR_EVIDENCE = /\.(xlsx|csv|json)$/i
+
+const NORM_VERBS = ['leyendo la norma', 'buscando reglas que ya existen', 'separando comprobaciones', 'redactando la propuesta']
+const CHAT_VERBS = ['leyendo el proceso', 'buscando en las reglas', 'redactando la respuesta']
 
 /** The conversation for this process: the one still open, or a new one. */
 async function processConversation(processId: number, name: string): Promise<DiscoverySession> {
@@ -179,30 +198,54 @@ export function Definition() {
   const [viewing, setViewing] = useState<number | null>(null)
   const viewed = history.find((version) => version.id === viewing)
 
-  /** Normas: the normalizer. Anywhere else: the process chat, in discuss mode. */
+  // The proposal the next message revises, if one waits for the manager.
+  const openProposal =
+    pane === 'normas' ? turns.findLast((turn) => turn.preview && turn.state === 'open') : undefined
+
+  /**
+   * Normas: the normalizer proposes, nothing is created; a message while a proposal is
+   * open revises it. Anywhere else: the process chat, in discuss mode.
+   */
   const send = useMutation({
-    mutationFn: async ({ prompt, files }: { prompt: string; files: Attachment[] }) => {
+    mutationFn: async ({
+      prompt,
+      files,
+      mode,
+      revising,
+    }: {
+      prompt: string
+      files: Attachment[]
+      mode: 'discuss' | 'revise'
+      revising?: Turn
+    }): Promise<Partial<Turn>> => {
       if (pane === 'normas') {
-        const out = await api.normalizeNorm(processId, prompt)
-        return { checks: out.norm_rules.flatMap((item) => item.checks) }
+        const norm = revising?.norm ?? prompt
+        const preview = await api.previewNorm(
+          processId,
+          revising?.preview
+            ? { text: norm, feedback: prompt, previous: { norm_rules: revising.preview.norm_rules } }
+            : { text: prompt },
+        )
+        return { preview, norm, state: 'open' }
       }
       if (!session.current) {
         session.current = await processConversation(processId, process.data?.name ?? 'Definición')
       }
-      const excel = files.filter((item) => EXCEL.test(item.name))
-      for (const file of excel) {
-        const next = await api.uploadDraftWorkbook(session.current.id, session.current.revision, file.file)
+      const evidence = files.filter((item) => TABULAR_EVIDENCE.test(item.name))
+      for (const file of evidence) {
+        const next = await api.uploadDraftEvidence(session.current.id, session.current.revision, file.file)
         session.current = { id: next.id, revision: next.revision }
       }
       const next = await api.messageDiscoverySession(
         session.current.id,
         session.current.revision,
         prompt,
+        mode,
       )
       session.current = { id: next.id, revision: next.revision }
       return {
         answer: lastAnswer(next),
-        skipped: files.filter((item) => !EXCEL.test(item.name)).map((item) => item.name),
+        skipped: files.filter((item) => !TABULAR_EVIDENCE.test(item.name)).map((item) => item.name),
       }
     },
     onMutate: ({ prompt, files }) => {
@@ -210,11 +253,16 @@ export function Definition() {
       setTurns((current) => [...current, { id, prompt, files }])
       return { id }
     },
-    onSuccess: (result, _vars, context) => {
+    onSuccess: (result, { revising }, context) => {
       setTurns((current) =>
-        current.map((turn) => (turn.id === context?.id ? { ...turn, ...result } : turn)),
+        current.map((turn) =>
+          turn.id === context?.id
+            ? { ...turn, ...result }
+            : turn.id === revising?.id
+              ? { ...turn, state: 'revised' }
+              : turn,
+        ),
       )
-      if ('checks' in result) void queryClient.invalidateQueries({ queryKey: ['rules'] })
     },
     onError: (error, _vars, context) => {
       // A stale revision: start from the conversation's current one next time.
@@ -222,6 +270,23 @@ export function Definition() {
       setTurns((current) =>
         current.map((turn) => (turn.id === context?.id ? { ...turn, error } : turn)),
       )
+    },
+  })
+
+  const settleTurn = (id: string, change: Partial<Turn>) =>
+    setTurns((current) => current.map((turn) => (turn.id === id ? { ...turn, ...change } : turn)))
+
+  // Only now do rules exist: the reviewed proposal is created and compiles.
+  const accept = useMutation({
+    mutationFn: ({ reviewed }: { turnId: string; reviewed: Normalization }) =>
+      api.acceptNorm(processId, reviewed),
+    onSuccess: (out, { turnId }) => {
+      settleTurn(turnId, {
+        state: 'accepted',
+        checks: out.norm_rules.flatMap((item) => item.checks),
+      })
+      void queryClient.invalidateQueries({ queryKey: ['rules'] })
+      void queryClient.invalidateQueries({ queryKey: keys.norm(processId) })
     },
   })
 
@@ -242,11 +307,10 @@ export function Definition() {
               <ol className="space-y-6">
                 {inbox.length > 0 ? (
                   <li className="space-y-3">
-                    <div className="flex items-center gap-1.5 text-[12px] text-muted">
-                      <Sparkles size={13} strokeWidth={1.6} />
+                    <p className="text-[12px] text-muted">
                       {inbox.length} propuesta{inbox.length === 1 ? '' : 's'} esperan tu decisión ·
                       aceptar entra al borrador
-                    </div>
+                    </p>
                     <ul className="space-y-2">
                       {inbox.map((proposal) => (
                         <ProposalCard key={proposal.id} processId={processId} proposal={proposal} />
@@ -268,12 +332,13 @@ export function Definition() {
                         </ul>
                       ) : null}
                     </div>
-                    <div className="flex items-center gap-1.5 text-[12px] text-muted">
-                      <Sparkles size={13} strokeWidth={1.6} />
-                      {turn.answer === undefined && !turn.checks && !turn.error
-                        ? 'Pensando…'
-                        : chat.proposals}
-                    </div>
+                    {turn.answer === undefined && !turn.preview && !turn.checks && !turn.error ? (
+                      <TerminalLoader verbs={pane === 'normas' ? NORM_VERBS : CHAT_VERBS} />
+                    ) : (
+                      <p className="font-mono text-[11px] tracking-[0.08em] text-faint">
+                        {chat.proposals.toUpperCase()}
+                      </p>
+                    )}
                     {turn.skipped?.length ? (
                       <Notice tone="warning" title="Solo Excel">
                         No se han subido: {turn.skipped.join(', ')}
@@ -287,6 +352,17 @@ export function Definition() {
                         </p>
                       </div>
                     ) : null}
+                    {turn.preview && turn.state ? (
+                      <NormProposal
+                        processId={processId}
+                        preview={turn.preview}
+                        state={turn.state}
+                        accepting={accept.isPending && accept.variables?.turnId === turn.id}
+                        error={accept.variables?.turnId === turn.id ? accept.error : undefined}
+                        onAccept={(reviewed) => accept.mutate({ turnId: turn.id, reviewed })}
+                        onDiscard={() => settleTurn(turn.id, { state: 'discarded' })}
+                      />
+                    ) : null}
                     {turn.checks ? (
                       <ul className="space-y-2">
                         {turn.checks.map((check) => (
@@ -297,7 +373,11 @@ export function Definition() {
                   </li>
                 ))}
               </ol>
-            ) : null}
+            ) : (
+              <EmptyState title={chat.title} className="h-full justify-center">
+                {chat.intro}
+              </EmptyState>
+            )}
           </div>
 
           {turns.length === 0 ? (
@@ -324,13 +404,16 @@ export function Definition() {
           ) : null}
 
           <Composer
-            placeholder={chat.placeholder}
+            placeholder={
+              openProposal ? 'Pide cambios a la propuesta: «quita la del IBAN», «que escale»…' : chat.placeholder
+            }
             draft={draft}
             onDraft={setDraft}
             focusTick={focusTick}
             busy={send.isPending}
-            onSend={(text, files) => {
-              send.mutate({ prompt: text, files })
+            allowChanges={pane !== 'normas'}
+            onSend={(text, files, mode) => {
+              send.mutate({ prompt: text, files, mode, revising: openProposal })
               setDraft('')
             }}
           />
@@ -469,6 +552,11 @@ function RulesPane({
       <p className="mb-2 font-mono text-[11px] tracking-[0.12em] text-faint">
         NORMA · {rules.length}
       </p>
+      {rules.length === 0 ? (
+        <EmptyState icon={BookOpenText} title="Aún no hay normas" className="py-8">
+          Escríbelas en el chat de la izquierda, o añade una a mano aquí abajo.
+        </EmptyState>
+      ) : null}
       <ul className="divide-y divide-hairline">
         {rules.map((rule) => {
           const status = rule.status as RuleStatusCode
@@ -1237,6 +1325,7 @@ function Composer({
   onDraft,
   focusTick,
   busy,
+  allowChanges,
   onSend,
 }: {
   placeholder: string
@@ -1244,12 +1333,14 @@ function Composer({
   onDraft: (text: string) => void
   focusTick: number
   busy: boolean
-  onSend: (text: string, files: Attachment[]) => void
+  allowChanges: boolean
+  onSend: (text: string, files: Attachment[], mode: 'discuss' | 'revise') => void
 }) {
   const input = useRef<HTMLInputElement>(null)
   const box = useRef<HTMLDivElement>(null)
   const [files, setFiles] = useState<Attachment[]>([])
   const [over, setOver] = useState(false)
+  const [proposeChanges, setProposeChanges] = useState(false)
 
   useEffect(() => {
     if (!focusTick) return
@@ -1263,7 +1354,11 @@ function Composer({
   const send = () => {
     const prompt = draft.trim()
     if (busy || (!prompt && files.length === 0)) return
-    onSend(prompt || 'Revisa los adjuntos y propone cambios.', files)
+    onSend(
+      prompt || 'Revisa los adjuntos y propón cambios.',
+      files,
+      proposeChanges || files.length > 0 ? 'revise' : 'discuss',
+    )
     onDraft('')
     setFiles([])
   }
@@ -1322,14 +1417,31 @@ function Composer({
           className="border-0 bg-transparent ring-0"
         />
         <div className="flex items-center justify-between px-1 pb-0.5">
-          <button
-            type="button"
-            onClick={() => input.current?.click()}
-            className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-canvas hover:text-ink"
-            title="Adjuntar"
-          >
-            <Paperclip size={14} strokeWidth={1.6} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => input.current?.click()}
+              className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-canvas hover:text-ink"
+              title="Adjuntar evidencia"
+            >
+              <Paperclip size={14} strokeWidth={1.6} />
+            </button>
+            {allowChanges ? (
+              <button
+                type="button"
+                aria-pressed={proposeChanges}
+                onClick={() => setProposeChanges((value) => !value)}
+                className={cn(
+                  'rounded-full px-2.5 py-1 text-[11px] ring-1',
+                  proposeChanges
+                    ? 'bg-ink text-white ring-ink'
+                    : 'text-muted ring-line hover:bg-canvas hover:text-ink',
+                )}
+              >
+                Proponer cambios
+              </button>
+            ) : null}
+          </div>
           <Button
             tone="primary"
             disabled={busy || (!draft.trim() && files.length === 0)}
@@ -1346,14 +1458,14 @@ function Composer({
         type="file"
         multiple
         hidden
-        accept=".xlsx"
+        accept=".xlsx,.csv,.json"
         onChange={(event) => {
           addFiles([...(event.target.files ?? [])])
           event.target.value = ''
         }}
       />
       <p className="mt-2 px-1 text-[11px] text-faint">
-        ⌘⏎ para enviar. Solo Excel: enseña al proceso, no entra al lote.
+        ⌘⏎ para enviar. XLSX, CSV o JSON aportan evidencia; no entran al lote.
       </p>
     </div>
   )

@@ -18,6 +18,8 @@ import type {
   InstanceTrace,
   LoadResult,
   NormOut,
+  Normalization,
+  NormPreview,
   NormRule,
   PlaneHealth,
   ProcessDetail,
@@ -66,6 +68,10 @@ export const liveClient: ApiClient = {
     get<Rule[]>(`/processes/${processId}/rules${query({ status })}`),
   listNormRules: (processId) => get<NormRule[]>(`/processes/${processId}/norm-rules`),
   normalizeNorm: (processId, text) => post<NormOut>(`/processes/${processId}/norm`, { text }),
+  previewNorm: (processId, body) =>
+    post<NormPreview>(`/processes/${processId}/norm/preview`, body),
+  acceptNorm: (processId, body: Normalization) =>
+    post<NormOut>(`/processes/${processId}/norm/accept`, body),
   getRule: (id) => get<RuleDetail>(`/rules/${id}`),
   createRule: (processId, body) => post<RuleDetail>(`/processes/${processId}/rules`, body),
   compileRule: (id) => post<RuleDetail>(`/rules/${id}/compile`),
@@ -76,13 +82,13 @@ export const liveClient: ApiClient = {
   listDiscoverySessions: () => get<DiscoverySessionSummary[]>('/process-drafts'),
   startDiscoverySession: (processId, name) =>
     post<DiscoverySession>('/process-drafts', { process_id: processId, name }),
-  messageDiscoverySession: (id, revision, message) =>
-    post<DiscoverySession>(`/process-drafts/${id}/messages`, { revision, message, mode: 'discuss' }),
-  uploadDraftWorkbook: (id, revision, file) => {
+  messageDiscoverySession: (id, revision, message, mode = 'discuss') =>
+    post<DiscoverySession>(`/process-drafts/${id}/messages`, { revision, message, mode }),
+  uploadDraftEvidence: (id, revision, file) => {
     const form = new FormData()
     form.append('file', file)
     form.append('revision', String(revision))
-    return upload<DiscoverySession>(`/process-drafts/${id}/workbooks`, form)
+    return upload<DiscoverySession>(`/process-drafts/${id}/evidence`, form)
   },
 
   summary: (processId) => get<ProcessSummary>(`/processes/${processId}/summary`),
@@ -133,6 +139,7 @@ export const liveClient: ApiClient = {
     async function worker() {
       while (next < files.length) {
         const index = next++
+        onProgress?.({ index, phase: 'reading', done, total: files.length, name: files[index].name })
         const form = new FormData()
         form.append('file', files[index])
         let result = await upload<DocumentUpload>(`/processes/${processId}/files`, form)
@@ -142,7 +149,16 @@ export const liveClient: ApiClient = {
         }
         results[index] = result
         done += 1
-        onProgress?.({ done, total: files.length, name: result.name, status: result.status })
+        const values = Object.values(result.symbols ?? {})
+        onProgress?.({
+          index,
+          phase: 'read',
+          done,
+          total: files.length,
+          name: result.name,
+          read: values.filter((value) => value != null && value !== '').length,
+          expected: values.length,
+        })
       }
     }
     await Promise.all(

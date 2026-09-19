@@ -1,13 +1,21 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { AlertTriangle, CheckCircle2, ChevronDown, FileSearch, XCircle } from 'lucide-react'
-import type { InstanceDetail, InstanceTrace, SpanNode, SymbolReading } from '../../api/contracts'
+import type {
+  InstanceDetail,
+  InstanceTrace,
+  SpanNode,
+  SymbolIO,
+  SymbolReading,
+} from '../../api/contracts'
 import { formatMs } from '../../lib/format'
 import { cn } from '../../lib/cn'
 import { t } from '../../i18n'
 import { label, tone } from '../../lib/status'
 import { JsonHighlight } from '../../lib/jsonHighlight'
 import { symbolLabel } from '../../lib/symbols'
+import { ExpandableText } from '../shell/ExpandableText'
+import { EmptyState } from '../shell/Notice'
 import { StatusBadge } from '../shell/StatusBadge'
 import { DocumentPopup } from './DocumentPopup'
 
@@ -20,15 +28,20 @@ const ease = [0.23, 1, 0.32, 1] as const
 export function TracePane({
   instance,
   trace,
+  schema,
 }: {
   instance: InstanceDetail | undefined
   trace: InstanceTrace | undefined
+  /** The process's symbols: which are required, and which hold a whole transcript. */
+  schema?: SymbolIO[]
 }) {
   const [document, setDocument] = useState<{ instanceId: number; symbol?: string } | null>(null)
   if (!instance) {
     return (
-      <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col px-5 py-4 text-[13px] text-muted">
-        Decisión
+      <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col items-center justify-center">
+        <EmptyState icon={FileSearch} title="Elige un documento">
+          Verás su decisión, las reglas que saltaron y la evidencia de cada dato.
+        </EmptyState>
       </aside>
     )
   }
@@ -39,9 +52,14 @@ export function TracePane({
       ? t(`instanceStatus.${instance.status}`)
       : current.replaceAll('_', ' ')
   const latest = instance.decisions.at(-1)
+  const mailOrigin = instance.events.find(event => event.data?.automation === 'mail_ingestion')
+    ?.data?.mail_origin as Record<string, unknown> | undefined
   // The trace carries each result with its rule's text.
   const results = trace?.decisions.at(-1)?.rule_results ?? []
-  const symbols = Object.entries(instance.symbols ?? {}) as [string, SymbolReading][]
+  const symbols = bySignificance(
+    Object.entries(instance.symbols ?? {}) as [string, SymbolReading][],
+    schema ?? [],
+  )
   const fired = results.filter((result) => result.fires === true).length
   const errors = results.filter((result) => result.fires === null).length
   const DecisionIcon =
@@ -54,6 +72,11 @@ export function TracePane({
   return (
     <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-6 pb-4">
       <DocumentHeader instance={instance} onOpen={() => setDocument({ instanceId: instance.id })} />
+      {mailOrigin && <details className="mb-4 rounded-lg border border-hairline p-3 text-sm">
+        <summary>Recibido por correo · {String(mailOrigin.original_name ?? instance.name)}</summary>
+        <p className="mt-2 break-all">{String(mailOrigin.sender ?? '')} · {String(mailOrigin.subject ?? '')}</p>
+        <p className="mt-1 break-all text-xs text-muted">{String(mailOrigin.account)} · {String(mailOrigin.folder)} · UID {String(mailOrigin.uid)} · Parte {String(mailOrigin.part)}</p>
+      </details>}
       {document?.instanceId === instance.id ? (
         <DocumentPopup instance={instance} trace={trace} initialSymbol={document.symbol} onClose={() => setDocument(null)} />
       ) : null}
@@ -143,31 +166,62 @@ export function TracePane({
           </p>
         ) : (
           <ul className="divide-y divide-hairline">
-            {symbols.map(([name, symbol]) => (
+            {symbols.map(([name, symbol]) => {
+              const value =
+                symbol.value === null || symbol.value === undefined ? null : String(symbol.value)
+              const long = value != null && value.length > LONG_VALUE
+              return (
               <li key={name} className="px-3 py-1.5">
-                <div className="flex items-baseline justify-between gap-2">
+                <div className="flex items-baseline justify-between gap-3">
                   {symbol.origin?.match(/^(document|scan):/) ? (
                     <button
                       type="button"
                       aria-label={`View ${name} in original PDF`}
                       onClick={() => setDocument({ instanceId: instance.id, symbol: name })}
-                      className="inline-flex min-w-0 items-center gap-1.5 text-left font-mono text-[11px] text-ocr underline decoration-ocr/30 underline-offset-4 hover:decoration-ocr"
+                      className={cn(
+                        'inline-flex items-center gap-1.5 text-left font-mono text-[11px] text-ocr underline decoration-ocr/30 underline-offset-4 hover:decoration-ocr',
+                        long ? 'min-w-0' : 'max-w-[55%] shrink-0',
+                      )}
                     >
                       <FileSearch size={12} className="shrink-0" />
-                      <span className="break-all">{symbolLabel(name)}</span>
+                      <span className="break-words">{symbolLabel(name)}</span>
                     </button>
                   ) : (
-                    <span className="font-mono text-[11px] text-muted">{symbolLabel(name)}</span>
+                    <span
+                      className={cn(
+                        'break-words font-mono text-[11px] text-muted',
+                        long ? 'min-w-0' : 'max-w-[55%] shrink-0',
+                      )}
+                    >
+                      {symbolLabel(name)}
+                    </span>
                   )}
-                  <span className="truncate font-mono text-[12px] text-ink">
-                    {symbol.value === null || symbol.value === undefined
-                      ? '—'
-                      : String(symbol.value)}
-                  </span>
+                  {long ? null : (
+                    <span
+                      title={value ?? undefined}
+                      className={cn(
+                        'min-w-0 truncate text-right font-mono text-[12px]',
+                        value == null ? 'text-faint' : 'text-ink',
+                      )}
+                    >
+                      {value ?? '—'}
+                    </span>
+                  )}
                 </div>
-                {symbol.origin ? <p className="text-[10.5px] text-faint">{symbol.origin}</p> : null}
+                {long ? (
+                  <ExpandableText
+                    text={readable(value)}
+                    className="mt-1 rounded-[8px] bg-canvas px-2.5 py-1.5 font-mono text-[11px] leading-5 text-ink"
+                  />
+                ) : null}
+                {symbol.origin ? (
+                  <p className="truncate text-[10.5px] text-faint" title={symbol.origin}>
+                    {symbol.origin}
+                  </p>
+                ) : null}
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
         </Block>
@@ -286,4 +340,31 @@ function Block({
       </AnimatePresence>
     </div>
   )
+}
+
+/** Past this, a value is a passage: it goes under its name, two lines until opened. */
+const LONG_VALUE = 60
+
+/**
+ * What a reviewer needs first: required symbols, then optional ones that were read, then
+ * the ones left empty, and last the whole-page transcript. Process order inside each.
+ */
+function bySignificance(
+  symbols: [string, SymbolReading][],
+  schema: SymbolIO[],
+): [string, SymbolReading][] {
+  const meta = new Map(schema.map((symbol, index) => [symbol.name, { symbol, index }]))
+  const rank = ([name, reading]: [string, SymbolReading]) => {
+    const known = meta.get(name)
+    if (known?.symbol.extraction?.source === 'text') return 3
+    if (known?.symbol.required) return 0
+    return reading.value === null || reading.value === undefined || reading.value === '' ? 2 : 1
+  }
+  const order = ([name]: [string, SymbolReading]) => meta.get(name)?.index ?? schema.length
+  return [...symbols].sort((a, b) => rank(a) - rank(b) || order(a) - order(b))
+}
+
+/** The reader marks each page for the models ("[Page 1; reader=native; …]"); a person needs none of it. */
+function readable(transcript: string): string {
+  return transcript.replace(/\s*\[Page \d+;[^\]]*\]\s*/g, '\n\n').trim()
 }

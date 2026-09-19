@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
 from datetime import UTC, datetime
@@ -159,6 +160,8 @@ def read_block() -> str:
 class Api:
     def __init__(self, base_url: str, report: Report, attempts: int = 3, pause: float = 5.0):
         self.http = httpx.AsyncClient(base_url=base_url, timeout=httpx.Timeout(60, read=None))
+        if token := os.getenv("TRACE_API_TOKEN"):
+            self.http.headers["Authorization"] = f"Bearer {token}"
         self.report = report
         self.attempts = attempts  # a 502 from an agent is resent: the backend wrote nothing
         self.pause = pause  # seconds between attempts

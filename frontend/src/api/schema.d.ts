@@ -150,6 +150,211 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/processes/{process_id}/gathering": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gathering */
+        get: operations["getProcessGathering"];
+        /** Set Gathering */
+        put: operations["setProcessGathering"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail-ingestion/{process_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** State */
+        get: operations["getMailState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail-ingestion/{process_id}/initialize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Initialize */
+        post: operations["initializeMailCursor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail-ingestion/{process_id}/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Discover */
+        post: operations["discoverMailMessages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail-ingestion/{process_id}/poll-failure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Poll Failure */
+        post: operations["recordMailPollFailure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail-ingestion/{process_id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Claim */
+        post: operations["claimMailMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail-ingestion/{process_id}/messages/{message_id}/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Manifest */
+        put: operations["saveMailManifest"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail-ingestion/{process_id}/messages/{message_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Import Pdf */
+        put: operations["importMailPDF"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail-ingestion/{process_id}/messages/{message_id}/attachments/{attachment_id}/failure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject */
+        post: operations["rejectMailAttachment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail-ingestion/{process_id}/messages/{message_id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finish */
+        post: operations["evaluateMailMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail-ingestion/{process_id}/messages/{message_id}/failure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Fail */
+        post: operations["recordMailMessageFailure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/mail-ingestion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Overview */
+        get: operations["getMailOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/processes/{process_id}/versions": {
         parameters: {
             query?: never;
@@ -458,8 +663,28 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Workbook */
+        /**
+         * Evidence Asset
+         * @deprecated
+         */
         post: operations["uploadDraftWorkbook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/process-drafts/{draft_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evidence Asset */
+        post: operations["uploadDraftEvidence"];
         delete?: never;
         options?: never;
         head?: never;
@@ -583,6 +808,46 @@ export interface paths {
          * @description The normalizer agent keeps each sentence of the norm (any language) as one norm rule and splits it into atomic checks in English, each an ordinary rule (`norm_rule_id` links it) with the decision the norm implies and how it was read (kept in the rule's `report.norm`). Statements that are not checkable conditions come back as the norm rule's `policies`; ids of active rules that already cover it, as `covered`.
          */
         post: operations["normalizeNorm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/norm/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What the normalizer makes of a norm, without saving anything
+         * @description Same reading as `POST /norm`, returned for review: nothing is written. With `previous` (an earlier preview) and `feedback` the normalizer revises that proposal. `existing` holds the rules that the sentences' `covered` ids name, whatever their status: what the norm asks for that is already there. `POST /norm/accept` saves the reviewed one.
+         */
+        post: operations["previewNorm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/norm/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save a reviewed norm preview: its checks become rules that compile in the background (status `compiling`)
+         * @description The body is a preview's `norm_rules`, possibly with checks or sentences removed. 409 when a check decides a decision type that does not exist or is the default, or says exactly what an existing rule says.
+         */
+        post: operations["acceptNorm"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1621,9 +1886,29 @@ export interface paths {
         put?: never;
         /**
          * The assistant proposes a decision for an escalated instance; a manager settles it
-         * @description Why the case escalated, the options with their consequence, the proposed one and its evidence, in `payload`. Only a proposal: no decision is taken until a manager accepts it (or resolves the instance with its `proposal_id`). A new one supersedes the instance's open proposal.
+         * @description Why the case escalated, the options with their consequence, the proposed one and its evidence, in `payload`. Only a proposal: no decision is taken until a manager accepts it (or resolves the instance with its `proposal_id`). A new one supersedes the instance's open proposal. If the case gets another decision while the model answers, nothing is stored (409).
          */
         post: operations["proposeDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/instances/{instance_id}/rule-proposal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * After a person resolved an escalated case, the reviewer agent amends the rule that escalated it so similar cases get that decision; a manager accepts or rejects it
+         * @description Only when one escalation rule fired and, without it, the other rules give the person's decision; otherwise 409 with the reason in Spanish, and no model is called. `kind: rule`, `channel: escalation`; `payload`: `{decision_id` (the resolution), `engine_decision_id, replaces` (the rule it amends), `text` (English, compiled on accept), `summary, type, decision, resolved_as, version_id}`. Accepting stages it in the process draft in place of `replaces` and compiles it in the background; publishing stays `/processes/{id}/draft/validate` and `/publish`. Left open, it ends `superseded` with `outcome.cause`: `ignored` (another case resolved), `version_published`, `case_changed` or `superseded` (a newer suggestion).
+         */
+        post: operations["proposeRule"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1661,7 +1946,7 @@ export interface paths {
         put?: never;
         /**
          * The manager accepts a proposal; its channel's own workflow applies it
-         * @description decision: resolves the instance with the proposed decision. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.
+         * @description decision: resolves the instance with the proposed decision. Escalation rule: creates the amended rule in the process draft, retires `replaces` there and compiles it in the background; `outcome` is `{rule_id, retired, draft_revision}`. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.
          */
         post: operations["acceptProposal"];
         delete?: never;
@@ -2023,6 +2308,35 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** AttachmentOut */
+        AttachmentOut: {
+            /** Id */
+            id: number;
+            /** Part */
+            part: string;
+            /** Original Name */
+            original_name: string;
+            /** Safe Name */
+            safe_name: string;
+            /** Encoding */
+            encoding: string;
+            /** Advertised Size */
+            advertised_size: number;
+            /** State */
+            state: string;
+            /** Error */
+            error: string | null;
+            /** File Hash */
+            file_hash: string | null;
+            /** Instance Id */
+            instance_id: number | null;
+            /** Execution Id */
+            execution_id: number | null;
+            /** Decision Id */
+            decision_id: number | null;
+            /** Decision */
+            decision?: string | null;
+        };
         /** Body_extractDocument */
         Body_extractDocument: {
             /**
@@ -2078,6 +2392,13 @@ export interface components {
             verify_fields?: ("supplier_tax_id" | "payment_iban" | "purchase_order_ref")[] | null;
             /** Mode */
             mode?: ("local" | "api" | "hybrid") | null;
+        };
+        /** Body_uploadDraftEvidence */
+        Body_uploadDraftEvidence: {
+            /** Revision */
+            revision: number;
+            /** File */
+            file: string;
         };
         /** Body_uploadDraftWorkbook */
         Body_uploadDraftWorkbook: {
@@ -2139,6 +2460,49 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /**
+         * Check
+         * @description One checkable condition of a norm sentence: becomes one `Rule`.
+         */
+        Check: {
+            /** Text */
+            text: string;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "requirement" | "prohibition";
+            /** Decision */
+            decision: string;
+            /**
+             * Decision Source
+             * @enum {string}
+             */
+            decision_source: "explicit" | "policy";
+            /**
+             * Quote
+             * @default
+             */
+            quote: string;
+            /**
+             * Kind
+             * @default violation
+             * @enum {string}
+             */
+            kind: "violation" | "doubt";
+            /**
+             * Kind Reason
+             * @default
+             */
+            kind_reason: string;
+            /** Interpretation */
+            interpretation: string;
+        };
         /** CheckOut */
         CheckOut: {
             /** Id */
@@ -2151,6 +2515,41 @@ export interface components {
             decision: string;
             /** Status */
             status: string;
+        };
+        /** ClaimedMessage */
+        ClaimedMessage: {
+            /** Id */
+            id: number;
+            /** Uid */
+            uid: number;
+            /** Uidvalidity */
+            uidvalidity: number;
+            /** State */
+            state: string;
+            /** Metadata Saved */
+            metadata_saved: boolean;
+            /** Envelope */
+            envelope: {
+                [key: string]: unknown;
+            } | null;
+            /** Attempts */
+            attempts: number;
+            /** Error */
+            error: string | null;
+            /** Retry At */
+            retry_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Attachments
+             * @default []
+             */
+            attachments: components["schemas"]["AttachmentOut"][];
+            /** Lease Token */
+            lease_token: string;
         };
         /** CompileStats */
         CompileStats: {
@@ -2509,6 +2908,17 @@ export interface components {
                     [key: string]: unknown[];
                 };
             };
+        };
+        /** DiscoverIn */
+        DiscoverIn: {
+            /** Uidvalidity */
+            uidvalidity: number;
+            /** Expected Cursor */
+            expected_cursor: number;
+            /** Through Uid */
+            through_uid: number;
+            /** Uids */
+            uids: number[];
         };
         /** DiscoveryDraftOut */
         DiscoveryDraftOut: {
@@ -2897,6 +3307,22 @@ export interface components {
             };
             extraction: components["schemas"]["ExtractionSettings"];
         };
+        /**
+         * ExistingRule
+         * @description A rule a sentence's `covered` names: what already implements part of it.
+         */
+        ExistingRule: {
+            /** Id */
+            id: number;
+            /** Text */
+            text: string;
+            /** Summary */
+            summary: string | null;
+            /** Status */
+            status: string;
+            /** Decision */
+            decision: string;
+        };
         /** ExtractOptions */
         ExtractOptions: {
             /** Mode */
@@ -3139,6 +3565,11 @@ export interface components {
              */
             created_at: string;
         };
+        /** GatheringSettings */
+        GatheringSettings: {
+            /** Email */
+            email?: "migration-test@j-aautomation.com" | null;
+        };
         /** GuidanceProposal */
         GuidanceProposal: {
             /** Name */
@@ -3213,6 +3644,13 @@ export interface components {
             };
             /** Sources */
             sources: components["schemas"]["SourceStats"][];
+        };
+        /** InitializeIn */
+        InitializeIn: {
+            /** Uidvalidity */
+            uidvalidity: number;
+            /** Uidnext */
+            uidnext: number;
         };
         /** InstanceDetail */
         InstanceDetail: {
@@ -3381,6 +3819,57 @@ export interface components {
             /** Email */
             email: string;
         };
+        /** MailFailureIn */
+        MailFailureIn: {
+            /**
+             * Error
+             * @enum {string}
+             */
+            error: "imap_unavailable" | "invalid_credentials" | "uidvalidity_changed" | "invalid_pdf" | "size_limit" | "invalid_mime" | "message_missing" | "infrastructure_error" | "attempts_exhausted";
+            /**
+             * Permanent
+             * @default false
+             */
+            permanent: boolean;
+        };
+        /** MailOverview */
+        MailOverview: {
+            account: components["schemas"]["MailState"] | null;
+            /** Messages */
+            messages: components["schemas"]["MessageOut"][];
+        };
+        /** MailState */
+        MailState: {
+            /**
+             * Protocol Version
+             * @default 1
+             */
+            protocol_version: number;
+            /** Id */
+            id: number;
+            /** Process Id */
+            process_id: number;
+            /** Host */
+            host: string;
+            /** Username */
+            username: string;
+            /** Folder */
+            folder: string;
+            /** State */
+            state: string;
+            /** Uidvalidity */
+            uidvalidity: number | null;
+            /** Initial Uid */
+            initial_uid: number | null;
+            /** Next Uid */
+            next_uid: number | null;
+            /** Last Poll At */
+            last_poll_at: string | null;
+            /** Retry At */
+            retry_at: string | null;
+            /** Error */
+            error: string | null;
+        };
         /**
          * ManagerProposalOut
          * @description One thing an agent proposes; only a manager accepts or rejects it.
@@ -3433,6 +3922,38 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** ManifestIn */
+        ManifestIn: {
+            /**
+             * Sender
+             * @default
+             */
+            sender: string;
+            /**
+             * Subject
+             * @default
+             */
+            subject: string;
+            /**
+             * Message Id
+             * @default
+             */
+            message_id: string;
+            /**
+             * Sent At
+             * @default
+             */
+            sent_at: string;
+            /**
+             * Internal Date
+             * @default
+             */
+            internal_date: string;
+            /** Size */
+            size: number;
+            /** Parts */
+            parts: components["schemas"]["PartIn"][];
+        };
         /** MessageIn */
         MessageIn: {
             /** Revision */
@@ -3446,6 +3967,39 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** MessageOut */
+        MessageOut: {
+            /** Id */
+            id: number;
+            /** Uid */
+            uid: number;
+            /** Uidvalidity */
+            uidvalidity: number;
+            /** State */
+            state: string;
+            /** Metadata Saved */
+            metadata_saved: boolean;
+            /** Envelope */
+            envelope: {
+                [key: string]: unknown;
+            } | null;
+            /** Attempts */
+            attempts: number;
+            /** Error */
+            error: string | null;
+            /** Retry At */
+            retry_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Attachments
+             * @default []
+             */
+            attachments: components["schemas"]["AttachmentOut"][];
+        };
         /** NormIn */
         NormIn: {
             /** Text */
@@ -3455,6 +4009,27 @@ export interface components {
         NormOut: {
             /** Norm Rules */
             norm_rules: components["schemas"]["CreatedNormRule"][];
+        };
+        /** NormPreview */
+        NormPreview: {
+            /** Norm Rules */
+            norm_rules: components["schemas"]["Sentence"][];
+            /**
+             * Existing
+             * @default []
+             */
+            existing: components["schemas"]["ExistingRule"][];
+        };
+        /** NormPreviewIn */
+        NormPreviewIn: {
+            /** Text */
+            text: string;
+            /**
+             * Feedback
+             * @default
+             */
+            feedback: string;
+            previous?: components["schemas"]["Normalization"] | null;
         };
         /** NormRuleOut */
         NormRuleOut: {
@@ -3501,12 +4076,28 @@ export interface components {
             /** Traces */
             traces: string;
         };
+        /** Normalization */
+        Normalization: {
+            /** Norm Rules */
+            norm_rules: components["schemas"]["Sentence"][];
+        };
         /** Option */
         Option: {
             /** Decision */
             decision: string;
             /** Consequence */
             consequence: string;
+        };
+        /** PartIn */
+        PartIn: {
+            /** Part */
+            part: string;
+            /** Original Name */
+            original_name: string;
+            /** Encoding */
+            encoding: string;
+            /** Advertised Size */
+            advertised_size: number;
         };
         /**
          * Plane
@@ -3798,7 +4389,10 @@ export interface components {
             revision: number;
             /** Validation Hash */
             validation_hash: string;
-            /** Reason */
+            /**
+             * Reason
+             * @default
+             */
             reason: string;
         };
         /** ReadingLocation */
@@ -4213,6 +4807,13 @@ export interface components {
             /** Decisions */
             decisions: components["schemas"]["RunDecisionOut"][];
         };
+        /** RunIn */
+        RunIn: {
+            /** Instance Ids */
+            instance_ids: number[];
+            /** Idempotency Key */
+            idempotency_key?: string | null;
+        };
         /**
          * RunOut
          * @description One stored execution (a run or a reprocess), read back from its row and its span.
@@ -4279,6 +4880,13 @@ export interface components {
         };
         /** RunSummary */
         RunSummary: {
+            /** Execution Id */
+            execution_id?: number | null;
+            /**
+             * Decision Ids
+             * @default []
+             */
+            decision_ids: number[];
             /** Decided */
             decided: number;
             /**
@@ -4299,6 +4907,31 @@ export interface components {
             down_sources: {
                 [key: string]: string;
             };
+        };
+        /**
+         * Sentence
+         * @description One sentence of the norm and what the normalizer made of it.
+         */
+        Sentence: {
+            /** Number */
+            number: number;
+            /** Text */
+            text: string;
+            /**
+             * Checks
+             * @default []
+             */
+            checks: components["schemas"]["Check"][];
+            /**
+             * Policies
+             * @default []
+             */
+            policies: string[];
+            /**
+             * Covered
+             * @default []
+             */
+            covered: number[];
         };
         /** SettleIn */
         SettleIn: {
@@ -5207,6 +5840,464 @@ export interface operations {
             };
         };
     };
+    getProcessGathering: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GatheringSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    setProcessGathering: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GatheringSettings"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GatheringSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getMailState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    initializeMailCursor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitializeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discoverMailMessages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscoverIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recordMailPollFailure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailFailureIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claimMailMessage: {
+        parameters: {
+            query?: {
+                ready_only?: boolean;
+            };
+            header?: never;
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimedMessage"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    saveMailManifest: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Mail-Lease": string;
+            };
+            path: {
+                message_id: number;
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManifestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    importMailPDF: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Mail-Lease": string;
+            };
+            path: {
+                message_id: number;
+                attachment_id: number;
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rejectMailAttachment: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Mail-Lease": string;
+            };
+            path: {
+                message_id: number;
+                attachment_id: number;
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailFailureIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evaluateMailMessage: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Mail-Lease": string;
+            };
+            path: {
+                message_id: number;
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recordMailMessageFailure: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Mail-Lease": string;
+            };
+            path: {
+                message_id: number;
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailFailureIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getMailOverview: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailOverview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listProcessVersions: {
         parameters: {
             query?: never;
@@ -5926,6 +7017,43 @@ export interface operations {
             };
         };
     };
+    uploadDraftEvidence: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                draft_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_uploadDraftEvidence"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscoveryDraftOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     syncDraftSource: {
         parameters: {
             query?: never;
@@ -6226,6 +7354,94 @@ export interface operations {
             };
         };
     };
+    previewNorm: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NormPreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NormPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The normalizer's model failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    acceptNorm: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Normalization"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NormOut"];
+                };
+            };
+            /** @description A check is invalid or already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listNormRules: {
         parameters: {
             query?: never;
@@ -6443,7 +7659,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RunIn"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -8253,7 +9473,54 @@ export interface operations {
                     "application/json": components["schemas"]["ManagerProposalOut"];
                 };
             };
-            /** @description Instance not escalated */
+            /** @description Instance not escalated, or it changed while the model answered */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The assistant's model failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    proposeRule: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                instance_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagerProposalOut"];
+                };
+            };
+            /** @description Not resolved, not learnable (reason in Spanish), or stale */
             409: {
                 headers: {
                     [name: string]: unknown;

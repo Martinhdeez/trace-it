@@ -23,6 +23,8 @@ planes that are never added together: **ingestion** (reading documents and data)
 **agents** (norm to code) and **execution** (deciding). The same spans are mirrored to
 OpenTelemetry (Logfire or Phoenix) when configured.
 
+**Update 2026-09-19 (ADR 0035).** Two agents-plane steps: `suggest_rule` (the reviewer agent, with its `llm_run`) and `expire_proposal` (a proposal nobody settled, with its cause). The loop's chain: `resolution` → `suggest_rule` → `accept_proposal` → `save_rule`, `retire_rule`, `compile_rules` → `publish_process_version` → `reprocess`, `decision`.
+
 ## Alternatives considered
 
 | Option | Why we rejected it |

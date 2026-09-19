@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync sources up backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down hiring-data hiring-demo check down reset-db
+.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync sources up backup export-batch check-outcomes test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down hiring-data hiring-demo check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 DEMO_ARGS ?=
@@ -106,6 +106,31 @@ test: test-db  # fast unit tests
 test-e2e: test-db  # golden outcomes of batch 1 + API flow (needs the challenge submodule)
 	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
 	$(PYTEST) -m "e2e and not llm"
+
+# Synthetic IMAP, worker, API, PostgreSQL and console on an isolated test database.
+MAIL_TEST_DB_URL ?= postgresql+psycopg://trace:trace@localhost:$${DB_PORT:-5432}/trace_mail_browser_test
+.PHONY: e2e-mail
+e2e-mail:
+	cd backend && TRACE_DATABASE_URL=$(MAIL_TEST_DB_URL) uv run python -m tests.support.prepare_db
+	cd backend && TRACE_DATABASE_URL=$(MAIL_TEST_DB_URL) uv run alembic upgrade head
+	cd tests/integration && npm ci && npx playwright install chromium
+	cd tests/integration && MAIL_TEST_DATABASE_URL=$(MAIL_TEST_DB_URL) npx playwright test --config mail.config.ts
+
+# The demo path through the real console and API in Chromium (tests/integration/README.md).
+# A fresh database with the frozen pack published; Playwright starts the ERP, API and console.
+E2E_DB_URL ?= postgresql+psycopg://trace:trace@localhost:$${DB_PORT:-5432}/trace_e2e_test
+E2E_DB = cd backend && TRACE_DATABASE_URL=$(E2E_DB_URL)
+e2e-integration:
+	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
+	$(E2E_DB) uv run python -m tests.support.prepare_db || (docker compose up db -d --wait && $(E2E_DB) uv run python -m tests.support.prepare_db)
+	$(E2E_DB) uv run alembic upgrade head
+	$(E2E_DB) uv run python -m app.cli load ../processes/invoice-payment.json
+	$(E2E_DB) uv run python -m app.cli load $(FROZEN) --activate --manager-id 1
+	test -f .models/manifest.json || $(MAKE) ocr-models
+	test -d frontend/node_modules || (cd frontend && npm ci)
+	rm -rf tests/integration/.data
+	cd tests/integration && npm ci && npx playwright install chromium
+	cd tests/integration && E2E_DATABASE_URL=$(E2E_DB_URL) npx playwright test
 
 eval-compiler:  # opt-in, calls real LLMs (keys in .env); writes backend/evals/reports/
 	cd backend && uv run python -m evals.eval_compiler

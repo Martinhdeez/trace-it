@@ -34,7 +34,7 @@ from app.features.ingestion.model import Instance
 from app.features.ingestion.symbols import flatten_symbols, scan
 from app.features.processes.service import get as get_process
 from app.features.proposals.model import ManagerProposal
-from app.features.proposals.service import settle
+from app.features.proposals.service import settle, supersede
 from app.features.rules.model import Rule
 from app.features.sources import service as sources
 from app.features.sources.model import Source
@@ -198,7 +198,14 @@ def _out(
     )
 
 
-async def run(session: AsyncSession, process_id: int, author: str | None = None) -> RunSummary:
+async def run(
+    session: AsyncSession,
+    process_id: int,
+    author: str | None = None,
+    *,
+    instance_ids: list[int] | None = None,
+    idempotency_key: str | None = None,
+) -> RunSummary:
     """Decide every PENDING instance that already has its symbols.
 
     Runs against the rules active now and the latest load of each source. A rule never
@@ -206,9 +213,43 @@ async def run(session: AsyncSession, process_id: int, author: str | None = None)
     instance without symbols is not run and stays PENDING until extraction fills them.
     Live sources are synced first; one that fails is down for this run (ADR 0028).
     """
+    from app.features.mail_ingestion.model import RunOperation
+
+    selected = sorted(set(instance_ids)) if instance_ids is not None else None
+    if selected is not None:
+        owned = set(
+            await session.scalars(
+                select(Instance.id).where(
+                    Instance.process_id == process_id, Instance.id.in_(selected)
+                )
+            )
+        )
+        if not selected or owned != set(selected):
+            raise ConflictError("Select nonempty instance IDs belonging to this process")
+    if idempotency_key and selected is None:
+        raise ConflictError("Idempotency requires an explicit instance selection")
+
+    async def previous():
+        if not idempotency_key:
+            return None
+        operation = await session.scalar(
+            select(RunOperation).where(
+                RunOperation.process_id == process_id, RunOperation.key == idempotency_key
+            )
+        )
+        if operation:
+            if operation.instance_ids != selected:
+                raise ConflictError("Idempotency key already used for another selection")
+            return RunSummary.model_validate(operation.result)
+        return None
+
+    if saved := await previous():
+        return saved
     with events.span("run_process", process_id=process_id) as span:
         down = await sources.sync_before_run(session, process_id)
         await versions.lock(session, process_id)
+        if saved := await previous():
+            return saved
         version = await versions.active(session, process_id)
         process = await get_process(session, process_id)
         rules = await ready_rules(session, process_id)
@@ -223,7 +264,7 @@ async def run(session: AsyncSession, process_id: int, author: str | None = None)
                 .order_by(Instance.id)
                 .with_for_update()
             )
-            if i.symbols is not None
+            if i.symbols is not None and (selected is None or i.id in selected)
         ]
         source_loads, inputs, down = await _inputs(session, process_id, down, version.snapshot)
         captured = Execution(process_id=process_id, version_id=version.id, inputs=inputs)
@@ -259,6 +300,26 @@ async def run(session: AsyncSession, process_id: int, author: str | None = None)
                 )
             count[verdict.decision] += 1
 
+        await session.flush()
+        result = RunSummary(decided=sum(count.values()), by_decision=dict(count), down_sources=down)
+        if selected is not None:
+            result.execution_id = captured.id
+            result.decision_ids = list(
+                await session.scalars(
+                    select(Decision.id)
+                    .where(Decision.execution_id == captured.id)
+                    .order_by(Decision.id)
+                )
+            )
+        if idempotency_key:
+            session.add(
+                RunOperation(
+                    process_id=process_id,
+                    key=idempotency_key,
+                    instance_ids=selected,
+                    result=result.model_dump(mode="json"),
+                )
+            )
         await session.commit()
         span.set(
             instances=len(pending),
@@ -268,7 +329,7 @@ async def run(session: AsyncSession, process_id: int, author: str | None = None)
             **_causes(verdicts),
             **stats,
         )
-    return RunSummary(decided=sum(count.values()), by_decision=dict(count), down_sources=down)
+    return result
 
 
 async def _inputs(
@@ -656,6 +717,18 @@ async def resolve(
             "previous_author": previous.author if previous else None,
             **({"proposal_id": proposal.id} if proposal else {}),
         },
+    )
+    # A resolution never waits on a proposal: what is still open on this case answers a
+    # decision that is no longer the last, and an open rule suggestion on another case was
+    # ignored (ADR 0035).
+    await supersede(session, "case_changed", ManagerProposal.instance_id == instance.id)
+    await supersede(
+        session,
+        "ignored",
+        ManagerProposal.process_id == instance.process_id,
+        ManagerProposal.channel == "escalation",
+        ManagerProposal.kind == "rule",
+        ManagerProposal.instance_id != instance.id,
     )
     await session.commit()
     return await get_instance(session, instance_id)

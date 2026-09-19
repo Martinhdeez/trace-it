@@ -1,0 +1,33 @@
+# Optional overlay. Ordinary deploys do not include this file or the mail profile.
+# TRACE_MAIL_IMAGE must be the verified backend image by immutable sha256 digest.
+services:
+  mail-ingestion:
+    profiles: ["mail"]
+    image: ${TRACE_MAIL_IMAGE:?Set the tested backend image by immutable digest}
+    command: ["python", "-m", "app.features.mail_ingestion.worker", "run"]
+    user: "10001:10001"
+    env_file: ["${TRACE_MAIL_ENV_FILE:-./secrets/mail.env}"]
+    environment:
+      MAIL_IMAP_PASSWORD_FILE: /run/secrets/mail_password
+      MAIL_API_TOKEN_FILE: /run/secrets/mail_token
+    secrets: [mail_password, mail_token]
+    depends_on:
+      backend: {condition: service_healthy}
+    restart: "no"
+    stop_grace_period: 5m
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+secrets:
+  mail_password:
+    file: ${TRACE_MAIL_PASSWORD_FILE:-./secrets/mail-password}
+  mail_token:
+    file: ${TRACE_MAIL_TOKEN_FILE:-./secrets/mail-token}

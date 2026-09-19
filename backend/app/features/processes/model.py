@@ -19,6 +19,7 @@ class Process(Base):
         ForeignKey("process_versions.id", use_alter=True, name="fk_processes_active_version_id")
     )
     name: Mapped[str] = mapped_column(String, unique=True)
+    gathering_email: Mapped[str | None] = mapped_column(String, unique=True)
     use_case_id: Mapped[int] = mapped_column(ForeignKey("use_cases.id"), index=True)
     decision_review: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[created_at]

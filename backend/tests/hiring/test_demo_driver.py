@@ -82,6 +82,12 @@ def test_auto_manager_sends_the_notes_then_defers_to_the_policy_thread():
     assert manager.review("rule:known-position", "...") == ("accepted", "Accepted as proposed.")
 
 
+def test_api_uses_the_deployment_bearer_token(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRACE_API_TOKEN", "production-token")
+    api = DEMO["Api"]("http://test", DEMO["Report"](tmp_path / "report.md"))
+    assert api.http.headers["Authorization"] == "Bearer production-token"
+
+
 def test_totals_add_up_what_the_llm_run_spans_recorded():
     spans = [
         {
