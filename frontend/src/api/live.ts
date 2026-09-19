@@ -62,6 +62,7 @@ export const liveClient: ApiClient = {
 
   listProcesses: () => get<ProcessOut[]>('/processes'),
   getProcess: (id) => get<ProcessDetail>(`/processes/${id}`),
+  deleteProcess: (id) => del(`/processes/${id}`),
   loadDefinition: (body: Definition) => post<LoadResult>('/processes/definition', body),
 
   listRules: (processId, status) =>

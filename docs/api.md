@@ -20,7 +20,7 @@ The committed contract is `frontend/openapi.json` (`make openapi`), with typed
 **Who may call what.** Identify with `X-User-Id` (the id `POST /login` returns). The console's
 user is the manager, who handles only escalations (Q5 in [integration.md](integration.md)).
 Reads stay open. These need a manager: run, reprocess, source sync,
-`POST /processes/definition`, draft read, edit, validate, publish and discard, resolve, alert ack,
+`POST /processes/definition`, process deletion, draft read, edit, validate, publish and discard, resolve, alert ack,
 `POST /users`, rule create, compile, activate and retire, norm submit, learning, proposals
 (propose, list, accept, reject). A missing header, or an id that does not exist, answers
 401 `{"code": "unauthenticated"}`; a user who is not a manager answers 403
@@ -31,7 +31,7 @@ The first manager comes from the pack (`make setup` loads its `users`).
 
 | Screen | Call | Notes |
 |---|---|---|
-| Processes | `GET /processes` | id, name, description |
+| Processes | `GET /processes`, `DELETE /processes/{id}` | id, name, description; deletion is manager-only and only works before runtime history exists |
 | Process page | `GET /processes/{id}/summary` | instances, `by_status`, `by_decision`, `queue`, `resolved`, rules with `fires`, current `sources`, `last_run_at` |
 | Process setup | `GET /processes/{id}` | decision types (priority, default, requires_human), symbols and optional `decision_review` guidance |
 | Extraction plan | `GET /processes/{id}/extraction-plan` | current fields, enforced rule references, warnings and content fingerprint; [configuration and caching](dynamic-extraction.md) |

@@ -4,7 +4,9 @@ import uuid
 
 import pytest
 
+from app.core.database import session_factory
 from app.features.agents import llm
+from app.features.sources.model import Source
 from tests.support.users import manager_client
 
 INVOICES = {
@@ -100,3 +102,41 @@ async def test_inconsistent_decision_types_are_refused(types: list, message: str
         )
         assert r.status_code == 422, r.text
         assert message in r.text
+
+
+async def test_manager_can_delete_an_unpublished_process() -> None:
+    name = f"delete-me-{uuid.uuid4().hex[:8]}"
+    async with manager_client() as api:
+        response = await api.post(
+            "/processes/definition",
+            json={"name": name, **INVOICES},
+        )
+        assert response.status_code == 200, response.text
+        process_id = response.json()["process"]["id"]
+
+        response = await api.delete(f"/processes/{process_id}")
+
+        assert response.status_code == 204, response.text
+        assert (await api.get(f"/processes/{process_id}")).status_code == 404
+        assert all(process["id"] != process_id for process in (await api.get("/processes")).json())
+
+
+async def test_process_with_source_history_cannot_be_deleted() -> None:
+    name = f"keep-me-{uuid.uuid4().hex[:8]}"
+    async with manager_client() as api:
+        response = await api.post(
+            "/processes/definition",
+            json={"name": name, **INVOICES},
+        )
+        assert response.status_code == 200, response.text
+        process_id = response.json()["process"]["id"]
+
+        async with session_factory() as session:
+            session.add(Source(process_id=process_id, name="test", origin="test", rows=[]))
+            await session.commit()
+
+        response = await api.delete(f"/processes/{process_id}")
+
+        assert response.status_code == 409, response.text
+        assert "source loads" in response.json()["message"]
+        assert (await api.get(f"/processes/{process_id}")).status_code == 200

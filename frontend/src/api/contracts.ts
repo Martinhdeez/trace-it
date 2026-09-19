@@ -256,6 +256,7 @@ export interface ApiClient {
 
   listProcesses(): Promise<ProcessOut[]>
   getProcess(id: number): Promise<ProcessDetail>
+  deleteProcess(id: number): Promise<void>
   /** Posts the English pack as it is. 409 when rules carry `code` files or a draft exists. */
   loadDefinition(body: Definition): Promise<LoadResult>
 

@@ -25,6 +25,18 @@ async def load(body: Definition, session: Session, _: Manager) -> LoadResult:
     return await load_definition(session, body)
 
 
+@router.delete(
+    "/{process_id}",
+    status_code=204,
+    operation_id="deleteProcess",
+    summary="Delete an unpublished process without runtime history",
+    description="A process with cases, source loads, published versions or other append-only "
+    "history is kept.",
+)
+async def delete_process(process_id: int, session: Session, _: Manager) -> None:
+    await service.delete_process(session, process_id)
+
+
 @router.get("/{process_id}", operation_id="getProcess", summary="A process with its setup")
 async def get_process(process_id: int, session: Session) -> ProcessDetail:
     return await service.get(session, process_id)

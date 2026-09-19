@@ -19,6 +19,11 @@ export const es = {
     signIn: 'Entrar',
     anonymous: 'sin identificar',
   },
+  processes: {
+    delete: 'Eliminar proceso',
+    confirmDelete: '¿Eliminar este proceso?',
+    deleting: 'Eliminando…',
+  },
   planes: {
     ingestion: 'Lectura',
     agents: 'Agentes',
@@ -176,6 +181,7 @@ export const es = {
     loading: 'Cargando…',
     empty: 'Nada por aquí todavía.',
     cancel: 'Cancelar',
+    confirm: 'Confirmar',
     save: 'Guardar',
     close: 'Cerrar',
     copy: 'Copiar',
