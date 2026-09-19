@@ -20,7 +20,7 @@ Organised by feature, not by file type (ADR 0012).
 ```
 backend/
   pyproject.toml              # dependencies (uv)
-  alembic/versions/           # one migration: 0001_initial_schema.py
+  alembic/versions/           # 0001_initial_schema.py, 0002_use_cases.py
   app/
     main.py                   # FastAPI app, routers, TraceError -> {"code", "message"}
     models.py                 # imports every model (Alembic needs it)
@@ -29,12 +29,13 @@ backend/
     common/exceptions.py      # TraceError and its subclasses
     features/
       users/                  # users, roles manager/operator, X-User-Id
+      use_cases/              # use cases and the versioned configuration of their agents
       processes/              # process, decision types, symbols; definition.py loads a pack
       rules/                  # rule life cycle draft -> active -> retired; compile, impact
       decisions/              # engine.py (pure), service.py (run, queue, resolve, export), audit.py
       instances/              # files, instances, symbols.py (stored shape <-> rule shape)
       sources/                # sources of truth, snapshots; http_connector.py (the ERP)
-      agents/                 # llm.py (PydanticAI seam), compiler.py, assistant.py, sandbox.py
+      agents/                 # llm.py (PydanticAI seam), compiler.py, assistant.py, sandbox.py, prompts/*.md
   tests/
     support/                  # challenge.py, pack.py, fakes.py, models.py, prepare_db.py
     golden/                   # expected outcomes of batch 1 (README there)
@@ -44,7 +45,20 @@ backend/
 
 Inside a feature: `model.py` (SQLAlchemy tables), `schemas.py` (Pydantic in/out), `service.py` (logic, takes the session), `router.py` (thin: validate, call the service, return), `tests/`. A router runs no SQL. A feature imports another's `model.py` or `service.py`, never its `router.py`. Errors are `TraceError` subclasses (`app/common/exceptions.py`); the API maps them to status codes. Naming and vocabulary: `docs/CONVENTIONS.md`.
 
-Agents (compiler A/B, assistant) run on PydanticAI: ADR 0006 and `features/agents/llm.py`. The model per role comes from `Settings` (`TRACE_*_MODEL`). Tests script the model with `FunctionModel` (`tests/support/models.py`): no network, no keys. Before writing PydanticAI code, read `.context/pydantic-ai/START-HERE.md`: the v2 API differs from what a model remembers.
+Agents (tester, compiler, assistant) run on PydanticAI: ADR 0006 and `features/agents/llm.py`.
+
+## Use cases and agent configuration
+
+A **use case** is what the app is used for (e.g. "Invoice payment"): its `description` (domain conventions) and how its agents work. A **process** is one set of rules inside a use case (`processes.use_case_id`); `ProcessOut.description` is its use case's. What an agent does is not in the code (ADR 0011): the platform prompt is a file in `features/agents/prompts/`, the same for every use case, and each use case adds a versioned configuration per role (`compiler`, `tester`, `assistant`): model, domain guidance, model settings, limits, examples. A role without one runs with `TRACE_<ROLE>_MODEL` and the defaults in `compiler.py`. Every agent event records `config_id` and `prompt_hash` (sha256[:12] of the effective instructions). The pack file `processes/<pack>/use-case.json` seeds it (`processes/README.md`).
+
+| Endpoint | Who | What |
+|---|---|---|
+| `GET /use-cases`, `GET /use-cases/{id}` | anyone | Use cases; one with the active configuration of each role |
+| `GET /use-cases/{id}/agents/{role}/versions` | anyone | Every version of a role's configuration, oldest first |
+| `PUT /use-cases/{id}/agents/{role}` | manager | Body `{config, note}`: a new version, active from now on |
+| `POST /agent-configs/{id}/activate` | manager | Activate an existing version: rollback, or adopt one loaded from the pack |
+
+Versions are append-only: only `active` moves. Tests script the model with `FunctionModel` (`tests/support/models.py`): no network, no keys. Before writing PydanticAI code, read `.context/pydantic-ai/START-HERE.md`: the v2 API differs from what a model remembers.
 
 ## Running locally
 
@@ -81,7 +95,7 @@ Without Docker for the backend (faster loop): `docker compose up db -d`, then in
 
 ## Database and migrations
 
-The migration history was squashed into `alembic/versions/0001_initial_schema.py`. An existing local database predates it: `make reset-db && make setup`.
+The migration history starts at `alembic/versions/0001_initial_schema.py` (squashed); a database older than it needs `make reset-db && make setup`. `0002_use_cases.py` moves each process's description into a use case of its own, so `alembic upgrade head` is enough from 0001.
 
 To change a table: edit the feature's `model.py` (a new table must be imported in `app/models.py`), then in `backend/`: `uv run alembic revision --autogenerate -m "add x to rules"`. Read the generated file before committing. Two branches generating migrations at once leave two heads: `uv run alembic merge heads` and tell the group.
 

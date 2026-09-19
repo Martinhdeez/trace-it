@@ -3,8 +3,9 @@
     make eval-compiler                                   # all 16 rules
     cd backend && uv run python -m evals.eval_compiler --rules 2,7
 
-For each rule, the whole compile loop runs with the configured models (`TRACE_COMPILER_MODEL`,
-`TRACE_TESTER_MODEL`, keys from `.env`): the tester's tests, then the coder against them. The
+For each rule, the whole compile loop runs as the app would run it: with the invoice use
+case's agent settings (`processes/invoice-payment/use-case.json`: models, guidance, limits,
+examples; a role without a model uses `TRACE_<ROLE>_MODEL`) and keys from `.env`. The
 generated code then runs in the real sandbox on every golden instance of batch 1 and is
 compared with the reference code; the reference also runs on the tester's tests, which
 measures the tester on its own. The report goes to `backend/evals/reports/compiler-<ts>.md`.
@@ -63,8 +64,16 @@ class RuleReport:
         )
 
 
-def models() -> dict[str, str]:
-    return {role: str(llm.model_for(role)) for role in compiler.ROLES}
+def setups() -> compiler.Setups:
+    """How each role runs in the invoice use case, as the loaded pack would configure it."""
+    return {role: llm.Setup(s) for role, s in pack.use_case().agents.items()}
+
+
+def models(setups: compiler.Setups) -> dict[str, str]:
+    return {
+        role: str((setups[role].settings.model if role in setups else None) or llm.model_for(role))
+        for role in compiler.ROLES
+    }
 
 
 def missing_keys(models: dict[str, str]) -> list[str]:
@@ -73,14 +82,17 @@ def missing_keys(models: dict[str, str]) -> list[str]:
     return sorted(k for k in needed if not os.environ.get(k))
 
 
-async def compile_one(rule: Rule, defn: dict[str, Any]) -> RuleReport:
+async def compile_one(
+    rule: Rule, defn: dict[str, Any], setups: compiler.Setups | None = None
+) -> RuleReport:
     """The compile loop on one rule, with the context the app would give it."""
     report = RuleReport(rule)
     symbols = [Symbol(**s) for s in defn["symbols"]]
-    runs = compiler.Runs()
+    runs = compiler.Runs(setups)
+    description = pack.use_case().description
     try:
         report.compilation = await compiler.compile_text(
-            rule, symbols, challenge.sources(), defn.get("description", ""), runs
+            rule, symbols, challenge.sources(), description, runs
         )
     except Exception as e:  # noqa: BLE001 - one failing rule must not stop the eval
         report.error = f"{type(e).__name__}: {e}"
@@ -195,7 +207,8 @@ def render(reports: list[RuleReport], models: dict[str, str], started: datetime)
 
 async def run(numbers: list[int] | None) -> tuple[Path, list[RuleReport]] | None:
     load_dotenv(pack.REPO / ".env")
-    configured = models()
+    configured_setups = setups()
+    configured = models(configured_setups)
     if missing := missing_keys(configured):
         print(f"Configured models {configured} need {', '.join(missing)}; skipping.")
         return None
@@ -205,7 +218,8 @@ async def run(numbers: list[int] | None) -> tuple[Path, list[RuleReport]] | None
     started = datetime.now(UTC)
     reports = []
     for rule in rules:
-        report = await asyncio.to_thread(evaluate, await compile_one(rule, defn))
+        compiled = await compile_one(rule, defn, configured_setups)
+        report = await asyncio.to_thread(evaluate, compiled)
         reports.append(report)
         print(f"R{rule.id:02d}: {'valid' if report.valid else 'NOT valid'} {report.agreement}")
 

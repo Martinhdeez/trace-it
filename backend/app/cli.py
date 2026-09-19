@@ -4,6 +4,9 @@
 process every draft whose code is already validated. A rule that arrives with its code
 written needs no compiler, so `--activate` alone is enough to run without any model.
 
+A pack with `<pack>/use-case.json` loads its use case first: the domain description and
+how its agents work (models, guidance, limits, examples).
+
 `sources sync <pack.json>` downloads an HTTP source (the ERP) into a new snapshot.
 """
 
@@ -17,19 +20,22 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from app.core.database import engine, session_factory
-from app.features.processes.definition import Definition, load_definition
+from app.features.processes.definition import Definition, load_pack
 from app.features.processes.model import Process
 from app.features.rules import service as rules
 from app.features.sources import service as sources
+from app.features.use_cases import service as use_cases
 
 
 async def load(file: Path, compile_: bool, activate: bool) -> None:
     try:
-        data = Definition.model_validate_json(file.read_text(encoding="utf-8"))
+        Definition.model_validate_json(file.read_text(encoding="utf-8"))
     except ValidationError as e:
         sys.exit(f"{file}: invalid definition\n{e}")
     async with session_factory() as session:
-        result = await load_definition(session, data, file.parent)
+        result = await load_pack(session, file)
+        configs = await use_cases.active(session, result.process.use_case_id)
+        print(f"Use case {result.process.use_case_id}: agents {sorted(configs)} configured")
         p = result.process
         print(
             f"Process {p.name!r} (id {p.id}): {len(p.decision_types)} decision types, "

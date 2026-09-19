@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from app.core.database import session_factory
 from app.features.processes.definition import Definition, load_definition
 from app.features.rules import service as rules
+from app.features.use_cases import service as use_cases
 from app.main import app
 
 PROCESSES = Path(__file__).parents[5] / "processes"
@@ -21,6 +22,10 @@ def _definition(file: str, with_code: bool = False) -> dict:
     so it is dropped unless a test is specifically about that.
     """
     data = json.loads((PROCESSES / file).read_text(encoding="utf-8"))
+    if data.pop("use_case", None):  # a use case of its own, with the pack's description
+        data["description"] = use_cases.read_file(
+            PROCESSES / Path(file).stem / "use-case.json"
+        ).description
     suffix = uuid.uuid4().hex[:8]
     data["name"] += f" {suffix}"
     for u in data.get("users", []):
@@ -107,3 +112,20 @@ async def test_from_disk_rules_arrive_with_their_code_and_activate() -> None:
 
     assert len(active) == len(data.rules) == 16
     assert all(r.hash for r in active)
+
+
+async def test_a_use_case_and_a_description_are_rejected() -> None:
+    data = _definition("travel-expenses.json") | {"use_case": "Anything", "description": "x"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        r = await api.post("/processes/definition", json=data)
+    assert r.status_code == 422, r.text
+    assert "belongs to the use case" in r.text
+
+
+async def test_a_missing_use_case_is_a_conflict() -> None:
+    data = _definition("travel-expenses.json") | {"use_case": f"missing {uuid.uuid4().hex}"}
+    data.pop("description", None)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        r = await api.post("/processes/definition", json=data)
+    assert r.status_code == 409, r.text
+    assert "does not exist" in r.json()["message"]

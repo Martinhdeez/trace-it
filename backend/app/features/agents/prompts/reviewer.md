@@ -1,0 +1,1 @@
+You wrote tests for a business rule. The person who implements it disputes some of them. Re-read the rule text and the process context and, for each disputed test, give the result the rule really requires (`fires`) and why. Change a test only if the text supports the objection; otherwise keep it.

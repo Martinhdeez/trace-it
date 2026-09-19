@@ -15,9 +15,10 @@ from app.core.events import Event
 from app.features.agents import assistant, llm
 from app.features.decisions.model import Decision
 from app.features.ingestion.model import File, Instance
-from app.features.processes.model import DecisionType, Process
+from app.features.processes.model import DecisionType
 from app.features.rules.model import Rule
 from app.main import app
+from tests.support import rows
 from tests.support.models import per_role, user_json
 
 
@@ -50,9 +51,7 @@ async def case(request):
     escalate = getattr(request, "param", "ESCALAR")
     suffix = uuid.uuid4().hex[:8]
     async with session_factory() as s:
-        process = Process(name=f"assistant-{suffix}", description=DESCRIPTION)
-        s.add(process)
-        await s.flush()
+        process = await rows.process(s, f"assistant-{suffix}", DESCRIPTION)
         s.add_all(
             [
                 DecisionType(process_id=process.id, name=escalate, priority=3, requires_human=True),
@@ -116,7 +115,7 @@ async def test_suggests_and_records_an_event(case, monkeypatch) -> None:
     assert suggestion == assistant.Suggestion(**SUGGESTION)
 
     context = user_json(calls[0])
-    assert context["process_description"] == DESCRIPTION
+    assert context["use_case_description"] == DESCRIPTION
     assert context["decision_types"] == ["ESCALAR", "NO_PAGAR", "PAGAR"]
     assert context["human_decision_types"] == ["ESCALAR"]
     assert context["escalation"]["fired_rules"][0]["text"].startswith("If amount")

@@ -9,10 +9,11 @@ from app.common.exceptions import ConflictError, NotFoundError
 from app.core.config import settings
 from app.features.agents import compiler
 from app.features.decisions import audit
-from app.features.processes.model import DecisionType, Symbol
+from app.features.processes.model import DecisionType, Process, Symbol
 from app.features.processes.service import get as get_process
 from app.features.rules.model import Rule
 from app.features.rules.schemas import RuleDetail, RuleIn, RuleOut
+from app.features.use_cases import service as use_cases
 
 
 def rule_hash(text: str, code: str) -> str:
@@ -84,7 +85,10 @@ async def _auto_activation(
     changed = len(impact.changes) + len(impact.conflicts)
     total = impact.unchanged + changed
     share = changed / total if total else 0.0
-    limit = settings.auto_activate_max_change
+    process = await session.get(Process, rule.process_id)
+    compiler_setup = (await use_cases.setups(session, process.use_case_id)).get("compiler")
+    default = settings.auto_activate_max_change
+    limit = compiler_setup.limit("auto_activate_max_change", default) if compiler_setup else default
     why = (
         f"{len(impact.conflicts)} decisions taken by a person would change"
         if impact.conflicts

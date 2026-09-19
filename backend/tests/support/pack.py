@@ -7,14 +7,24 @@ from typing import Any
 from app.features.decisions.engine import Outcomes
 from app.features.rules.model import Rule
 from app.features.rules.service import rule_hash
+from app.features.use_cases import service as use_cases
+from app.features.use_cases.schemas import UseCaseDefinition
 
 REPO = Path(__file__).resolve().parents[3]
 PACK = REPO / "processes"
 PROCESS_FILE = PACK / "invoice-payment.json"
 
 
+USE_CASE_FILE = PACK / "invoice-payment" / "use-case.json"
+
+
 def definition() -> dict[str, Any]:
     return json.loads(PROCESS_FILE.read_text(encoding="utf-8"))
+
+
+def use_case() -> UseCaseDefinition:
+    """The invoice use case: description and agent settings, examples' code read in."""
+    return use_cases.read_file(USE_CASE_FILE)
 
 
 def codes(defn: dict[str, Any] | None = None) -> list[str]:

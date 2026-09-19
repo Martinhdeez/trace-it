@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic_ai.messages import (
     ModelMessage,
+    ModelRequest,
     ModelResponse,
     RetryPromptPart,
     ToolCallPart,
@@ -55,3 +56,8 @@ def user_json(messages: list[ModelMessage]) -> dict[str, Any]:
 def retry_prompts(messages: list[ModelMessage]) -> list[str]:
     """What the validators told the model to fix, in order."""
     return [str(p.content) for m in messages for p in m.parts if isinstance(p, RetryPromptPart)]
+
+
+def instructions(messages: list[ModelMessage]) -> str:
+    """The instructions the model was given on its last request."""
+    return next(m.instructions for m in reversed(messages) if isinstance(m, ModelRequest))

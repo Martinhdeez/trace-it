@@ -7,7 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.features.agents import compiler, llm, sandbox
-from tests.support.models import per_role, retry_prompts, user_prompt
+from app.features.use_cases.schemas import AgentSettings, Example
+from tests.support.models import instructions, per_role, retry_prompts, user_prompt
 
 
 class SandboxError(Exception):
@@ -99,7 +100,7 @@ def seen(monkeypatch: pytest.MonkeyPatch) -> dict:
     """The compiler reads the process from a fake, not the database."""
 
     async def read(session, process_id):
-        return DESCRIPTION, {"suppliers": [{"cif": "B1", "iban": "ES1"}]}
+        return DESCRIPTION, {"suppliers": [{"cif": "B1", "iban": "ES1"}]}, {}
 
     monkeypatch.setattr(compiler, "read_process", read)
     return {}
@@ -259,3 +260,49 @@ async def test_still_malformed_after_the_repairs_fails(
 
     assert e.value.status_code == 502 and "compiler" in e.value.message
     assert len(seen["compiler"]) == 3  # the first answer and two repairs
+
+
+def use_case(monkeypatch: pytest.MonkeyPatch, **settings: AgentSettings) -> None:
+    """The rule's use case configures its agents with `settings` (role -> settings)."""
+    setups = {role: llm.Setup(s) for role, s in settings.items()}
+
+    async def read(session, process_id):
+        return DESCRIPTION, {}, setups
+
+    monkeypatch.setattr(compiler, "read_process", read)
+
+
+async def test_the_coder_sees_examples_of_other_rules_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    examples = [
+        Example(text=RULE.text, type="prohibition", code="OWN_EXAMPLE_CODE"),
+        Example(text="If supplier is empty, escalate", type="prohibition", code="OTHER_CODE"),
+    ]
+    use_case(monkeypatch, compiler=AgentSettings(examples=examples))
+    seen: dict = {}
+    script(monkeypatch, seen, [suite()], [proposal(CODE)])
+
+    await compile_()
+
+    coder = instructions(seen["compiler"][0])
+    assert "OTHER_CODE" in coder and "If supplier is empty" in coder
+    assert "OWN_EXAMPLE_CODE" not in coder
+
+
+async def test_the_use_case_limits_are_honoured(monkeypatch: pytest.MonkeyPatch) -> None:
+    use_case(
+        monkeypatch,
+        tester=AgentSettings(limits={"min_tests": 7}),
+        compiler=AgentSettings(limits={"max_attempts": 1}),
+    )
+    seven = suite()
+    seven["tests"].append({**seven["tests"][0], "name": "amount 0 again"})
+    seen: dict = {}
+    script(monkeypatch, seen, [suite(), seven], [proposal(CODE_GREATER_EQUAL)])
+
+    result = await compile_()
+
+    [complaint] = retry_prompts(seen["tester"][1])
+    assert "At least 7 tests" in complaint
+    assert result.report["valid"] is False and result.report["attempts"] == 1
