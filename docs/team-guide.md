@@ -105,6 +105,7 @@ benchmark and golden-reference tools also need `pdftotext` (poppler).
 | `make backup` | `pg_dump` of the live database into `backups/` (`DB_CONTAINER`, `DB_NAME`) |
 | `make export-batch FILES=<dir> OUT=<file>` | Outcomes of the instances named like the PDFs of `<dir>` only, then checked: one line per file, valid results (`docs/runbook-batch2.md`) |
 | `make check-outcomes OUT=<file> FILES=<dir>` | Only the check, for a file already written |
+| `make delivery` | Exports both batches into `delivery/outcomes.jsonl` and `delivery/outcomes_lote2.jsonl` (with the trace fields when the export CLI has `--trace`) and checks both against the hackathon contract. `DELIVERY_PACK`, `B1`, `L2`, `OUT1`, `OUT2` override the pack, the batches and the outputs (`delivery/README.md`) |
 | `make compile` | Compiles the draft rules with the two agents (needs LLM keys); compiling never publishes, `make activate` does |
 | `make demo` | Uploads workbook and 500 PDFs through the production API, syncs the ERP, runs decisions and exports `output/outcomes.jsonl` (`tools/README.md`). Requires the backend and ERP running, plus downloaded OCR weights for scans |
 | `make demo DEMO_ARGS="--limit 5 --local-only"` | Small API run with local OCR and no Gemini/Jev requests; use a fresh database for comparable results |

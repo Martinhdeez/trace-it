@@ -14,6 +14,7 @@ the demo does not use them.
 | `hiring_demo.py` | `make hiring-demo`: a hiring process born from discovery, then the CV batch and a learning round; writes an evaluation report ([the experiment](../processes/hiring-screening/README.md)) |
 | `reviewer_demo_pdfs.py` | `make reviewer-demo-pdfs`: the reviewer agent's demo invoices, 10 % VAT pair plus one without order ([docs](../docs/reviewer-agent.md#demo-pair)) |
 | `bench_advice.py` | `make bench-advice DB=<copy> [N=5]`: latency, tokens, retries, fallbacks and decisions of the escalation advice on the demo cases, real LLMs ([docs](../docs/reviewer-agent.md#benchmark)) |
+| `check_delivery.py` | `make delivery`, or on its own: checks a delivery JSONL against the hackathon contract, standard library only ([delivery/README.md](../delivery/README.md)) |
 | `trace_decision.py` | `make trace-decision FILE=<file_id>`: one invoice's state, decisions, evidence, latency, errors, retries and pending work, as text |
 | `workbook.py` | Historical spreadsheet mapping helper for the text-layer baseline |
 | `extractor.py` | Historical PDF text-layer extractor and regex symbols, without OCR |

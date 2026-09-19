@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync sources up backup export-batch check-outcomes test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down hiring-data hiring-demo hiring-erp reviewer-demo-pdfs check down reset-db
+.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync sources up backup export-batch check-outcomes delivery test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down hiring-data hiring-demo hiring-erp reviewer-demo-pdfs check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 DEMO_ARGS ?=
@@ -91,6 +91,24 @@ export-batch:  # FILES=<folder of PDFs> OUT=<file>: outcomes of those files only
 check-outcomes:  # OUT=<file> FILES=<folder of PDFs>: one line per file, valid results
 	cd backend && uv run python -m app.cli check-outcomes $(abspath $(OUT)) --files $(abspath $(FILES))
 
+# The three files the hackathon expects in delivery/ (delivery/README.md). Overridable:
+# DELIVERY_PACK=<pack.json> B1=<batch 1 PDFs> L2=<batch 2 PDFs> OUT1=<file> OUT2=<file>.
+# Exports with the trace fields when the export CLI has --trace; without it, the minimal
+# file_id/result export, and it says so. Both files are then checked; a bad one fails.
+DELIVERY_PACK ?= $(FROZEN)
+B1 ?= .context/500-sombras-de-alberto/facturas
+L2 ?= .context/lote_2_sorpresa/facturas
+OUT1 ?= delivery/outcomes.jsonl
+OUT2 ?= delivery/outcomes_lote2.jsonl
+delivery:
+	@cd backend && uv run python -m app.cli export --help | grep -q -- --trace \
+		|| echo "note: the export CLI has no --trace flag yet; writing the minimal export"
+	trace=$$(cd backend && uv run python -m app.cli export --help | grep -o -- '--trace' | head -1); \
+	cd backend && uv run python -m app.cli export $(DELIVERY_PACK) --files $(abspath $(B1)) --output $(abspath $(OUT1)) $$trace \
+		&& uv run python -m app.cli export $(DELIVERY_PACK) --files $(abspath $(L2)) --output $(abspath $(OUT2)) $$trace
+	python3 tools/check_delivery.py $(OUT1) --files $(B1)
+	python3 tools/check_delivery.py $(OUT2) --files $(L2)
+
 # Tests use their own database (recreated each run), never the one `make setup` fills.
 TEST_DB_URL ?= postgresql+psycopg://trace:trace@localhost:$${DB_PORT:-5432}/trace_test
 PREPARE_DB = cd backend && TRACE_DATABASE_URL=$(TEST_DB_URL) uv run python -m tests.support.prepare_db
@@ -109,7 +127,7 @@ test-e2e: test-db  # golden outcomes of batch 1 + API flow (needs the challenge 
 
 # Synthetic IMAP, worker, API, PostgreSQL and console on an isolated test database.
 MAIL_TEST_DB_URL ?= postgresql+psycopg://trace:trace@localhost:$${DB_PORT:-5432}/trace_mail_browser_test
-.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync sources up backup export-batch check-outcomes test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down hiring-data hiring-demo reviewer-demo-pdfs check down reset-db
+.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync sources up backup export-batch check-outcomes delivery test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down hiring-data hiring-demo reviewer-demo-pdfs check down reset-db
 e2e-mail:
 	cd backend && TRACE_DATABASE_URL=$(MAIL_TEST_DB_URL) uv run python -m tests.support.prepare_db
 	cd backend && TRACE_DATABASE_URL=$(MAIL_TEST_DB_URL) uv run alembic upgrade head
@@ -164,6 +182,7 @@ reviewer-demo-pdfs:  # OUT=<folder>: the reviewer agent's demo invoices (docs/re
 check:
 	cd backend && uv run ruff check . && uv run ruff format --check .
 	cd tools && uv run --project ../backend ruff check . && uv run --project ../backend ruff format --check .
+	cd tools && uv run --project ../backend pytest -q test_check_delivery.py
 	$(MAKE) test test-e2e
 
 down:
