@@ -8,6 +8,7 @@
  * A step waiting for one of Carlos's packages is `test.fixme('pkg n')`, and goes live in
  * the PR that lands package n (docs/frontend-handoff.md).
  */
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
@@ -26,11 +27,15 @@ const ESCALATED = ['2026-0233-A_catering.pdf', 'factura_41082.pdf']
 const SCAN = 'scan_001.pdf'
 const RESOLVED = 'factura_41082.pdf'
 const NOTE = 'Pedido duplicado revisado: esta es la factura buena'
+const LEARNED = 'Cargar el maestro de proveedores actualizado'
+const DATABASE =
+  process.env.E2E_DATABASE_URL ?? 'postgresql+psycopg://trace:trace@localhost:5432/trace_e2e_test'
 
 test.describe.configure({ mode: 'serial' })
 
 let page: Page
 let processId: number
+let headers: Record<string, string>
 // API responses that failed, for the error check on every screen. With no key, the
 // assistant's proposal answers 502 `llm_error`; it is not part of the path (D4).
 let failures: string[] = []
@@ -42,7 +47,7 @@ test.beforeAll(async ({ browser, request }) => {
   // The sources, as the real demo loads them before any invoice: a rule reading a source
   // that was never loaded escalates SOURCE_UNAVAILABLE (B11), which is not the demo.
   const manager = await (await request.post(`${API}/login`, { data: { email: MANAGER.email } })).json()
-  const headers = { 'X-User-Id': String(manager.id) }
+  headers = { 'X-User-Id': String(manager.id) }
   const book = await request.post(`${API}/processes/${processId}/sources/workbook`, {
     headers,
     multipart: {
@@ -83,6 +88,16 @@ async function realAndClean(allow: string[] = []) {
   expect(codes.filter((text) => !allow.some((code) => text.endsWith(` · ${code}`)))).toEqual([])
   expect(failures.filter((line) => !ASSISTANT.test(line))).toEqual([])
   failures = []
+}
+
+/** Every proposal channel is an LLM call; with no key (D4) the test stores one as it would. */
+function storeProposal(kind: 'escalation' | 'source', target: number, value: string): number {
+  const out = execFileSync(
+    'uv',
+    ['run', 'python', '-m', 'tests.support.proposals', kind, String(target), value],
+    { cwd: resolve(import.meta.dirname, '../../backend'), env: { ...process.env, TRACE_DATABASE_URL: DATABASE } },
+  )
+  return Number(out.toString().trim().split('\n').at(-1))
 }
 
 async function instanceByName(request: APIRequestContext, name: string) {
@@ -177,8 +192,21 @@ test('pkg 5: the detail says why it escalated, as the API does', async ({ reques
   await realAndClean(['llm_error'])
 })
 
-test.fixme('pkg 5: accept the assistant proposal', async () => {
-  // Needs a proposal with no LLM key (D4), e.g. one stored by the learning flow.
+test('pkg 5: accept the assistant proposal', async ({ request }) => {
+  // On the scan: the next steps resolve RESOLVED by hand and read ESCALATED[0] as escalated.
+  storeProposal('escalation', (await instanceByName(request, SCAN)).id, 'NO_PAGAR')
+  await page.getByRole('button', { name: SCAN }).click()
+  const card = page.locator('div').filter({ has: page.getByText('El asistente propone') }).last()
+  await expect(card.getByText('Stored by the e2e: no LLM key')).toBeVisible()
+  await card.getByRole('button', { name: 'Aceptar' }).click()
+  await expect(page.getByRole('button', { name: SCAN })).toHaveCount(0)
+  const scan = await instanceByName(request, SCAN)
+  expect(scan.decision).toBe('NO_PAGAR')
+  expect(scan.decisions.at(-1).author).not.toBe('engine')
+  // Back on the case the next step resolves by hand.
+  await page.getByRole('button', { name: RESOLVED }).click()
+  await expect(page.getByRole('combobox', { name: 'Decisión' })).toBeVisible()
+  await realAndClean(['llm_error'])
 })
 
 test('resolve as the manager', async ({ request }) => {
@@ -208,8 +236,29 @@ test('trace view shows the decisions and the escalation reason', async ({ reques
   await realAndClean()
 })
 
-test.fixme('pkg 8: the proposals inbox lists the resolution', async () => {
-  // Accept or reject from the inbox, with `proposal_id` on resolve (#93).
+test('pkg 8: accept a learning proposal from the inbox', async ({ request }) => {
+  const id = storeProposal('source', processId, LEARNED)
+  await page.goto(`/processes/${processId}/definition`)
+  const card = page.getByRole('listitem').filter({ hasText: LEARNED })
+  await card.getByRole('button', { name: 'Aceptar' }).click()
+  // Settled, it leaves the open inbox.
+  await expect(card).toHaveCount(0)
+  const accepted: { id: number }[] = await (
+    await request.get(`${API}/processes/${processId}/proposals?status=accepted`, { headers })
+  ).json()
+  expect(accepted.map((item) => item.id)).toContain(id)
+  await realAndClean()
+})
+
+test('pkgs 9, 11: definition and settings screens load real data', async () => {
+  for (const path of ['definition', 'definition/contexto', 'definition/inputs', 'definition/fuentes', 'settings']) {
+    await page.goto(`/processes/${processId}/${path}`)
+    await page.waitForLoadState('networkidle')
+    await realAndClean()
+  }
+  await page.goto('/settings')
+  await page.waitForLoadState('networkidle')
+  await realAndClean()
 })
 
 test('pkg 7: run history lists the run', async () => {
