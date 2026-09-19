@@ -10,6 +10,16 @@ from app.features.ingestion.config import Settings
 MATERIAL = Path(__file__).resolve().parents[5] / ".context/500-sombras-de-alberto"
 
 
+@pytest.fixture(autouse=True)
+def no_provider_backoff(monkeypatch):
+    # Refused calls fail at once unless a test sets a retry budget; nothing really sleeps.
+    from app.features.ingestion.ocr import journal
+
+    monkeypatch.setenv("TRACEPAY_PROVIDER_RETRY_MAX_WAIT_S", "0")
+    monkeypatch.setattr(journal, "_sleep", lambda seconds: None)
+    monkeypatch.setattr(journal, "_slots", {})
+
+
 @pytest.fixture
 def settings(tmp_path):
     # General application imports may load .env; unit tests must remain offline.
