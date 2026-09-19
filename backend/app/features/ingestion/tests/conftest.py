@@ -17,6 +17,7 @@ def settings(tmp_path):
         data_dir=tmp_path / "data",
         model_dir=tmp_path / "models",
         workers=1,
+        ocr_profile="experimental",
         vlm_url=None,
         vlm_model=None,
         vlm_api_key=None,

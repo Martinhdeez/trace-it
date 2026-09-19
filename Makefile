@@ -1,15 +1,22 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: setup compile activate load-frozen demo erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down check down reset-db
+.PHONY: setup ocr-models ocr-check compile activate load-frozen demo erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 DEMO_ARGS ?=
 
 setup:
 	test -f .env || cp .env.example .env
+	$(MAKE) ocr-models ocr-check
 	docker compose up -d --build --wait
 	docker compose exec -T backend alembic upgrade head
 	$(LOAD)
 	@echo "Ready: API at http://localhost:$${BACKEND_PORT:-8000}/docs"
+
+ocr-models:
+	uv run --project backend --locked python -m app.features.ingestion.tools.download_models --profile v5-latin --output .models
+
+ocr-check:
+	uv run --project backend --locked --env-file .env python -m app.features.ingestion.quality
 
 compile:  # needs LLM keys in .env
 	$(LOAD) --compile

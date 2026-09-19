@@ -24,6 +24,12 @@ make erp               # leave the challenge ERP running in another terminal
 make demo              # 500 invoices -> output/outcomes.jsonl and detail.json
 ```
 
+The API defaults to `TRACEPAY_OCR_PROFILE=verified`: startup verifies the evaluated
+weight/dictionary hashes and requires the configured Gemini/Jev model IDs and keys.
+`make setup` installs those weights and checks that profile. For explicit local-only
+experiments, set `TRACEPAY_OCR_PROFILE=experimental` before starting the backend.
+The current shared corpus export is linked from [the reports index](../backend/reports/README.md).
+
 `make demo` activates the supplied hand-written rules. The API must be reachable
 at the host port configured by `BACKEND_PORT` (8000 by default), and the backend
 must reach the ERP on port 8009. The demo uses the pack's seeded manager account.

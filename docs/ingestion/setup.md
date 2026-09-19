@@ -87,7 +87,10 @@ The public Hugging Face model repositories do not require a paid API key.
 The four ONNX files occupy approximately 102 MB together; allow additional space
 for download caches, Python dependencies and Docker images. `.models/` is ignored
 by Git and mounted read-only at `/srv/.models` in the running backend. Model
-loading is lazy: a healthy API does not by itself prove the weights are present.
+loading is lazy. By default, both API applications verify the pinned weights,
+detector configuration and dictionaries at startup, and require the evaluated
+Gemini/Jev model IDs and credentials. Missing or different components stop startup
+with a configuration error. This checks configuration, not provider availability.
 
 Do not use `--no-verifier`, `v6-small`, or a different primary profile when
 reproducing this setup. Those switches are for experiments. The API never
@@ -115,6 +118,7 @@ every provider account has access to them:
 GEMINI_API_KEY=your_gemini_key
 TYPESAFE_API_KEY=your_typesafe_key
 TRACEPAY_GEMINI_MODEL=gemini-3.1-flash-lite
+TRACEPAY_OCR_PROFILE=verified
 TRACEPAY_JEV_MODEL=jev-1.13.0
 TRACEPAY_WORKERS=2
 TRACEPAY_OCR_THREADS=4
@@ -136,8 +140,12 @@ visual verifier. `load --activate` uses the supplied hand-written rules without
 calling rule agents. Agent settings in `processes/invoice-payment/use-case.json`
 are separate from `TRACEPAY_*`; changing the compiler model does not change OCR.
 
-Without provider keys, native PDF/XLSX extraction and the two local OCR readers
-still work, but that is a different configuration with different coverage.
+For local-only operation or a different model, explicitly set
+`TRACEPAY_OCR_PROFILE=experimental` before starting the API. Native PDF/XLSX
+extraction and available local readers still work in that mode, but it has
+different coverage. The default `verified` profile never silently drops those
+providers. `make setup` installs both pinned local readers and runs `make ocr-check`
+before starting Docker. You can run `make ocr-check` separately after editing `.env`.
 Focused local/visual corroboration requires an enabled visual provider. Requests
 omit `vlm` and `jev` to permit configured providers automatically; `vlm=false`
 and `jev=false` explicitly disable them, even when keys exist.
