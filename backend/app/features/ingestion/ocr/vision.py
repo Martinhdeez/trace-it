@@ -171,6 +171,7 @@ class VisionFallback:
                 model=model,
                 operation="image_transcription",
                 fallback=fallback,
+                force=self.settings.ocr_force_recompute,
             )
             content = output_text(result)
         else:
@@ -244,6 +245,7 @@ class VisionFallback:
                 model=model,
                 operation="image_transcription",
                 fallback=fallback,
+                force=self.settings.ocr_force_recompute,
             )
             content = result["text"]
         if not isinstance(content, str) or not content.strip() or transcript_warnings(content):

@@ -80,6 +80,10 @@ class Settings:
     jev_api_key: str | None = field(
         default_factory=lambda: os.getenv("TYPESAFE_API_KEY"), repr=False
     )
+    # Demo switch: ignore extraction caches, OCR caches and the provider journal.
+    ocr_force_recompute: bool = field(
+        default_factory=lambda: os.getenv("TRACEPAY_OCR_FORCE_RECOMPUTE", "0") == "1"
+    )
     max_batch_files: int = 100
     max_queued_files: int = 1000
 

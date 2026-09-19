@@ -112,6 +112,7 @@ class LocalOCR:
                 line.model_dump() for line in self._recognize(png, page, point_size, signature)
             ],
             validate=lambda values: [TextLine.model_validate(line).model_dump() for line in values],
+            force=self.settings.ocr_force_recompute,
         )
         return [TextLine.model_validate(line) for line in result]
 

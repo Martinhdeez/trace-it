@@ -169,6 +169,7 @@ class TextJudge:
             model=self.settings.jev_model,
             operation="text_selection",
             fallback=fallback,
+            force=self.settings.ocr_force_recompute,
         )
 
     def _select_helm(self, payload, questions, *, fallback=False):
@@ -260,6 +261,7 @@ class TextJudge:
             model=model,
             operation="text_selection",
             fallback=fallback,
+            force=self.settings.ocr_force_recompute,
         )
         return validate(data)
 
@@ -315,6 +317,7 @@ class TextJudge:
             provider="jev",
             model=self.settings.jev_model,
             operation="text_selection",
+            force=self.settings.ocr_force_recompute,
         )
         return {
             "role": "textual_recommendation_only",

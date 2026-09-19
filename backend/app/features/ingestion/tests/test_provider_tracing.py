@@ -1,3 +1,4 @@
+import hashlib
 import json
 from dataclasses import replace
 from types import SimpleNamespace
@@ -88,6 +89,26 @@ def test_provider_failure_and_uncertain_replay_have_sanitized_spans(tmp_path, mo
     assert "secret-key" not in trace
     assert "private invoice content" not in trace
     assert "private response" not in trace
+
+
+def test_forced_call_ignores_started_journal_record(tmp_path, monkeypatch):
+    rows = []
+    monkeypatch.setattr(events, "_write", rows.extend)
+    identity = {"request": 1}
+    fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    (tmp_path / f"{fingerprint}.json").write_text(json.dumps({"state": "started"}))
+
+    def call(mark_network_attempt):
+        mark_network_attempt()
+        return {"fresh": True}
+
+    result = recorded_call(tmp_path, identity, call, provider="gemini", force=True)
+
+    assert result == {"fresh": True}
+    assert rows[0]["data"]["outcome"] == "forced"
+    assert rows[0]["data"]["request_fingerprint"] == fingerprint
+    record = json.loads((tmp_path / f"{fingerprint}.json").read_text())
+    assert record["state"] == "complete"
 
 
 def test_generic_vision_and_text_judge_calls_are_traced(settings, monkeypatch):
