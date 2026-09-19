@@ -2,7 +2,7 @@ import { Plus, Search } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import mark from '../../assets/trace-mark.png'
+import mark from '../../assets/trace-mark-clear.png'
 import { api } from '../../api/client'
 import { keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
@@ -55,7 +55,7 @@ export function Sidebar() {
           src={mark}
           alt=""
           draggable={false}
-          className="h-6 w-6 select-none rounded-[6px] object-cover"
+          className="h-6 w-6 select-none object-contain"
         />
         <p className="text-[13px] font-medium tracking-[-0.03em] text-ink">
           trace<span className="text-faint">[.]</span>it

@@ -3,7 +3,7 @@ import { motion, useReducedMotion } from 'motion/react'
 import { FileText, LoaderCircle, Play, Search } from 'lucide-react'
 import hackspain from '../../assets/hackspain.png'
 import maisa from '../../assets/maisa.png'
-import mark from '../../assets/trace-mark.png'
+import mark from '../../assets/trace-mark-clear.png'
 import { cn } from '../../lib/cn'
 import { StatusBadge } from '../shell/StatusBadge'
 import {
@@ -500,7 +500,7 @@ function MiniSidebar({ phase }: { phase: Phase }) {
   return (
     <aside className="hidden w-[168px] shrink-0 flex-col md:flex lg:w-[196px]">
       <div className="flex items-center gap-1.5 px-4 pt-3 pb-3">
-        <img src={mark} alt="" className="h-5 w-5 rounded-[5px] object-cover" draggable={false} />
+        <img src={mark} alt="" className="h-5 w-5 object-contain" draggable={false} />
         <p className="text-[12px] font-medium tracking-[-0.03em]">
           trace<span className="text-faint">[.]</span>it
         </p>
