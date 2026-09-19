@@ -20,10 +20,11 @@ The committed contract is `frontend/openapi.json` (`make openapi`), with typed
 **Who may call what.** Identify with `X-User-Id` (the id `POST /login` returns). The console's
 user is the manager, who handles only escalations (Q5 in [integration.md](integration.md)).
 Reads stay open. These need a manager: run, reprocess, source sync,
-`POST /processes/definition`, draft validate and publish, resolve, alert ack, `POST /users`,
-rule activate and retire, learning, proposals (propose, list, accept, reject). A missing header, or an id that does not exist, answers
+`POST /processes/definition`, draft read, edit, validate, publish and discard, resolve, alert ack,
+`POST /users`, rule create, compile, activate and retire, norm submit, learning, proposals
+(propose, list, accept, reject). A missing header, or an id that does not exist, answers
 401 `{"code": "unauthenticated"}`; a user who is not a manager answers 403
-`{"code": "permission_denied"}`. Uploads, extraction and rule creation need any known user.
+`{"code": "permission_denied"}`. Uploads and extraction need any known user.
 The first manager comes from the pack (`make setup` loads its `users`).
 
 ## One screen, one call
@@ -47,8 +48,8 @@ The first manager comes from the pack (`make setup` loads its `users`).
 | Proposals | `GET /processes/{id}/proposals?status=open`, `POST /proposals/{id}/accept`, `POST /proposals/{id}/reject` `{reason?}`, `POST /instances/{id}/proposal` | everything an agent proposes, in one shape; manager-only. See [Proposals](#proposals) |
 | Rules | `GET /processes/{id}/rules?status=` | compiling, draft, active, blocked, retired |
 | Rule | `GET /rules/{id}` | `code`, `tests`, `report` (`valid`, `tests`, `discrepancies`, `attempts`, `reviews`; `needs_data` when blocked) |
-| Norm | `POST /processes/{id}/norm`, `GET /processes/{id}/norm-rules` | the client's norm split into norm rules, each with its rules |
-| Rule lifecycle | `POST /processes/{id}/rules` (compiles in the background), `POST /rules/{id}/compile`, `GET /rules/{id}/impact`, `POST /rules/{id}/activate`, `POST /rules/{id}/retire` | impact = `unchanged`, `changes`, `conflicts`; activate/retire need a manager |
+| Norm | `POST /processes/{id}/norm`, `GET /processes/{id}/norm-rules` | the client's norm split into norm rules, each with its rules; the POST needs a manager |
+| Rule lifecycle | `POST /processes/{id}/rules` (compiles in the background), `POST /rules/{id}/compile`, `GET /rules/{id}/impact`, `POST /rules/{id}/activate`, `POST /rules/{id}/retire` | impact = `unchanged`, `changes`, `conflicts`; create, compile, activate and retire need a manager |
 | Learning | `POST /processes/{id}/learning`, `GET /processes/{id}/learning` | Manager-only analysis and proposed norms; [full flow](learning.md) |
 | Norm proposal | `GET /norm-proposals/{id}`, `POST .../validate`, `POST .../approve`, `POST .../reject` | Isolated previews; explicit manager adoption with a validation ID |
 | Sources | `GET /processes/{id}/sources` | current load per source: rows count, origin, `loaded_at`, and from its latest sync `status` (`ok`/`down`, null if never synced), `error`, `checked_at`. A `down` load is not read by runs until a sync succeeds (ADR 0028) |

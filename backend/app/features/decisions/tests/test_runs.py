@@ -93,6 +93,14 @@ MUTATIONS = [
     ("POST", "/instances/{iid}/resolve", {"decision": "PAGAR", "reason": "x"}),
     ("POST", "/alerts/999999999/ack", None),
     ("POST", "/users", {"name": "x", "email": "x@x.x", "role": "operator"}),
+    ("POST", "/processes/{pid}/rules", {"text": "x", "type": "prohibition", "decision": "x"}),
+    ("POST", "/processes/{pid}/norm", {"text": "x"}),
+    ("POST", "/rules/999999999/compile", None),
+    ("POST", "/rules/999999999/activate", None),
+    ("POST", "/rules/999999999/retire", None),
+    ("PUT", "/processes/{pid}/draft", {"description": "x"}),
+    ("POST", "/processes/{pid}/draft/validate", None),
+    ("DELETE", "/processes/{pid}/draft?revision=1", None),
 ]
 
 
