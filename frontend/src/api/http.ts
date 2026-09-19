@@ -16,9 +16,12 @@ export class ApiError extends Error {
     return this.status === 501
   }
 
-  /** The backend is not up, or CORS blocked us. */
+  /**
+   * The backend is not up, or CORS blocked us. Vite's proxy answers 502 with no
+   * `{code, message}` body when nothing listens behind it; a backend 502 carries a code.
+   */
   get unreachable(): boolean {
-    return this.status === 0
+    return this.status === 0 || (this.status >= 502 && this.status <= 504 && this.code === 'http_error')
   }
 }
 

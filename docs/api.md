@@ -5,8 +5,17 @@
 # API for the console
 
 The backend is the contract; this page is the map. Live and exact: `make setup`, then
-http://localhost:8000/docs (OpenAPI). Every response is JSON in English; errors are
-`{"code", "message"}`. Identify with `X-User-Id` (from `POST /login`); resolving,
+http://localhost:8000/docs (OpenAPI). Every response is JSON in English. Errors come in
+two shapes:
+
+- Domain errors (404, 409, 403, the 422s `invalid_document` and `sandbox_error`, 500):
+  `{"code", "message"}`.
+- Request validation (422 from FastAPI, a body or parameter that does not match the
+  schema): `{"detail": [{"loc", "msg", "type"}]}`. Kept as FastAPI sends it; a 422 without
+  `code` is always this one.
+
+The committed contract is `frontend/openapi.json` (`make openapi`), with typed
+`operationId`s and one name per schema. Identify with `X-User-Id` (from `POST /login`); resolving,
 activating rules, document extraction and source uploads need it. CORS is open.
 
 ## One screen, one call

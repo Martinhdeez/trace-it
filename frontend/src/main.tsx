@@ -13,7 +13,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 15_000,
-      // Retrying a 501 or a 404 only delays the fallback to the mock.
+      // A 4xx will not change on retry; show it at once.
       retry: (attempts, error) =>
         attempts < 1 && !(error instanceof ApiError && error.status < 500),
     },
