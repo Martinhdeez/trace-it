@@ -11,6 +11,7 @@ the API running on :8010.
 
 - `INFORME-MANANA.md`: overnight report: from Alberto's original rule text to decisions, 471/471 against the golden set.
 - `REPORT-integrated-run.md`: one integrated run with real models, what ran and how to inspect its traces in the dashboard.
+- `REPORT-trazabilidad.md`: per-module traceability: spans, fields, real trace trees, metrics, curl audit guide (Spanish).
 - `PRUEBA-EN-VIVO.md`: live test guide: URLs, how to start a demo run and what to look at.
 - `coverage/SUMMARY.txt`: audit spans per step (ok/error) for the API coverage run whose captures are in `coverage/`.
 - `delivery/`: the submitted plan (`albertitos_plan.*`) and the architecture diagram.
