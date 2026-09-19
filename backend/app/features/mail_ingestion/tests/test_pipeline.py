@@ -507,3 +507,41 @@ async def test_administrative_bearer_and_mail_bearer_keep_separate_scopes(pipeli
     assert (await worker.api.get("/db/tables")).status_code == 401
     assert (await human.get(worker.root, headers=administrative)).status_code == 401
     assert (await worker.api.get(worker.root)).status_code == 200
+
+
+async def test_imap_disconnect_persists_bounded_retry_and_recovers(pipeline, monkeypatch):
+    import imaplib
+
+    from app.features.mail_ingestion.imap import ReadOnlyIMAP
+
+    _, worker, human = pipeline
+    await worker.initialize()
+    original = ReadOnlyIMAP.login
+
+    def disconnected(*args):
+        raise imaplib.IMAP4.abort("Synthetic dropped connection")
+
+    monkeypatch.setattr(ReadOnlyIMAP, "login", disconnected)
+    await worker.cycle()
+    state = (await overview(worker, human))["account"]
+    assert state["state"] == "active" and state["error"] == "imap_unavailable"
+    retry_at = state["retry_at"]
+    assert retry_at
+    await worker.cycle()
+    assert (await overview(worker, human))["account"]["retry_at"] == retry_at
+    async with session_factory() as session:
+        assert (
+            await session.scalar(
+                select(MailAccount.failures).where(
+                    MailAccount.process_id == worker.settings.process_id
+                )
+            )
+            == 1
+        )
+    monkeypatch.setattr(ReadOnlyIMAP, "login", original)
+    async with session_factory() as session:
+        await session.execute(update(MailAccount).values(retry_at=None))
+        await session.commit()
+    await worker.cycle()
+    state = (await overview(worker, human))["account"]
+    assert state["retry_at"] is None and state["error"] is None

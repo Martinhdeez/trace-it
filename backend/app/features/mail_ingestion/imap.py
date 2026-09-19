@@ -152,6 +152,9 @@ class Mailbox:
         self.connection.sock.settimeout(cfg.timeout_seconds)
         try:
             self.connection.login(cfg.imap_username, cfg.imap_password_file.read_text().strip())
+        except imaplib.IMAP4.abort:
+            # A dropped transport during LOGIN is not a rejected password.
+            raise
         except imaplib.IMAP4.error as exc:
             self.connection.shutdown()
             raise AuthenticationFailed("Mailbox authentication failed") from exc

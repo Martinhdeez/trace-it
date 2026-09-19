@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import contextlib
+import imaplib
 import logging
 import signal
 from datetime import UTC, datetime
@@ -154,7 +155,7 @@ class Worker:
         except AuthenticationFailed:
             await self.request("POST", "/poll-failure", json={"error": "invalid_credentials"})
             raise RuntimeError("Mailbox authentication refused; account halted") from None
-        except OSError:
+        except (OSError, imaplib.IMAP4.error):
             await self.request("POST", "/poll-failure", json={"error": "imap_unavailable"})
         finally:
             await asyncio.to_thread(mailbox.__exit__, None, None, None)

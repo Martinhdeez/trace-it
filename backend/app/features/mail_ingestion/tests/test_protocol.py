@@ -1,3 +1,4 @@
+import imaplib
 import ssl
 
 import pytest
@@ -176,3 +177,18 @@ def test_international_filename_parameters_are_preserved():
         ["ATTACHMENT", ["filename*", "utf-8''factura%20caf%C3%A9.pdf"]],
     ]
     assert candidates(tree)[0]["original_name"] == "factura café.pdf"
+
+
+def test_disconnect_during_login_is_not_a_credential_rejection(local_mail, monkeypatch):
+    _, cfg = local_mail
+
+    def disconnected(*args):
+        raise imaplib.IMAP4.abort("Synthetic dropped connection")
+
+    monkeypatch.setattr(ReadOnlyIMAP, "login", disconnected)
+    mailbox = Mailbox(cfg)
+    try:
+        with pytest.raises(imaplib.IMAP4.abort):
+            mailbox.__enter__()
+    finally:
+        mailbox.__exit__()
