@@ -72,6 +72,11 @@ export async function getText(path: string): Promise<string> {
   return response.text()
 }
 
+export async function getBlob(path: string): Promise<Blob> {
+  const response = await send(path, { headers: headers() })
+  return response.blob()
+}
+
 export async function post<T>(path: string, body?: unknown): Promise<T> {
   const response = await send(path, {
     method: 'POST',

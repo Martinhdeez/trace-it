@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
+import { useState } from 'react'
 import type { InstanceDetail, TraceEvent } from '../../api/contracts'
-import { extractedDocuments } from '../../data/documents.generated'
 import { formatMs } from '../../lib/format'
 import { label } from '../../lib/status'
 import { Overlay } from '../shell/Overlay'
@@ -10,23 +10,34 @@ import { DocumentPane } from './DocumentPane'
 export function DocumentPopup({
   instance,
   onClose,
+  initialSymbol,
 }: {
   instance: InstanceDetail
   onClose: () => void
+  initialSymbol?: string
 }) {
-  const doc = extractedDocuments[instance.nombre]
+  const [showInfo, setShowInfo] = useState(false)
   const cost = processingCost(instance.eventos)
   const current = label(instance)
 
   return (
     <Overlay onClose={onClose} size="xl">
-      <div className="flex h-full min-h-0 overflow-hidden rounded-[20px] bg-surface shadow-pop ring-1 ring-line">
+      <div role="dialog" aria-modal="true" aria-label="Original document" className="flex h-full min-h-0 flex-col overflow-hidden rounded-[20px] bg-surface shadow-pop ring-1 ring-line md:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <header className="flex shrink-0 items-center justify-between gap-3 border-b border-hairline px-4 py-3">
             <div className="min-w-0">
               <p className="text-[11px] text-muted">Documento</p>
               <h2 className="truncate font-mono text-[13px]">{instance.nombre}</h2>
             </div>
+            <button
+              type="button"
+              aria-expanded={showInfo}
+              aria-controls="document-info"
+              onClick={() => setShowInfo((value) => !value)}
+              className="ml-auto shrink-0 rounded-full px-3 py-1 text-[12px] text-muted ring-1 ring-line hover:bg-canvas"
+            >
+              Info
+            </button>
             <button
               type="button"
               onClick={onClose}
@@ -36,23 +47,16 @@ export function DocumentPopup({
               <X size={14} strokeWidth={1.75} />
             </button>
           </header>
-          <DocumentPane instanceId={instance.id} name={instance.nombre} embedded />
+          <DocumentPane instanceId={instance.id} name={instance.nombre} embedded initialSymbol={initialSymbol} />
         </div>
 
-        <aside className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-hairline px-4 py-4">
+        {showInfo ? <aside id="document-info" aria-label="Document information" className="max-h-[35%] shrink-0 overflow-y-auto border-t border-hairline px-4 py-4 md:max-h-none md:w-[220px] md:border-t-0 md:border-l">
           <Section title="Info">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[12px] text-muted">Resultado</span>
               <StatusBadge value={current} />
             </div>
             <Row label="hash" value={instance.fichero_hash.slice(0, 12)} mono />
-            {doc ? (
-              <>
-                <Row label="origen" value={doc.inputKind} />
-                <Row label="página" value={doc.page} />
-                <Row label="tamaño" value={`${doc.sizeKb} KB`} />
-              </>
-            ) : null}
             <Row
               label="símbolos"
               value={String(Object.keys(instance.simbolos ?? {}).length)}
@@ -104,7 +108,7 @@ export function DocumentPopup({
               </ul>
             ) : null}
           </Section>
-        </aside>
+        </aside> : null}
       </div>
     </Overlay>
   )

@@ -43,7 +43,7 @@ export function Overlay({
           align === 'right'
             ? 'h-full w-full max-w-md'
             : size === 'xl'
-              ? 'h-[min(88dvh,860px)] w-full max-w-[1100px]'
+              ? 'h-[min(88dvh,860px)] min-w-0 w-full max-w-[1100px]'
               : size === 'lg'
                 ? 'w-full max-w-3xl'
                 : 'w-full max-w-lg'

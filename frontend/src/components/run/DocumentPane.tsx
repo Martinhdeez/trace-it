@@ -8,19 +8,22 @@ import { keys } from '../../api/queries'
 import { extractedDocuments } from '../../data/documents.generated'
 import { formatEuro } from '../../lib/format'
 import { cn } from '../../lib/cn'
+import { PdfEvidence } from './PdfEvidence'
 
 /**
- * The facsimile of the document. A scan has no parsed version, which is exactly
- * the case that ends in REVISION.
+ * Stored PDFs use their original pages and saved reading evidence. The generated
+ * paper below remains the fallback for the offline demo and workbook evidence.
  */
 export function DocumentPane({
   instanceId,
   name,
   embedded = false,
+  initialSymbol,
 }: {
   instanceId: number | undefined
   name: string | undefined
   embedded?: boolean
+  initialSymbol?: string
 }) {
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -35,6 +38,21 @@ export function DocumentPane({
 
   const bumpZoom = (delta: number) => {
     setZoom((value) => Math.min(2, Math.max(0.5, Math.round((value + delta) * 10) / 10)))
+  }
+
+  if (instanceId && evidence.isPending) {
+    return <p role="status" className="p-5 text-[13px] text-muted">Loading document evidence…</p>
+  }
+  if (instanceId && evidence.isError) {
+    return (
+      <div role="alert" className="p-5 text-[13px] text-muted">
+        <p>Could not load document evidence. {evidence.error.message}</p>
+        <button className="mt-2 underline" onClick={() => evidence.refetch()}>Retry</button>
+      </div>
+    )
+  }
+  if (instanceId && evidence.data?.kind === 'invoice') {
+    return <PdfEvidence key={`${instanceId}:${evidence.data.id}`} instanceId={instanceId} name={name ?? evidence.data.file_id} evidence={evidence.data} initialSymbol={initialSymbol} />
   }
 
   return (

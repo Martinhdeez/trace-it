@@ -121,6 +121,12 @@ async def attach_document(
 
 
 async def document_result(session, instance_id):
+    event = await document_event(session, instance_id)
+    return ExtractionResult.model_validate(event.data["extraction"])
+
+
+async def document_event(session, instance_id):
+    """The persisted reading and adapter that supplied this instance's symbols."""
     if await session.get(Instance, instance_id) is None:
         raise NotFoundError(f"Instance {instance_id} does not exist")
     event = await session.scalar(
@@ -138,7 +144,7 @@ async def document_result(session, instance_id):
     )
     if event is None:
         raise NotFoundError("No document extraction is recorded for this instance")
-    return ExtractionResult.model_validate(event.data["extraction"])
+    return event
 
 
 async def document_content(session, instance_id) -> tuple[str, bytes]:
