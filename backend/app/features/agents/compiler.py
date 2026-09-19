@@ -378,11 +378,16 @@ async def compile_text(
     feedback = ""
     for attempt in range(1, max_attempts + 1):
         prompt = f"{ctx}\n\nTests your code must pass (JSON):\n{_as_json(tests)}{feedback}"
-        proposal = await runs(coder, "compiler", prompt, coder_instructions, deps=coder_deps)
-        if isinstance(proposal, NeedsData):
-            return _needs_data(proposal, "compiler")
-        results = await asyncio.to_thread(run_tests, proposal.code, tests)
-        failures = [r for r in results if not r["passed"]]
+        with events.span("coder_attempt", attempt=attempt) as span:
+            proposal = await runs(coder, "compiler", prompt, coder_instructions, deps=coder_deps)
+            if isinstance(proposal, NeedsData):
+                span.set(needs_data=proposal.missing)
+                return _needs_data(proposal, "compiler")
+            with events.span("run_tests", cases=len(tests)) as run:
+                results = await asyncio.to_thread(run_tests, proposal.code, tests)
+                run.set(passed=sum(r["passed"] for r in results))
+            failures = [r for r in results if not r["passed"]]
+            span.set(failures=len(failures), disputes=len(proposal.disputes))
         if not failures or attempt == max_attempts:
             break
         feedback = "\n\nYour previous code:\n" + proposal.code + "\n\nIt fails these tests:\n"
@@ -433,15 +438,4 @@ async def compile_rule(session: AsyncSession, rule: Rule, symbols: list[Symbol])
 
     against them. The result is reported, never silently accepted."""
     description, sources, setups = await read_process(session, rule.process_id)
-    runs = Runs(setups)
-    result = await compile_text(rule, symbols, sources, description, runs)
-    for trace in runs.traces:
-        events.record(
-            session,
-            "compile_rule",
-            process_id=rule.process_id,
-            data={"rule_id": rule.id, "valid": result.report["valid"], **trace.as_data()},
-            latency_ms=trace.latency_ms,
-            cost=trace.cost,
-        )
-    return result
+    return await compile_text(rule, symbols, sources, description, Runs(setups))

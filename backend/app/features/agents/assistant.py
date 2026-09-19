@@ -131,26 +131,19 @@ async def suggest(session: AsyncSession, instance_id: int) -> Suggestion:
     instance = await session.get(Instance, instance_id)
     if instance is None:
         raise NotFoundError(f"Instance {instance_id} does not exist")
-    context, types = await _context(session, instance)
-    prompt = json.dumps(context, ensure_ascii=False, default=str)
-    process = await session.get(Process, instance.process_id)
-    setup = (await use_cases.setups(session, process.use_case_id)).get("assistant")
-    suggestion, trace = await llm.run(
-        assistant,
-        "assistant",
-        prompt,
-        instructions=llm.prompt("assistant"),
-        setup=setup,
-        deps=Deps(types),
-    )
-    events.record(
-        session,
-        "suggest_escalation",
-        process_id=instance.process_id,
-        instance_id=instance_id,
-        data={"decision": suggestion.decision, **trace.as_data()},
-        latency_ms=trace.latency_ms,
-        cost=trace.cost,
-    )
-    await session.commit()
+    links = {"instance_id": instance_id, "process_id": instance.process_id}
+    with events.span("suggest_escalation", **links) as span:
+        context, types = await _context(session, instance)
+        prompt = json.dumps(context, ensure_ascii=False, default=str)
+        process = await session.get(Process, instance.process_id)
+        setup = (await use_cases.setups(session, process.use_case_id)).get("assistant")
+        suggestion, trace = await llm.run(
+            assistant,
+            "assistant",
+            prompt,
+            instructions=llm.prompt("assistant"),
+            setup=setup,
+            deps=Deps(types),
+        )
+        span.set(decision=suggestion.decision, model=trace.model)
     return suggestion

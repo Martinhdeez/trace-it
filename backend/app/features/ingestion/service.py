@@ -9,6 +9,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from app.common.exceptions import NotFoundError
+from app.core import events
 from app.features.ingestion.config import Settings
 from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.ocr.local import LocalOCR
@@ -107,6 +108,12 @@ class ExtractionService:
         return hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
 
     def extract(self, item, options: ExtractOptions):
+        with events.span("extraction", kind=item["kind"], sha256=item["sha256"]) as span:
+            result = self._extract(item, options)
+            span.set(cache_hit=result.cache_hit, warnings=len(result.warnings), **result.metrics)
+            return result
+
+    def _extract(self, item, options: ExtractOptions):
         started = time.perf_counter()
         key = self.cache_key(item, options)
         with self.locks[int(key[:8], 16) % len(self.locks)]:

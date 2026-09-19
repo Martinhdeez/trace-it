@@ -234,17 +234,12 @@ async def normalize_norm(session: AsyncSession, process_id: int, norm: str) -> N
             .order_by(Rule.id)
         )
     )
-    output, trace = await normalize(
-        norm, description, types, symbols, sources, active, setups.get("normalizer")
-    )
-    events.record(
-        session,
-        "normalize_norm",
-        process_id=process_id,
-        data={"process_id": process_id, "output": output.model_dump(), **trace.as_data()},
-        latency_ms=trace.latency_ms,
-        cost=trace.cost,
-    )
+    with events.span("normalize_norm", process_id=process_id) as span:
+        output, _ = await normalize(
+            norm, description, types, symbols, sources, active, setups.get("normalizer")
+        )
+        checks = sum(len(s.checks) for s in output.norm_rules)
+        span.set(output=output.model_dump(), norm_rules=len(output.norm_rules), checks=checks)
     created = []
     for sentence in output.norm_rules:
         norm_rule = NormRule(

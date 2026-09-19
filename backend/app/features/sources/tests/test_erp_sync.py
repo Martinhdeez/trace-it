@@ -128,7 +128,9 @@ async def test_failed_sync_keeps_the_previous_snapshot() -> None:
     assert [s.origin for s in stored] == [SEED_ORIGIN]
     async with session_factory() as session:
         failure = await session.scalar(
-            select(Event).where(Event.step == "sync_source_failed").order_by(Event.id.desc())
+            select(Event)
+            .where(Event.step == "sync_source", Event.status == "error")
+            .order_by(Event.id.desc())
         )
     assert "gave up after 2 attempts" in failure.data["error"]
 

@@ -64,7 +64,7 @@ async def attach_document(
             "symbols": symbols,
             **(context or {}),
         },
-        latency_ms=round(result.metrics.get("extraction_ms", 0)),
+        duration_ms=round(result.metrics.get("extraction_ms", 0)),
     )
     await session.commit()
     return {

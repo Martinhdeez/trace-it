@@ -127,7 +127,7 @@ async def test_suggests_and_records_an_event(case, monkeypatch) -> None:
     assert event.step == "suggest_escalation"
     assert event.data["model"] == "fake/model"
     assert event.data["decision"] == "NO_PAGAR"
-    assert event.latency_ms is not None
+    assert event.duration_ms is not None
 
 
 @pytest.mark.parametrize("case", ["MANUAL_CHECK"], indirect=True)
@@ -149,7 +149,13 @@ async def test_invalid_decision_retries_once(case, monkeypatch) -> None:
     assert len(calls) == 2
     async with session_factory() as s:
         event = await s.scalar(select(Event).where(Event.instance_id == case["escalated"]))
-    assert event.data["retries"] == 1
+        run = await s.scalar(
+            select(Event).where(Event.trace_id == event.trace_id, Event.step == "llm_run")
+        )
+    assert run.parent_id == event.span_id
+    assert run.data["retries"] == 1 and run.data["agent"] == "assistant"
+    [retry] = run.data["retry_prompts"]
+    assert "REJECT" in retry and run.data["output"]["decision"] == "NO_PAGAR"
 
 
 async def test_two_invalid_decisions_give_502(case, monkeypatch) -> None:

@@ -16,11 +16,12 @@ class DecisionOut(BaseModel):
 
 class EventOut(BaseModel):
     id: int
+    trace_id: str  # `GET /traces/{trace_id}`: the tree this step belongs to
     instance_id: int | None
     step: str = Field(examples=["decision", "resolution", "compile_rule", "sync_source"])
+    status: str  # "ok" or "error"
     data: dict[str, Any] | None
-    latency_ms: int | None
-    cost: float | None
+    duration_ms: int | None
     created_at: datetime
 
 
