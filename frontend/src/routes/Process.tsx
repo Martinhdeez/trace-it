@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSession } from '../state/session'
 import {
   AlertTriangle,
   BookOpenText,
@@ -43,6 +44,7 @@ type SessionRun = {
 export function Process() {
   const processId = Number(useParams().processId)
   const queryClient = useQueryClient()
+  const { isManager } = useSession()
   const [runPanelOpen, setRunPanelOpen] = useState(false)
   const [queue, setQueue] = useState<QueuedFile[]>([])
   const [runs, setRuns] = useState<SessionRun[]>([])
@@ -66,10 +68,17 @@ export function Process() {
     queryKey: keys.processMetrics(processId),
     queryFn: () => api.processMetrics(processId),
   })
-  // 404 means there is no draft to publish.
+  // `revision` is the draft's, or null when there is none; only then is there a draft to read.
+  const execution = useQuery({
+    queryKey: keys.execution(processId),
+    queryFn: () => api.getExecution(processId),
+    enabled: isManager,
+  })
+  const hasDraft = execution.data?.revision != null
   const draft = useQuery({
     queryKey: keys.draft(processId),
     queryFn: () => api.getDraft(processId),
+    enabled: hasDraft,
   })
   const versions = useQuery({
     queryKey: keys.versions(processId),
@@ -115,7 +124,8 @@ export function Process() {
   const active = rules.data?.filter((rule) => rule.estado === 'activa').length ?? 0
   const compiling = rules.data?.filter((rule) => rule.estado === 'compilando').length ?? 0
   const waiting = summary.data?.queue ?? 0
-  const nextVersion = Math.max(0, ...(versions.data ?? []).map((version) => version.number)) + 1
+  const currentVersion = Math.max(0, ...(versions.data ?? []).map((version) => version.number))
+  const nextVersion = currentVersion + 1
   const busy = run.isPending || upload.isPending
   const startBlocked =
     compiling > 0
@@ -224,7 +234,7 @@ export function Process() {
         </Overlay>
       ) : null}
 
-      {publishOpen && draft.data ? (
+      {publishOpen && hasDraft && draft.data ? (
         <Overlay onClose={() => setSearchParams({}, { replace: true })} size="lg">
           <NestedCard
             label={`Publicar v${nextVersion}`}
@@ -256,7 +266,9 @@ export function Process() {
           </div>
         ) : null}
         <header className="mb-6">
-          <p className="text-[13px] text-muted">Panel</p>
+          <p className="text-[13px] text-muted">
+            {currentVersion ? `Panel · v${currentVersion} publicada` : 'Panel · sin versión publicada'}
+          </p>
           <h1 className="mt-1 text-[32px] font-medium leading-[1.1] tracking-[-0.045em]">
             {process.data?.nombre ?? '…'}
           </h1>
@@ -270,7 +282,7 @@ export function Process() {
           waiting={waiting}
           compiling={compiling}
           findings={findings.data?.length ?? 0}
-          draftVersion={draft.data ? nextVersion : undefined}
+          draftVersion={hasDraft && draft.data ? nextVersion : undefined}
         />
 
         <Metrics summary={summary.data} plane={plane.data} providers={providers.data} />
