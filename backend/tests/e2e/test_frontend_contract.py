@@ -20,6 +20,12 @@ def canonical(path: str) -> str:
     return re.sub(r"\$?\{[^}]+\}", "{}", path)
 
 
+def same_route(route: str, call: str) -> bool:
+    """`{}` on either side is one segment: the client's `/metrics/{}` covers `/metrics/agents`."""
+    a, b = route.split("/"), call.split("/")
+    return len(a) == len(b) and all(x == y or "{}" in (x, y) for x, y in zip(a, b, strict=True))
+
+
 def test_live_client_routes_exist_in_openapi():
     live = (FRONTEND / "live.ts").read_text(encoding="utf-8")
     calls = re.findall(
@@ -38,8 +44,7 @@ def test_live_client_routes_exist_in_openapi():
         f"{methods.get(method, method).upper()} {path}"
         for method, _, path in calls
         if not any(
-            methods.get(method, method) == route_method
-            and re.fullmatch(re.escape(route).replace(r"\{\}", "[^/]+"), canonical(path))
+            methods.get(method, method) == route_method and same_route(route, canonical(path))
             for route, route_method in routes
         )
     )
@@ -54,9 +59,8 @@ def test_live_client_identity_header_matches_backend():
 
 
 def test_live_client_user_fields_match_api():
-    contract = (FRONTEND / "live.ts").read_text(encoding="utf-8")
-    user = re.search(r"type RawUser = \{(.*?)\}", contract, re.S)
-    assert user
-    fields = set(re.findall(r"(?:^|;)\s*(\w+):", user.group(1)))
-    schema = app.openapi()["components"]["schemas"]["UserOut"]
-    assert fields == set(schema["properties"]), "The wire user type must match the API"
+    # The wire user is the generated UserOut; test_openapi keeps openapi.json current.
+    contract = (FRONTEND / "contracts.ts").read_text(encoding="utf-8")
+    assert re.search(r"type User = components\['schemas'\]\['UserOut'\]", contract), (
+        "The wire user type must be the API's UserOut"
+    )
