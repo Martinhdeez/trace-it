@@ -26,6 +26,7 @@ from app.features.sources.http_connector import (
     SyncError,
 )
 from app.features.sources.model import Source
+from app.features.use_cases.model import UseCase
 
 
 class SourceUnavailableError(TraceError):
@@ -117,14 +118,29 @@ def pack_sources_file(pack_file: Path) -> Path:
     return pack_file.with_suffix("") / "sources.json"
 
 
-def find_pack(process_name: str) -> Path:
+def find_pack(use_case: str) -> Path:
+    """The pack of a use case: the one whose `use_case` names it (or, without `use_case`,
+    whose own `name` gave the use case its name). Its connectors serve every process of the
+    use case (ADR 0013)."""
     for pack in sorted(settings.processes_dir.glob("*.json")):
         try:
-            if json.loads(pack.read_text(encoding="utf-8")).get("name") == process_name:
+            data = json.loads(pack.read_text(encoding="utf-8"))
+            if (data.get("use_case") or data.get("name")) == use_case:
                 return pack
         except (json.JSONDecodeError, AttributeError):
             continue
-    raise NotFoundError(f"No process pack in {settings.processes_dir} is named {process_name!r}")
+    raise NotFoundError(
+        f"No process pack in {settings.processes_dir} is for the use case {use_case!r}"
+    )
+
+
+async def process_config(session: AsyncSession, process_id: int, name: str) -> HttpSourceConfig:
+    """The connector of source `name` for a process: its use case's `sources.json`."""
+    process = await session.get(Process, process_id)
+    if process is None:
+        raise NotFoundError(f"Process {process_id} does not exist")
+    use_case = await session.get(UseCase, process.use_case_id)
+    return load_config(pack_sources_file(find_pack(use_case.name)), name)
 
 
 def load_config(sources_file: Path, source_name: str) -> HttpSourceConfig:
@@ -233,8 +249,5 @@ async def sync(
 
 
 async def sync_process(session: AsyncSession, process_id: int, name: str) -> SyncResult:
-    process = await session.get(Process, process_id)
-    if process is None:
-        raise NotFoundError(f"Process {process_id} does not exist")
-    config = load_config(pack_sources_file(find_pack(process.name)), name)
+    config = await process_config(session, process_id, name)
     return await sync(session, process_id, name, config)

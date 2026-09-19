@@ -58,7 +58,7 @@ Loading never overrides what was changed at runtime: a role with no stored versi
 
 ## `invoice-payment/sources.json`: source connectors
 
-A pack may carry `<pack-name>/sources.json` with the connector configuration of its sources of truth. The invoice pack configures `erp` as an HTTP source: login, paged XML, field mapping, retries, rate limit. `make erp-sync` or `POST /processes/{id}/sources/erp/sync` download it into a new snapshot. Format and behaviour: `docs/sources-http.md`.
+A pack may carry `<pack-name>/sources.json` with the connector configuration of its sources of truth. The invoice pack configures `erp` as an HTTP source: login, paged XML, field mapping, retries, rate limit. `make erp-sync` or `POST /processes/{id}/sources/erp/sync` download it into a new snapshot. The connectors belong to the pack's use case: any process of "Invoice payment", whatever its name, syncs with this file (ADR 0013). Format and behaviour: `docs/sources-http.md`.
 
 ## Minimal example: travel expenses
 

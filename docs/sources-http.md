@@ -5,6 +5,13 @@ A process pack declares the external APIs its rules read in `processes/<pack>/so
 connector (`backend/app/features/sources/http_connector.py`) reads that configuration. The
 challenge ERP is its first configuration. ADR 0013 records why it works this way.
 
+**Connectors belong to the use case.** The ERP is the invoice use case's, not one process's.
+A sync of any process finds the pack of the process's use case: the `processes/*.json` whose
+`use_case` names it (a pack without `use_case` gives its own `name` to its use case), and
+reads `sources.json` beside it. A process created later in the same use case (e.g. from a
+norm, "Invoice payment - live norm") syncs with the same connector. A use case with no such
+pack answers 404 naming the use case.
+
 **Rules never call the API.** A sync downloads everything and writes one new `sources` row
 (a snapshot). The engine reads the latest snapshot per source name.
 
