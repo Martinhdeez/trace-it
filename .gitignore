@@ -16,3 +16,7 @@ build/
 default_rapidocr.yaml
 reports/
 output/
+.htpasswd
+deploy/models/
+playwright-report/
+test-results/
