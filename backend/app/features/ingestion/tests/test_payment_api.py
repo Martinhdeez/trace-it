@@ -152,7 +152,15 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
     source_rows = (await client.get(f"/processes/{process_id}/sources/orders")).json()
     assert source_rows["data"][0]["purchase_order"] == "PO-2026-0703"
     process_events = (await client.get(f"/processes/{process_id}/events")).json()
-    assert {event["step"] for event in process_events} == {"load_workbook", "ingest_document"}
+    assert {event["step"] for event in process_events} == {
+        "upload_workbook",
+        "load_workbook",
+        "upload_document",
+        "store_file",
+        "extraction",
+        "native_text",
+        "ingest_document",
+    }
     assert (await client.get(f"/processes/{process_id}/export")).status_code == 409
     run = await client.post(f"/processes/{process_id}/run")
     assert run.json() == {"decided": 1, "by_decision": {"PAGAR": 1}}, run.text
@@ -237,6 +245,7 @@ async def test_pending_reextraction_uses_new_snapshots_and_keeps_both_events(pay
                 select(Event)
                 .where(
                     Event.instance_id == upload["instance_id"],
+                    Event.step.in_(("ingest_document", "extract_document")),
                 )
                 .order_by(Event.id)
             )

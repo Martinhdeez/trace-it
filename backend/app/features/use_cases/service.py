@@ -11,6 +11,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError, NotFoundError
+from app.core import events
 from app.features.agents import llm
 from app.features.use_cases.model import AgentConfig, UseCase
 from app.features.use_cases.schemas import (
@@ -58,7 +59,16 @@ async def ensure(session: AsyncSession, name: str, description: str | None) -> U
 
 async def load(session: AsyncSession, data: UseCaseDefinition) -> UseCase:
     """Create or update a use case from its definition (idempotent)."""
-    use_case = await ensure(session, data.name, data.description)
+    with events.span("load_use_case", name=data.name, author=PACK_AUTHOR) as span:
+        use_case = await ensure(session, data.name, data.description)
+        added = await _load_agents(session, use_case, data)
+        span.set(use_case_id=use_case.id, added=added)
+    return use_case
+
+
+async def _load_agents(session: AsyncSession, use_case: UseCase, data: UseCaseDefinition) -> list:
+    """Each role's file config not stored yet, as a new version: `[{role, version, active}]`."""
+    added = []
     for role, settings in data.agents.items():
         versions = list(
             await session.scalars(
@@ -70,8 +80,11 @@ async def load(session: AsyncSession, data: UseCaseDefinition) -> UseCase:
         if any(AgentSettings.model_validate(v.config) == settings for v in versions):
             continue
         note = "loaded from the pack"
-        await _add(session, use_case.id, role, settings, PACK_AUTHOR, note, activate=not versions)
-    return use_case
+        row = await _add(
+            session, use_case.id, role, settings, PACK_AUTHOR, note, activate=not versions
+        )
+        added.append({"role": role, "version": row.version, "active": row.active})
+    return added
 
 
 async def _add(
@@ -167,21 +180,35 @@ async def configure(
     author: str,
     note: str | None,
 ) -> AgentConfigOut:
-    """A new version of `role`'s configuration, active from now on."""
+    """A new version of `role`'s configuration, active from now on. The span says who
+    changed what: the version it replaces and the new one (in the process feeds)."""
     await _use_case(session, use_case_id)
-    row = await _add(session, use_case_id, role, settings, author, note, activate=True)
-    await session.commit()
+    links = {"use_case_id": use_case_id, "role": role, "author": author, "note": note}
+    with events.span("configure_agent", **links) as span:
+        before = (await active(session, use_case_id)).get(role)
+        row = await _add(session, use_case_id, role, settings, author, note, activate=True)
+        await session.commit()
+        span.set(
+            before_version=before.version if before else None,
+            after_version=row.version,
+            config_id=row.id,
+            config=row.config,
+        )
     return _out(row)
 
 
-async def activate(session: AsyncSession, config_id: int) -> AgentConfigOut:
+async def activate(session: AsyncSession, config_id: int, author: str) -> AgentConfigOut:
     """Make an existing version the active one (rollback or adopting a loaded version)."""
     row = await session.get(AgentConfig, config_id)
     if row is None:
         raise NotFoundError(f"Agent config {config_id} does not exist")
-    if row.active:
-        raise ConflictError(f"Version {row.version} of {row.role} is already active")
-    await _deactivate(session, row.use_case_id, row.role)
-    row.active = True
-    await session.commit()
+    links = {"use_case_id": row.use_case_id, "role": row.role, "author": author}
+    with events.span("activate_agent_config", config_id=config_id, **links) as span:
+        before = (await active(session, row.use_case_id)).get(row.role)
+        span.set(before_version=before.version if before else None, after_version=row.version)
+        if row.active:
+            raise ConflictError(f"Version {row.version} of {row.role} is already active")
+        await _deactivate(session, row.use_case_id, row.role)
+        row.active = True
+        await session.commit()
     return _out(row)

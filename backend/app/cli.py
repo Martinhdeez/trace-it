@@ -56,7 +56,7 @@ async def load(file: Path, compile_: bool, activate: bool) -> None:
                 if (rule.report or {}).get("valid"):
                     continue
                 try:
-                    r = await rules.compile_rule(session, rule.id)
+                    r = await rules.compile_rule(session, rule.id, author="cli")
                     status = "valid" if r.report["valid"] else "with discrepancies"
                 except Exception as e:  # one failing rule must not stop the others
                     await session.rollback()
@@ -69,7 +69,7 @@ async def load(file: Path, compile_: bool, activate: bool) -> None:
                     print(f"  rule {rule.id}: no validated code, still a draft")
                     continue
                 try:
-                    await rules.activate(session, rule.id)
+                    await rules.activate(session, rule.id, author="cli")
                     activated += 1
                 except Exception as e:  # a rule that contradicts a person must not stop the rest
                     await session.rollback()

@@ -90,6 +90,8 @@ class RuleTrace(BaseModel):
     activation: dict[str, Any] | None  # the impact gate's verdict (`report.activation`)
     normalization: SpanOut | None  # the normalizer run that wrote it, if it came from a norm
     compilations: list[SpanNode]  # newest first: tester, coder attempts, tests, reviews
+    # Oldest first: saved, (re)compiled, activated, retired, impact previews; who and when
+    lifecycle: list[SpanOut]
     runtime: RuleRuntime
 
 

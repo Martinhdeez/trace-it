@@ -9,6 +9,7 @@ import pymupdf
 from PIL import Image
 
 from app.common.normalization import fold
+from app.core import events
 from app.features.ingestion.ocr.bands import flatten_periodic_bands
 
 from .invoice import parse_invoice
@@ -153,7 +154,9 @@ def verify_identifiers(
                     if family == "primary_scale"
                     else png
                 )
-                generated = getattr(reader, method)(input_png, page, size)
+                with events.span("focused_read", field=name, reader=family, page=page) as span:
+                    generated = getattr(reader, method)(input_png, page, size)
+                    span.set(lines=len(generated))
                 # Coordinates always refer back to the original PDF, not the crop.
                 generated = [
                     line.model_copy(
@@ -214,7 +217,12 @@ def verify_identifiers(
             try:
                 metrics["vlm_calls"] += 1
                 metrics["focused_calls"] += 1
-                generated = vlm.transcribe(render_region(content, page, box, settings), page, size)
+                high = {"field": name, "reader": "visual_high", "page": page}
+                with events.span("focused_read", **high) as span:
+                    generated = vlm.transcribe(
+                        render_region(content, page, box, settings), page, size
+                    )
+                    span.set(lines=len(generated))
                 generated = [
                     line.model_copy(
                         update={
@@ -257,7 +265,10 @@ def verify_identifiers(
                     try:
                         metrics["ocr_calls"] += 1
                         metrics["focused_calls"] += 1
-                        generated = getattr(ocr, method)(png, page, sizes[page])
+                        dewarp = {"field": name, "reader": family + "_band_dewarp", "page": page}
+                        with events.span("focused_read", **dewarp) as span:
+                            generated = getattr(ocr, method)(png, page, sizes[page])
+                            span.set(lines=len(generated))
                         generated = [
                             line.model_copy(
                                 update={

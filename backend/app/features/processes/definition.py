@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError
+from app.core import events
 from app.features.agents import sandbox
 from app.features.processes.model import DecisionType, Process, Symbol
 from app.features.processes.schemas import ProcessDetail, ProcessIn
@@ -95,6 +96,22 @@ def _rule(data: RuleDefinition, process_id: int, base: Path | None) -> Rule:
 async def load_definition(
     session: AsyncSession, data: Definition, base: Path | None = None
 ) -> LoadResult:
+    """`_load` in a span: what the definition added to which process."""
+    with events.span("load_definition", name=data.name) as span:
+        result = await _load(session, data, base)
+        p = result.process
+        span.set(
+            process_id=p.id,
+            use_case_id=p.use_case_id,
+            decision_types=len(p.decision_types),
+            symbols=len(p.symbols),
+            new_rules=result.new_rules,
+            new_users=result.new_users,
+        )
+        return result
+
+
+async def _load(session: AsyncSession, data: Definition, base: Path | None) -> LoadResult:
     """Create the process if missing (by name), upsert its decision types and symbols, add each
     rule as a draft unless the process already has one with the same text, and create missing
     users by email. Existing rules are never touched. `base` is the folder a rule's `code`

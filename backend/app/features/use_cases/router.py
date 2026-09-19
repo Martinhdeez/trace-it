@@ -64,4 +64,4 @@ async def configure(
 )
 async def activate(config_id: int, session: Session, user: CurrentUser) -> AgentConfigOut:
     _manager_only(user)
-    return await service.activate(session, config_id)
+    return await service.activate(session, config_id, user.name)

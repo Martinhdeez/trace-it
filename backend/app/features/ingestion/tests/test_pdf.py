@@ -2,6 +2,7 @@ from collections import Counter
 
 import pytest
 
+from app.core import events
 from app.features.ingestion.pdf.extractor import extract_pdf
 from app.features.ingestion.pdf.invoice import parse_invoice
 from app.features.ingestion.schemas import INVOICE_FIELDS, ExtractOptions
@@ -71,3 +72,24 @@ def test_all_native_invoices(settings):
     assert count == 471
     assert invalid == {"issued_on": 3}
     assert missing_currency == 175  # No explicit currency in monetary fields (see currency audit).
+
+
+class BrokenOCR:
+    def signature(self):
+        return {"fake": True}
+
+    def recognize(self, *args):
+        raise RuntimeError("OCR weights missing")
+
+
+def test_an_ocr_failure_is_an_error_span_and_a_warning(settings, monkeypatch):
+    written = []
+    monkeypatch.setattr(events, "_write", written.extend)
+    with events.span("upload"):
+        _, _, warnings, _, metrics = extract_pdf(
+            pdf_bytes(""), ExtractOptions(vlm=False, jev=False), settings, BrokenOCR(), NoVLM()
+        )
+    assert {"code": "OCR_ERROR", "stage": "primary"}.items() <= warnings[0].items()
+    [ocr] = [r for r in written if r["step"] == "ocr"]
+    assert ocr["status"] == "error" and ocr["data"]["error"] == "RuntimeError: OCR weights missing"
+    assert ocr["data"]["reader"] == "primary" and metrics["ocr_calls"] == 1

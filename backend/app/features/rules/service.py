@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.core.database import session_factory
 from app.features.agents import compiler
 from app.features.decisions import audit
-from app.features.decisions.model import Decision
+from app.features.decisions.model import Decision, Finding
 from app.features.processes.model import DecisionType, Process, Symbol
 from app.features.processes.service import get as get_process
 from app.features.rules.model import ENFORCED, NormRule, Rule
@@ -22,6 +22,8 @@ from app.features.rules.schemas import CheckOut, NormRuleOut, RuleDetail, RuleIn
 from app.features.use_cases import service as use_cases
 
 logger = logging.getLogger(__name__)
+
+AUTO = "auto"  # the author of what the system did by itself
 
 
 def rule_hash(text: str, code: str) -> str:
@@ -92,12 +94,12 @@ async def create(session: AsyncSession, process_id: int, data: RuleIn) -> RuleDe
     return _detail(rule)
 
 
-async def compile_rule(session: AsyncSession, rule_id: int) -> RuleDetail:
+async def compile_rule(session: AsyncSession, rule_id: int, author: str = AUTO) -> RuleDetail:
     """Compile (or recompile) a draft or blocked rule and wait for the result."""
     rule = await _rule(session, rule_id)
     if rule.status not in ("draft", "blocked"):
         raise ConflictError(f"Only a draft or blocked rule can be compiled (it is {rule.status})")
-    return await _compile(session, rule)
+    return await _compile(session, rule, author)
 
 
 def _kept(rule: Rule, report: dict[str, Any]) -> dict[str, Any]:
@@ -106,9 +108,9 @@ def _kept(rule: Rule, report: dict[str, Any]) -> dict[str, Any]:
     return {**report, "norm": norm} if norm else report
 
 
-async def _compile(session: AsyncSession, rule: Rule) -> RuleDetail:
+async def _compile(session: AsyncSession, rule: Rule, author: str = AUTO) -> RuleDetail:
     links = {"rule_id": rule.id, "process_id": rule.process_id, "norm_rule_id": rule.norm_rule_id}
-    with events.span("compile_rule", **links) as span:
+    with events.span("compile_rule", author=author, before=rule.status, **links) as span:
         detail = await _compile_traced(session, rule)
         span.set(rule_status=detail.status, valid=bool((detail.report or {}).get("valid")))
         return detail
@@ -241,7 +243,7 @@ async def _impact_gate(session: AsyncSession, rule: Rule, was_blocked: bool) -> 
     }
 
 
-async def _apply(session: AsyncSession, rule: Rule, proposed: list[Rule]) -> None:
+async def _apply(session: AsyncSession, rule: Rule, proposed: list[Rule]) -> list[Finding]:
     """Check a rule change against every decision already taken, then adopt it.
 
     The past is never rewritten. What the change says about it is recorded as findings for
@@ -255,42 +257,65 @@ async def _apply(session: AsyncSession, rule: Rule, proposed: list[Rule]) -> Non
             f"{len(impact.conflicts)} decisions taken by a person would change: "
             f"{contradicted}. Resolve them before applying this rule"
         )
-    await audit.record_findings(session, rule.process_id, impact, rule)
+    return await audit.record_findings(session, rule.process_id, impact, rule)
 
 
 async def impact(session: AsyncSession, rule_id: int) -> audit.Impact:
     """What activating (or retiring) this rule would do, without doing it."""
     rule = await _rule(session, rule_id)
-    proposed = (
-        await audit.proposal_without(session, rule)
-        if rule.status in ENFORCED
-        else await audit.proposal_with(session, rule)
+    links = {"rule_id": rule.id, "process_id": rule.process_id, "norm_rule_id": rule.norm_rule_id}
+    with events.span("impact_check", preview=True, **links) as span:
+        proposed = (
+            await audit.proposal_without(session, rule)
+            if rule.status in ENFORCED
+            else await audit.proposal_with(session, rule)
+        )
+        result = await audit.check(session, rule.process_id, proposed)
+        span.set(changed=len(result.changes), conflicts=len(result.conflicts))
+        return result
+
+
+def _status_span(step: str, rule: Rule, author: str):
+    """A change of a rule's status: who, from which status, and the rule's version (hash)."""
+    return events.span(
+        step,
+        rule_id=rule.id,
+        process_id=rule.process_id,
+        norm_rule_id=rule.norm_rule_id,
+        author=author,
+        before=rule.status,
+        rule_hash=rule.hash,
     )
-    return await audit.check(session, rule.process_id, proposed)
 
 
-async def activate(session: AsyncSession, rule_id: int) -> RuleDetail:
-    """A rule only enters the process when its validation found no discrepancy."""
+async def activate(session: AsyncSession, rule_id: int, author: str = AUTO) -> RuleDetail:
+    """A rule only enters the process when its validation found no discrepancy. `author`:
+    the person who activated it, or `auto` when its compilation did (ADR 0004)."""
     rule = await _rule(session, rule_id)
-    if rule.status != "draft":
-        raise ConflictError(f"Only a draft rule can be activated (it is {rule.status})")
-    if not (rule.report or {}).get("valid"):
-        raise ConflictError("The rule has unresolved discrepancies or is not compiled")
-    with events.span("activate_rule", rule_id=rule.id, process_id=rule.process_id):
-        await _apply(session, rule, await audit.proposal_with(session, rule))
+    with _status_span("activate_rule", rule, author) as span:
+        if rule.status != "draft":
+            raise ConflictError(f"Only a draft rule can be activated (it is {rule.status})")
+        if not (rule.report or {}).get("valid"):
+            raise ConflictError("The rule has unresolved discrepancies or is not compiled")
+        findings = await _apply(session, rule, await audit.proposal_with(session, rule))
         rule.status = "active"
         rule.activated_at = datetime.now(UTC)
         await session.commit()
+        span.set(after=rule.status, findings=len(findings))
     return _detail(rule)
 
 
-async def retire(session: AsyncSession, rule_id: int) -> RuleDetail:
+async def retire(session: AsyncSession, rule_id: int, author: str) -> RuleDetail:
     """Retiring a rule can change a past decision just as adding one can, so it goes
     through the same check."""
     rule = await _rule(session, rule_id)
-    if rule.status not in ENFORCED:
-        raise ConflictError(f"Only an active or blocked rule can be retired (it is {rule.status})")
-    await _apply(session, rule, await audit.proposal_without(session, rule))
-    rule.status = "retired"
-    await session.commit()
+    with _status_span("retire_rule", rule, author) as span:
+        if rule.status not in ENFORCED:
+            raise ConflictError(
+                f"Only an active or blocked rule can be retired (it is {rule.status})"
+            )
+        findings = await _apply(session, rule, await audit.proposal_without(session, rule))
+        rule.status = "retired"
+        await session.commit()
+        span.set(after=rule.status, findings=len(findings))
     return _detail(rule)

@@ -18,6 +18,7 @@ class EventOut(BaseModel):
     id: int
     trace_id: str  # `GET /traces/{trace_id}`: the tree this step belongs to
     instance_id: int | None
+    rule_id: int | None = None  # a rule's step: saved, compiled, activated, retired
     step: str = Field(examples=["decision", "resolution", "compile_rule", "sync_source"])
     status: str  # "ok" or "error"
     data: dict[str, Any] | None

@@ -30,6 +30,7 @@ from app.features.traces.schemas import (
 )
 
 FAILURES = ("MISSING_DATA", "RULE_ERROR", "RULE_NEEDS_DATA", "RULE_CONFLICT")
+LIFECYCLE = ("save_rule", "compile_rule", "activate_rule", "retire_rule", "impact_check")
 
 
 def _nodes(rows: Iterable[Event]) -> dict[str, SpanNode]:
@@ -178,6 +179,11 @@ async def rule_trace(session: AsyncSession, rule_id: int) -> RuleTrace:
             )
         )
     ).one()
+    lifecycle = await session.scalars(
+        select(Event)
+        .where(Event.rule_id == rule_id, Event.step.in_(LIFECYCLE))
+        .order_by(Event.started_at)
+    )
     return RuleTrace(
         id=rule.id,
         process_id=rule.process_id,
@@ -192,6 +198,7 @@ async def rule_trace(session: AsyncSession, rule_id: int) -> RuleTrace:
         if normalizations
         else None,
         compilations=compilations,
+        lifecycle=[SpanOut.model_validate(e, from_attributes=True) for e in lifecycle],
         runtime=RuleRuntime(
             runs=evaluated[0],
             instances=evaluated[1] or 0,
