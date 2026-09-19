@@ -71,7 +71,7 @@ called when the pipeline needs them; supply your own `GEMINI_API_KEY` and
 through `--invoices <directory>`, `--book <workbook.xlsx>`, `--cutoff YYYY-MM-DD`,
 `--output <directory>`, `--api-url <url>`, and `--limit <positive integer>`.
 The default input is `.context/500-sombras-de-alberto`, and the output is
-`output/`. The default cut-off is `2026-09-18`; use
+`output/`. The API requires a cut-off on every workbook upload (422 without one); the driver sends `2026-09-18` unless told otherwise. Use
 `--cutoff 2026-09-19` to match the manual OCR evaluation in the setup guide.
 `--limit` restricts uploads, while run/export still cover every instance
 already stored in the process. `--process <id>` selects a process when more

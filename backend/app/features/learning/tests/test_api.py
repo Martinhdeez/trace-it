@@ -18,6 +18,7 @@ from app.features.learning.model import Analysis
 from app.features.rules.model import Rule
 from app.features.sources.model import Source
 from tests.support.models import down, per_role, user_json
+from tests.support.users import anonymous
 
 TEXT = "Escalate invoices whose nif is B96233419 for verification."
 CODE = """def evaluate(instance, sources, others):
@@ -306,7 +307,7 @@ async def test_manager_only_and_invalid_evidence_retry(monkeypatch):
         assert (
             await api.post(f"/processes/{pid}/learning", json={}, headers=operator)
         ).status_code == 403
-        assert (await api.post(f"/processes/{pid}/learning", json={})).status_code == 422
+        assert (await anonymous("POST", f"/processes/{pid}/learning", json={})).status_code == 401
         seen = {}
         monkeypatch.setattr(
             llm,

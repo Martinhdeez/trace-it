@@ -3,10 +3,9 @@
 import uuid
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 
 from app.features.agents import llm
-from app.main import app
+from tests.support.users import manager_client
 
 INVOICES = {
     "decision_types": [
@@ -28,7 +27,7 @@ async def test_process_rule_flow(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(llm, "run", llm_down)
     suffix = uuid.uuid4().hex[:8]
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+    async with manager_client() as api:
         r = await api.post(
             "/users",
             json={"name": "Ana", "email": f"ana-{suffix}@x.com", "role": "manager"},
@@ -94,7 +93,7 @@ async def test_process_rule_flow(monkeypatch: pytest.MonkeyPatch) -> None:
     ],
 )
 async def test_inconsistent_decision_types_are_refused(types: list, message: str) -> None:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+    async with manager_client() as api:
         r = await api.post(
             "/processes/definition",
             json={"name": f"conflict-{uuid.uuid4().hex[:8]}", "decision_types": types},

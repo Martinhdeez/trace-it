@@ -18,6 +18,7 @@ from app.features.use_cases import service as use_cases
 from app.features.use_cases.schemas import AgentSettings
 from app.main import app
 from tests.support.models import down, instructions, per_role, scripted
+from tests.support.users import manager
 
 
 class Answer(BaseModel):
@@ -150,6 +151,7 @@ async def test_a_rule_whose_models_all_fail_stays_a_draft_with_the_error(
         "symbols": [{"name": "amount", "type": "number"}],
     }
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api:
+        await manager(api)
         r = await api.post("/processes/definition", json=definition)
         assert r.status_code == 200, r.text
         process = r.json()["process"]

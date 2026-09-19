@@ -31,18 +31,18 @@ Constraints from the plan:
 |---|---|---|---|---|---|---|---|---|
 | 1 | API mode and proxy | `VITE_API_MODE=auto` answers from the mock without warning when a call fails. The proxy targets `:8010` | Serves on `:8000` (`make setup`) | The demo can show seeded mock data and nothing says so (#1) | b | Only the backend has data. The mock becomes opt-in with a visible badge | S | FE |
 | 2 | Login and identity | No login screen. A user is picked from a list in Settings. `signIn` is never called, so no user means no `X-User-Id` header | `POST /login {email}`, `GET /me`, header `X-User-Id` | Uploads and resolve fail with 422 when no user is picked (#5) | b | The backend already has login | S | FE |
-| 3 | Roles and enforcement | Role checks only on Rule and ExecutionSettings | No auth on `run`, `reprocess`, `sources/*/sync`, `POST /processes/definition`, `POST /users` or `suggestion`. `resolve` and `ack` accept operators. A missing header returns 422, not 401 | Anyone can run, re-sync or rewrite a process (#6) | c | The backend enforces 401/403. The frontend hides what the role cannot do | M | BE+FE |
+| 3 | Roles and enforcement | Role checks only on Rule and ExecutionSettings | **Done (Q5).** A manager is required on `run`, `reprocess`, `sources/*/sync`, `POST /processes/definition`, draft publish, `resolve`, `ack` and `POST /users`. A missing or unknown `X-User-Id` returns 401 `unauthenticated`, a non-manager 403 `permission_denied`. Reads stay open | The frontend must send the manager's `X-User-Id` on every write | c | The backend enforces 401/403. The frontend hides what the role cannot do | M | BE+FE |
 | 4 | Process list | Works. Fields mapped to Spanish (`nombre`) | `GET /processes` | Only the mapper | b | Read the English fields | S | FE |
 | 5 | Process type and initialization metadata | Its requirements doc asks for `type`, `accepted_document_types`, `document_label` and `initialization` | None. `GET /processes/{id}/summary` has the counts | New fields for a second process type that does not exist yet | d | One process type today. The summary covers the counts | – | – |
 | 6 | Process console (Panel) metrics | Latencia and Coste are hardcoded "—". The counts are derived on the client | `GET /processes/{id}/summary`, `/metrics/execution`, `/metrics/ingestion` | Placeholders and client-side maths (#20) | b | The backend already measures this | M | FE |
-| 7 | Run history ("Ejecuciones") | Runs kept in React state for this browser session only | An `executions` table (one row per run, `decisions.execution_id`) and `summary.last_run_at`. No list endpoint | The history is lost on reload | **a** | The frontend's run list is good UX. Add a thin read endpoint over data the backend already stores (Q1) | S | BE (+FE S) |
+| 7 | Run history ("Ejecuciones") | Runs kept in React state for this browser session only | **Done (Q1).** `GET /processes/{id}/runs` (newest first: author, version, `rules_hash`, `by_decision`, `escalated`, `escalation_reasons`, `down_sources`, `trace_id`) and `GET /runs/{id}` (the decisions of that run), read from `executions`, `decisions.execution_id` and the run's span. No migration | The history is lost on reload. The frontend reads it from the backend | **a** | The frontend's run list is good UX. Add a thin read endpoint over data the backend already stores (Q1) | S | BE (+FE S) |
 | 8 | Context (description) editing | Contexto → Guardar re-posts the whole process to `POST /processes/definition` | `PUT /processes/{id}/draft {description, expected_revision}` | The re-post stages a draft with `rules=[]` and resets `required` and `decision_review` (#2) | b | The draft API is the only safe way to write. The re-post breaks the demo | S | FE |
 | 9 | Symbols (inputs) editing | Adding or removing a symbol re-posts `POST /processes/definition` | `PUT /processes/{id}/draft {symbols, expected_revision}` | Same data loss as #8 | b | Same reason as #8 | S | FE |
 | 10 | Symbol types | Free text: `texto`/`numero`/`booleano` | `type: str`, with examples `text`/`number`/`date` | Spanish values are stored as they are, and `booleano` has no meaning in the backend (#15) | c | The backend declares an enum. The frontend shows a `<select>` with Spanish labels | S | BE+FE |
 | 11 | Invoice template and chat chips | Spanish symbol names (`nif_emisor`, `pedido`) | The pack uses `issuer_nif`, `purchase_order`… | Rules written from the template name symbols that do not exist (#16) | b | The pack is the source of truth | S | FE |
 | 12 | Rule detail | Two-compiler fields `codigo_a/b` and `tests_a/b`. `autor:'tester'` is hardcoded | One `code`, `tests` and `report` | Fake A/B data (#27) | b | The backend has one compiler and a blind tester (ADR 0004) | S | FE |
 | 13 | Rule "Activar" | Presented as if it takes effect | `POST /rules/{id}/activate` only stages the rule into the draft | The manager thinks the rule is live (#18) | b | Publishing is what makes it effective (ADR 0015). Relabel it "Añadir a la versión" | S | FE |
-| 14 | "Proponer" chat | Regular expressions in `proposalsFrom()`. Attachments are never uploaded | `POST /processes/{id}/norm` (normalizer). Discuss and revise under `/process-drafts/*` ([process-chat.md](process-chat.md)) | Fake AI in the headline flow (#13) | b | The normalizer is ADR A, the core of the pitch (Q2) | M | FE |
+| 14 | "Proponer" chat | Regular expressions in `proposalsFrom()`. Attachments are never uploaded | `POST /processes/{id}/norm` (normalizer). Discuss and revise under `/process-drafts/*` ([process-chat.md](process-chat.md)) | Fake AI in the headline flow (#13) | b | The normalizer is ADR A, the core of the pitch. "Proponer" covers rules and context, inputs and sources of truth, through three channels (Q2 decision below) | M | FE |
 | 15 | Chat attachments | Shown as chips, never sent | Workbooks through `sources/workbook` or discovery `/workbooks` | Promises something that does not happen | d | Remove the chips. Workbooks go through Fuentes | S | FE |
 | 16 | Create a process (form) | Spanish keys. The client checks one default and one human outcome | `POST /processes/definition` (English pack shape) | Mapper only. The backend validates too | b | One shape, the pack's | S | FE |
 | 17 | Import JSON | Accepts only a Spanish shape. The repo's own packs throw a TypeError | `POST /processes/definition`. Rules with `code` files get 409 over HTTP | The import breaks on `processes/*.json` (#4) | b | Post the English pack as it is and show the 409 text | S | FE |
@@ -53,10 +53,10 @@ Constraints from the plan:
 | 22 | Run errors | Generic error | 409 when nothing is published, while a rule is compiling, or when no rule is active | The manager cannot tell why a run failed | b | Show the backend's message | S | FE |
 | 23 | `down_sources` and source status | `RunSummary.down_sources` is dropped. Source `status`/`error`/`checked_at` are not shown | `RunSummary.down_sources`, `GET /processes/{id}/sources` (ADR 0028) | Cases escalate `SOURCE_UNAVAILABLE` and the screen never says why (#10) | b | Resilience is on the rubric (E). The data already exists | S | FE |
 | 24 | ERP sync | Calls `sources/erp/sync`. The URL `127.0.0.1:8009` is hardcoded as a label | `POST /processes/{id}/sources/{name}/sync`, `GET …/diff` | A made-up label. The diff is unused | b | Connectors live in the pack. Show the rows diff after a sync | S | FE |
-| 25 | Cut-off date | `cut_off_date='2026-09-18'` is hardcoded in `live.ts` | An optional workbook form field. It becomes the `parameters` source that R12 reads | The frontend decides R12's input (#9) | b | Business data belongs to the manager and the backend, never to a constant (Q4) | S | FE |
+| 25 | Cut-off date | `cut_off_date='2026-09-18'` is hardcoded in `live.ts` | **Done (Q4).** A required workbook form field (422 when missing, no default). It becomes the `parameters` source that R12 reads | The frontend decides R12's input (#9) | b | Business data belongs to the manager and the backend, never to a constant (Q4) | S | FE |
 | 26 | Queue and tabs | Tabs are human outcomes, and items are filtered by `decision === tab` | `GET /processes/{id}/queue` also returns reviewer disagreements (`review_pending`) | Those cases are invisible until export returns 409 (#7) | b | The backend defines the queue | S | FE |
 | 27 | REVISION vs `review_pending` | A `REVISION` state that never occurs (`listInstances('REVISION')` returns `[]`) | Status is `PENDING`/`DECIDED`, plus a `review_pending` flag and `reviews[]` (ADR 0016, 0021) | A state the backend dropped (ADR 0009 is superseded) (#8) | b | Show the flag and the reviewer's recommendation | S | FE |
-| 28 | Resolve | `resolve`, then an optional `createRule` (two calls). No role check | `POST /instances/{id}/resolve`. Accepts operators | Its requirements doc asks for an atomic resolve plus rule, review records and claim/release | d | `createRule` only stages a draft, so a half-done pair is harmless. One manager in the demo. Who may resolve is Q5 | – | – |
+| 28 | Resolve | `resolve`, then an optional `createRule` (two calls). No role check | `POST /instances/{id}/resolve`. Manager only (Q5) | Its requirements doc asks for an atomic resolve plus rule, review records and claim/release | d | `createRule` only stages a draft, so a half-done pair is harmless. One manager in the demo. Only a manager resolves (Q5) | – | – |
 | 29 | Trace view | Built from `/instances/{id}`. `documents.generated.ts` is the fallback, and `DocumentPopup` always reads it | `GET /instances/{id}/trace` (spans, evidence, `exported_decision`), `/file` (PDF), `/document` | Bundled data in live mode (#11). Its requirements doc asks for `GET /documents/{id}/decision` | b | `/instances/{id}/trace` is that consolidated endpoint. Traceability is 20 points of the rubric | M | FE |
 | 30 | Extraction fields vs symbol names | DocumentPane joins fields to symbols | Symbols use `issuer_nif`/`iban`. Extraction fields use `supplier_tax_id`/`payment_iban` | The evidence cannot be joined to its symbol (#17) | **a** | The trace view needs it. Add `FieldReading.symbol` (additive) | S | BE |
 | 31 | Alerts | Not called. The Panel "alerts" card counts compiling rules, waiting cases and findings | `GET /processes/{id}/alerts`, `POST /alerts/{id}/ack` (ADR 0026) | A missing feature (#21) | b | Stale-decision alerts are part of key decision E | S | FE |
@@ -72,9 +72,9 @@ Constraints from the plan:
 | 41 | `executionApi` | A second client that bypasses the contract and the mock | – | Duplicate client (#28) | b | Fold it into the typed client | S | FE |
 | 42 | Dead code | `routes/{Audit,Rules,Sources}.tsx`, `RuleSteps.tsx`, `listFiles` (invents `hash:''`), `uploadSource` | – | Fabricated fields (#29) | d | Delete it | S | FE |
 | 43 | Reprocess | None | `POST /processes/{id}/reprocess?dry_run=` | Needed to act on an alert, besides Resolve | d | After the demo path. The API and CLI are enough for now | – | – |
-| 44 | Learning | None | `/processes/{id}/learning`, `/norm-proposals/*` ([learning.md](learning.md)) | No UI for the bonus feature | d | Q6 | – | – |
+| 44 | Learning | None | `/processes/{id}/learning`, `/norm-proposals/*` ([learning.md](learning.md)) | No UI for the bonus feature | d | Q6: no new UI. Learning shows in the run history (row 7): a rerun of the same invoices has fewer escalations | – | – |
 | 45 | Discovery (new process by conversation) | Form or JSON import | `/process-drafts/*` ([process-discovery.md](process-discovery.md)) | Unused | d | The form and import are enough for one pack. Discovery takes minutes of LLM calls | – | – |
-| 46 | User administration | Picker only | `POST /users` (no auth) | – | d | Users come from the pack. The backend protects `POST /users` under #3 | – | – |
+| 46 | User administration | Picker only | `POST /users`, manager only (#3) | – | d | Users come from the pack. The first manager is loaded by `make setup` | – | – |
 
 **Already aligned** (only the mapper changes, under #38):
 - Assistant suggestion (`GET /instances/{id}/suggestion`).
@@ -139,6 +139,25 @@ The UI shows the Spanish label and the code in monospace:
 | `parameters.cut_off_date` | date (source row) | Fecha de corte | hardcoded `'2026-09-18'` |
 
 ---
+
+## Decisions (Martín, 2026-09-19)
+
+These settle the open questions in section 3. Where a decision differs from the recommendation there, the decision wins.
+
+- **Scope.** Integration changes functionality only. It never changes how the frontend looks.
+- **Q1: run history.** It is a timeline of runs that makes going back easy. Any past run opens read-only and shows what it decided.
+  - Backend: `GET /processes/{id}/runs` and `GET /runs/{id}` ([api.md](api.md)).
+  - `by_decision` and `escalated` cover every instance a run evaluated. A rerun of the same invoices therefore compares directly with the run before it.
+- **Q2: "Proponer".** The assistant proposes rules and also context, inputs and sources of truth. It does so through three channels:
+  1. The escalation assistant explains why a case escalated and proposes decisions.
+  2. The definition chat proposes changes, which the manager accepts.
+  3. The learning agent proposes promotions from traces.
+- **Q3: runs.** Runs stay synchronous. There is no worker and no per-run stream.
+- **Q4: cut-off date.** The cut-off date is a required input on the workbook upload. There is no default value. The backend answers 422 when it is missing.
+- **Q5: one role.** The app's user is the manager, who handles only escalations.
+  - Every write needs a manager: run, reprocess, source sync, `POST /processes/definition`, draft publish, resolve, alert ack and `POST /users`.
+  - A missing or unknown `X-User-Id` answers 401. A user who is not a manager gets 403. Reads stay open.
+- **Q6: learning.** Learning gets no new UI. It shows in the run history: a rerun of the same invoices has fewer escalations.
 
 ## 3. Open questions for the team
 

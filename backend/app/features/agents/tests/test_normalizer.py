@@ -24,6 +24,7 @@ from app.main import app
 from evals import eval_norm
 from tests.support import pack
 from tests.support.models import per_role, retry_prompts, user_prompt
+from tests.support.users import manager
 
 TYPES = [
     DecisionType(name="ESCALAR", priority=3, is_default=False, requires_human=True),
@@ -172,13 +173,18 @@ PROCESS = {
 async def api():
     suffix = uuid.uuid4().hex[:8]
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        headers = {}
-        for role in ("manager", "operator"):
-            r = await client.post(
-                "/users", json={"name": role, "email": f"{role}-{suffix}@x.com", "role": role}
-            )
-            headers[role] = {"X-User-Id": str(r.json()["id"])}
-        r = await client.post("/processes/definition", json={"name": f"norm-{suffix}", **PROCESS})
+        headers = {"manager": await manager(name="manager")}
+        r = await client.post(
+            "/users",
+            json={"name": "operator", "email": f"operator-{suffix}@x.com", "role": "operator"},
+            headers=headers["manager"],
+        )
+        headers["operator"] = {"X-User-Id": str(r.json()["id"])}
+        r = await client.post(
+            "/processes/definition",
+            json={"name": f"norm-{suffix}", **PROCESS},
+            headers=headers["manager"],
+        )
         yield client, r.json()["process"]["id"], headers
     await engine.dispose()  # connections are bound to this test's event loop
 

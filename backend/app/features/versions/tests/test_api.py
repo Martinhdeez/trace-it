@@ -14,6 +14,7 @@ from app.features.rules.model import Rule
 from app.features.rules.service import rule_hash
 from app.features.sources.model import Source
 from app.features.versions import configuration
+from tests.support.users import anonymous
 
 CODE = """def evaluate(instance, sources, others):
     duplicate = any(o.get("order") == instance.get("order") for o in others)
@@ -391,7 +392,7 @@ async def test_historical_queue_resolution_and_pack_reload():
 async def test_invalid_rules_and_manager_gate():
     async with client() as api:
         pid, headers, rid, _ = await seed(api)
-        assert (await api.post(f"/processes/{pid}/draft/validate")).status_code == 422
+        assert (await anonymous("POST", f"/processes/{pid}/draft/validate")).status_code == 401
         async with session_factory() as session:
             rule = await session.get(Rule, rid)
             rule.report = {"valid": False}

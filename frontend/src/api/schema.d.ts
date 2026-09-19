@@ -602,6 +602,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/processes/{process_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run history, newest first: each run and reprocess with its outcome
+         * @description One entry per stored execution: when, who, the process version and rules hash, the engine's outcome per decision type for every instance it evaluated, the escalations and their reason codes, `down_sources` and the `trace_id`. `by_decision` and `escalated` cover every evaluated instance, so a rerun of the same invoices compares with the run before it; `decided` counts only the decisions it appended.
+         */
+        get: operations["listRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One past run with the decisions it appended, read-only */
+        get: operations["getRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/processes/{process_id}/summary": {
         parameters: {
             query?: never;
@@ -1750,8 +1787,11 @@ export interface components {
         Body_uploadProcessWorkbook: {
             /** File */
             file: string;
-            /** Cut Off Date */
-            cut_off_date?: string | null;
+            /**
+             * Cut Off Date
+             * Format: date
+             */
+            cut_off_date: string;
         };
         /** Candidate */
         Candidate: {
@@ -3480,6 +3520,151 @@ export interface components {
             lifecycle: components["schemas"]["SpanOut"][];
             runtime: components["schemas"]["RuleRuntime"];
         };
+        /** RunDecisionOut */
+        RunDecisionOut: {
+            /** Decision Id */
+            decision_id: number;
+            /** Instance Id */
+            instance_id: number;
+            /** Name */
+            name: string;
+            /** Decision */
+            decision: string;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** RunDetail */
+        RunDetail: {
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @example run
+             * @example reprocess
+             */
+            kind: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Author */
+            author: string | null;
+            /** Version Id */
+            version_id: number;
+            /** Version Number */
+            version_number: number;
+            /** Rules Hash */
+            rules_hash: string | null;
+            /** Instances */
+            instances: number;
+            /** Decided */
+            decided: number;
+            /**
+             * By Decision
+             * @example {
+             *       "ESCALAR": 31,
+             *       "NO_PAGAR": 36,
+             *       "PAGAR": 433
+             *     }
+             */
+            by_decision: {
+                [key: string]: number;
+            };
+            /** Escalated */
+            escalated: number;
+            /**
+             * Escalation Reasons
+             * @example {
+             *       "SOURCE_UNAVAILABLE": 3
+             *     }
+             */
+            escalation_reasons: {
+                [key: string]: number;
+            };
+            /**
+             * Down Sources
+             * @default {}
+             */
+            down_sources: {
+                [key: string]: string;
+            };
+            /** Trace Id */
+            trace_id: string | null;
+            /** Decisions */
+            decisions: components["schemas"]["RunDecisionOut"][];
+        };
+        /**
+         * RunOut
+         * @description One stored execution (a run or a reprocess), read back from its row and its span.
+         */
+        RunOut: {
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @example run
+             * @example reprocess
+             */
+            kind: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Author */
+            author: string | null;
+            /** Version Id */
+            version_id: number;
+            /** Version Number */
+            version_number: number;
+            /** Rules Hash */
+            rules_hash: string | null;
+            /** Instances */
+            instances: number;
+            /** Decided */
+            decided: number;
+            /**
+             * By Decision
+             * @example {
+             *       "ESCALAR": 31,
+             *       "NO_PAGAR": 36,
+             *       "PAGAR": 433
+             *     }
+             */
+            by_decision: {
+                [key: string]: number;
+            };
+            /** Escalated */
+            escalated: number;
+            /**
+             * Escalation Reasons
+             * @example {
+             *       "SOURCE_UNAVAILABLE": 3
+             *     }
+             */
+            escalation_reasons: {
+                [key: string]: number;
+            };
+            /**
+             * Down Sources
+             * @default {}
+             */
+            down_sources: {
+                [key: string]: string;
+            };
+            /** Trace Id */
+            trace_id: string | null;
+        };
         /** RunSummary */
         RunSummary: {
             /** Decided */
@@ -4087,8 +4272,8 @@ export interface operations {
     getProcessDraft: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 process_id: number;
@@ -4120,8 +4305,8 @@ export interface operations {
     editProcessDraft: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 process_id: number;
@@ -4159,8 +4344,8 @@ export interface operations {
             query: {
                 revision: number;
             };
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 process_id: number;
@@ -4190,8 +4375,8 @@ export interface operations {
     validateProcessDraft: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 process_id: number;
@@ -4223,8 +4408,8 @@ export interface operations {
     publishProcessDraft: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 process_id: number;
@@ -4260,8 +4445,8 @@ export interface operations {
     replayDecision: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 decision_id: number;
@@ -4293,8 +4478,8 @@ export interface operations {
     getExecutionSettings: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 process_id: number;
@@ -4346,7 +4531,9 @@ export interface operations {
     createUser: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4419,8 +4606,8 @@ export interface operations {
     me: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path?: never;
             cookie?: never;
@@ -4470,7 +4657,9 @@ export interface operations {
     loadDefinition: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4534,8 +4723,8 @@ export interface operations {
     listDiscoverySessions: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path?: never;
             cookie?: never;
@@ -4565,8 +4754,8 @@ export interface operations {
     startDiscoverySession: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path?: never;
             cookie?: never;
@@ -4600,8 +4789,8 @@ export interface operations {
     getDiscoverySession: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 draft_id: number;
@@ -4633,8 +4822,8 @@ export interface operations {
     getDiscoverySessionHistory: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 draft_id: number;
@@ -4666,8 +4855,8 @@ export interface operations {
     messageDiscoverySession: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 draft_id: number;
@@ -4703,8 +4892,8 @@ export interface operations {
     uploadDraftWorkbook: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 draft_id: number;
@@ -4740,8 +4929,8 @@ export interface operations {
     syncDraftSource: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 draft_id: number;
@@ -4778,8 +4967,8 @@ export interface operations {
     reviewDraftProposal: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 draft_id: number;
@@ -4815,8 +5004,8 @@ export interface operations {
     prepareDiscoverySession: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 draft_id: number;
@@ -4852,8 +5041,8 @@ export interface operations {
     publishDiscoverySession: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 draft_id: number;
@@ -4889,8 +5078,8 @@ export interface operations {
     configureDiscoveryExecution: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 draft_id: number;
@@ -4996,8 +5185,8 @@ export interface operations {
     normalizeNorm: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 process_id: number;
@@ -5166,8 +5355,8 @@ export interface operations {
     activateRule: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 rule_id: number;
@@ -5206,8 +5395,8 @@ export interface operations {
     retireRule: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 rule_id: number;
@@ -5246,7 +5435,9 @@ export interface operations {
     runProcess: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
             path: {
                 process_id: number;
             };
@@ -5279,7 +5470,9 @@ export interface operations {
             query?: {
                 dry_run?: boolean;
             };
-            header?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
             path: {
                 process_id: number;
             };
@@ -5298,6 +5491,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReprocessSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listRuns: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDetail"];
                 };
             };
             /** @description Validation Error */
@@ -5479,8 +5736,8 @@ export interface operations {
     resolveInstance: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 instance_id: number;
@@ -5640,8 +5897,8 @@ export interface operations {
     getProcessExtractionPlan: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 process_id: number;
@@ -5673,8 +5930,8 @@ export interface operations {
     uploadProcessDocument: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 process_id: number;
@@ -5710,8 +5967,8 @@ export interface operations {
     getInstanceDocument: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 instance_id: number;
@@ -5743,8 +6000,8 @@ export interface operations {
     extractInstanceDocument: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 instance_id: number;
@@ -5787,8 +6044,8 @@ export interface operations {
     uploadProcessWorkbook: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 process_id: number;
@@ -5918,7 +6175,9 @@ export interface operations {
     syncSource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
             path: {
                 process_id: number;
                 name: string;
@@ -6072,8 +6331,8 @@ export interface operations {
     configureAgent: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 use_case_id: number;
@@ -6117,8 +6376,8 @@ export interface operations {
     activateAgentConfig: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 config_id: number;
@@ -6451,8 +6710,8 @@ export interface operations {
             query?: {
                 limit?: number;
             };
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 process_id: number;
@@ -6484,8 +6743,8 @@ export interface operations {
     analyzeProcessCases: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 process_id: number;
@@ -6521,8 +6780,8 @@ export interface operations {
     getLearningAnalysis: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 analysis_id: number;
@@ -6554,8 +6813,8 @@ export interface operations {
     getNormProposal: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 proposal_id: number;
@@ -6587,8 +6846,8 @@ export interface operations {
     validateNormProposal: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 proposal_id: number;
@@ -6620,8 +6879,8 @@ export interface operations {
     approveNormProposal: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 proposal_id: number;
@@ -6657,8 +6916,8 @@ export interface operations {
     rejectNormProposal: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 proposal_id: number;
@@ -6727,8 +6986,8 @@ export interface operations {
     ackAlert: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 alert_id: number;
@@ -6771,8 +7030,8 @@ export interface operations {
     getOcrConfig: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path?: never;
             cookie?: never;
@@ -6802,8 +7061,8 @@ export interface operations {
     extractDocument: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path?: never;
             cookie?: never;
@@ -6837,8 +7096,8 @@ export interface operations {
     getDocumentExtraction: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 extraction_id: string;
@@ -6870,8 +7129,8 @@ export interface operations {
     submitDocumentBatch: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path?: never;
             cookie?: never;
@@ -6905,8 +7164,8 @@ export interface operations {
     getDocumentBatch: {
         parameters: {
             query?: never;
-            header: {
-                "x-user-id": number;
+            header?: {
+                "x-user-id"?: number | null;
             };
             path: {
                 batch_id: string;
