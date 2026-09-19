@@ -85,6 +85,9 @@ Requirements: Docker, [uv](https://docs.astral.sh/uv/), `pdftotext` (poppler) fo
 | `make setup` | `.env` from the example, Postgres + backend (`docker compose`), migrations, loads `processes/invoice-payment.json`. Repeatable. API at http://localhost:8000/docs (`BACKEND_PORT=8001 make setup` if 8000 is taken) |
 | `make erp` | Starts the challenge ERP from the submodule (port 8009). Keep it running in another terminal |
 | `make erp-sync` | Downloads the ERP into a new snapshot (`docs/sources-http.md`) |
+| `make backup` | `pg_dump` of the live database into `backups/` (`DB_CONTAINER`, `DB_NAME`) |
+| `make export-batch FILES=<dir> OUT=<file>` | Outcomes of the instances named like the PDFs of `<dir>` only, then checked: one line per file, valid results (`docs/runbook-batch2.md`) |
+| `make check-outcomes OUT=<file> FILES=<dir>` | Only the check, for a file already written |
 | `make activate` | Activates every draft rule whose code is validated: the hand-written `rules-v3/` need no model |
 | `make compile` | Compiles the draft rules with the two agents (needs LLM keys) |
 | `make demo` | The whole invoice process over the 500 challenge PDFs, through the API: `output/outcomes.jsonl` (`tools/README.md`) |

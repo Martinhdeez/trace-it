@@ -9,6 +9,7 @@ Start with the [root README](../README.md) for what the system does, then:
 | [api.md](api.md) | The API, screen by screen, for whoever builds the console |
 | [adr/README.md](adr/README.md) | Architecture decision records. ADR 0001 wins over everything else |
 | [invoice-payment-rules.md](invoice-payment-rules.md) | Where each of the 16 invoice rules comes from, and the team decisions behind them |
+| [runbook-batch2.md](runbook-batch2.md) | Saturday's batch 2, ERP update and norm v4, step by step, with rehearsal timings |
 | [sources-http.md](sources-http.md) | The HTTP source connector (the ERP): configuration and guarantees |
 | [ingestion/README.md](ingestion/README.md) | Document ingestion: PDF, OCR, workbook |
 | [../processes/README.md](../processes/README.md) | Format of a process pack |
