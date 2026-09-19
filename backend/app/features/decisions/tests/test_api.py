@@ -14,7 +14,7 @@ from httpx import ASGITransport, AsyncClient
 from app.core.database import session_factory
 from app.features.agents import sandbox
 from app.features.ingestion.model import File, Instance
-from app.features.processes.model import DecisionType
+from app.features.processes.model import DecisionType, Symbol
 from app.features.rules.model import Rule
 from app.features.sources.model import Source
 from app.main import app
@@ -305,6 +305,30 @@ async def test_a_priority_tie_at_runtime_escalates(fake_sandbox: None) -> None:
         assert (
             detail["decisions"][0]["reason"] == "RULE_CONFLICT: ESCALAR, NO_PAGAR share priority 3"
         )
+
+
+async def test_a_required_symbol_missing_escalates(fake_sandbox: None) -> None:
+    """The process marks `nif` required: an instance extracted with no symbols at all is
+    escalated with the reason, never paid by default."""
+    async with client() as api:
+        process_id, _ = await create_process(api, "operator")
+        async with session_factory() as session:
+            nif = await session.get(Symbol, (process_id, "nif"))
+            assert nif is not None
+            nif.required = True
+            digest = uuid.uuid4().hex
+            session.add(File(hash=digest, name="scan.pdf", content=b"%PDF"))
+            scan = Instance(process_id=process_id, file_hash=digest, name="scan.pdf", symbols={})
+            session.add(scan)
+            await session.commit()
+            scan_id = scan.id
+
+        r = await api.post(f"/processes/{process_id}/run")
+        assert r.status_code == 200, r.text
+        assert r.json() == {"decided": 4, "by_decision": {"PAGAR": 1, "NO_PAGAR": 1, "ESCALAR": 2}}
+        detail = (await api.get(f"/instances/{scan_id}")).json()
+        assert detail["decision"] == "ESCALAR"
+        assert detail["decisions"][0]["reason"] == "MISSING_DATA: nif"
 
 
 def test_flat_symbols_are_refused_on_write() -> None:
