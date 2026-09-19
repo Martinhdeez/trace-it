@@ -39,6 +39,7 @@ export function CommandPalette() {
 
   const hits = useMemo(() => {
     const list: Hit[] = [
+      { id: 'docs', label: 'Docs', hint: 'cinco decisiones', to: paths.docs() },
       { id: 'processes', label: 'Procesos', hint: 'todos', to: paths.processes },
       { id: 'new', label: 'Nuevo proceso', hint: 'crear o importar', to: paths.newProcess },
       { id: 'settings', label: 'Ajustes del espacio', hint: 'usuario y modelos', to: paths.settings },
@@ -53,12 +54,13 @@ export function CommandPalette() {
       list.push(
         { id: 'inbox', label: 'Bandeja', hint: 'proceso', to: paths.process(processId) },
         { id: 'panel', label: 'Panel', hint: 'proceso', to: paths.panel(processId) },
-        { id: 'definition', label: 'Definición', hint: 'normas y contexto', to: paths.definition(processId) },
+        { id: 'definition', label: 'Definición', hint: 'chat del proceso', to: paths.processChat(processId) },
         { id: 'normas', label: 'Normas', hint: 'definición', to: paths.definition(processId) },
         { id: 'contexto', label: 'Contexto', hint: 'definición', to: paths.definitionContext(processId) },
         { id: 'inputs', label: 'Inputs', hint: 'definición', to: paths.definitionInputs(processId) },
         { id: 'fuentes', label: 'Fuentes de verdad', hint: 'ERP y maestros', to: paths.definitionSources(processId) },
         { id: 'inst', label: 'Ejecuciones', hint: 'histórico del lote', to: paths.instances(processId) },
+        { id: 'reception', label: 'Recepción', hint: 'correos y adjuntos', to: paths.reception(processId) },
         { id: 'review', label: 'Revisión', hint: 'esperando a una persona', to: paths.review(processId) },
         { id: 'psettings', label: 'Ajustes del proceso', hint: 'OCR y modelos', to: paths.processSettings(processId) },
       )

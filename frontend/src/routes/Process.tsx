@@ -20,6 +20,7 @@ import { MetricCells, PlaneDashboards } from '../components/process/PlaneDashboa
 import { PublishDraft } from '../components/process/PublishDraft'
 import { ReprocessAfterPublish } from '../components/process/ReprocessAfterPublish'
 import { ExportButton } from '../components/process/ExportButton'
+import { MailSummary } from '../components/process/MailStatus'
 import { ProcessAbout } from '../components/process/ProcessAbout'
 import {
   revokePreview,
@@ -317,6 +318,8 @@ export function Process() {
           />
         </header>
 
+        <MailSummary processId={processId} />
+
         <Alerts
           processId={processId}
           waiting={waiting}
@@ -403,7 +406,7 @@ function Alerts({
       : null,
     proposals > 0
       ? {
-          to: paths.definition(processId),
+          to: paths.processChat(processId),
           text: `${proposals} propuesta${proposals === 1 ? ' espera' : 's esperan'} tu decisión`,
         }
       : null,
@@ -746,7 +749,7 @@ function EmptyPanel({
           </Button>
         ) : (
           <Link
-            to={paths.definition(processId)}
+            to={paths.processChat(processId)}
             className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-[12px] font-medium text-on-ink hover:bg-ink/90"
           >
             Ir a Definición

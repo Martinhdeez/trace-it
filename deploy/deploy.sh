@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# No build, git checkout, global prune, database reset or changes to other projects.
+# No build, git checkout, global prune or changes to other projects.
+# This demo installation can explicitly reset test data after its verified backup.
 set -Eeuo pipefail
 umask 077
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
@@ -40,6 +41,10 @@ compose=(docker compose --env-file secrets/compose.env -p trace-it -f compose.ym
 for image in "$TRACE_BACKEND_IMAGE" "$TRACE_FRONTEND_IMAGE"; do
   [[ $(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image") == "$revision" ]]
 done
+# The preceding release may predate this optional service entirely.
+previous_criminal=$(docker ps -q \
+  --filter label=com.docker.compose.project=trace-it \
+  --filter label=com.docker.compose.service=criminal-records)
 mkdir -p backups releases
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 release="releases/$stamp-$revision.env"
@@ -51,13 +56,21 @@ backup="backups/$stamp-$revision"
 mkdir "$backup"
 rollback() {
   trap - ERR
+  if [[ -n "${mail_ids:-}" ]]; then
+    docker stop --time 300 trace-it-mail-ingestion-1 >/dev/null 2>&1 || true
+  fi
   echo 'Release failed; restoring previous application images. Database is NEVER restored automatically.' >&2
   if [[ -f current.env ]]; then
     set -a
     # shellcheck source=/dev/null
     source current.env
     set +a
-    "${compose[@]}" up -d --wait --wait-timeout 180 criminal-records backend frontend || true
+    "${compose[@]}" up -d --wait --wait-timeout 180 backend frontend || true
+    if [[ -n "$previous_criminal" ]]; then
+      "${compose[@]}" up -d --wait --wait-timeout 120 criminal-records || true
+    else
+      "${compose[@]}" stop criminal-records || true
+    fi
   else
     "${compose[@]}" stop criminal-records backend frontend || true
   fi
@@ -67,7 +80,7 @@ rollback() {
 trap rollback ERR
 # Stop the optional mail writer before backend shutdown, backups or migrations.
 # Discover by this project's exact Compose labels; never affect another stack.
-# Do not restart it automatically on success or rollback. Activation is explicit.
+# Resume a previously running worker only after successful demo deployment; never initialize it.
 mail_ids=$(docker ps -q \
   --filter label=com.docker.compose.project=trace-it \
   --filter label=com.docker.compose.service=mail-ingestion)
@@ -80,6 +93,7 @@ fi
 "${compose[@]}" exec -T db pg_restore --list < "$backup/database.dump" > "$backup/database.list"
 "${compose[@]}" run --rm --no-deps -T backend python -c \
   'import sys, tarfile; t=tarfile.open(fileobj=sys.stdout.buffer, mode="w|gz"); t.add("/srv/.data", arcname="data"); t.close()' > "$backup/ingestion.tar.gz"
+tar -tzf "$backup/ingestion.tar.gz" > "$backup/ingestion.list"
 # Runtime may be restricted; only this one-off migration container receives owner credentials.
 set -a
 # shellcheck source=/dev/null
@@ -92,6 +106,14 @@ if [[ "${TRACE_DATABASE_USER:-trace}" == trace_app ]]; then
   "${compose[@]}" run --rm --no-deps -T -e TRACE_DATABASE_URL -e TRACE_APP_DATABASE_PASSWORD \
     backend python -m app.features.database_api.provision
   unset TRACE_APP_DATABASE_PASSWORD
+fi
+if [[ -f DEMO_RESET_ENABLED ]]; then
+  [[ -s reset-demo.py && -s demo-seed.json ]]
+  "${compose[@]}" run --rm --no-deps -T -e TRACE_DATABASE_URL \
+    -v /opt/trace-it/reset-demo.py:/srv/reset-demo.py:ro \
+    -v /opt/trace-it/demo-seed.json:/srv/demo-seed.json:ro \
+    backend python /srv/reset-demo.py reset --seed /srv/demo-seed.json --confirm-demo-reset \
+    > "$backup/demo-reset.json"
 fi
 unset TRACE_DATABASE_URL
 if [[ ! -f INITIALIZED ]]; then
@@ -110,6 +132,29 @@ curl --config secrets/curl.conf --fail --silent --show-error --max-time 20 \
   https://gex-dashboard.hopto.org/nexia/trace-it/api/ready >/dev/null
 curl --config secrets/curl.conf --fail --silent --show-error --max-time 20 \
   https://gex-dashboard.hopto.org/nexia/trace-it/ >/dev/null
+if [[ -f DEMO_RESET_ENABLED && -n "$mail_ids" ]]; then
+  # Explicit demo policy: retain the cursor and resume with the candidate backend digest.
+  set -a
+  source secrets/mail-compose.env
+  set +a
+  export TRACE_MAIL_IMAGE="$TRACE_BACKEND_IMAGE"
+  mail_compose=(docker compose --env-file secrets/compose.env -p trace-it
+    -f compose.yml -f compose.mail.yml --profile mail)
+  "${mail_compose[@]}" run --rm --no-deps -T mail-ingestion \
+    python -m app.features.mail_ingestion.worker check
+  "${mail_compose[@]}" up -d --no-deps mail-ingestion
+  python3 - <<'PIN_MAIL'
+import os
+from pathlib import Path
+p = Path("secrets/mail-compose.env")
+lines = [line for line in p.read_text().splitlines() if not line.startswith("TRACE_MAIL_IMAGE=")]
+lines.append("TRACE_MAIL_IMAGE=" + os.environ["TRACE_MAIL_IMAGE"])
+staged = p.with_suffix(".env.next")
+staged.write_text("\n".join(lines) + "\n")
+staged.chmod(p.stat().st_mode & 0o777)
+staged.replace(p)
+PIN_MAIL
+fi
 [[ ! -f current.env ]] || cp current.env previous.env
 cp "$release" current.env
 trap - ERR

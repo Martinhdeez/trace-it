@@ -80,7 +80,7 @@ Code: `backend/app/features/agents/assistant.py`; prompts: `prompts/assistant.md
 
 **Length limits.** Characters and list sizes are capped in the output models
 (`Field(max_length)`). Sentences and single lines are checked by the output validators
-(`too_long` → `ModelRetry`). A violation sends the answer back; both agents have 2 retries,
+(`too_long` → `ModelRetry`). A violation sends the answer back; the decision assistant has 3 retries and the reviewer 2,
 then 502.
 
 | Field | Limit |
@@ -104,8 +104,9 @@ for an active rule that already gives that decision. Its Spanish `consequence` r
 
 **"No rule, always a person" is a valid answer.**
 - Assistant: `no_rule_reason` (Spanish), with `proposed_rule` and `proposed_type` null.
-  `decision` is still a final type (never `ESCALAR`). The prompt makes a missing or
-  unverified datum always "no rule".
+  `decision` is one of `option_types`: the final types, plus `ESCALAR` ("mantener escalado
+  / pedir el dato") only on an engine escalation, where no_rule_reason is required (#167,
+  below).
 - Reviewer: `no_rule_reason`, stored as an ordinary open `rule` proposal. It has
   `payload.text: ""`, `payload.no_rule_reason`, the reason as `rationale`, a `summary`
   starting "Sin regla:", and `payload.type` taken from the old rule. The manager dismisses
@@ -170,6 +171,37 @@ the golden symbols and the demo invoices. The full outputs are in PR #165.
 Known gap: on the VAT case, the assistant's `proposed_rule` once named the file. The
 reviewer's identifier check does not cover the decision assistant yet.
 
+### Findings from the live demo on real data, and their fixes (#167)
+
+| # | Finding | Fix | Test (scripted, no key) |
+|---|---|---|---|
+| 1 | The reviewer proposed "`vat_rate` other than 21 unless catering/hostelería sector". No field carries a sector, so the rule never compiled ("Rule 18 has no validated code"). Another run keyed on `free_text` mentioning "catering", which invoice B lacks, so nothing was learned. | The context gets `available_fields`: every symbol with its meaning, and every source with its columns. Symbols whose description says no rule reads them (`free_text`, `issuer_name`) are left out. The validator reads the rule's fields (backticked identifiers, snake_case and `source.column` words) and sends back a rule that reads an unknown or unusable field, or no field at all, listing the fields it may use. It also sends back a rule whose summary or rationale admits "no hay datos de…". The prompt prefers the simplest generalisation over the old rule's own fields ("`vat_rate` is other than 21 and other than 10"), or no_rule_reason. | `test_a_rule_on_data_no_field_carries_is_sent_back` |
+| 2 | On MISSING_DATA, the decision assistant proposed NO_PAGAR and said the case closes without a person. | The context gets `escalation.engine_code` (MISSING_DATA, UNVERIFIED_DATA, SOURCE_UNAVAILABLE, RULE_CONFLICT, SCAN_REVIEW, RULE_ERROR, RULE_NEEDS_DATA, RULE_COMPILE_FAILED). With it, `option_types` adds the human type ("Mantener escalado y pedir el dato"), and no_rule_reason is required. Any Spanish text saying the case closes without a person ("sin intervención humana", "se cierra sin", "no hace falta que lo revise…") is sent back, on every escalation. | `test_an_engine_escalation_keeps_a_person_deciding`, `test_jargon_and_closing_without_a_person_are_sent_back` |
+| 3 | The manager read "R09", backticked field names and origins like `document:573da…`. | Case symbols go to the model as plain values (no origin), and `symbol_meanings` says what each one is. `why`, `reasoning`, `consequence`, `no_rule_reason`, and the reviewer's `summary` and `rationale` are sent back if they contain backticks, snake_case or `source.column` names, `R<n>` codes, or `symbol:` / `document:` / `rule:` references. Decision type names and the related file names are allowed. Rule text for compiling stays English. | `test_jargon_and_closing_without_a_person_are_sent_back`, `test_the_managers_text_is_plain_spanish` |
+| 4 | Duplicate order: NO_PAGAR advised on both invoices, so the order is never paid. | `escalation.related_cases`: the other cases the fired rules name (whole names only), with their symbols, current decision and whether they were received before or after. Without no_rule_reason, the reasoning or a consequence must name the other invoice, saying which one is paid; otherwise it is sent back. | `test_both_invoices_of_one_order_are_advised_consistently` |
+| 5 | One call took 98 s. | Both agents run on the `assistant` role's settings (reasoning off, `max_tokens` 1500, `timeout_seconds` 120, with fallbacks). The decision path is now tested like the reviewer's. The 98 s comes from retries and fallbacks, each up to the 120 s timeout, not from reasoning. Live calls after the fix: 3-4 s each, first try. The decision assistant has 3 retries (it tended to answer ESCALAR outside engine escalations); the reviewer keeps 2. | `test_the_decision_assistant_runs_without_reasoning_under_a_tight_cap` |
+
+Limit: the field check catches field-shaped words, not a free-English concept such as
+"hotel services". The prompt covers that, and so does the compile: a rule that cannot be
+implemented fails there, before any validation or publish.
+
+**Live after the fixes** (deepseek-v4-flash, 0 retries each, 3-4 s):
+- VAT 10 %, reviewer: `` `vat_rate` is other than 21 and other than 10. `` with summary
+  "Se escala el IVA distinto de 21 % y de 10 %; el 10 % (hostelería) deja de escalarse."
+  (three runs, the same rule).
+- MISSING_DATA, assistant: decision ESCALAR, with options NO_PAGAR / PAGAR / ESCALAR
+  "Mantener escalado y pedir el dato: hay que conseguir el pedido del proveedor para poder
+  comprobar la factura." no_rule_reason: "Falta el pedido en la factura y ninguna regla
+  puede aportarlo: sin él no se puede comprobar que la compra exista ni que el importe
+  cuadre. Una persona debe pedir el pedido al proveedor y decidir."
+- Duplicate pair, assistant on `factura_41082.pdf`: NO_PAGAR, "Se paga la primera
+  recibida, 2026-0233-A_catering.pdf, y esta se rechaza." This names the pair
+  consistently. In that hand-built context the other invoice was marked as received
+  after, so "primera recibida" is the model's own error; the validator checks that the
+  other invoice is named, not the order.
+- Duplicate pair, reviewer, with the reason "He llamado a Catering Hermanos Pico…":
+  **no rule**, "…esa confirmación no está en ninguna fuente ni símbolo…".
+
 ### Frontend integration notes (after Carlos's refactor)
 
 No component changed in #165; `tsc -b` passes on the current `Queue.tsx`.
@@ -187,6 +219,10 @@ No component changed in #165; `tsc -b` passes on the current `Queue.tsx`.
   - `type`: always set (falls back to the old rule's).
 - `POST /proposals/{id}/accept` on a rule proposal with empty `payload.text` and no `text`:
   409, Spanish `message`.
+- (#167) On an engine escalation (MISSING_DATA and the other engine codes), `options` also
+  has one for the human type (`ESCALAR`), consequence "Mantener escalado y pedir …", and
+  `proposed` may be `ESCALAR`. Accepting it resolves the case as `ESCALAR` by the person:
+  it stays in the queue.
 
 **Render**
 - Decision proposal: `why` (≤ 2 lines), then each option's `consequence`, with its `rule`
@@ -201,6 +237,8 @@ No component changed in #165; `tsc -b` passes on the current `Queue.tsx`.
   - "Entendido" = Rechazar with reason "Sin regla";
   - an optional "Escribir yo la regla" that opens the textarea, then Aceptar sends `text`.
   - Until then, the current card already works: empty textarea, Aceptar disabled.
+- (#167) An `ESCALAR` option: render it like any other option, but label its button
+  "Mantener escalado" rather than "Aceptar", and never style it as closing the case.
 
 ## Rejected vs ignored
 

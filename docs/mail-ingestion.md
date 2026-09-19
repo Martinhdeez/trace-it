@@ -24,8 +24,11 @@ The worker discovers UIDs without filtering on unread flags or trusting the send
 It inspects BODYSTRUCTURE and RFC822.SIZE first, then bounded headers and candidate parts.
 PDF and octet-stream attachments with PDF filenames are supported. Message attachments,
 ZIPs, executables and links are not followed. Original filenames are preserved separately
-from safe, unique internal names. A PDF signature alone is insufficient: EOF, parser
-integrity, encryption and page count (maximum 500) are checked before ingestion.
+from safe, unique internal names. A PDF signature alone is insufficient: EOF, readability,
+encryption and page count (maximum 500) are checked before ingestion. Recoverable PDF
+structure damage is accepted when the reader can open its pages. The original bytes go
+through the same process extraction pipeline as uploaded documents, including its configured
+OCR and verification; the mail worker does not replace that pipeline or rewrite the PDF.
 
 All ready attachments from a message are imported before evaluation. The existing extraction
 configuration, published rules, source synchronization, captured inputs, sandbox, parallel
@@ -176,7 +179,7 @@ These are separate, reviewable steps for a later root intervention.
    do not clear the cursor or repeat initialization against an existing boundary.
 6. **Activate explicitly.** Set MAIL_INGESTION_ENABLED=true in the operator file, then run
    `mail-service.sh start`. Check compatibility, assignment and last-poll status. The worker
-   uses protocol version 1 and fails closed on mismatched account/host/folder/process.
+   uses protocol version 2 and fails closed on mismatched account/host/folder/process.
    No additional port, Docker socket, OCR key or administrative mailbox credential is used.
 7. **Verify a user-supplied email.** Ask the user to supply a new message after initialization.
    Inspect each attachment, its stored original PDF/evidence, execution and decision.
@@ -213,3 +216,68 @@ old-mail exclusion, initialization races, bounded downloads, duplicates, manual 
 lease recovery, concurrent workers, lost responses, UIDVALIDITY halt, credential scope,
 missing sources, infrastructure failure and preserved `others` context.
 CI runs this test in addition to the existing integration and production-image checks.
+
+
+## Reception console and activity (migration 0019)
+
+Open a process and choose **Reception** ("Recepción" in the console). The overview also
+has a mailbox summary; Settings retains mailbox assignment. Reception lists messages,
+PDF attachments, reading/evaluation stages, outcomes and links to documents, review and
+executions. Review-required outcomes are distinct from technical failures. It refreshes
+every five seconds; filters apply to the current page and older messages remain paginated.
+Activity links open their exact message, including messages outside the first page.
+
+The worker sends a heartbeat every 15 seconds, independently of document extraction.
+A heartbeat older than 60 seconds displays a warning, not a claim that the mailbox is
+connected. The last successful mailbox poll and worker heartbeat are displayed separately.
+A stopped/halted worker is visibly stopped. Heartbeat indicates worker liveness, not that
+an individual PDF is making progress. Stages reflect committed state, never invented
+percentages; document evidence explains whether native text, OCR or vision was used.
+
+New mail transitions generate grouped in-app notices (at most three message cards per poll)
+while the process is open. Existing history never generates startup toasts. Read state is
+stored per user and process; **Mark as read** acknowledges it across browser sessions.
+Notifications are in-app only. Message details retain reception, reading, evaluation,
+failure and retry transitions, plus earlier operator recovery events where available.
+No historical transition timestamps are fabricated for messages predating this release.
+
+A manager may retry an eligible failed PDF using **Retry reading** and the inline
+confirmation. Only that MIME part is reset; successful attachments, past decisions,
+manual pending instances and mailbox cursor remain intact. The message must be terminal,
+have no active lease, match the current UID boundary and have fewer than six total claims.
+Only invalid_pdf, infrastructure_error and operator_retry_failed without an imported
+instance/decision/execution are eligible. Stale or concurrent clicks return 409. The previous
+failure and requesting manager are recorded before the transition. Permanent size/MIME
+issues require a corrected new email; exhausted attempts require operator investigation.
+Imported-but-undecided documents use existing lease recovery, not a reset of their identity.
+
+### API additions
+
+Console endpoints use the existing human authentication and process boundaries:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | /processes/{id}/mail-ingestion | Overview; limit, before_id and optional message_id |
+| GET | /processes/{id}/mail-ingestion/activity | Recent activity; after_id for ascending catch-up, limit <= 200 |
+| POST | /processes/{id}/mail-ingestion/activity/read | Monotonic per-user receipt: {"through_id": 123} |
+| GET | /processes/{id}/mail-ingestion/messages/{message_id}/history | Stage and legacy operator history |
+| POST | /processes/{id}/mail-ingestion/attachments/{attachment_id}/retry | Manager only: {"expected_attempts": 1} |
+
+The scoped worker token alone can call POST /mail-ingestion/{id}/heartbeat with
+{"phase":"polling"}, "processing", "waiting" or "stopped", and POST
+/mail-ingestion/{id}/messages/{message_id}/attachments/{attachment_id}/reading with
+its current X-Mail-Lease. Worker credentials cannot acknowledge human notifications or
+request manager retries. Activity is an audit table and is read-only through the database
+API. OpenAPI includes the complete request/response schemas.
+
+### Upgrade an already active mailbox
+
+Release backend, frontend and worker from the same reviewed revision. Back up first;
+apply additive migration 0019 and run the standard database privilege provisioning.
+The normal deploy script stops mail before migrating and intentionally leaves it stopped.
+Point TRACE_MAIL_IMAGE at the new backend digest, run mail-service.sh check (protocol=2),
+verify the persisted account/process/UIDVALIDITY/initial_uid/next_uid, then start the worker.
+**Do not run initialize again and do not import history.** Verify a fresh heartbeat, a new
+successful poll and unchanged cursor boundaries except normal discovery of new mail.
+Existing messages/decisions are preserved. Old workers fail closed against protocol 2;
+rollback requires a matching worker/backend pair and retaining the additive database state.

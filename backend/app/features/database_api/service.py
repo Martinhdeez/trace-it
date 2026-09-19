@@ -23,7 +23,7 @@ from app.features.database_api.model import DatabaseApiChange
 from app.features.database_api.schemas import DatabaseRow, DatabaseRows
 from app.models import Base
 
-READ_ONLY = {"database_api_changes", "events"}
+READ_ONLY = {"database_api_changes", "events", "mail_activity"}
 
 
 def encode(value: Any) -> Any:

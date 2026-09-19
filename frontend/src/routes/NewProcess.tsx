@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { api } from '../api/client'
 import type { DecisionType, Definition } from '../api/contracts'
+import { ProcessDraftChat } from '../components/process/ProcessDraftChat'
 import { Button, Field, Input, Segmented, Select, Textarea } from '../components/shell/Controls'
 import { ErrorNotice, Notice } from '../components/shell/Notice'
 import { Topbar } from '../components/shell/Topbar'
@@ -22,7 +23,7 @@ const EMPTY_OUTCOMES: DecisionType[] = [
 ]
 
 export function NewProcess() {
-  const [tab, setTab] = useState<'form' | 'json'>('form')
+  const [tab, setTab] = useState<'chat' | 'form' | 'json'>('chat')
 
   return (
     <>
@@ -33,13 +34,14 @@ export function NewProcess() {
             value={tab}
             onChange={setTab}
             options={[
+              { value: 'chat', label: 'Chat' },
               { value: 'form', label: 'A mano' },
               { value: 'json', label: 'Importar JSON' },
             ]}
           />
         }
       />
-      {tab === 'form' ? <ByHand /> : <FromDefinition />}
+      {tab === 'chat' ? <ProcessDraftChat /> : tab === 'form' ? <ByHand /> : <FromDefinition />}
     </>
   )
 }
@@ -58,7 +60,7 @@ function FromDefinition() {
     mutationFn: (definition: Definition) => api.loadDefinition(definition),
     onSuccess: (result) => {
       void queryClient.invalidateQueries()
-      navigate(paths.process(result.process.id))
+      navigate(paths.processChat(result.process.id))
     },
   })
 
@@ -137,7 +139,7 @@ function ByHand() {
     mutationFn: (body: Definition) => api.loadDefinition(body),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ['processes'] })
-      navigate(paths.definition(result.process.id))
+      navigate(paths.processChat(result.process.id))
     },
   })
 

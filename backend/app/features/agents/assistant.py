@@ -78,34 +78,110 @@ def too_long(**texts: tuple[str | None, int]) -> None:
         raise ModelRetry("Be concise: " + "; ".join(wrong))
 
 
+# What a manager should never read: field names, rule codes, reference ids.
+JARGON = re.compile(
+    r"`|\bR\d{1,2}\b|\b(?:document|symbol|rule|resolution):|\b\w+_\w+\b|\b[a-z]+\.[a-z_]+\b"
+)
+# The policy: an escalated case is decided by a person, never closed by the advice.
+NO_HUMAN = re.compile(
+    r"sin (?:intervención|revisión|supervisión) humana|se cierra sin"
+    r"|no (?:hace falta|es necesario|necesita)[^.;]{0,40}(?:persona|revis|humano)",
+    re.IGNORECASE,
+)
+
+
+def plain(allowed: set[str], **texts: str | None) -> None:
+    """ModelRetry naming the Spanish texts written with jargon or that skip the person.
+    `allowed`: words that are fine as they are (decision type names)."""
+    wrong = []
+    for name, text in texts.items():
+        words = sorted(allowed, key=len, reverse=True)
+        text = re.sub("|".join(map(re.escape, words)) or "$^", "", text or "")
+        if found := JARGON.findall(text):
+            wrong.append(f"{name} uses {sorted(set(found))}")
+        if NO_HUMAN.search(text):
+            wrong.append(f"{name} says the case closes without a person")
+    if wrong:
+        raise ModelRetry(
+            "Write for a manager in plain Spanish: no field names (use their Spanish label), "
+            "no rule codes like R09 (say «la regla 9» or what it checks), no references, and "
+            "never that the case closes without a person: " + "; ".join(wrong)
+        )
+
+
+# Escalations the engine made by itself (data or infrastructure, not a rule): a person
+# must decide them, so the advice always offers to keep the case escalated.
+ENGINE_CODES = {
+    "MISSING_DATA",
+    "UNVERIFIED_DATA",
+    "SOURCE_UNAVAILABLE",
+    "RULE_CONFLICT",
+    "SCAN_REVIEW",
+    "RULE_ERROR",
+    "RULE_NEEDS_DATA",
+    "RULE_COMPILE_FAILED",
+}
+
+
+def engine_code(reason: str | None) -> str:
+    head = re.split(r"[:\s]", (reason or "").split(" | ", 1)[0].strip(), maxsplit=1)[0]
+    return head if head in ENGINE_CODES else ""
+
+
 @dataclass(frozen=True)
 class Deps:
     decision_types: list[str]
     final_types: list[str]  # the ones that close a case: every option
     references: set[str]
+    engine_code: str = ""  # the engine escalated by itself (MISSING_DATA...): a person decides
+    related: tuple[str, ...] = ()  # the other cases the fired rules name (a duplicate order)
 
 
 # Its platform prompt is `prompts/assistant.md`; the use case adds guidance and model.
-assistant = Agent(None, output_type=Suggestion, deps_type=Deps, name="assistant", retries=2)
+assistant = Agent(None, output_type=Suggestion, deps_type=Deps, name="assistant", retries=3)
 
 
 @assistant.output_validator
 def _known_decision(ctx: RunContext[Deps], suggestion: Suggestion) -> Suggestion:
-    if suggestion.decision not in ctx.deps.decision_types:
-        raise ModelRetry(
-            f"decision {suggestion.decision!r} is not one of {ctx.deps.decision_types}"
-        )
+    deps = ctx.deps
+    if suggestion.decision not in deps.decision_types:
+        raise ModelRetry(f"decision {suggestion.decision!r} is not one of {deps.decision_types}")
+    human = [t for t in deps.decision_types if t not in deps.final_types][:1]
+    expected = deps.final_types + (human if deps.engine_code else [])
     options = [o.decision for o in suggestion.options]
-    if sorted(options) != sorted(ctx.deps.final_types):
-        raise ModelRetry(f"options must be exactly one per type of {ctx.deps.final_types}")
+    if sorted(options) != sorted(expected):
+        keep = (
+            f" ({human[0]}: 'mantener escalado / pedir el dato'; {deps.engine_code} is an "
+            "engine escalation a person must decide)"
+            if deps.engine_code
+            else ""
+        )
+        raise ModelRetry(
+            f"options must be exactly one each, for: {', '.join(expected)}{keep}; you gave "
+            f"{options}"
+        )
     if suggestion.decision not in options:
         raise ModelRetry(
-            f"decision must be one of the options {options}, also with no_rule_reason: "
+            f"decision must be one of option_types {expected}, also with no_rule_reason: "
             "that a person must always decide goes in no_rule_reason, not in decision"
         )
-    unknown = set(suggestion.evidence) - ctx.deps.references
+    unknown = set(suggestion.evidence) - deps.references
     if unknown:
         raise ModelRetry(f"cite only references in evidence_refs: {sorted(unknown)}")
+    if deps.engine_code and not suggestion.no_rule_reason:
+        raise ModelRetry(
+            f"{deps.engine_code} is an engine escalation, not a rule: no rule decides it. "
+            "Give no_rule_reason saying a person must decide (and what to obtain)"
+        )
+    if deps.related and not suggestion.no_rule_reason:
+        said = " ".join([suggestion.reasoning, *(o.consequence for o in suggestion.options)])
+        if not any(n.rsplit(".", 1)[0].casefold() in said.casefold() for n in deps.related):
+            raise ModelRetry(
+                f"the fired rule involves other cases ({', '.join(deps.related)}): advise "
+                "both consistently, saying which one is paid and which one is not (for "
+                "example the first received is paid, the duplicate is not), or answer "
+                "no_rule_reason. Rejecting all of them means the order is never paid"
+            )
     if suggestion.no_rule_reason:
         if suggestion.proposed_rule:
             raise ModelRetry("with no_rule_reason, proposed_rule must be null")
@@ -119,7 +195,53 @@ def _known_decision(ctx: RunContext[Deps], suggestion: Suggestion) -> Suggestion
         **{f"why[{i}]": (w, 1) for i, w in enumerate(suggestion.why)},
         **{f"{o.decision}.consequence": (o.consequence, 1) for o in suggestion.options},
     )
+    plain(
+        {*deps.decision_types, *deps.related, *(n.rsplit(".", 1)[0] for n in deps.related)},
+        reasoning=suggestion.reasoning,
+        no_rule_reason=suggestion.no_rule_reason,
+        **{f"why[{i}]": w for i, w in enumerate(suggestion.why)},
+        **{f"{o.decision}.consequence": o.consequence for o in suggestion.options},
+    )
     return suggestion
+
+
+async def related_cases(session: AsyncSession, instance: Instance, evidence: str) -> list[dict]:
+    """The other cases `evidence` names (a duplicate order names the invoices it shares the
+    order with): their symbols, which of them equal this case's, their current decision and
+    whether they were received before or after this one."""
+    from app.features.decisions.service import latest_decisions
+
+    others = list(
+        await session.scalars(
+            select(Instance)
+            .where(
+                Instance.process_id == instance.process_id,
+                Instance.id != instance.id,
+                func.strpos(literal(evidence or ""), Instance.name) > 0,
+            )
+            .order_by(Instance.id)
+            .limit(MAX_RESOLUTIONS)
+        )
+    )
+    # a whole name only: "c" is inside "purchase"
+    others = [
+        o for o in others if re.search(rf"(?<![\w.-]){re.escape(o.name)}(?![\w.-])", evidence)
+    ]
+    latest = await latest_decisions(session, others)
+    case = flatten_symbols(instance.symbols or {})
+    related = []
+    for other in others:
+        flat = flatten_symbols(other.symbols or {})
+        related.append(
+            {
+                "name": other.name,
+                "symbols": flat,
+                "same_as_case": sorted(k for k in case if k in flat and flat[k] == case[k]),
+                "decision": latest[other.id].decision if other.id in latest else None,
+                "received": "before" if other.id < instance.id else "after",
+            }
+        )
+    return related
 
 
 async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str, Any], list[str]]:
@@ -180,8 +302,13 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
         "human_decision_types": human,
         "case": {
             "name": instance.name,
-            "symbols": instance.symbols or {},
+            "symbols": flatten_symbols(instance.symbols or {}),
             "file_text": ((file.text if file else None) or "")[:MAX_TEXT],
+        },
+        # what each symbol means, to name it in plain Spanish instead of by its name
+        "symbol_meanings": {
+            s["name"]: s.get("description", "")
+            for s in (version.snapshot["process"]["symbols"] if version else [])
         },
         "escalation": {
             "current_decision": latest.decision,
@@ -195,6 +322,14 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
                 }
                 for r in fired
             ],
+            # the engine escalated by itself (missing data, a source down...): no rule
+            "engine_code": engine_code(latest.reason) or None,
+            # other cases the fired rules name (a duplicate order): advise them consistently
+            "related_cases": await related_cases(
+                session,
+                instance,
+                " ".join([latest.reason or "", *(r.get("reason") or "" for r in fired)]),
+            ),
         },
         "active_rules": [
             {"id": r.id, "text": r.text, "type": r.type, "decision": r.decision}
@@ -212,6 +347,11 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
             for d, symbols in resolutions
         ],
     }
+    # the options to answer, one each: the final types, and keeping it escalated when the
+    # engine escalated by itself
+    context["option_types"] = [t for t in types if t not in human] + (
+        human[:1] if context["escalation"]["engine_code"] else []
+    )
     context["evidence_refs"] = sorted(
         {f"symbol:{name}" for name in instance.symbols or {}}
         | {f"rule:{r['id']}" for r in context["escalation"]["fired_rules"] if r["id"]}
@@ -255,6 +395,8 @@ async def suggest(session: AsyncSession, instance_id: int) -> Suggestion:
                 types,
                 [t for t in types if t not in context["human_decision_types"]],
                 set(context["evidence_refs"]),
+                context["escalation"]["engine_code"] or "",
+                tuple(r["name"] for r in context["escalation"]["related_cases"]),
             ),
         )
         span.set(decision=suggestion.decision, model=trace.model)
@@ -279,6 +421,33 @@ class RuleDeps:
     values: dict[str, set[str]] = field(default_factory=dict)  # from `known_values`
     rejected: list[str] = field(default_factory=list)  # rule texts the manager rejected ("":
     # a "no rule" answer)
+    fields: frozenset[str] = frozenset()  # symbols, sources and columns a rule may read
+    unusable: frozenset[str] = frozenset()  # symbols no rule reads (free text, trace only)
+    names: frozenset[str] = frozenset()  # decision type names: fine in the Spanish text
+
+
+# Words of a rule's expressions that are not fields.
+BUILTINS = {"round", "abs", "len", "min", "max", "sum", "none", "true", "false", "and", "or"}
+BUILTINS |= {"not", "in", "is", "decimal", "str", "int", "float", "cents", "others", "_instance"}
+# "The data does not say": then no rule can say it either.
+NO_DATA = re.compile(
+    r"no hay datos?|no consta|sin datos|no (?:está|figura|aparece) en (?:los datos|ningun)"
+    r"|not in the data|no data",
+    re.IGNORECASE,
+)
+
+
+def fields_read(text: str) -> set[str]:
+    """What a rule text names as data: identifiers in backticks, and snake_case or dotted
+    words outside them (`orders.total_amount`, vat_rate)."""
+    names = set()
+    for quoted in re.findall(r"`([^`]+)`", text):
+        names |= {w for w in re.findall(r"[A-Za-z_]\w*", quoted) if re.search("[a-z]", w)}
+    bare = re.sub(r"`[^`]*`", " ", text)
+    names |= set(re.findall(r"\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b", bare))
+    for source, column in re.findall(r"\b([a-z_]+)\.([a-z_]+)\b", bare):
+        names |= {source, column}
+    return {n for n in names if n.casefold() not in BUILTINS}
 
 
 reviewer_agent = Agent(
@@ -318,6 +487,30 @@ def _general(ctx: RunContext[RuleDeps], suggestion: RuleSuggestion) -> RuleSugge
             "the manager already rejected this rule (rejected_suggestions): propose a "
             "different one that answers the reject reason"
         )
+    deps = ctx.deps
+    if suggestion.text.strip() and deps.fields:
+        read = fields_read(suggestion.text)
+        known = {f.casefold() for f in deps.fields}
+        unknown = sorted(f for f in read if f.casefold() not in known)
+        unusable = sorted(f for f in read if f in deps.unusable)
+        if unknown or unusable or not read & deps.fields:
+            raise ModelRetry(
+                (f"the rule reads {unknown + unusable}, which no rule can read. " if read else "")
+                + "A rule compiles only on available_fields; name them in backticks: "
+                + ", ".join(sorted(deps.fields - deps.unusable))
+                + ". If none captures the person's reason, answer no_rule_reason"
+            )
+        if NO_DATA.search(f"{suggestion.summary} {suggestion.rationale}"):
+            raise ModelRetry(
+                "you say the data does not carry it: then no rule can read it. Answer "
+                "no_rule_reason instead of a rule"
+            )
+    plain(
+        set(deps.names),
+        summary=suggestion.summary,
+        rationale=suggestion.rationale,
+        no_rule_reason=suggestion.no_rule_reason,
+    )
     invented = made_up_values(
         f"{suggestion.text} {suggestion.rationale} {suggestion.no_rule_reason or ''}",
         ctx.deps.values,
@@ -425,23 +618,7 @@ async def suggest_rule(
     evidence = next(
         (r.get("reason") or "" for r in engine.results if r.get("rule_id") == rule_id), ""
     )
-    # The other cases the rule's own reason names (a duplicate order names the invoices it
-    # shares the order with), with which of their symbols equal this case's.
-    named = await session.execute(
-        select(Instance.name, Instance.symbols)
-        .where(
-            Instance.process_id == instance.process_id,
-            Instance.id != instance.id,
-            func.strpos(literal(evidence), Instance.name) > 0,
-        )
-        .order_by(Instance.id)
-        .limit(MAX_RESOLUTIONS)
-    )
-    related = []
-    for name, symbols in named:
-        flat = flatten_symbols(symbols or {})
-        same = sorted(k for k in case if k in flat and flat[k] == case[k])
-        related.append({"name": name, "symbols": flat, "same_as_case": same})
+    related = await related_cases(session, instance, evidence)
     rejected = [
         {"text": p.payload.get("text"), "reject_reason": (p.outcome or {}).get("reason")}
         for p in await session.scalars(
@@ -478,6 +655,22 @@ async def suggest_rule(
         "rejected_suggestions": rejected,
         "sources": {name: sorted(rows[0]) if rows else [] for name, rows in sources.items()},
     }
+    # ponytail: a symbol whose description says no rule reads it (free text, trace only) is
+    # left out; a `readable` flag on symbols if another pack words it differently.
+    symbols = version.snapshot["process"]["symbols"]
+    unusable = {s["name"] for s in symbols if "no rule" in s.get("description", "").casefold()}
+    context["available_fields"] = {
+        "symbols": {
+            s["name"]: s.get("description", "") for s in symbols if s["name"] not in unusable
+        },
+        "sources": context["sources"],
+    }
+    fields = (
+        {s["name"] for s in symbols}
+        | set(sources)
+        | {c for columns in context["sources"].values() for c in columns}
+        | fields_read(old.text)
+    )
     context["evidence_refs"] = sorted(
         {f"symbol:{name}" for name in instance.symbols or {}}
         | {f"rule:{rule_id}", context["resolution"]["ref"]}
@@ -494,6 +687,9 @@ async def suggest_rule(
             set(context["evidence_refs"]),
             known_values(case, *(r["symbols"] for r in related + similar)),
             [r["text"] or "" for r in rejected],
+            frozenset(fields),
+            frozenset(unusable),
+            frozenset(t["name"] for t in version.snapshot["process"]["decision_types"]),
         ),
         instance_id=instance.id,
     )

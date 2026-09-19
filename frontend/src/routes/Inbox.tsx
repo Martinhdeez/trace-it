@@ -68,6 +68,11 @@ export function Inbox() {
     queryKey: keys.queue(processId, 'all'),
     queryFn: () => api.queue(processId),
   })
+  const summary = useQuery({
+    queryKey: keys.summary(processId),
+    queryFn: () => api.summary(processId),
+  })
+  const pending = summary.data?.by_status.PENDING ?? 0
   const history = useQuery({
     queryKey: keys.instances(processId),
     queryFn: () => api.listInstances(processId),
@@ -165,10 +170,17 @@ export function Inbox() {
               ) : null}
               {queue.isSuccess && visible.length === 0 ? (
                 <section className="rounded-[16px] bg-surface ring-1 ring-line">
-                  <EmptyState icon={CheckCircle2} title={day ? 'Nada vence ese día' : 'Todo al día'}>
+                  <EmptyState icon={CheckCircle2} title={day ? 'Nada vence ese día' : pending ? 'Documentos pendientes de evaluar' : 'Sin revisiones pendientes'}>
                     {day
                       ? 'Elige otro día en el calendario o quita el filtro.'
-                      : 'Ninguna factura te espera. Arrastra facturas a esta página para procesarlas.'}
+                      : pending
+                        ? `${pending} documento${pending === 1 ? '' : 's'} recibido${pending === 1 ? '' : 's'}, pendiente${pending === 1 ? '' : 's'} de evaluación. Aparecerán aquí si necesitan una decisión tuya.`
+                        : 'No hay documentos que requieran tu revisión. Puedes consultar los recibidos en Historial.'}
+                    {!day && pending > 0 ? (
+                      <Link to={paths.panel(processId)} className="mt-3 inline-block font-medium text-ink underline">
+                        Ir a la consola para evaluar
+                      </Link>
+                    ) : null}
                   </EmptyState>
                 </section>
               ) : (
