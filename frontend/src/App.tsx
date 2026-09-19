@@ -7,6 +7,7 @@ import { Landing } from './routes/Landing'
 import { Docs } from './routes/Docs'
 import { NewProcess } from './routes/NewProcess'
 import { Process } from './routes/Process'
+import { ProcessChat } from './routes/ProcessChat'
 import { Processes } from './routes/Processes'
 import { Queue } from './routes/Queue'
 import { Rule } from './routes/Rule'
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/processes/new" element={<NewProcess />} />
         <Route path="/processes/:processId" element={<Inbox />} />
         <Route path="/processes/:processId/panel" element={<Process />} />
+        <Route path="/processes/:processId/chat" element={<ProcessChat />} />
         <Route path="/processes/:processId/definition/*" element={<Definition />} />
         <Route path="/processes/:processId/review" element={<Queue />} />
         <Route path="/processes/:processId/reception" element={<Reception />} />

@@ -35,6 +35,8 @@ export const keys = {
   draft: (processId: number) => ['draft', processId] as const,
   versions: (processId: number) => ['versions', processId] as const,
   execution: (processId: number) => ['execution', processId] as const,
+  discoverySessions: ['process-drafts'] as const,
+  discoverySession: (id: number) => ['process-draft', id] as const,
 }
 
 /** After a decision moves, everything that counts instances is stale. */

@@ -1,0 +1,847 @@
+import { useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  ArrowUp,
+  Check,
+  ChevronRight,
+  FileUp,
+  MessageSquareText,
+  Paperclip,
+  RefreshCw,
+  X,
+} from 'lucide-react'
+import { api } from '../../api/client'
+import type {
+  DiscoveryMessage,
+  DiscoveryPlan,
+  DiscoverySession,
+  DiscoverySessionSummary,
+  ValidationChange,
+} from '../../api/contracts'
+import { keys } from '../../api/queries'
+import { cn } from '../../lib/cn'
+import { paths } from '../../lib/paths'
+import { Button, Segmented, Select, Textarea } from '../shell/Controls'
+import { EmptyState, ErrorNotice, Notice } from '../shell/Notice'
+import { TerminalLoader } from '../shell/TerminalLoader'
+import { NestedCard } from '../shell/Well'
+import { FileChip, revokePreview, toPreview, type FilePreview } from './FileChip'
+import { ValidationImpact } from './ValidationImpact'
+
+type Attachment = FilePreview & { file: File }
+type ChatMode = 'discuss' | 'revise'
+
+type ReviewItem = {
+  key: string
+  title: string
+  description: string
+  evidence: { reference: string; explanation: string }[]
+  detail?: string
+}
+
+type Preview = {
+  valid?: boolean
+  examples?: {
+    name: string
+    expected: string
+    actual: string
+    reason?: string
+    passed: boolean
+  }[]
+  impact?: {
+    unchanged?: number
+    changes?: ValidationChange[]
+    conflicts?: ValidationChange[]
+    resolved_by_person?: (ValidationChange & { resolution: string; resolved_by: string })[]
+    errors?: { instance_id: number; name?: string; reason?: string }[]
+    error?: string
+  }
+  compilations?: { proposal?: string; report?: { valid?: boolean }; interpretation?: string }[]
+  source_counts?: Record<string, number>
+  source_mutations?: unknown
+  review?: { valid?: boolean; basis?: string; previews?: unknown[] } | null
+}
+
+const CHAT_VERBS = ['leyendo el proceso', 'contrastando la evidencia', 'redactando la respuesta']
+const PREPARE_VERBS = [
+  'normalizando las reglas',
+  'compilando y probando',
+  'ejecutando los ejemplos',
+  'comparando con el histórico',
+]
+const TABULAR_EVIDENCE = /\.(xlsx|csv|json)$/i
+
+function messageOf(value: Record<string, unknown>): DiscoveryMessage | null {
+  if ((value.role !== 'user' && value.role !== 'assistant') || typeof value.text !== 'string') {
+    return null
+  }
+  if (value.role === 'user' && /^(accepted|rejected):/.test(value.text)) return null
+  return {
+    role: value.role,
+    text: value.text,
+    author: typeof value.author === 'string' ? value.author : undefined,
+    mode: value.mode === 'discuss' || value.mode === 'revise' ? value.mode : undefined,
+    evidence: Array.isArray(value.evidence)
+      ? value.evidence.filter((item): item is string => typeof item === 'string')
+      : undefined,
+    questions: Array.isArray(value.questions)
+      ? value.questions.filter((item): item is string => typeof item === 'string')
+      : undefined,
+  }
+}
+
+function evidenceText(evidence: ReviewItem['evidence']): string {
+  return evidence.map((item) => `${item.reference}: ${item.explanation}`).join(' · ')
+}
+
+function setupDescription(plan: DiscoveryPlan): string {
+  const outcomes = plan.decision_types.map((item) => item.name).join(', ') || 'sin salidas'
+  const symbols = plan.symbols.map((item) => item.name).join(', ') || 'sin inputs'
+  return `${plan.name || 'Proceso sin nombre'} · ${outcomes} · ${symbols}`
+}
+
+/** Every key the backend requires before preparation, in the same order it validates them. */
+function reviewItems(plan: DiscoveryPlan): ReviewItem[] {
+  return [
+    {
+      key: 'setup',
+      title: 'Definición del proceso',
+      description: setupDescription(plan),
+      evidence: [],
+      detail: plan.description,
+    },
+    ...plan.connectors.map((item) => ({
+      key: `connector:${item.name}`,
+      title: `Conector · ${item.name}`,
+      description: item.explanation,
+      evidence: item.evidence,
+      detail: `Campos obligatorios: ${item.required.join(', ')}`,
+    })),
+    ...plan.sources.map((item) => ({
+      key: `source:${item.name}`,
+      title: `Fuente · ${item.name}`,
+      description: item.explanation,
+      evidence: item.evidence,
+      detail: `${item.operation} · ${item.kind}`,
+    })),
+    ...plan.rules.map((item) => ({
+      key: `rule:${item.name}`,
+      title: item.summary || `Regla · ${item.name}`,
+      description: item.text,
+      evidence: item.evidence,
+      detail: `${item.type} → ${item.decision}`,
+    })),
+    ...plan.guidance.map((item) => ({
+      key: `guidance:${item.name}`,
+      title: `Criterio del revisor · ${item.name}`,
+      description: item.text,
+      evidence: item.evidence,
+    })),
+    ...plan.examples.map((item) => ({
+      key: `example:${item.name}`,
+      title: `Ejemplo · ${item.name}`,
+      description: `${item.explanation} Resultado esperado: ${item.decision}.`,
+      evidence: [],
+      detail: JSON.stringify(item.instance),
+    })),
+  ]
+}
+
+function openSessions(
+  sessions: DiscoverySessionSummary[],
+  processId: number | undefined,
+): DiscoverySessionSummary[] {
+  return sessions.filter(
+    (item) => item.published_process_id == null && item.process_id === (processId ?? null),
+  )
+}
+
+function snapshotNames(session: DiscoverySession): Set<string> {
+  return new Set(
+    session.snapshots.flatMap((value) => {
+      const row = value as Record<string, unknown>
+      return typeof row.name === 'string' ? [row.name] : []
+    }),
+  )
+}
+
+function changesOf(session: DiscoverySession) {
+  return session.changes.flatMap((value) => {
+    const row = value as Record<string, unknown>
+    return typeof row.field === 'string'
+      ? [{ field: row.field, before: row.before, after: row.after }]
+      : []
+  })
+}
+
+const CHANGE_LABELS: Record<string, string> = {
+  name: 'Nombre',
+  description: 'Contexto y convenciones',
+  decision_types: 'Tipos de decisión',
+  symbols: 'Inputs',
+  connectors: 'Conectores',
+  sources: 'Fuentes de verdad',
+  rules: 'Reglas',
+  decision_review: 'Revisión subjetiva',
+  guidance: 'Criterios del revisor',
+  examples: 'Ejemplos de aceptación',
+}
+
+export function ProcessDraftChat({
+  processId,
+  processName,
+  className,
+}: {
+  processId?: number
+  processName?: string
+  className?: string
+}) {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [draft, setDraft] = useState('')
+  const [mode, setMode] = useState<ChatMode>(processId == null ? 'revise' : 'discuss')
+  const [files, setFiles] = useState<Attachment[]>([])
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  const sessions = useQuery({
+    queryKey: keys.discoverySessions,
+    queryFn: () => api.listDiscoverySessions(),
+  })
+  const candidates = useMemo(
+    () => openSessions(sessions.data ?? [], processId),
+    [processId, sessions.data],
+  )
+
+  const activeId = selectedId ?? candidates[0]?.id ?? null
+
+  const session = useQuery({
+    queryKey: keys.discoverySession(activeId ?? 0),
+    queryFn: () => api.getDiscoverySession(activeId as number),
+    enabled: activeId != null,
+  })
+  const current = session.data
+  const versionDraft = useQuery({
+    queryKey: keys.execution(processId ?? 0),
+    queryFn: () => api.getExecution(processId as number),
+    enabled: processId != null,
+  })
+
+  const cache = (next: DiscoverySession) => {
+    setSelectedId(next.id)
+    queryClient.setQueryData(keys.discoverySession(next.id), next)
+  }
+
+  const store = async (next: DiscoverySession) => {
+    cache(next)
+    await queryClient.invalidateQueries({ queryKey: keys.discoverySessions })
+    return next
+  }
+
+  const start = useMutation({
+    mutationFn: () => api.startDiscoverySession(processId, processName),
+    onSuccess: store,
+  })
+
+  const send = useMutation({
+    mutationFn: async () => {
+      let next = current ?? (await api.startDiscoverySession(processId, processName))
+      cache(next)
+      for (const file of files) {
+        if (!TABULAR_EVIDENCE.test(file.name)) continue
+        next = await api.uploadDraftEvidence(next.id, next.revision, file.file)
+        cache(next)
+      }
+      const message = draft.trim() || 'Revisa la evidencia adjunta y propón los cambios necesarios.'
+      next = await api.messageDiscoverySession(
+        next.id,
+        next.revision,
+        message,
+        files.length > 0 ? 'revise' : mode,
+      )
+      return next
+    },
+    onSuccess: async (next) => {
+      await store(next)
+      setDraft('')
+      files.forEach(revokePreview)
+      setFiles([])
+      if (processId != null) {
+        await queryClient.invalidateQueries({ queryKey: keys.proposals(processId, 'open') })
+      }
+    },
+  })
+
+  const review = useMutation({
+    mutationFn: async ({
+      keys: proposalKeys,
+      disposition,
+    }: {
+      keys: string[]
+      disposition: 'accepted' | 'rejected'
+    }) => {
+      if (!current) throw new Error('No hay conversación abierta')
+      let next = current
+      for (const proposal of proposalKeys) {
+        next = await api.reviewDiscoveryProposal(
+          next.id,
+          next.revision,
+          proposal,
+          disposition,
+          disposition === 'rejected' ? 'Necesita cambios; la explicación sigue en el chat.' : '',
+        )
+      }
+      return next
+    },
+    onSuccess: store,
+  })
+
+  const syncSource = useMutation({
+    mutationFn: (name: string) => {
+      if (!current) throw new Error('No hay conversación abierta')
+      return api.syncDiscoverySource(current.id, current.revision, name)
+    },
+    onSuccess: store,
+  })
+
+  const prepare = useMutation({
+    mutationFn: () => {
+      if (!current) throw new Error('No hay conversación abierta')
+      return api.prepareDiscoverySession(current.id, current.revision)
+    },
+    onSuccess: store,
+  })
+
+  const publish = useMutation({
+    mutationFn: () => {
+      if (!current) throw new Error('No hay conversación abierta')
+      return api.publishDiscoverySession(current.id, current.revision)
+    },
+    onSuccess: async (next) => {
+      await store(next)
+      await queryClient.invalidateQueries()
+      if (next.published_process_id != null) navigate(paths.process(next.published_process_id))
+    },
+  })
+
+  const messages = (current?.messages ?? []).flatMap((value) => {
+    const message = messageOf(value)
+    return message ? [message] : []
+  })
+  const items = current ? reviewItems(current.plan) : []
+  const pending = items.filter((item) => current?.reviews[item.key] !== 'accepted')
+  const hasRevision = messages.some((message) => message.role === 'user' && message.mode === 'revise')
+  const questions = [...new Set(current?.plan.questions ?? [])]
+  const allAccepted = items.length > 0 && pending.length === 0
+  const missingPlan = current
+    ? [
+        !current.plan.name.trim() ? 'un nombre' : null,
+        current.plan.decision_types.length === 0 ? 'tipos de decisión' : null,
+        current.plan.examples.length === 0 ? 'ejemplos de aceptación' : null,
+      ].filter((item): item is string => item != null)
+    : []
+  const blockedByVersionDraft = versionDraft.data?.revision != null
+  const canPrepare =
+    hasRevision &&
+    allAccepted &&
+    questions.length === 0 &&
+    missingPlan.length === 0 &&
+    !blockedByVersionDraft
+  const preview = current?.preview as Preview | null | undefined
+  const busy = send.isPending || review.isPending || syncSource.isPending || prepare.isPending
+  const error =
+    sessions.error ??
+    session.error ??
+    versionDraft.error ??
+    start.error ??
+    send.error ??
+    review.error ??
+    syncSource.error ??
+    prepare.error ??
+    publish.error
+
+  const addFiles = (incoming: File[]) => {
+    setFiles((existing) => [...existing, ...incoming.map(toPreview)])
+    setMode('revise')
+  }
+  const removeFile = (id: string) => {
+    setFiles((existing) => {
+      const removed = existing.find((item) => item.id === id)
+      if (removed) revokePreview(removed)
+      return existing.filter((item) => item.id !== id)
+    })
+  }
+
+  if (!current && (sessions.isPending || (activeId != null && session.isPending))) {
+    return <TerminalLoader verbs={['abriendo la conversación']} className="p-8" />
+  }
+
+  if (!current) {
+    return (
+      <div className={cn('min-h-0 flex-1 overflow-y-auto px-6 py-6', className)}>
+        {error ? <ErrorNotice error={error} /> : null}
+        <EmptyState
+          icon={MessageSquareText}
+          title={processId == null ? 'Crea el proceso hablando' : 'Revisa el proceso hablando'}
+          action={
+            <Button tone="primary" disabled={start.isPending} onClick={() => start.mutate()}>
+              {start.isPending ? 'Abriendo…' : 'Empezar conversación'}
+            </Button>
+          }
+        >
+          Describe qué debe decidir, adjunta sus fuentes y responde las preguntas. Nada se aplica
+          hasta que revises el resultado y pulses Publicar.
+        </EmptyState>
+      </div>
+    )
+  }
+
+  if (current.published_process_id != null) {
+    return (
+      <div className={cn('min-h-0 flex-1 overflow-y-auto px-6 py-6', className)}>
+        <Notice
+          title="Proceso publicado"
+          action={
+            <Button onClick={() => navigate(paths.process(current.published_process_id as number))}>
+              Abrir proceso
+              <ChevronRight size={12} />
+            </Button>
+          }
+        >
+          La versión aprobada ya está en vigor. La conversación queda guardada en el historial.
+        </Notice>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={cn(
+        'grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.85fr)]',
+        className,
+      )}
+    >
+      <section className="flex min-h-0 flex-col border-b border-hairline lg:border-b-0 lg:border-r">
+        <header className="flex items-center justify-between gap-3 border-b border-hairline px-5 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-medium text-ink">
+              {current.plan.name || processName || 'Nuevo proceso'}
+            </p>
+            <p className="font-mono text-[10px] text-faint">
+              conversación {current.id} · revisión {current.revision}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {candidates.length > 1 ? (
+              <Select
+                aria-label="Conversación"
+                value={current.id}
+                onChange={(event) => setSelectedId(Number(event.target.value))}
+                className="w-40 py-1"
+              >
+                {candidates.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name || `Borrador ${item.id}`}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
+            <Button tone="ghost" disabled={start.isPending} onClick={() => start.mutate()}>
+              Nueva
+            </Button>
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          {messages.length === 0 ? (
+            <EmptyState title="Cuéntame qué tiene que decidir">
+              Puedes pegar la política, explicar casos límite o adjuntar XLSX, CSV y JSON como
+              evidencia. El asistente preguntará lo que falte.
+            </EmptyState>
+          ) : (
+            <ol className="space-y-4">
+              {messages.map((message, index) => (
+                <li
+                  key={`${index}:${message.text}`}
+                  className={cn('flex', message.role === 'user' ? 'justify-end' : 'justify-start')}
+                >
+                  <div
+                    className={cn(
+                      'max-w-[88%] rounded-[16px] px-4 py-3 ring-1',
+                      message.role === 'user'
+                        ? 'bg-ink text-on-ink ring-ink'
+                        : 'bg-surface text-ink ring-line',
+                    )}
+                  >
+                    <p className="whitespace-pre-line text-[13px] leading-6">{message.text}</p>
+                    {message.evidence?.length ? (
+                      <p
+                        className={cn(
+                          'mt-2 font-mono text-[10px]',
+                          message.role === 'user' ? 'text-white/55' : 'text-faint',
+                        )}
+                      >
+                        {message.evidence.join(' · ')}
+                      </p>
+                    ) : null}
+                    {message.questions?.length ? (
+                      <ul className="mt-3 space-y-1 border-t border-current/10 pt-2 text-[12px]">
+                        {message.questions.map((question) => (
+                          <li key={question}>{question}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+          {send.isPending ? <TerminalLoader verbs={CHAT_VERBS} className="mt-4" /> : null}
+          {prepare.isPending ? <TerminalLoader verbs={PREPARE_VERBS} className="mt-4" /> : null}
+          {error ? <div className="mt-4"><ErrorNotice error={error} /></div> : null}
+        </div>
+
+        <div className="shrink-0 border-t border-hairline px-5 py-4">
+          {files.length ? (
+            <ul className="mb-2 flex flex-wrap gap-2">
+              {files.map((file) => (
+                <li key={file.id}>
+                  <FileChip file={file} onRemove={() => removeFile(file.id)} />
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <Textarea
+            rows={3}
+            value={draft}
+            disabled={busy}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault()
+                if (draft.trim() || files.length) send.mutate()
+              }
+            }}
+            placeholder={
+              mode === 'revise'
+                ? 'Describe el proceso o pide un cambio concreto.'
+                : 'Pregunta por una regla, un dato o una decisión.'
+            }
+          />
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                title="Adjuntar evidencia"
+                onClick={() => fileInput.current?.click()}
+                className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-canvas hover:text-ink"
+              >
+                <Paperclip size={14} strokeWidth={1.6} />
+              </button>
+              <Segmented
+                value={mode}
+                onChange={setMode}
+                options={[
+                  { value: 'discuss', label: 'Preguntar' },
+                  { value: 'revise', label: 'Proponer cambios' },
+                ]}
+              />
+            </div>
+            <Button
+              tone="primary"
+              disabled={busy || (!draft.trim() && files.length === 0)}
+              onClick={() => send.mutate()}
+            >
+              <ArrowUp size={13} strokeWidth={2} />
+              Enviar
+            </Button>
+          </div>
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            accept=".xlsx,.csv,.json"
+            onChange={(event) => {
+              addFiles([...(event.target.files ?? [])])
+              event.target.value = ''
+            }}
+          />
+        </div>
+      </section>
+
+      <aside className="min-h-0 overflow-y-auto px-5 py-5">
+        <div className="space-y-5">
+          {processId != null ? (
+            <p className="text-[12px] text-muted">
+              Chat es la vía principal. El{' '}
+              <Link to={paths.definition(processId)} className="underline hover:text-ink">
+                editor manual
+              </Link>{' '}
+              sigue disponible para cambios puntuales.
+            </p>
+          ) : null}
+
+          {processId != null && blockedByVersionDraft ? (
+            <Notice
+              tone="warning"
+              title="Hay otro borrador abierto"
+              action={
+                <Link to={`${paths.panel(processId)}?publicar=1`}>
+                  <Button>Revisarlo</Button>
+                </Link>
+              }
+            >
+              Publícalo o descártalo antes de preparar esta conversación. El chat no lo sobrescribe.
+            </Notice>
+          ) : null}
+
+          {questions.length ? (
+            <Notice tone="warning" title={`${questions.length} pregunta${questions.length === 1 ? '' : 's'} pendiente${questions.length === 1 ? '' : 's'}`}>
+              <ul className="space-y-2">
+                {questions.map((question) => (
+                  <li key={question}>
+                    <button
+                      type="button"
+                      className="text-left hover:text-ink"
+                      onClick={() => {
+                        setDraft(`Sobre "${question}": `)
+                        setMode('revise')
+                      }}
+                    >
+                      {question}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Notice>
+          ) : null}
+
+          {hasRevision && changesOf(current).length ? (
+            <NestedCard label="cambios propuestos">
+              <ul className="divide-y divide-hairline">
+                {changesOf(current).map((change) => (
+                  <li key={change.field} className="px-3.5 py-2.5">
+                    <details>
+                      <summary className="cursor-pointer text-[13px] text-ink">
+                        {CHANGE_LABELS[change.field] ?? change.field}
+                      </summary>
+                      <div className="mt-2 grid gap-2 text-[11px] text-muted sm:grid-cols-2">
+                        <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-[8px] bg-canvas p-2">
+                          {JSON.stringify(change.before, null, 2)}
+                        </pre>
+                        <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-[8px] bg-canvas p-2">
+                          {JSON.stringify(change.after, null, 2)}
+                        </pre>
+                      </div>
+                    </details>
+                  </li>
+                ))}
+              </ul>
+            </NestedCard>
+          ) : null}
+
+          {hasRevision ? (
+            <section className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-[15px] font-medium text-ink">Revisión</h2>
+                  <p className="text-[11px] text-faint">
+                    {items.length - pending.length} de {items.length} aprobadas
+                  </p>
+                </div>
+                {pending.length ? (
+                  <Button
+                    tone="primary"
+                    disabled={review.isPending}
+                    onClick={() =>
+                      review.mutate({ keys: pending.map((item) => item.key), disposition: 'accepted' })
+                    }
+                  >
+                    <Check size={12} />
+                    Aprobar pendientes
+                  </Button>
+                ) : null}
+              </div>
+              <ul className="space-y-2">
+                {items.map((item) => {
+                  const disposition = current.reviews[item.key]
+                  return (
+                    <li key={item.key} className="rounded-[14px] bg-surface px-3.5 py-3 ring-1 ring-line">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium text-ink">{item.title}</p>
+                          <p className="mt-1 text-[12px] leading-5 text-muted">{item.description}</p>
+                          {item.detail ? <p className="mt-1 font-mono text-[10px] text-faint">{item.detail}</p> : null}
+                          {item.evidence.length ? (
+                            <p className="mt-1 text-[10px] text-faint">{evidenceText(item.evidence)}</p>
+                          ) : null}
+                        </div>
+                        {disposition === 'accepted' ? (
+                          <span className="shrink-0 text-[11px] text-pagar">Aprobada</span>
+                        ) : disposition === 'rejected' ? (
+                          <span className="shrink-0 text-[11px] text-nopagar">Rechazada</span>
+                        ) : (
+                          <div className="flex shrink-0 gap-1">
+                            <Button
+                              tone="ghost"
+                              className="px-2"
+                              aria-label={`Rechazar ${item.title}`}
+                              disabled={review.isPending}
+                              onClick={() => review.mutate({ keys: [item.key], disposition: 'rejected' })}
+                            >
+                              <X size={11} />
+                            </Button>
+                            <Button
+                              className="px-2"
+                              aria-label={`Aprobar ${item.title}`}
+                              disabled={review.isPending}
+                              onClick={() => review.mutate({ keys: [item.key], disposition: 'accepted' })}
+                            >
+                              <Check size={11} />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          ) : null}
+
+          {current.plan.connectors.length ? (
+            <section className="space-y-2">
+              <h2 className="text-[15px] font-medium text-ink">Conectores</h2>
+              {current.plan.connectors.map((connector) => {
+                const loaded = snapshotNames(current).has(connector.name)
+                const accepted = current.reviews[`connector:${connector.name}`] === 'accepted'
+                return (
+                  <div key={connector.name} className="flex items-center gap-3 rounded-[12px] bg-canvas px-3 py-2 ring-1 ring-line">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-[11px] text-ink">{connector.name}</p>
+                      <p className="text-[11px] text-muted">{loaded ? 'Snapshot cargado' : 'Sin snapshot'}</p>
+                    </div>
+                    <Button
+                      disabled={!accepted || loaded || syncSource.isPending}
+                      onClick={() => syncSource.mutate(connector.name)}
+                    >
+                      <RefreshCw size={11} />
+                      Sincronizar
+                    </Button>
+                  </div>
+                )
+              })}
+            </section>
+          ) : null}
+
+          {hasRevision && !preview ? (
+            <NestedCard label="preparar versión">
+              <div className="space-y-3 px-3.5 py-3">
+                <p className="text-[12px] leading-5 text-muted">
+                  Compila las reglas, ejecuta los ejemplos y compara el resultado con las decisiones anteriores.
+                </p>
+                {!allAccepted ? <p className="text-[11px] text-escalar">Aprueba todas las propuestas antes de preparar.</p> : null}
+                {questions.length ? <p className="text-[11px] text-escalar">Responde las preguntas pendientes antes de preparar.</p> : null}
+                {missingPlan.length ? <p className="text-[11px] text-escalar">Faltan {missingPlan.join(', ')}.</p> : null}
+                {blockedByVersionDraft ? <p className="text-[11px] text-escalar">Cierra el otro borrador antes de preparar.</p> : null}
+                <Button
+                  tone="primary"
+                  disabled={!canPrepare || prepare.isPending}
+                  onClick={() => prepare.mutate()}
+                >
+                  <FileUp size={12} />
+                  {prepare.isPending ? 'Preparando…' : 'Preparar y comprobar'}
+                </Button>
+              </div>
+            </NestedCard>
+          ) : null}
+
+          {preview ? (
+            <PreviewCard
+              processId={processId}
+              preview={preview}
+              publishing={publish.isPending}
+              onPrepare={() => prepare.mutate()}
+              onPublish={() => publish.mutate()}
+            />
+          ) : null}
+        </div>
+      </aside>
+    </div>
+  )
+}
+
+function PreviewCard({
+  processId,
+  preview,
+  publishing,
+  onPrepare,
+  onPublish,
+}: {
+  processId?: number
+  preview: Preview
+  publishing: boolean
+  onPrepare: () => void
+  onPublish: () => void
+}) {
+  const examples = preview.examples ?? []
+  const validCompilations = (preview.compilations ?? []).filter((item) => item.report?.valid).length
+
+  return (
+    <NestedCard label="vista previa">
+      <div className="space-y-4 px-3.5 py-3">
+        <Notice
+          tone={preview.valid ? 'neutral' : 'error'}
+          title={preview.valid ? 'La versión está lista para publicar' : 'La versión todavía no pasa las comprobaciones'}
+        >
+          {validCompilations} reglas compiladas · {examples.filter((item) => item.passed).length} de{' '}
+          {examples.length} ejemplos correctos
+        </Notice>
+
+        {examples.length ? (
+          <ul className="divide-y divide-hairline rounded-[10px] bg-canvas px-3 ring-1 ring-line">
+            {examples.map((example) => (
+              <li key={example.name} className="flex items-start gap-2 py-2 text-[12px]">
+                <span className={example.passed ? 'text-pagar' : 'text-nopagar'}>
+                  {example.passed ? '✓' : '×'}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="text-ink">{example.name}</span>
+                  <span className="block text-[10px] text-muted">
+                    esperado {example.expected}, obtenido {example.actual}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {processId != null && preview.impact ? (
+          <ValidationImpact processId={processId} validation={preview.impact} />
+        ) : null}
+
+        {preview.source_counts && Object.keys(preview.source_counts).length ? (
+          <p className="text-[11px] text-muted">
+            Fuentes: {Object.entries(preview.source_counts).map(([name, count]) => `${name} ${count}`).join(' · ')}
+          </p>
+        ) : null}
+        {preview.review?.basis ? <p className="text-[11px] text-muted">{preview.review.basis}</p> : null}
+
+        <div className="flex flex-wrap gap-2 border-t border-hairline pt-3">
+          <Button disabled={publishing} onClick={onPrepare}>
+            <RefreshCw size={11} />
+            Repetir comprobaciones
+          </Button>
+          <Button tone="primary" disabled={!preview.valid || publishing} onClick={onPublish}>
+            {publishing ? 'Publicando…' : 'Publicar'}
+          </Button>
+        </div>
+        <p className="text-[10px] text-faint">
+          Publicar es la aprobación explícita del responsable. El asistente no puede hacerlo por ti.
+        </p>
+      </div>
+    </NestedCard>
+  )
+}

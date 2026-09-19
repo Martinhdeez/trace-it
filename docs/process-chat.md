@@ -1,8 +1,9 @@
 # Discuss and revise an existing process
 
 Process chat extends the saved discovery conversation. All endpoints require a manager's
-`X-User-Id`; there is no new frontend or agent role. The `discovery` role supplies model
-settings. Starting a conversation does not change the published process.
+`X-User-Id`; the `discovery` role supplies model settings. Starting a conversation does not
+change the published process. The console's Definition tab opens this conversation first;
+the manual definition editor remains available for small direct edits.
 
 ## Explain first
 
