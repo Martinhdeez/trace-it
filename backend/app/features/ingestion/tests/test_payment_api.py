@@ -172,7 +172,13 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
         "native_text",
         "ingest_document",
     }
-    assert (await client.get(f"/processes/{process_id}/export")).status_code == 409
+    pending_export = await client.get(f"/processes/{process_id}/export")
+    assert pending_export.status_code == 200
+    assert json.loads(pending_export.text) == {
+        "file_id": "invoice.pdf",
+        "result": "ESCALAR",
+        "reason": "NO_FINDING",
+    }
     run = await client.post(f"/processes/{process_id}/run")
     assert run.json() == {"decided": 1, "by_decision": {"PAGAR": 1}}, run.text
     assert (await client.post(f"/processes/{process_id}/run")).json()["decided"] == 0

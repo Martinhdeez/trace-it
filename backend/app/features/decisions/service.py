@@ -744,8 +744,10 @@ async def export(
     Returns the body and the names shared by several instances. `file_id` is the filename
     exactly as supplied, accents included. Decisions without optional review retain the
     challenge's engine-first export. Reviewed decisions wait for pending approval and
-    export a later human resolution when present (ADR 0021). `names` limits the export to
-    one delivery batch; other instances may still be pending.
+    export a later human resolution when present (ADR 0021). A pending instance uses the
+    process's escalation outcome, so an incomplete batch is still deliverable without
+    creating a fake engine decision. `names` limits the export to one delivery batch;
+    other instances may still be pending.
     """
     with events.span("export_outcomes", process_id=process_id, batch=len(names or ())) as span:
         body, duplicates = await _export(session, process_id, names)
@@ -770,9 +772,7 @@ async def _export(
         log.warning("Process %s: duplicate names on export: %s", process_id, duplicates)
     instances = list(by_name.values())
 
-    pending = [i.name for i in instances if i.status == "PENDING"]
-    if pending:
-        raise ConflictError(f"{len(pending)} instances pending: {', '.join(pending[:5])}")
+    pending = [i for i in instances if i.status == "PENDING"]
 
     engine: dict[int, Decision] = {}
     human: dict[int, Decision] = {}
@@ -784,7 +784,10 @@ async def _export(
         )
         for row in rows:
             (engine if row.author == ENGINE else human)[row.instance_id] = row
-    exported = {**human, **engine}
+    exported: dict[int, tuple[str, str | None]] = {
+        instance_id: (decision.decision, decision.reason)
+        for instance_id, decision in {**human, **engine}.items()
+    }
     reviews = await decision_reviewer.for_decisions(session, list(engine.values()))
     awaiting = []
     for instance in instances:
@@ -794,13 +797,18 @@ async def _export(
             continue  # Preserve the challenge export for decisions without an optional review.
         resolution = human.get(instance.id)
         if resolution and resolution.id > automatic.id:
-            exported[instance.id] = resolution
+            exported[instance.id] = (resolution.decision, resolution.reason)
         elif review.requires_human:
             awaiting.append(instance.name)
     if awaiting:
         raise ConflictError(
             f"{len(awaiting)} instances awaiting human review: {', '.join(awaiting[:5])}"
         )
+
+    if pending:
+        escalation = (await outcomes(session, process_id)).escalate
+        for instance in pending:
+            exported.setdefault(instance.id, (escalation, None))
 
     undecided = [i.name for i in instances if i.id not in exported]
     if undecided:
@@ -811,8 +819,8 @@ async def _export(
         json.dumps(
             {
                 "file_id": i.name,
-                "result": exported[i.id].decision,
-                "reason": exported[i.id].reason or "NO_FINDING",
+                "result": exported[i.id][0],
+                "reason": exported[i.id][1] or "NO_FINDING",
             },
             ensure_ascii=False,
         )

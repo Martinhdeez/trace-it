@@ -48,8 +48,8 @@ jobs:
       # LLM tests (`-m llm`) are never run here.
       - name: make check
         run: make check
-      - name: ERP subpath, original faults and guarded bootstrap
-        run: uv run --project backend pytest deploy/erp deploy/test_demo_deploy.py -q
+      - name: Deployment controls, routes, ERP faults and guarded bootstrap
+        run: uv run --project backend pytest deploy -q
 
   # The demo path through the real console and API in Chromium (tests/integration/README.md).
   e2e-integration:
@@ -128,8 +128,8 @@ jobs:
         env:
           REVISION: ${{ github.sha }}
         run: |
-          docker build --build-arg REVISION="$REVISION" -f deploy/backend.Dockerfile -t trace-it-backend:ci .
-          docker build --build-arg REVISION="$REVISION" -f deploy/frontend.Dockerfile -t trace-it-frontend:ci .
+          bash deploy/test-build-images.sh
+          bash deploy/build-images.sh "$REVISION"
       - name: Start the isolated stack and migrate its empty database
         run: bash deploy/ci-stack.sh up
       - name: Verify a PostgreSQL backup can be restored in isolation

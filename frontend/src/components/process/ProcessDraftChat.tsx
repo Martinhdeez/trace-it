@@ -24,6 +24,7 @@ import { cn } from '../../lib/cn'
 import { paths } from '../../lib/paths'
 import { Button, Segmented, Select, Textarea } from '../shell/Controls'
 import { EmptyState, ErrorNotice, Notice } from '../shell/Notice'
+import { Markdown } from '../shell/Markdown'
 import { TerminalLoader } from '../shell/TerminalLoader'
 import { NestedCard } from '../shell/Well'
 import { FileChip, revokePreview, toPreview, type FilePreview } from './FileChip'
@@ -474,7 +475,11 @@ export function ProcessDraftChat({
                         : 'bg-surface text-ink ring-line',
                     )}
                   >
-                    <p className="whitespace-pre-line text-[13px] leading-6">{message.text}</p>
+                    {message.role === 'assistant' ? (
+                      <Markdown>{message.text}</Markdown>
+                    ) : (
+                      <p className="whitespace-pre-line text-[13px] leading-6">{message.text}</p>
+                    )}
                     {message.evidence?.length ? (
                       <p
                         className={cn(

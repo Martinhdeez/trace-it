@@ -413,7 +413,7 @@ its example paths are local evaluation outputs, not downloadable datasets.
 | Data-directory lock error | Stop the other ingestion server using that directory; use one Uvicorn worker. |
 | ERP connection refused | Keep the ERP terminal open; check port 8009 and Docker-to-host connectivity. `localhost` inside the backend is the container. |
 | `/login` returns 404 | Load the process pack to seed users, or inspect `GET /users` for an existing account. |
-| `/export` returns 409 | Inspect pending instances/rules; ensure every upload succeeded and `/run` completed. |
+| `/export` returns 409 | Inspect reviewer-requested approvals or another missing outcome. Pending instances export as the process's escalation type with `NO_FINDING`. |
 
 Docker stores extraction objects, SQLite jobs/results and provider journals in
 the `ingestion_data` volume; PostgreSQL uses the `db` volume. The standalone

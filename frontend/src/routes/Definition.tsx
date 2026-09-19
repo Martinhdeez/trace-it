@@ -31,6 +31,7 @@ import { TruthSources } from '../components/process/TruthSources'
 import { ValidationImpact } from '../components/process/ValidationImpact'
 import { Button, Input, Select, Textarea } from '../components/shell/Controls'
 import { ErrorNotice, Empty, EmptyState, Notice } from '../components/shell/Notice'
+import { Markdown } from '../components/shell/Markdown'
 import { TerminalLoader } from '../components/shell/TerminalLoader'
 import { NormProposal, type ProposalState } from '../components/process/NormProposal'
 import { ExpandableText } from '../components/shell/ExpandableText'
@@ -349,9 +350,7 @@ export function Definition() {
                     {turn.error ? <ErrorNotice error={turn.error} /> : null}
                     {turn.answer ? (
                       <div className="rounded-[16px] bg-surface px-4 py-3 ring-1 ring-line">
-                        <p className="whitespace-pre-line text-[13px] leading-6 text-ink">
-                          {turn.answer}
-                        </p>
+                        <Markdown>{turn.answer}</Markdown>
                       </div>
                     ) : null}
                     {turn.preview && turn.state ? (

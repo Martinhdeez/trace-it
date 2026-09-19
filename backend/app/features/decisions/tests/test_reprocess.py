@@ -94,7 +94,7 @@ async def test_reprocess_and_export_a_named_batch() -> None:
         )
         assert r.json() == {"unchanged": 1, "changes": [], "conflicts": []}
 
-    # FA-9999 is still PENDING: the whole process cannot be exported, one batch can.
+    # FA-9999 is still PENDING: the named batch can still be exported independently.
     batch = {"factura_1217.pdf", "FA-1016_papelería.pdf"}
     async with session_factory() as session:
         body, duplicates = await decisions.export(session, process_id, batch)

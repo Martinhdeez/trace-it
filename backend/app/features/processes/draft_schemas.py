@@ -33,7 +33,10 @@ class SourceProposal(BaseModel):
     snapshot: str = ""
     rows: list[dict[str, Any]] = []  # constants only, approved as part of this proposal
     operation: Literal["replace", "append", "upsert", "delete"] = "replace"
-    key: list[str] = Field(default_factory=list)
+    key: list[str] = Field(
+        default_factory=list,
+        description="Canonical output fields identifying a row for append/upsert/delete.",
+    )
 
     @model_validator(mode="after")
     def valid_mutation(self) -> Self:

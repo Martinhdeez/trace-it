@@ -35,6 +35,10 @@ Every response carries `trace_id`, the audit trail of the last agent run on this
 model call with its agent, the model that answered, the instructions it saw, its output,
 rejected outputs, tokens and latency (ADR 0018). It is null until the first agent run.
 
+Model chains may mix providers. `helmcode:<model>` uses `HELMCODE_API_KEY`; a
+`vercel:<provider/model>` entry uses Vercel AI Gateway through `AI_GATEWAY_API_KEY`.
+Timeouts and provider errors advance to the next configured model and are retained in the trace.
+
 ## Supply evidence and explain the process
 
 - `POST /process-drafts/{id}/evidence`: multipart `file` and `revision`. Accepts XLSX, CSV
@@ -61,9 +65,11 @@ For a new draft with unresolved policy or authority questions, discovery propose
 and asks the manager first. Rules and examples can remain empty until those answers arrive.
 Answering a question revises the proposal; it does not approve it or publish live rules.
 
-Every source mapping declares `replace`, `append`, `upsert` or `delete`. Upsert and delete
-require canonical key fields; append may name keys to reject collisions. Preparation rejects
-duplicate or missing keys and shows the operation, key and before/after row counts.
+Every proposed source mapping declares how its rows affect the current snapshot: `replace`,
+`append`, `upsert` or `delete`. Upsert and delete require canonical key fields; append may
+also name keys to reject collisions. Preparation rejects duplicate or missing keys and shows
+the operation, key, and before/after row counts. An incremental file must never be interpreted
+as a complete replacement merely because its columns match.
 
 ## Review and test
 

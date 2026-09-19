@@ -189,7 +189,7 @@ async def resolve_instance(
                 }
             },
         },
-        409: {"description": "Some instance has no decision or is awaiting human review"},
+        409: {"description": "An instance has no exportable outcome or is awaiting human review"},
     },
 )
 async def export_outcomes(process_id: int, session: Session) -> PlainTextResponse:

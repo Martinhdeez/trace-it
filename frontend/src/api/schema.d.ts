@@ -5541,7 +5541,10 @@ export interface components {
              * @enum {string}
              */
             operation: "replace" | "append" | "upsert" | "delete";
-            /** Key */
+            /**
+             * Key
+             * @description Canonical output fields identifying a row for append/upsert/delete.
+             */
             key?: string[];
         };
         /**
@@ -8781,7 +8784,7 @@ export interface operations {
                     "application/x-ndjson": unknown;
                 };
             };
-            /** @description Some instance has no decision or is awaiting human review */
+            /** @description An instance has no exportable outcome or is awaiting human review */
             409: {
                 headers: {
                     [name: string]: unknown;

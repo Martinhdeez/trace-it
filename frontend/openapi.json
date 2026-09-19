@@ -5124,7 +5124,7 @@
             }
           },
           "409": {
-            "description": "Some instance has no decision or is awaiting human review"
+            "description": "An instance has no exportable outcome or is awaiting human review"
           },
           "422": {
             "description": "Validation Error",
@@ -17350,7 +17350,8 @@
               "type": "string"
             },
             "type": "array",
-            "title": "Key"
+            "title": "Key",
+            "description": "Canonical output fields identifying a row for append/upsert/delete."
           }
         },
         "type": "object",

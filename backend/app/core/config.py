@@ -27,8 +27,8 @@ class Settings(BaseSettings):
     normalizer_model: str = "helmcode:deepseek-v4-flash"
     discovery_model: str = "helmcode:glm5.3"
     fallback_models: list[str] = ["helmcode:glm5.3", "helmcode:qwen3.6"]
-    # Helmcode, an OpenAI-compatible API: select it with `helmcode:<model>` (e.g.
-    # `helmcode:deepseek-v4-flash`). Its key is read like every provider's: HELMCODE_API_KEY.
+    # OpenAI-compatible gateways. Select Helmcode with `helmcode:<model>` and Vercel AI
+    # Gateway with `vercel:<provider/model>`. Credentials stay in their environment variables.
     # HELMCODE_URL (the ingestion's older name) is read when this one is not set.
     helmcode_base_url: str = Field(
         "https://api.helmcode.com/v1",

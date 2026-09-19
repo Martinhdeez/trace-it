@@ -158,10 +158,18 @@ async def test_run_resolve_and_export(fake_sandbox: None) -> None:
         r = await api.get(f"/processes/{process_id}/instances", params={"status": "PENDING"})
         assert [i["name"] for i in r.json()] == ["FA-9999_sin_leer.pdf"]
 
-        # The export refuses to invent a result for an instance nobody decided.
+        # A pending instance exports the process's escalation outcome so the batch stays
+        # complete even when extraction has not produced symbols yet.
         r = await api.get(f"/processes/{process_id}/export")
-        assert r.status_code == 409, r.text
-        assert "FA-9999_sin_leer.pdf" in r.json()["message"]
+        assert r.status_code == 200, r.text
+        pending_line = next(
+            json.loads(line) for line in r.text.splitlines() if "FA-9999_sin_leer.pdf" in line
+        )
+        assert pending_line == {
+            "file_id": "FA-9999_sin_leer.pdf",
+            "result": "ESCALAR",
+            "reason": "NO_FINDING",
+        }
 
         # What a person has to look at.
         r = await api.get(f"/processes/{process_id}/queue")

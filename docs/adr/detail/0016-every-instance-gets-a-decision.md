@@ -63,8 +63,11 @@ frontend, and a second answer to "what does this case need from me".
   `REVIEW`, no `review_reason`, no `human_kind`.
 - The exported decision is the engine's latest decision for the instance (ADR 0009 kept
   this: the challenge wants the process output, and a person's resolution never changes
-  it). A person's decision is exported only for an instance the engine never decided. Export
-  refuses (409) while any instance is `PENDING`.
+  it). A person's decision is exported only for an instance the engine never decided. A
+  `PENDING` instance has no engine decision yet, so export uses the process's escalation
+  type with reason `NO_FINDING`; it does not append a fake decision to history. Export
+  still refuses (409) while a review awaits a person or another instance has no exportable
+  outcome.
   **Update (2026-09-19).** When the engine decision has an optional review (ADR 0021),
   a later person's resolution is exported instead, and export refuses (409) while a review
   awaits a person (`decisions/service.py`, `_export`).
