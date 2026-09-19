@@ -46,7 +46,7 @@ The checks the normalizer and the compiler wrote from `Norma_Pagos_v3`, kept exa
 were adopted for delivery: `invoice-payment.json` (a pack of its own process, `Invoice payment -
 frozen <date>`, whose rules point at `rules/n<norm rule>-<check>.py`) and `manifest.json` (the
 norm's sentences, each check's hash, reading, test rows and test report, the models, the golden
-result and how many norm runs it took). `make load-frozen` loads and activates it with no LLM,
+result and how many norm runs it took). `make load-frozen MANAGER_ID=<id>` loads, validates and publishes it with no LLM,
 exactly like the hand-written rules below; `backend/tests/e2e/test_frozen_rules.py` reloads it
 and checks the hashes and 471/471 on the golden.
 

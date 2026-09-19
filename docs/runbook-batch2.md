@@ -9,9 +9,11 @@ every change is a new decision row (ADR 0008).
 **Which rules decide.** The delivery runs on the rule set compiled from `Norma_Pagos_v3` and
 frozen on 2026-09-19 (`processes/invoice-payment/frozen/2026-09-19/`, 12 checks, 471/471 on
 the golden). It lives in its own process, `Invoice payment - frozen 2026-09-19`, loaded by
-`make load-frozen` with no LLM. The process named `Invoice payment` holds the hand-written
+`make load-frozen MANAGER_ID=1` with no LLM (it validates and publishes the process version,
+`docs/process-versions.md`). The process named `Invoice payment` holds the hand-written
 rules: never deliver from it, and never run `make demo` or `make activate` on the live
-database (they activate the hand-written rules). Every command below names the frozen process:
+database (`make activate` publishes the hand-written rules; `make demo` drives that process). Every
+command below names the frozen process:
 `$P` over the API, `PACK=$FROZEN` for `make export-batch`.
 
 Rehearsed on 2026-09-19 at 11:10 on a scratch database (`trace_freeze`) with the full OCR
@@ -53,7 +55,7 @@ challenge inputs). The challenge Makefile expects the CSV at
 
 | # | Command | Expect | If it fails |
 |---|---|---|---|
-| 1 | `git switch dev && git pull && make setup && make load-frozen`, then set `P` (section 0) | migrations up to date, `Ready: API at ...`; `Process 'Invoice payment - frozen 2026-09-19' (id N) ... 12 active in the process` | Port taken: `BACKEND_PORT=8001 make setup`. Never `make reset-db`. `load-frozen` runs the CLI on the host: it needs `.env` without a `TRACE_DATABASE_URL` pointing elsewhere |
+| 1 | `git switch dev && git pull && make setup && make load-frozen MANAGER_ID=1`, then set `P` (section 0) | migrations up to date, `Ready: API at ...`; `Process 'Invoice payment - frozen 2026-09-19' (id N)`, a validation report with `"valid": true`, `Published process version N` (or `The pack already matches the published version`) | Port taken: `BACKEND_PORT=8001 make setup`. Never `make reset-db`. `load-frozen` runs the CLI on the host: it needs `.env` without a `TRACE_DATABASE_URL` pointing elsewhere |
 | 1a | Only if the frozen process has no instances yet (`curl -s $API/processes/$P/summary`): `make erp` in another terminal, then `uv run --project backend --locked --env-file .env python tools/demo_run.py --api-url $API --process $P --output output/friday-run` | `run: {'decided': 500, ...}`; about 10 min, of which about 8 on the 29 scans | Without `--process $P` the driver picks the process named `Invoice payment` (hand-written rules). Check `.models/` and both manifests first (`docs/ingestion/setup.md`) |
 | 1b | `curl -s $API/processes/$P/summary \| python3 -m json.tool \| head -20` | `by_status: {"DECIDED": 500}`, no `PENDING` | Pending instances: `curl -X POST $API/processes/$P/run` first |
 | 1c | `make export-batch PACK=$FROZEN FILES=$B1 OUT=output/friday/outcomes.jsonl` | `OK: one line per file ...` with Friday's counts | Without `PACK=$FROZEN` it exports the hand-written process. This file is the reference to diff against later |
@@ -64,13 +66,14 @@ challenge inputs). The challenge Makefile expects the CSV at
 | 5 | `curl -s -X POST "$API/processes/$P/reprocess?dry_run=true" \| python3 -m json.tool` | `unchanged`, `changes` (batch-1 invoices the ERP update changes, each with before/after/reason), `conflicts: []` | Conflicts: a person decided that invoice; the manager looks at each (`GET /instances/{id}`) and resolves again if needed. Reprocess never overrides a person |
 | 5b | Same without `?dry_run=true` | same body; each change is a new engine decision, the old one stays | Run it **before step 7**: once batch 2 is in, it takes part in batch 1's duplicate check (same order on two invoices) |
 | 6 | `python3 -c 'import json,sys; print(json.dumps({"text": open(sys.argv[1]).read()}))' $L2/norma_v4.txt > /tmp/norm.json` then `curl -s -X POST $API/processes/$P/norm -H "$MANAGER" -H 'Content-Type: application/json' --data @/tmp/norm.json \| python3 -m json.tool` | One norm rule per sentence, each with its `checks` (English text, decision, `interpretation`, `rule_id`) and `policies` | Norm arrives in the workbook: copy the sheet's text to `norma_v4.txt`. 502: the normalizer's model failed; retry once, then write the rule yourself (6d). If v4 repeats all of v3, send only the new sentences: the frozen checks already cover v3 |
-| 6b | `curl -s $API/processes/$P/rules \| python3 -c 'import json,sys; [print(r["id"], r["status"], r["decision"], (r["report"] or {}).get("activation"), r["text"][:70]) for r in json.load(sys.stdin) if r["status"] != "active" or r["norm_rule_id"]]'` every 15 s | No `compiling` after about 2 min (the v3 norm took 105 s for 12 checks) | Still `compiling` after 4 min: `POST $API/rules/{id}/compile` (waits for it). Until none is `compiling`, `run` and `reprocess` answer 409 |
-| 6c | For each new rule, by status: | | |
-| | `active` | Compiled, tests passed: already enforced. The invoice use case has no share limit (`auto_activate_max_change: 1.0`, ADR 0004), so a valid rule activates whatever it changes; its impact is recorded as audit findings | Check, not a gate: read its `interpretation` (`GET /rules/{id}`) and what it changes (`GET $API/processes/$P/findings`). A wrong reading: retire it (`POST /rules/{id}/retire`) and use 6d |
-| | `draft` with `activation.auto: false` | Valid code, but a decision taken by a person would change | `curl -s $API/rules/{id}/impact`: resolve those instances again, then `curl -X POST $API/rules/{id}/activate -H "$MANAGER"` |
-| | `draft` with `valid: false` or `report.error` | Tests failed, or the model was down | `POST $API/rules/{id}/compile`; still failing: 6d |
-| | `blocked` | The rule needs a symbol or source the process lacks (`report.needs_data`) | Enforced as ESCALAR for every instance it runs on. Decide before step 7: provide the data (new source / symbol) and recompile, or retire it (`POST /rules/{id}/retire`) if the norm does not really need it |
-| 6d | Fallback: `curl -X POST $API/processes/$P/rules -H 'Content-Type: application/json' -d '{"text": "<the condition in English, symbols in backticks>", "type": "prohibition", "decision": "ESCALAR"}'` | status `compiling`, then as 6c | Retire the failed check first so it does not also run |
+| 6b | `curl -s $API/processes/$P/rules \| python3 -c 'import json,sys; [print(r["id"], r["status"], r["decision"], (r["report"] or {}).get("valid"), r["text"][:70]) for r in json.load(sys.stdin) if r["norm_rule_id"] and r["status"] != "active"]'` every 15 s | No `compiling` after about 1 min (one v4 check: 31 s; the 12 v3 checks: 105 s). Compiling never activates: a valid check stays `draft` | Still `compiling` after 4 min: `POST $API/rules/{id}/compile` (waits for it). Until none is `compiling`, `run` and `reprocess` answer 409 |
+| 6c | For each new check, by status: | | |
+| | `draft` with `valid: true` | Compiled, its tests passed; not enforced yet | Read its `interpretation` (`GET /rules/{id}`). Right reading: `curl -s -X POST $API/rules/{id}/activate -H "$MANAGER"` (stages it in the process draft, publishes nothing). Wrong reading: leave it out and use 6d |
+| | `draft` with `valid: false` | Tests failed | `POST $API/rules/{id}/compile`; still failing: 6d |
+| | `blocked` with `report.error` | The compile failed (model down, tokens out, malformed output). Once published it is enforced as ESCALAR for every instance, reason `RULE_COMPILE_FAILED` | `POST $API/rules/{id}/compile` once the model answers; still failing: 6d |
+| | `blocked` with `report.needs_data` | The rule needs a symbol or source the process lacks | Once published it escalates every instance it runs on. Decide before 6e: provide the data (new source / symbol) and recompile, or do not stage it if the norm does not really need it |
+| 6d | Fallback: `curl -X POST $API/processes/$P/rules -H 'Content-Type: application/json' -d '{"text": "<the condition in English, symbols in backticks>", "type": "prohibition", "decision": "ESCALAR"}'` | status `compiling`, then as 6c | A wrong check already published: `POST /rules/{id}/retire -H "$MANAGER"` stages its removal, then 6e |
+| 6e | `curl -s -X POST $API/processes/$P/draft/validate -H "$MANAGER" > /tmp/val.json; python3 -c 'import json; d=json.load(open("/tmp/val.json")); v=d["validation"]; print(len(d["snapshot"]["rules"]), "rules", {k: (len(x) if isinstance(x, list) else x) for k, x in v.items() if k in ("valid", "unchanged", "changes", "conflicts", "errors")}); json.dump({"revision": d["revision"], "validation_hash": v["hash"], "reason": "Norm v4"}, open("/tmp/pub.json", "w"))'`, then `curl -s -X POST $API/processes/$P/draft/publish -H "$MANAGER" -H 'Content-Type: application/json' --data @/tmp/pub.json` | `13 rules` (12 frozen + the v4 checks), `valid: True`, `conflicts: 0`; `changes` = decided cases the new version would decide differently (not applied). Publish answers the new version `number` | `valid: False` or conflicts: read `/tmp/val.json` (`errors`, `conflicts`), fix, validate again. 409 on publish: something changed since the validation; validate again. Publishing never re-decides past cases (see below) |
 | 7 | `uv run --project backend --locked --env-file .env python tools/demo_run.py --api-url $API --process $P --invoices "$L2/facturas" --output output/lote2-run` (add `--book "$L2/<new>.xlsx"` if a new workbook came) | `workbook`, `erp sync`, upload progress, `run: {'decided': 40, ...}`; one to ten minutes depending on how many scans (about 10 s each, up to 66 s) | `--process $P` is mandatory (see step 1a). The driver also re-uploads the workbook and syncs the ERP: harmless, a new snapshot. `--output` must not be `output/`: that holds Friday's files. Export refused (409): something is PENDING; step 8 |
 | 7' | Manual API alternative: `for f in $L2/facturas/*.pdf; do curl --fail-with-body -sS "$API/processes/$P/files" -H "$MANAGER" -F "file=@$f" -F 'ocr=true' > /dev/null; done; curl --fail-with-body -sS -X POST "$API/processes/$P/run"` | 201 per file; `{"decided": 40, ...}` | Check `.models/` and both manifests before scans; without weights, extraction may leave values unresolved. Preserve each response if OCR evidence is needed |
 | 8 | `curl -s $API/processes/$P/summary \| python3 -m json.tool \| head -12`; `curl -s "$API/processes/$P/instances?status=PENDING"` | `PENDING` absent, `[]` | PENDING = no symbols: `POST /instances/{id}/extract` (Álvaro), then `POST /processes/$P/run` |
@@ -83,7 +86,7 @@ challenge inputs). The challenge Makefile expects the CSV at
 ## Does norm v4 re-decide batch 1?
 
 Not by itself. Activating a rule never edits a past decision: it records audit findings
-(what would change, `GET /processes/$P/findings`). Batch 1's export changes only if we run
+(what would change, `GET /processes/$P/findings`, and `changes` in the validation of 6e). Batch 1's export changes only if we run
 `reprocess` after activating it. **Default: do not** (the norm is for new invoices; the
 findings show the team what it would have changed). If the norm or the organisers say it
 applies to batch 1 too: step 5 again after step 6, with `names` = batch 1.
@@ -95,17 +98,20 @@ applies to batch 1 too: step 5 again after step 6, with `names` = batch 1.
    `curl -X POST $API/processes/$P/sources/erp/sync`, read the diff) or workbook (`--book` in
    `demo_run.py` / `POST /processes/$P/sources/workbook`). A corrected PDF is a new file (new
    hash): ingest it; export keeps the newest instance of a name.
-3. `POST /processes/$P/reprocess?dry_run=true`: the changes must be exactly the invoices that
-   datum touches. Then without `dry_run`.
+3. `POST /processes/$P/reprocess?dry_run=true` with `{"names": [...]}` of the batch it
+   concerns: the changes must be exactly the invoices that datum touches. Then without
+   `dry_run`. Without `names` it re-decides every instance, and once batch 2 is in, batch 1's
+   duplicate-order check sees batch 2 (the rehearsal flipped 36 batch-1 invoices this way).
 4. Steps 10, 10b, 11.
 
 ## Rollback
 
-- **A rule** (v4 or a fallback) was wrong: `POST /rules/{id}/retire -H "$MANAGER"` (checked
-  against past decisions like an activation), then `reprocess` to undo its decisions. The
+- **A rule** (v4 or a fallback) was wrong: `POST /rules/{id}/retire -H "$MANAGER"` stages its
+  removal, then 6e (validate, publish), then `reprocess` with `names` to undo its decisions.
+  Or restore the previous version: `PUT /processes/$P/draft` with `restore_version_id`, then 6e. The
   wrong decisions stay in the history, followed by the right ones.
-- **The frozen set itself**: it is in git. On a new database, `make load-frozen` gives the
-  same 12 checks with the same hashes (`manifest.json`); `test_frozen_rules.py` proves 471/471.
+- **The frozen set itself**: it is in git. On a new database, `make load-frozen MANAGER_ID=1` gives
+  the same 12 checks with the same hashes (`manifest.json`); `test_frozen_rules.py` proves 471/471.
 - **The database** is wrong beyond that: restore the dump of step 2 into a new database and
   point the backend at it, so the broken one stays for the post-mortem:
 
@@ -121,30 +127,36 @@ applies to batch 1 too: step 5 again after step 6, with `names` = batch 1.
 
 Full OCR path: local OCR (PP-OCRv5 primary and verifier), Gemini `gemini-3.1-flash-lite`,
 Jev `jev-1.13.0`. The API ran from the host (`uvicorn`, port 8060) on `trace_freeze`,
-not in Docker; the commands are the same.
+not in Docker; the commands are the same. Two passes: at 11:10 on `dev` before process
+versions (#66), and at 11:28 on `dev` with them (steps 1, 6 and 6e below), with a second set
+of 40 PDFs.
 
 | Step | Time | Notes |
 |---|---:|---|
 | Norm v3 from the sheet: normalize | 112 s | 6 norm rules, 12 checks (Helmcode `deepseek-v4-flash`) |
-| Norm v3: compile all checks to a status | 105 s | 12/12 `active` at the first attempt; 471/471 on the golden |
-| 1. `make load-frozen` | 1.8 s | 12 checks active, no LLM |
+| Norm v3: compile all checks | 105 s | 12/12 valid at the first attempt; 471/471 on the golden |
+| 1. `make load-frozen MANAGER_ID=1` | 3 s | validation `valid: true`, version published, no LLM |
 | 1a. Batch 1 through the API, full OCR (500 PDFs) | 564 s | 471 text PDFs in 2 s of extraction; 29 scans 478 s (p50 9.5 s, max 66 s, `fax_2026_0411.pdf`). PAGAR 450 / NO_PAGAR 42 / ESCALAR 8; the 471 text PDFs as the golden |
 | 1b. Summary | 0.1 s | |
-| 1c. `make export-batch` batch 1 | 0.9 s | `OK` 500/500 |
-| 2. `make backup` | 0.6 s | 6.6 MB dump |
-| 3. Name checks | 0.02 s | 40, no shared name |
+| 1c. `make export-batch` batch 1 | 1 s | `OK` 500/500 |
+| 2. `make backup` | 0.7 s | 6.6 to 7.7 MB dump |
+| 3. Name checks | 0.03 s | 40, no shared name |
 | 4. ERP restart with `--lote2` | not run | No update CSV in the rehearsal and the ERP on :8009 was shared; measured before at 1 s |
 | 4b. ERP status + API sync | 5.5 s | 516 rows, 26 pages, 3 `ORA-00600` retried, diff empty (no update loaded) |
-| 5 / 5b. `reprocess` dry run, then for real | 0.9 s each | 500 unchanged (the ERP did not change) |
-| 6. Norm v4 | not run | No v4 text; the v3 figures above are the reference |
-| 7. `demo_run.py` over 40 PDFs (30 text, 10 scans) | 39 s | 10 scans in 28 s: faster than batch 1 because the pages were already read once (same images, new bytes). New scans: count about 10 s each. All 40 ESCALAR: each copy shares its order with its batch-1 original |
+| 5 / 5b. `reprocess` dry run, then for real | 0.9 s each | First pass: 500 unchanged. Second pass, with the first 40 already in: 36 batch-1 changes (see below) |
+| 6. `POST /norm`, one v4 sentence | 4.5 s | "total over 10,000 EUR: a person reviews it" -> one check, ESCALAR |
+| 6b. Compile to a status | 31 s | `draft`, valid, first attempt |
+| 6c. Stage (`/rules/{id}/activate`) | 0.03 s | |
+| 6e. Validate, then publish | 1 s + 0.1 s | 13 rules, valid, 35 decided cases would change (not applied), version 3 |
+| 7. `demo_run.py` over 40 PDFs (30 text, 10 scans) | 39 s / 36 s | Scans took about 3 s each: their pages had been read once already (same images, new bytes). New scans: count about 10 s each, up to a minute. All 40 ESCALAR: each copy shares its order with its batch-1 original |
 | 8 / 8b. Summary, pending, queue | 0.2 s | no PENDING; reasons `Same order as` and `MISSING_DATA` |
-| 10. `make export-batch` batch 2 | 1.2 s | `OK` 40/40 |
-| 10b. Export batch 1 and diff with Friday | 0.9 s | `OK` 500/500, no difference |
+| 10. `make export-batch` batch 2 | 1.1 s | `OK` 40/40 |
+| 10b. Export batch 1 and diff with Friday | 0.9 s | First pass: no difference. Second pass: the 36 changes of step 5b |
 | 11. `make check-outcomes` both | 1.7 s | `OK` both |
 
 For 40 PDFs, from the organisers' zip to the two checked files: about 15 minutes of commands
-and reading, plus the norm v4 (about 4 minutes of models) and the scans (about 10 s each).
+and reading, plus the norm v4 (under a minute of models per sentence) and the scans (about
+10 s each).
 
 Found by the rehearsals and fixed:
 - 2026-09-19 (first): the former `demo_run.py` crashed on a batch-2 PDF with the same bytes
@@ -155,3 +167,9 @@ Found by the rehearsals and fixed:
   named `Invoice payment`, which holds the hand-written rules, not the frozen set. The runbook
   now names the frozen process everywhere (`$P`, `PACK=$FROZEN`, sync through the API);
   batch-1 ingestion on a fresh database is step 1a; the scan timings are measured.
+- 2026-09-19 (process versions): compiling no longer activates; step 6 now stages each
+  check and validates and publishes the draft (6e). `make load-frozen` needs `MANAGER_ID`.
+- 2026-09-19: a `reprocess` without `names` after batch 2 is in re-decides batch 1 against
+  batch 2 too. In the second pass it flipped 36 batch-1 invoices to ESCALAR (duplicate order
+  with the rehearsal copies). Step 5b stays before step 7; Sunday's reprocess now passes
+  `names`.
