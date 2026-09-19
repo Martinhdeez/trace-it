@@ -6,6 +6,7 @@ import json
 import statistics
 from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 
 from sqlalchemy import Numeric, String, case, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONPATH
@@ -142,20 +143,44 @@ def _roots(nodes: dict[str, SpanNode]) -> list[SpanNode]:
     )
 
 
+_AGENT = func.coalesce(func.nullif(Event.data["agent"].astext, ""), Event.data["role"].astext)
+
+
 async def list_spans(
     session: AsyncSession,
     process_id: int | None,
     step: str | None,
     status: str | None,
     limit: int,
+    plane: Plane | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    rule_id: int | None = None,
+    norm_rule_id: int | None = None,
+    use_case_id: int | None = None,
+    data: dict[str, str | None] | None = None,
 ) -> list[SpanOut]:
-    query = select(Event)
-    if process_id is not None:
-        query = query.where(Event.process_id == process_id)
+    """`data` filters span attributes: `model`, `role`, `agent` (the `by_role` key: the
+    agent's name, else its role), `provider`, `operation`."""
+    query = select(Event).where(*_scope(process_id, since))
     if step is not None:
         query = query.where(Event.step == step)
     if status is not None:
         query = query.where(Event.status == status)
+    if plane is not None:
+        query = query.where(Event.step.in_(steps_of(plane)))
+    if until is not None:
+        query = query.where(Event.started_at < until)
+    if rule_id is not None:
+        query = query.where(Event.rule_id == rule_id)
+    if norm_rule_id is not None:
+        query = query.where(Event.norm_rule_id == norm_rule_id)
+    if use_case_id is not None:
+        processes = select(Process.id).where(Process.use_case_id == use_case_id)
+        query = query.where(Event.process_id.in_(processes))
+    for key, value in (data or {}).items():
+        if value is not None:
+            query = query.where((_AGENT if key == "agent" else Event.data[key].astext) == value)
     rows = await session.scalars(query.order_by(Event.id.desc()).limit(limit))
     return [SpanOut.model_validate(r, from_attributes=True) for r in rows]
 
@@ -325,6 +350,21 @@ def _scope(process_id: int | None, since: datetime | None) -> list:
     return where
 
 
+def _link(scope: dict, **filters) -> str | None:
+    """`GET /traces` for the spans behind one aggregate row, in the metrics' scope (`process_id`
+    and `since` of `scope`). None when a row's key is null: no filter selects exactly it."""
+    if any(v is None for v in filters.values()):
+        return None
+    since = scope.get("since")
+    query = {
+        "process_id": scope.get("process_id"),
+        "since": since.isoformat() if since else None,
+        **filters,
+        "limit": 1000,
+    }
+    return "/traces?" + urlencode({k: v for k, v in query.items() if v is not None})
+
+
 _ERRORS = func.count().filter(Event.status == "error")
 
 
@@ -332,7 +372,7 @@ def _total(key: str):
     return func.coalesce(func.sum(Event.data[key].as_integer()), 0)
 
 
-async def _steps(session: AsyncSession, where: list) -> list[StepStats]:
+async def _steps(session: AsyncSession, where: list, scope: dict) -> list[StepStats]:
     rows = await session.execute(
         select(Event.step, func.count(), _ERRORS, _p(0.5), _p(0.95))
         .where(*where)
@@ -340,7 +380,8 @@ async def _steps(session: AsyncSession, where: list) -> list[StepStats]:
         .order_by(Event.step)
     )
     return [
-        StepStats(step=s, count=c, errors=e, p50_ms=p50, p95_ms=p95) for s, c, e, p50, p95 in rows
+        StepStats(step=s, count=c, errors=e, p50_ms=p50, p95_ms=p95, traces=_link(scope, name=s))
+        for s, c, e, p50, p95 in rows
     ]
 
 
@@ -349,8 +390,10 @@ _TOKENS = ("retries", "requests", "input_tokens", "output_tokens", "cached_token
 
 async def _llm(session: AsyncSession, where: list, *keys, join=None) -> list[tuple]:
     """`llm_run` spans grouped by `keys`: (*keys, calls, errors, fallbacks, truncations,
-    retries, requests, input, output and cached tokens)."""
+    retries, requests, input, output and cached tokens, known cost, unpriced requests)."""
     failed = Event.data["failed_attempts"]
+    cost_status = Event.data["cost_status"].astext
+    priced = cost_status.in_(("known", "included"))
     query = select(
         *keys,
         func.count(),
@@ -358,6 +401,13 @@ async def _llm(session: AsyncSession, where: list, *keys, join=None) -> list[tup
         func.count().filter(Event.status == "ok", failed.contains([{}])),
         func.count().filter(failed.contains([{"error": TRUNCATED}])),
         *map(_total, _TOKENS),
+        func.coalesce(func.sum(cast(Event.data["cost_usd"].astext, Numeric)).filter(priced), 0),
+        func.coalesce(
+            func.sum(Event.data["requests"].as_integer()).filter(
+                or_(cost_status.is_(None), ~priced)
+            ),
+            0,
+        ),
     ).select_from(Event)
     if join is not None:
         query = query.outerjoin(*join)
@@ -368,10 +418,18 @@ async def _llm(session: AsyncSession, where: list, *keys, join=None) -> list[tup
     )
 
 
-def _token_stats(rows: list[tuple]) -> list[TokenStats]:
-    fields = ("calls", "errors", "fallbacks", "truncations", *_TOKENS)
+_LLM_FIELDS = ("calls", "errors", "fallbacks", "truncations", *_TOKENS, "known_cost_usd")
+_LLM_FIELDS += ("unpriced_requests",)
+
+
+def _token_stats(rows: list[tuple], link) -> list[TokenStats]:
+    """One row per key; `link(key)` is its drill-down."""
     return [
-        TokenStats(key=None if k is None else str(k), **dict(zip(fields, rest, strict=True)))
+        TokenStats(
+            key=None if k is None else str(k),
+            **dict(zip(_LLM_FIELDS, rest, strict=True)),
+            traces=link(k),
+        )
         for k, *rest in rows
     ]
 
@@ -391,7 +449,7 @@ async def _runs(session: AsyncSession, where: list) -> tuple[int, int, float | N
     return runs, instances, round(instances / run_ms * 1000, 1) if run_ms else None
 
 
-async def _providers(session: AsyncSession, where: list) -> list[ProviderStats]:
+async def _providers(session: AsyncSession, where: list, scope: dict) -> list[ProviderStats]:
     """Group journal calls; replayed response tokens never count as new network usage."""
     provider = Event.data["provider"].astext
     model = Event.data["model"].astext
@@ -463,6 +521,7 @@ async def _providers(session: AsyncSession, where: list) -> list[ProviderStats]:
             priced_requests=priced,
             included_requests=included_count,
             unpriced_requests=unpriced,
+            traces=_link(scope, name="provider_call", provider=p, model=m, operation=o),
         )
         for (
             p,
@@ -530,17 +589,17 @@ async def _outcomes(session: AsyncSession, process_id: int | None, since: dateti
 async def metrics(session: AsyncSession, process_id: int, since: datetime | None) -> ProcessMetrics:
     await get_process(session, process_id)
     spans = _scope(process_id, since)
+    scope = {"process_id": process_id, "since": since}
     runs, instances, per_second = await _runs(session, spans)
-    model, role = Event.data["model"].astext, Event.data["role"].astext
     by_outcome, failures, escalated, pending = await _outcomes(session, process_id, since)
     return ProcessMetrics(
         since=since,
         runs=runs,
         instances_decided=instances,
         instances_per_second=per_second,
-        steps=await _steps(session, spans),
-        llm=await _llm_stats(session, spans, model, role),
-        providers=await _providers(session, spans),
+        steps=await _steps(session, spans, scope),
+        llm=await _llm_stats(session, spans, scope),
+        providers=await _providers(session, spans, scope),
         decisions_by_outcome=by_outcome,
         failures=failures,
         escalated=escalated,
@@ -548,10 +607,16 @@ async def metrics(session: AsyncSession, process_id: int, since: datetime | None
     )
 
 
-async def _llm_stats(session: AsyncSession, where: list, model, role) -> list[LlmStats]:
-    fields = ("calls", "errors", "fallbacks", "truncations", *_TOKENS)
+async def _llm_stats(session: AsyncSession, where: list, scope: dict) -> list[LlmStats]:
+    """By model and role."""
+    model, role = Event.data["model"].astext, Event.data["role"].astext
     return [
-        LlmStats(model=m, role=r, **dict(zip(fields, rest, strict=True)))
+        LlmStats(
+            model=m,
+            role=r,
+            **dict(zip(_LLM_FIELDS, rest, strict=True)),
+            traces=_link(scope, name="llm_run", model=m, role=r),
+        )
         for m, r, *rest in await _llm(session, where, model, role)
     ]
 
@@ -569,7 +634,8 @@ async def plane_metrics(
     if process_id is not None:
         await get_process(session, process_id)
     where = _scope(process_id, since)
-    steps = await _steps(session, [*where, Event.step.in_(steps_of(plane))])
+    scope = {"process_id": process_id, "since": since}
+    steps = await _steps(session, [*where, Event.step.in_(steps_of(plane))], scope)
     base = {
         "plane": plane,
         "process_id": process_id,
@@ -628,7 +694,7 @@ async def _ingestion(session: AsyncSession, where: list, base: dict) -> Ingestio
         vision_calls=calls[2],
         judge_calls=calls[3],
         focused_reads=calls[4],
-        providers=await _providers(session, where),
+        providers=await _providers(session, where, base),
         cache_hits=calls[5],
         abstentions=sum(abstentions.values()),
         abstentions_by_field=abstentions,
@@ -636,8 +702,7 @@ async def _ingestion(session: AsyncSession, where: list, base: dict) -> Ingestio
 
 
 async def _agents(session: AsyncSession, where: list, base: dict) -> AgentsMetrics:
-    model, role = Event.data["model"].astext, Event.data["role"].astext
-    agent = func.coalesce(func.nullif(Event.data["agent"].astext, ""), role)
+    model = Event.data["model"].astext
     hour = func.date_trunc("hour", Event.started_at)
     per_hour = await session.execute(
         select(hour, func.count(), *map(_total, _TOKENS[2:]))
@@ -661,20 +726,50 @@ async def _agents(session: AsyncSession, where: list, base: dict) -> AgentsMetri
         )
     ).one()
     compilations, valid, attempts, max_attempts = compiled
+
+    by_model = _token_stats(
+        await _llm(session, where, model), lambda k: _link(base, name="llm_run", model=k)
+    )
+    total = TokenStats(
+        key=None,
+        **{f: sum(getattr(r, f) for r in by_model) for f in _LLM_FIELDS},
+        traces=_link(base, name="llm_run"),
+    )
     return AgentsMetrics(
         **base,
-        llm=await _llm_stats(session, where, model, role),
-        by_model=_token_stats(await _llm(session, where, model)),
-        by_role=_token_stats(await _llm(session, where, agent)),
-        by_rule=_token_stats(await _llm(session, where, Event.rule_id)),
-        by_norm_rule=_token_stats(await _llm(session, where, Event.norm_rule_id)),
+        total=total,
+        llm=await _llm_stats(session, where, base),
+        by_model=by_model,
+        by_role=_token_stats(
+            await _llm(session, where, _AGENT), lambda k: _link(base, name="llm_run", agent=k)
+        ),
+        by_rule=_token_stats(
+            await _llm(session, where, Event.rule_id),
+            lambda k: _link(base, name="llm_run", rule_id=k),
+        ),
+        by_norm_rule=_token_stats(
+            await _llm(session, where, Event.norm_rule_id),
+            lambda k: _link(base, name="llm_run", norm_rule_id=k),
+        ),
         by_use_case=_token_stats(
             await _llm(
                 session, where, Process.use_case_id, join=(Process, Process.id == Event.process_id)
-            )
+            ),
+            lambda k: _link(base, name="llm_run", use_case_id=k),
         ),
         per_hour=[
-            TokenBucket(hour=h, calls=c, input_tokens=i, output_tokens=o, cached_tokens=k)
+            TokenBucket(
+                hour=h,
+                calls=c,
+                input_tokens=i,
+                output_tokens=o,
+                cached_tokens=k,
+                traces=_link(
+                    {**base, "since": max(h, base["since"]) if base["since"] else h},
+                    name="llm_run",
+                    until=(h + timedelta(hours=1)).isoformat(),
+                ),
+            )
             for h, c, i, o, k in per_hour
         ],
         compile=CompileStats(
@@ -734,6 +829,7 @@ async def _norms(session: AsyncSession, where: list, limit: int = 50) -> list[No
                 seconds_to_active=round((max(done) - n.started_at).total_seconds(), 1)
                 if done
                 else None,
+                traces=f"/traces/{n.trace_id}",
             )
         )
     return out
@@ -786,7 +882,14 @@ async def _execution(session: AsyncSession, where: list, base: dict) -> Executio
         instances_per_second=per_second,
         rules=[
             RuleRunStats(
-                rule_id=r, evaluations=c, instances=i, fired=f, errors=e, p50_ms=p50, p95_ms=p95
+                rule_id=r,
+                evaluations=c,
+                instances=i,
+                fired=f,
+                errors=e,
+                p50_ms=p50,
+                p95_ms=p95,
+                traces=_link(base, name="evaluate_rule", rule_id=r),
             )
             for r, c, i, f, e, p50, p95 in rules
         ],
