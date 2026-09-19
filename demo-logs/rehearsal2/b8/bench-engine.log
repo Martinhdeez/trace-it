@@ -1,0 +1,4 @@
+reprocess: 500 instances, 17 rules, 1204 ms, 415/s
+reprocess: 500 instances, 17 rules, 1131 ms, 442/s
+median: 429 instances/s
+evaluate_rule: 34 spans, p50 48 ms, p95 110 ms, max 112 ms

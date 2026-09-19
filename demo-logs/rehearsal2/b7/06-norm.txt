@@ -1,0 +1,27 @@
+$ cat $L2/norma_v4.txt; python3 -c 'import json,sys; print(json.dumps({"text": open(sys.argv[1]).read()}))' $L2/norma_v4.txt > $LOG/06-norm-in.json; curl -s -X POST $API/processes/$P/norm -H "$MANAGER" -H "Content-Type: application/json" --data @$LOG/06-norm-in.json | python3 -m json.tool > $LOG/06-norm-out.json; head -c 2500 $LOG/06-norm-out.json
+An invoice whose total is above 10,000 EUR is reviewed by a person before it is paid.
+{
+    "norm_rules": [
+        {
+            "number": 1,
+            "text": "An invoice whose total is above 10,000 EUR is reviewed by a person before it is paid.",
+            "checks": [
+                {
+                    "text": "The invoice's total (symbol `total`) is at most 10,000 EUR, i.e. cents(total) <= 1000000; an invoice with cents(total) > 1000000 must be reviewed by a person before it is paid, and the process has no symbol recording that human review.",
+                    "type": "requirement",
+                    "decision": "ESCALAR",
+                    "decision_source": "explicit",
+                    "quote": "is reviewed by a person before it is paid",
+                    "kind": "doubt",
+                    "kind_reason": "The system cannot decide payment by itself for a high-value invoice: the norm routes it to a person, so firing means a human must resolve the case.",
+                    "interpretation": "I read 'above 10,000 EUR' as strictly greater than 10,000.00 EUR, compared in whole cents (cents(total) > 1000000). The sentence names the outcome for such invoices \u2014 a review by a person before payment \u2014 which maps to ESCALAR (requires_human). The process has no symbol recording a human review, so the check fires whenever the total exceeds the threshold; the compiler will report the missing review data.",
+                    "rule_id": 35
+                }
+            ],
+            "policies": [],
+            "covered": [],
+            "id": 1
+        }
+    ]
+}
+[exit 0] [12.37 s] [14:51:25]

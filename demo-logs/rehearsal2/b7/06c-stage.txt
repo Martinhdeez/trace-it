@@ -1,0 +1,5 @@
+$ curl -s -o /dev/null -w "no header: %{http_code}\n" -X POST $API/rules/35/activate; curl -s -o /dev/null -w "operator: %{http_code}\n" -X POST $API/rules/35/activate -H "X-User-Id: 2"; curl -s -X POST $API/rules/35/activate -H "$MANAGER" | head -c 400; echo
+no header: 401
+operator: 403
+{"id":35,"process_id":2,"norm_rule_id":1,"text":"The invoice's total (symbol `total`) is at most 10,000 EUR, i.e. cents(total) <= 1000000; an invoice with cents(total) > 1000000 must be reviewed by a person before it is paid, and the process has no symbol recording that human review.","type":"requirement","decision":"ESCALAR","status":"draft","hash":"7c7f4e2dc5a725cfaef21d10c6c234597e2a579844896ee
+[exit 0] [0.07 s] [14:52:00]

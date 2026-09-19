@@ -19,7 +19,9 @@ command below names the frozen process:
 Rehearsed on 2026-09-19 at 11:10 on a scratch database (`trace_freeze`) with the full OCR
 path (local OCR, Gemini and Jev): batch 1 ingested through the API, then 40 batch-1 PDFs (30
 text, 10 scans) under new names and with changed bytes as batch 2, an ERP sync and both
-exports. Timings and what the rehearsal fixed are at the end.
+exports. Timings and what the rehearsal fixed are at the end. Rehearsed again at 14:47
+(rehearsal 2) on `integration` with manager auth, step 1d and a copy of Friday's database
+(outputs in `demo-logs/rehearsal2/b7/`); it found the [known blocker](#known-blocker-publishing-on-a-process-with-unread-scans).
 
 ## Roles
 
@@ -55,12 +57,12 @@ challenge inputs). The challenge Makefile expects the CSV at
 
 | # | Command | Expect | If it fails |
 |---|---|---|---|
-| 1 | `git switch dev && git pull && make setup && make load-frozen MANAGER_ID=1`, then set `P` (section 0) | migrations up to date, `Ready: API at ...`; `Process 'Invoice payment - frozen 2026-09-19' (id N)`, a validation report with `"valid": true`, `Published process version N` (or `The pack already matches the published version`) | Port taken: `BACKEND_PORT=8001 make setup`. Never `make reset-db`. `load-frozen` runs the CLI on the host: it needs `.env` without a `TRACE_DATABASE_URL` pointing elsewhere |
+| 1 | `git switch integration && git pull && make setup && make load-frozen MANAGER_ID=1`, then set `P` (section 0) | migrations up to date, `Ready: API at ...`; `Process 'Invoice payment - frozen 2026-09-19' (id N)`, a validation report with `"valid": true`, `Published process version N` (or `The pack already matches the published version`) | Port taken: `BACKEND_PORT=8001 make setup`. Never `make reset-db`. `load-frozen` runs the CLI on the host with `.env` (no `TRACE_DATABASE_URL` pointing elsewhere) and pins the host's OCR readers (Gemini/Jev keys, the `.models` path) in the version it publishes: with the API in Docker, run it in the container instead, `docker compose exec -T backend python -m app.cli load /processes/invoice-payment/frozen/2026-09-19/invoice-payment.json --activate --manager-id 1`. `A different process draft already exists`: the database holds a pack draft of `Invoice payment` (hand-written, never delivered from) from an older checkout; read its `revision` (`curl -s $API/processes/1/draft -H "$MANAGER"`), discard it (`curl -X DELETE "$API/processes/1/draft?revision=N" -H "$MANAGER"`) and run step 1 again. `The draft failed validation` with `MISSING_EXISTING_REQUIRED` errors: see [Known blocker](#known-blocker-publishing-on-a-process-with-unread-scans); the published frozen version stays and keeps deciding |
 | 1a | Only if the frozen process has no instances yet (`curl -s $API/processes/$P/summary`): `make erp` in another terminal, then `uv run --project backend --locked --env-file .env python tools/demo_run.py --api-url $API --process $P --output output/friday-run` | `run: {'decided': 500, ...}`; about 10 min, of which about 8 on the 29 scans | Without `--process $P` the driver picks the process named `Invoice payment` (hand-written rules). Check `.models/` and both manifests first (`docs/ingestion/setup.md`) |
 | 1b | `curl -s $API/processes/$P/summary \| python3 -m json.tool \| head -20` | `by_status: {"DECIDED": 500}`, no `PENDING` | Pending instances: `curl -X POST $API/processes/$P/run -H "$MANAGER"` first |
 | 1c | `make export-batch PACK=$FROZEN FILES=$B1 OUT=output/friday/outcomes.jsonl` | `OK: one line per file ...` with Friday's counts | Without `PACK=$FROZEN` it exports the hand-written process. This file is the reference to diff against later |
 | 1d | Compiler token limit, once per database: the commands in [Compiler token limit](#compiler-token-limit-before-step-6) | `draft N compiler 16000` | Without it a v4 check can come back `blocked` with the output token limit hit (`finish_reason` length) |
-| 2 | `make backup` | `backups/trace-<time>.dump`, about 6.5 MB | Container name: `docker ps --format '{{.Names}}' \| grep db`, then `make backup DB_CONTAINER=<name>` |
+| 2 | `make backup` (`DB_NAME=<live database>` if it is not `trace`; Friday's was `trace_delivery`) | `backups/<db>-<time>.dump`, about 6.5 MB | Container name: `docker ps --format '{{.Names}}' \| grep db`, then `make backup DB_CONTAINER=<name>` |
 | 3 | `ls $L2/facturas \| wc -l`; `comm -12 <(ls $B1 \| sort) <(ls $L2/facturas \| sort)` | `40`; nothing printed | A name shared with batch 1: stop and ask the organisers. Export keeps only the newest instance of a name (`X-Duplicate-Names`), so batch 1's file would change |
 | 4 | Stop `make erp` (Ctrl+C), then `make -C .context/500-sombras-de-alberto erp-lote2 LOTE2_ERP=$L2/erp_export_lote2.csv` (keep it running) | `actualizacion cargada: N asientos nuevos, M actualizados` | `faltan columnas`: the CSV is not the ERP export format; ask. Port busy: `ERP_PORT=8010` and `TRACE_ERP_URL=http://127.0.0.1:8010` |
 | 4b | `make -C .context/500-sombras-de-alberto erp-status`, then `curl -s -X POST $API/processes/$P/sources/erp/sync -H "$MANAGER" \| python3 -m json.tool` | `<actualizacion_cargada>SI`; sync `rows` (516 before the update), `stats.status.update_loaded: "SI"`, `diff` with `added` and `changed` entries | The ERP update needs no sync of its own any more: every run and reprocess (5b, 7) syncs the ERP first (ADR 0028). This sync is for reading the diff and raising the alerts now, and for step 5's dry run, which reads the stored snapshot. Not `make erp-sync`: it syncs the process named `Invoice payment` only. 502: nothing was written and runs will not read the old snapshot either; fix the ERP and rerun. `SI` missing: the ERP started without `--lote2` |
@@ -73,13 +75,13 @@ challenge inputs). The challenge Makefile expects the CSV at
 | | `draft` with `valid: false` | Tests failed | `POST $API/rules/{id}/compile`; still failing: 6d |
 | | `blocked` with `report.error` | The compile failed (model down, tokens out, malformed output). Once published it is enforced as ESCALAR for every instance, reason `RULE_COMPILE_FAILED` | `POST $API/rules/{id}/compile` once the model answers; still failing: 6d |
 | | `blocked` with `report.needs_data` | The rule needs a symbol or source the process lacks | Once published it escalates every instance it runs on. Decide before 6e: provide the data (new source / symbol) and recompile, or do not stage it if the norm does not really need it |
-| 6d | Fallback: `curl -X POST $API/processes/$P/rules -H 'Content-Type: application/json' -d '{"text": "<the condition in English, symbols in backticks>", "type": "prohibition", "decision": "ESCALAR"}'` | status `compiling`, then as 6c | A wrong check already published: `POST /rules/{id}/retire -H "$MANAGER"` stages its removal, then 6e |
-| 6e | `curl -s -X POST $API/processes/$P/draft/validate -H "$MANAGER" > /tmp/val.json; python3 -c 'import json; d=json.load(open("/tmp/val.json")); v=d["validation"]; print(len(d["snapshot"]["rules"]), "rules", {k: (len(x) if isinstance(x, list) else x) for k, x in v.items() if k in ("valid", "unchanged", "changes", "conflicts", "errors")}); json.dump({"revision": d["revision"], "validation_hash": v["hash"], "reason": "Norm v4"}, open("/tmp/pub.json", "w"))'`, then `curl -s -X POST $API/processes/$P/draft/publish -H "$MANAGER" -H 'Content-Type: application/json' --data @/tmp/pub.json` | `13 rules` (12 frozen + the v4 checks), `valid: True`, `conflicts: 0`; `changes` = decided cases the new version would decide differently (not applied). Publish answers the new version `number` | `valid: False` or conflicts: read `/tmp/val.json` (`errors`, `conflicts`), fix, validate again. 409 on publish: something changed since the validation; validate again. Publishing never re-decides past cases (see below) |
-| 7 | `uv run --project backend --locked --env-file .env python tools/demo_run.py --api-url $API --process $P --invoices "$L2/facturas" --output output/lote2-run` (add `--book "$L2/<new>.xlsx"` if a new workbook came) | `workbook`, `erp sync`, upload progress, `run: {'decided': 40, ...}`; one to ten minutes depending on how many scans (about 10 s each, up to 66 s) | `--process $P` is mandatory (see step 1a). The driver also re-uploads the workbook and syncs the ERP: harmless, a new snapshot. `--output` must not be `output/`: that holds Friday's files. Export refused (409): something is PENDING; step 8 |
+| 6d | Fallback: `curl -X POST $API/processes/$P/rules -H "$MANAGER" -H 'Content-Type: application/json' -d '{"text": "<the condition in English, symbols in backticks>", "type": "prohibition", "decision": "ESCALAR"}'` | status `compiling`, then as 6c. Unlike a `/norm` check it is in the draft at once: one that ends `blocked` or invalid makes 6e fail (`Rule N has no validated code`) until it is retired (`POST /rules/{id}/retire -H "$MANAGER"`) | A wrong check already published: `POST /rules/{id}/retire -H "$MANAGER"` stages its removal, then 6e |
+| 6e | `curl -s -X POST $API/processes/$P/draft/validate -H "$MANAGER" > /tmp/val.json; python3 -c 'import json; d=json.load(open("/tmp/val.json")); v=d["validation"]; print(len(d["snapshot"]["rules"]), "rules", {k: (len(x) if isinstance(x, list) else x) for k, x in v.items() if k in ("valid", "unchanged", "changes", "conflicts", "errors")}); json.dump({"revision": d["revision"], "validation_hash": v["hash"], "reason": "Norm v4"}, open("/tmp/pub.json", "w"))'`, then `curl -s -X POST $API/processes/$P/draft/publish -H "$MANAGER" -H 'Content-Type: application/json' --data @/tmp/pub.json` | `13 rules` (12 frozen + the v4 checks), `valid: True`, `conflicts: 0`; `changes` = decided cases the new version would decide differently (not applied). Publish answers the new version `number` | `valid: False` or conflicts: read `/tmp/val.json` (`error`, `errors`, `conflicts`), fix, validate again. `errors` all `MISSING_EXISTING_REQUIRED`: [Known blocker](#known-blocker-publishing-on-a-process-with-unread-scans). 409 on publish: something changed since the validation; validate again. Publishing never re-decides past cases (see below) |
+| 7 | `uv run --project backend --locked --env-file .env python tools/demo_run.py --api-url $API --process $P --invoices "$L2/facturas" --output output/lote2-run` (add `--book "$L2/<new>.xlsx"` if a new workbook came) | `workbook`, `erp sync`, upload progress, `run: {'decided': 40, ...}`; one to ten minutes depending on how many scans (about 10 s each, up to 66 s) | `--process $P` is mandatory (see step 1a). The driver also re-uploads the workbook and syncs the ERP: harmless, a new snapshot. `--output` must not be `output/`: that holds Friday's files. Export refused (409): something is PENDING; step 8. Scans all `ESCALAR` `MISSING_DATA` and `make trace-decision FILE=<scan>` shows `ERROR vision: ProviderUnavailable`: Gemini refused (429 `RESOURCE_EXHAUSTED`: the key's free-tier daily quota for the model ran out, as in rehearsal 2). Local OCR and Jev still read, so those scans stay safely escalated; a paid key before the evening avoids it |
 | 7' | Manual API alternative: `for f in $L2/facturas/*.pdf; do curl --fail-with-body -sS "$API/processes/$P/files" -H "$MANAGER" -F "file=@$f" -F 'ocr=true' > /dev/null; done; curl --fail-with-body -sS -X POST "$API/processes/$P/run" -H "$MANAGER"` | 201 per file; `{"decided": 40, ...}` | Check `.models/` and both manifests before scans; without weights, extraction may leave values unresolved. Preserve each response if OCR evidence is needed |
 | 8 | `curl -s $API/processes/$P/summary \| python3 -m json.tool \| head -12`; `curl -s "$API/processes/$P/instances?status=PENDING"` | `PENDING` absent, `[]` | PENDING = no symbols: `POST /instances/{id}/extract` (Álvaro), then `POST /processes/$P/run` with `-H "$MANAGER"` |
 | 8b | `curl -s "$API/processes/$P/queue" \| python3 -c 'import json,sys; from collections import Counter; print(Counter(i["reason"][:40] for i in json.load(sys.stdin)))'` | ESCALAR reasons: `MISSING_DATA` (a scan field OCR could not corroborate: NIF, IBAN or order), `Same order as: ...` (duplicate order), the v4 rule | Any `RULE_ERROR` or `RULE_NEEDS_DATA`: a rule failed or is blocked; fix it (6c) and step 9 |
-| 9 | Only if a rule was fixed after step 7: `curl -s -X POST "$API/processes/$P/reprocess?dry_run=true" -H 'Content-Type: application/json' -d "$(python3 -c 'import json,os,sys; print(json.dumps({"names": os.listdir(sys.argv[1])}))' $L2/facturas)"`, then without `dry_run` | Only batch-2 changes | `names` keeps batch 1 out of it |
+| 9 | Only if a rule was fixed after step 7: `curl -s -X POST "$API/processes/$P/reprocess?dry_run=true" -H "$MANAGER" -H 'Content-Type: application/json' -d "$(python3 -c 'import json,os,sys; print(json.dumps({"names": os.listdir(sys.argv[1])}))' $L2/facturas)"`, then without `dry_run` | Only batch-2 changes | `names` keeps batch 1 out of it |
 | 10 | `make export-batch PACK=$FROZEN FILES=$L2/facturas OUT=output/delivery/outcomes_lote2.jsonl` | `40 lines for 40 PDFs`, `OK: one line per file, valid results {...}` | `missing`: a PDF with no instance (step 7 skipped it); `not a file of the batch (same as ... once normalised)`: accent spelled differently, tell Álvaro |
 | 10b | `make export-batch PACK=$FROZEN FILES=$B1 OUT=output/delivery/outcomes.jsonl`; `diff <(sort output/friday/outcomes.jsonl) <(sort output/delivery/outcomes.jsonl)` | `500 lines`, `OK`; the diff shows exactly the changes of step 5 | A difference not listed in step 5: stop |
 | 11 | Delivery: copy `output/delivery/outcomes.jsonl`, `outcomes_lote2.jsonl` and `albertitos_plan.pdf` to the root of `la-caja-outcomes`, `make check-outcomes OUT=<repo>/outcomes_lote2.jsonl FILES=$L2/facturas` (and batch 1), commit, push | Three files at the root, nothing else | Never commit them to this repo (`output/` is ignored) |
@@ -102,14 +104,30 @@ UC=$(curl -s $API/use-cases | python3 -c 'import json,sys; print(next(u["id"] fo
 CFG=$(curl -s $API/use-cases/$UC/agents/compiler/versions | python3 -c 'import json,sys; print([c for c in json.load(sys.stdin) if c["config"]["model_settings"].get("max_tokens") == 16000][-1]["id"])')
 curl -s -X POST $API/agent-configs/$CFG/activate -H "$MANAGER" | python3 -m json.tool | head -5   # 409 "already active": fine
 REV=$(curl -s $API/processes/$P/draft -H "$MANAGER" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("revision", "null"))')   # null: no draft yet
-curl -s -X PUT $API/processes/$P/draft -H "$MANAGER" -H 'Content-Type: application/json' -d "{"refresh_agents": true, "expected_revision": $REV}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("draft", d["revision"], "compiler", d["snapshot"]["agents"]["compiler"]["settings"]["model_settings"].get("max_tokens"))'
+curl -s -X PUT $API/processes/$P/draft -H "$MANAGER" -H 'Content-Type: application/json' -d "{\"refresh_agents\": true, \"expected_revision\": $REV}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("draft", d["revision"], "compiler", d["snapshot"]["agents"]["compiler"]["settings"]["model_settings"].get("max_tokens"))'
 ```
 
 Expect `draft N compiler 16000`. `CFG` fails with `IndexError`: step 1 ran on an older
-checkout; update `dev` and run `make load-frozen MANAGER_ID=1` again. The refresh pins the
+checkout; update the checkout (`integration`) and run `make load-frozen MANAGER_ID=1` again. The refresh pins the
 active config of every role, and only the compiler's changed. The draft is published with the
 v4 checks in step 6e; runs and reprocess keep reading the published version meanwhile.
 Rollback: activate the previous version's id from the same `versions` list and refresh again.
+
+## Known blocker: publishing on a process with unread scans
+
+Found by rehearsal 2 (`integration` at 8972c2b, on a copy of Friday's database). Validation
+(`versions/service.py` `inspect`, ADR 0030) counts a past instance that lacks a required
+symbol as an error, `MISSING_EXISTING_REQUIRED`, and an error makes the draft invalid.
+Friday's database has 8 such instances: scans the engine escalated with `MISSING_DATA`, the
+expected outcome for a field OCR could not corroborate. So no new version of `$P` can be
+published: step 1's `make load-frozen` ends `The draft failed validation; nothing was
+published`, and 6e answers `valid: False` with the same 8 errors and a 409 on publish.
+
+- **What still works:** the published frozen version keeps deciding. Steps 2 to 5b and 7 to 11
+  run as written; batch 2 is decided without the v4 check.
+- **What does not:** the v4 check is staged but never enforced.
+- **Until the code is fixed:** stop at 6e and tell the team. Do not edit the database. The
+  v4 finding can be applied by hand from the queue, or the delivery goes out without it.
 
 ## Does norm v4 re-decide batch 1?
 
@@ -126,7 +144,7 @@ applies to batch 1 too: step 5 again after step 6, with `names` = batch 1.
    syncs it, `curl -X POST $API/processes/$P/sources/erp/sync -H "$MANAGER"` to read the diff first) or workbook (`--book` in
    `demo_run.py` / `POST /processes/$P/sources/workbook` with a required `cut_off_date` form field). A corrected PDF is a new file (new
    hash): ingest it; export keeps the newest instance of a name.
-3. `POST /processes/$P/reprocess?dry_run=true` with `{"names": [...]}` of the batch it
+3. `POST /processes/$P/reprocess?dry_run=true` (`-H "$MANAGER"`) with `{"names": [...]}` of the batch it
    concerns: the changes must be exactly the invoices that datum touches. Then without
    `dry_run`. Without `names` it re-decides every instance, and once batch 2 is in, batch 1's
    duplicate-order check sees batch 2 (the rehearsal flipped 36 batch-1 invoices this way).
@@ -155,13 +173,13 @@ Demo, on a scratch database and your own ERP only (outputs of a live run in
 # 1. One ERP datum changes: restart the ERP with a one-line update, then sync.
 printf 'asiento_id,fecha_registro,proveedor_id,nif,pedido,importe_esperado,estado\nAS-00476,2026-03-28,P002,A41220987,PO-2026-0476,2551.64,PENDIENTE\n' > /tmp/erp_change.csv
 python3 .context/500-sombras-de-alberto/alberto_erp.py --lote2 /tmp/erp_change.csv   # other terminal
-curl -s -X POST $API/processes/$P/sources/erp/sync | python3 -m json.tool      # diff: AS-00476 PAGADA -> PENDIENTE
+curl -s -X POST $API/processes/$P/sources/erp/sync -H "$MANAGER" | python3 -m json.tool      # diff: AS-00476 PAGADA -> PENDIENTE
 # 2. The open alerts: 2026-03-28_P002.pdf NO_PAGAR -> PAGAR, with the ERP row before and after.
 curl -s "$API/processes/$P/alerts?status=open" | python3 -m json.tool
 curl -s $API/processes/$P/metrics/execution | python3 -c 'import json,sys; print(json.load(sys.stdin)["open_alerts"])'
 # 3. The manager acknowledges it, then acts (reprocess or resolve); the alert becomes resolved.
 curl -s -X POST $API/alerts/1/ack -H "$MANAGER" -H 'Content-Type: application/json' -d '{"note": "AS-00476 was never paid"}'
-curl -s -X POST $API/processes/$P/reprocess -H 'Content-Type: application/json' -d '{"names": ["2026-03-28_P002.pdf"]}'
+curl -s -X POST $API/processes/$P/reprocess -H "$MANAGER" -H 'Content-Type: application/json' -d '{"names": ["2026-03-28_P002.pdf"]}'
 curl -s "$API/processes/$P/alerts?status=resolved"
 ```
 
@@ -236,3 +254,54 @@ Found by the rehearsals and fixed:
   batch 2 too. In the second pass it flipped 36 batch-1 invoices to ESCALAR (duplicate order
   with the rehearsal copies). Step 5b stays before step 7; Sunday's reprocess now passes
   `names`.
+
+## Rehearsal 2 (2026-09-19 14:47, manager auth and step 1d)
+
+`integration` at 8972c2b (#92 manager auth and required cut-off, #93 proposals). Friday's dump
+`trace_delivery-20260919-115830.dump` restored into `trace_rehearsal2_test` (0.5 s), API on
+the host (`uvicorn`, port 8050) and the challenge ERP on 8051. The simulated delivery: 10
+batch-1 PDFs (7 text, 3 scans) under new names with changed bytes, an ERP update with one
+changed row (AS-00476 PAGADA -> PENDIENTE) and one new row, and a one-sentence norm v4.
+Every write was also sent without `-H "$MANAGER"` (401) and as an operator (403).
+
+| Step | Time | Notes |
+|---|---:|---|
+| 1. `make setup` (host equivalent: migrations 0012 -> 0015, pack load) | 1.9 s | The pack load failed: `A different process draft already exists`. Discarding the draft of `Invoice payment` (1 s) fixed it; now in step 1 |
+| 1. `make load-frozen MANAGER_ID=1` | 3 s | Failed: `The draft failed validation` (8 `MISSING_EXISTING_REQUIRED`, the known blocker). v1 stays published |
+| 1b / 1c. Summary, export batch 1 | 0.1 s / 1.2 s | 500 DECIDED; 443 / 36 / 21, `OK` |
+| 1d. Compiler token limit | 0.2 s | As written the `PUT` sent invalid JSON (quotes); fixed. `draft 2 compiler 16000` |
+| 2. `make backup` | 0.6 s | 6.7 MB. `make backup` alone dumps the database named `trace`; now in step 2 |
+| 3. Name checks | 0.01 s | 10, no shared name |
+| 4 / 4b. ERP with `--lote2`, status, API sync | 1 s / 6.1 s | `1 asientos nuevos, 1 actualizados`; 517 rows, `update_loaded: SI`, diff 1 added, 1 changed |
+| Alerts after 4b | 0.06 s | 1 open: `2026-03-28_P002.pdf` NO_PAGAR -> PAGAR, ERP row before/after |
+| 5 / 5b. Reprocess dry run, then for real | 0.9 s / 6.3 s | 499 unchanged, 1 change (the same invoice), 0 conflicts. The alert became resolved |
+| 6. `POST /norm`, one sentence | 12.4 s | One check, ESCALAR: total over 10,000 EUR |
+| 6b. Compile to a status | 6.9 s | `draft`, valid, first attempt, compiler `max_tokens` 16000 |
+| 6c. Stage | 0.07 s | 401 without the header, 403 as operator |
+| 6e. Validate, then publish | 1.1 s | 13 rules, `valid: False`: 8 errors (the known blocker), 38 changes, 0 conflicts; publish 409 |
+| 7. `demo_run.py` over 10 PDFs (3 scans) | 43 s | Logs in as the manager and sends the cut-off. `run: {'decided': 10, 'by_decision': {'ESCALAR': 10}}`: 9 `Same order as`, 1 `MISSING_DATA` |
+| 7'. Manual API, one file | 5.5 s | 201; run `decided: 0` (nothing pending) |
+| 8 / 8b. Summary, pending, queue | 0.3 s | 510 DECIDED, no PENDING |
+| 9. Reprocess dry run with `names` | 0.7 s | 10 unchanged. 401 without the header, which the step lacked; added |
+| 10. Export batch 2 | 1.3 s | `OK` 10/10 |
+| 10b. Export batch 1, diff with Friday | 1.1 s | Only step 5's change: `2026-03-28_P002.pdf` NO_PAGAR -> PAGAR |
+| 11. `make check-outcomes` both | 2 s | `OK` both |
+| Alert ack | 0.1 s | 401 without the header; acknowledged with it |
+
+Found by rehearsal 2 and fixed here:
+- Step 1 said `git switch dev`; the team works from `integration`.
+- Step 1: a database from an older checkout holds a pack draft of `Invoice payment` that
+  blocks `make setup` and `make load-frozen`; the step says how to discard it.
+- `make load-frozen` ran without `.env`, so a version it published pinned no Gemini or Jev
+  reader and scans were read by local OCR only (B8's run: 0 vision calls). It now reads
+  `.env`. With the API in Docker the host's `.models` path would be pinned instead; step 1
+  gives the in-container command.
+- 1d's `PUT` sent invalid JSON; 6d, 9, the alerts demo and Sunday's reprocess lacked
+  `-H "$MANAGER"`; `make backup` needs `DB_NAME` for a database not named `trace`.
+
+Found and not fixed (reported):
+- The known blocker above.
+- `POST /processes/{id}/rules` (6d) answers 201 without `X-User-Id` and puts the rule in the
+  draft, where an invalid one blocks 6e. It is not manager-only.
+- Gemini answered 429 `RESOURCE_EXHAUSTED` (free-tier daily quota) all afternoon, so new scans
+  lose that reader and escalate more (step 7's "If it fails").

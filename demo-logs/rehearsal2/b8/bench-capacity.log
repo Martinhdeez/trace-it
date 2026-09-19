@@ -1,0 +1,18 @@
+17 rules, base 500 instances, sandbox timeout 10.0 s, 14 CPUs
+
+n=500: sequential 1.12 s, 447/s, stdin 0.7 MB per rule, child CPU 0.9 s, largest child RSS so far 25 MB, verdicts with RULE_ERROR 0
+  per rule, wall s: R1=0.05, R2=0.05, R3=0.05, R4=0.05, R5=0.07, R6=0.08, R7=0.08, R8=0.05, R9=0.05, R10=0.05, R11=0.05, R12=0.05, R13=0.10, R14=0.11, R15=0.08, R16=0.08, R17=0.05
+  slowest R14 0.11 s
+  parallel, 4 workers: 0.50 s, 1010/s, rules timed out 0
+  parallel, 14 workers: 0.62 s, 800/s, rules timed out 0
+  fix path, sequential: 0.78 s, 640/s, slowest rule 0.10 s
+
+n=5000: sequential 26.28 s, 190/s, stdin 5.4 MB per rule, child CPU 25.3 s, largest child RSS so far 69 MB, verdicts with RULE_ERROR 0
+  per rule, wall s: R1=1.19, R2=1.21, R3=1.22, R4=1.21, R5=1.49, R6=1.50, R7=1.53, R8=1.20, R9=1.22, R10=1.21, R11=1.20, R12=1.22, R13=1.53, R14=1.81, R15=1.50, R16=4.70, R17=1.23
+  slowest R16 4.70 s
+  parallel, 4 workers: 11.42 s, 438/s, rules timed out 0
+  parallel, 14 workers: 10.79 s, 464/s, rules timed out 0
+  fix path, sequential: 4.09 s, 1223/s, slowest rule 0.74 s
+real 57.05
+user 91.97
+sys 18.28

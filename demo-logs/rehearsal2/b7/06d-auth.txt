@@ -1,0 +1,8 @@
+$ curl -s -w " %{http_code}\n" -X POST $API/processes/$P/rules -H "Content-Type: application/json" -d "{\"text\": \"x\", \"type\": \"prohibition\", \"decision\": \"ESCALAR\"}"; curl -s -w " %{http_code}\n" -X POST "$API/processes/$P/reprocess?dry_run=true" -H "Content-Type: application/json" -d "{\"names\": []}"; curl -s -w " %{http_code}\n" -X POST $API/processes/$P/sources/erp/sync
+{"id":36,"process_id":2,"norm_rule_id":null,"text":"x","type":"prohibition","decision":"ESCALAR","status":"compiling","hash":null,"report":null,"created_at":"2026-09-19T12:52:08.132007Z","activated_at":null,"code":null,"tests":null} 201
+{"code":"unauthenticated","message":"Send X-User-Id with the id POST /login returns"} 401
+{"code":"unauthenticated","message":"Send X-User-Id with the id POST /login returns"} 401
+[exit 0] [0.07 s] [14:52:08]
+$ curl -s -w " %{http_code}\n" -X POST $API/rules/36/retire -H "$MANAGER" | head -c 300; echo
+{"id":36,"process_id":2,"norm_rule_id":null,"text":"x","type":"prohibition","decision":"ESCALAR","status":"draft","hash":null,"report":{"valid":false,"activation":{"why":"Manager publication required","auto":false},"needs_data":{"by":"tester","missing":["rule text / statement of what is prohibited"]
+[exit 0] [0.03 s] [14:52:30]

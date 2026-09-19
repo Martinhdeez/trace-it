@@ -1,0 +1,12 @@
+$ make -C .context/500-sombras-de-alberto erp-status; curl -s -X POST $API/processes/$P/sources/erp/sync -H "$MANAGER" | python3 -m json.tool > $LOG/04b-sync.json; python3 -c "import json; d=json.load(open(\"$LOG/04b-sync.json\")); print(\"rows\", d.get(\"rows\"), \"update_loaded\", d.get(\"stats\",{}).get(\"status\",{}).get(\"update_loaded\"), \"diff\", {k: len(v) if isinstance(v,list) else v for k,v in (d.get(\"diff\") or {}).items()})"
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<estado>
+  <version>ERP Miralmar · bridge AS/400 2.3.1 (2009)</version>
+  <activo_segundos>7</activo_segundos>
+  <asientos>517</asientos>
+  <actualizacion_cargada>SI</actualizacion_cargada>
+  <animo>El sistema lleva 17 anos funcionando. No sera hoy.</animo>
+</estado>
+
+rows 517 update_loaded SI diff {'previous_id': 4, 'current_id': 5, 'added': 1, 'removed': 0, 'changed': {'AS-00476': {'status': ['PAGADA', 'PENDIENTE']}}}
+[exit 0] [6.14 s] [14:50:44]

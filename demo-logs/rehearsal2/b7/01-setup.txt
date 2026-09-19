@@ -1,0 +1,72 @@
+$ git log --oneline -1; (cd backend && uv run alembic upgrade head 2>&1 | tail -4 && uv run --env-file ../.env python -m app.cli load ../processes/invoice-payment.json | tail -3)
+8972c2b feat(proposals): one accept/reject contract for escalation, chat and learning (#93)
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Stale decision alerts (ADR 0026).
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Optional extraction hints on process symbols.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Proposals from the escalation assistant, the process chat and learning.
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/app/cli.py", line 193, in <module>
+    main()
+  File "/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/app/cli.py", line 183, in main
+    asyncio.run(load(args.file, args.compile, args.activate, args.manager_id))
+  File "/Users/apple/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/Users/apple/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/apple/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/app/cli.py", line 45, in load
+    result = await load_pack(session, file)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/app/features/processes/definition.py", line 194, in load_pack
+    return await load_definition(session, data, file.parent)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/app/features/processes/definition.py", line 101, in load_definition
+    result = await _load(session, data, base)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/app/features/processes/definition.py", line 172, in _load
+    raise ConflictError(
+app.common.exceptions.ConflictError: A different process draft already exists; edit or discard it before loading a pack
+[exit 0] [1.92 s] [14:47:09]
+$ curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $API/processes/1/draft; curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $API/processes/1/draft -H "$MANAGER"; (cd backend && uv run --env-file ../.env python -m app.cli load ../processes/invoice-payment.json | tail -1)
+401
+422
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/app/cli.py", line 193, in <module>
+    main()
+  File "/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/app/cli.py", line 183, in main
+    asyncio.run(load(args.file, args.compile, args.activate, args.manager_id))
+  File "/Users/apple/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/Users/apple/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/apple/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/app/cli.py", line 45, in load
+    result = await load_pack(session, file)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/app/features/processes/definition.py", line 194, in load_pack
+    return await load_definition(session, data, file.parent)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/app/features/processes/definition.py", line 101, in load_definition
+    result = await _load(session, data, base)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/app/features/processes/definition.py", line 172, in _load
+    raise ConflictError(
+app.common.exceptions.ConflictError: A different process draft already exists; edit or discard it before loading a pack
+[exit 0] [0.98 s] [14:47:40]
+$ curl -s -o /dev/null -w "discard %{http_code}\n" -X DELETE "$API/processes/1/draft?revision=1" -H "$MANAGER"; (cd backend && uv run --env-file ../.env python -m app.cli load ../processes/invoice-payment.json | grep -v "^ \|^{\|^}")
+discard 204
+Use case 1: agents ['assistant', 'compiler', 'discovery', 'normalizer', 'tester'] configured
+Process 'Invoice payment' (id 1): 3 decision types, 12 symbols, 2 new rules, 0 new users
+[exit 0] [0.99 s] [14:47:48]

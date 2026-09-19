@@ -1,0 +1,22 @@
+# Frozen pack, no workbook uploaded (2026-09-19, integration 8972c2b, DB trace_b8_test)
+# cli load frozen --activate --manager-id 1 -> process 2; then, with no POST /sources/workbook:
+$ curl -sS "$A/processes/2/files" -H "$M" -F file=@2026-01-08_P001.pdf -F ocr=true        -> 201
+$ curl -sS "$A/processes/2/files" -H "$M" -F file=@2026-0233-A_catering.pdf -F ocr=true   -> 201
+$ curl -sS -X POST "$A/processes/2/run" -H "$M"
+{"decided":2,"by_decision":{"NO_PAGAR":2}}
+2026-01-08_P001.pdf      NO_PAGAR ISSUER_NIF_NOT_IN_SUPPLIERS | PURCHASE_ORDER_NOT_FOUND PO-2026-0096   (golden PAGAR)
+2026-0233-A_catering.pdf NO_PAGAR ISSUER_NIF_NOT_IN_SUPPLIERS | PURCHASE_ORDER_NOT_FOUND PO-2026-0492   (golden ESCALAR)
+
+# Per-rule results of 2026-01-08_P001.pdf
+18 True  ISSUER_NIF_NOT_IN_SUPPLIERS          (suppliers empty: no workbook)
+19 False
+20 True  PURCHASE_ORDER_NOT_FOUND PO-2026-0096 (orders empty: no workbook)
+21-25 False
+26 False                                      (date not later than parameters.cut_off_date: no parameters, passes)
+27-29 False
+
+Finding: a source that was never loaded is read as an empty table, not as unavailable.
+The run is accepted (no 409/422), the supplier and order checks fire and the invoice ends
+NO_PAGAR; the cut-off check passes with no cut-off at all. ADR 0028 only treats an HTTP
+source whose sync failed as down (SOURCE_UNAVAILABLE -> ESCALAR). Policy "cannot
+determine -> ESCALAR" is broken for a never-loaded workbook. Not fixed here (decision logic).
