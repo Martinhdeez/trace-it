@@ -36,6 +36,16 @@ class TextSpan(BaseModel):
     bbox: list[float]
 
 
+class TablePosition(BaseModel):
+    """Geometry-derived cell membership, never an additional reader or an inferred header."""
+
+    id: str
+    row: int
+    column: int
+    rows: int
+    columns: int
+
+
 class TextLine(BaseModel):
     id: str
     page: int
@@ -46,3 +56,4 @@ class TextLine(BaseModel):
     confidence: float | None = None
     preprocessing: list[str] = Field(default_factory=list)
     spans: list[TextSpan] = Field(default_factory=list)
+    table: TablePosition | None = None

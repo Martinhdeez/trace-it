@@ -16,6 +16,7 @@ from app.common.normalization import clean_text, fold, invoice_date
 from .extraction_plan import ExtractionField
 from .ocr.errors import ProviderUnavailable, note_provider_failure, provider_on_cooldown
 from .ocr.journal import record_response, recorded_call, retry_after
+from .pdf.layout import table_cells
 from .schemas import FieldReading
 
 SUPPORTED_TYPES = {"text", "string", "number", "integer", "date", "boolean"}
@@ -248,6 +249,32 @@ def read_schema_fields(
                 continue
             if raw:
                 candidates[match.field].append(_candidate(raw, line, kinds[match.field]))
+    # A two-column key/value row can be read without inventing a combined quote.
+    # More complex tables retain cell context for the grounded semantic reader below.
+    for cells in table_cells(lines).values():
+        positions = [line.table for group in cells.values() for line in group]
+        if positions[0].columns != 2:
+            continue
+        for row in range(positions[0].rows):
+            label_lines, value_lines = cells.get((row, 0), []), cells.get((row, 1), [])
+            if len(label_lines) != 1 or len(value_lines) != 1:
+                continue
+            # Without an explicit delimiter this could be a header row (Region | 2025),
+            # not a label/value form. Let the semantic reader handle that distinction.
+            if not label_lines[0].text.rstrip().endswith((":", "#", "=")):
+                continue
+            label = fold(label_lines[0].text).strip(" :#=")
+            owners = {name for name, alias in labels if alias == label}
+            if len(owners) != 1:
+                continue
+            name = next(iter(owners))
+            if kinds[name] not in SUPPORTED_TYPES:
+                continue
+            line = value_lines[0]
+            if not any(
+                c.evidence.locator == line.id and c.raw == line.text for c in candidates[name]
+            ):
+                candidates[name].append(_candidate(line.text, line, kinds[name]))
     readings = {
         name: _reading(items, min_confidence, "schema_label") for name, items in candidates.items()
     }
@@ -352,7 +379,10 @@ class SchemaFieldReader:
         for line in supplied:
             if size + len(line.text) > MAX_TRANSCRIPT:
                 break
-            transcript.append({"line_id": line.id, "text": line.text})
+            entry = {"line_id": line.id, "text": line.text}
+            if line.table is not None:
+                entry["table"] = line.table.model_dump()
+            transcript.append(entry)
             size += len(line.text)
         selected_fields = unresolved[:MAX_FIELDS]
         if not transcript or not selected_fields:

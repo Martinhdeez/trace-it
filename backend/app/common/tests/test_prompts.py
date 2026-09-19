@@ -33,7 +33,7 @@ AGENT_PROMPTS = {
     "tester",
 }
 READER_PROMPTS = {
-    "select-fields": "7a1f63c31490",
+    "select-fields": "96462cf52445",
     "text-judge": "ebdf0c98cc00",
     "transcribe-compatible": "6410f63fa628",
     "transcribe-invoice": "933f2cfe127f",

@@ -6,6 +6,8 @@ from app.common.extraction import TextLine
 from app.common.normalization import clean_text
 from app.features.ingestion.config import Settings
 
+from .layout import reading_order, suspect_spacing, table_membership
+
 # MuPDF is not thread-safe. Keep document access/rendering short and serialized;
 # OCR runs outside this lock and has its own bounded session.
 PDF_LOCK = threading.Lock()
@@ -36,6 +38,12 @@ def native_pages(content: bytes, settings: Settings):
                             )
                         )
             lines.sort(key=lambda line: (round(line.bbox[1], 1), line.bbox[0]))
+            lines, layout_warnings = table_membership(page, lines)
+            # Text coordinates are unrotated, even when the displayed page is rotated.
+            lines = reading_order(lines, page.cropbox.width)
+            spacing = suspect_spacing(lines)
+            if spacing:
+                layout_warnings.append("NATIVE_SUSPECT_SPACING")
             image_area = sum(
                 abs((r[2] - r[0]) * (r[3] - r[1]))
                 for image in page.get_image_info()
@@ -47,6 +55,8 @@ def native_pages(content: bytes, settings: Settings):
                     "size": (page.rect.width, page.rect.height),
                     "lines": lines,
                     "image_ratio": min(1, image_area / max(1, page.rect.get_area())),
+                    "suspect_spacing": spacing,
+                    "warnings": layout_warnings,
                 }
             )
     return pages

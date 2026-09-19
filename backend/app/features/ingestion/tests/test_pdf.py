@@ -1,3 +1,5 @@
+import hashlib
+import json
 from collections import Counter
 
 import pytest
@@ -72,6 +74,35 @@ def test_all_native_invoices(settings):
     assert count == 471
     assert invalid == {"issued_on": 3}
     assert missing_currency == 175  # No explicit currency in monetary fields (see currency audit).
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not MATERIAL.exists(), reason="Initialize official submodule")
+def test_native_corpus_preserves_field_values_abstentions_and_candidates(settings):
+    """Pin the pre-layout reader's evidence on the real corpus, not just non-empty fields.
+
+    Captured from dev 7fccfa8 before the layout adaptation. Intentional future changes
+    require the comparison tool and an explicit baseline update; this is not a claim
+    that every original candidate is correct. Existing abstentions must stay abstentions.
+    Geometry has separate tests and is excluded from this platform-independent digest.
+    """
+    from app.features.ingestion.pdf.native import native_pages
+
+    readings = {}
+    for path in sorted((MATERIAL / "facturas").glob("*.pdf")):
+        pages = native_pages(path.read_bytes(), settings)
+        fields, _ = parse_invoice([line for page in pages for line in page["lines"]])
+        readings[path.name] = {
+            name: {
+                "value": field.value,
+                "status": field.status,
+                "candidates": [(c.raw, c.value, c.error) for c in field.candidates],
+            }
+            for name, field in fields.items()
+        }
+    assert len(readings) == 500
+    digest = hashlib.sha256(json.dumps(readings, sort_keys=True, ensure_ascii=True).encode())
+    assert digest.hexdigest() == "19fdcbae568f62313778721b10821364312bd592e3c334c6250cd8c46d96b3c1"
 
 
 class BrokenOCR:

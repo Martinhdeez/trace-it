@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Download, Minus, Plus, RotateCw } from 'lucide-react'
 import type { DocumentEvidence, DocumentLocations } from '../../api/contracts'
@@ -33,6 +33,9 @@ export function PdfEvidence({
   const [query, setQuery] = useState('')
   const [downloadError, setDownloadError] = useState('')
   const highlight = useRef<HTMLDivElement>(null)
+  const scroller = useRef<HTMLDivElement>(null)
+  const sheet = useRef<HTMLDivElement>(null)
+  const zoomAnchor = useRef<{ x: number; y: number; clientX: number; clientY: number } | null>(null)
   const root = `/instances/${instanceId}`
   const locations = useQuery({
     queryKey: ['document-locations', instanceId, evidence.id],
@@ -69,12 +72,53 @@ export function PdfEvidence({
       inline: 'center',
       behavior: 'instant',
     })
-  }, [source, focusRequest, pageImage.data, rotation, zoom, page])
+  }, [source, focusRequest, pageImage.data, rotation, page])
   const dimensions = locations.data?.pages.find((item) => item.number === page)
   const width = (dimensions?.width ?? 595) * zoom
   const height = (dimensions?.height ?? 842) * zoom
   const sideways = rotation % 180 !== 0
   const shown = source?.page === page ? source : undefined
+
+  function changeZoom(next: number, point?: { x: number; y: number }) {
+    next = Math.max(0.5, Math.min(3, next))
+    if (next === zoom) return
+    if (scroller.current && sheet.current) {
+      const panel = scroller.current.getBoundingClientRect()
+      const paper = sheet.current.getBoundingClientRect()
+      const clientX = point?.x ?? panel.left + panel.width / 2
+      const clientY = point?.y ?? panel.top + panel.height / 2
+      zoomAnchor.current = {
+        x: (clientX - paper.left) / paper.width,
+        y: (clientY - paper.top) / paper.height,
+        clientX,
+        clientY,
+      }
+    }
+    setZoom(next)
+  }
+
+  useLayoutEffect(() => {
+    const anchor = zoomAnchor.current
+    if (anchor && sheet.current && scroller.current) {
+      const paper = sheet.current.getBoundingClientRect()
+      scroller.current.scrollLeft += paper.left + anchor.x * paper.width - anchor.clientX
+      scroller.current.scrollTop += paper.top + anchor.y * paper.height - anchor.clientY
+    }
+    zoomAnchor.current = null
+  }, [zoom])
+
+  useEffect(() => {
+    const panel = scroller.current
+    if (!panel) return
+    function wheel(event: WheelEvent) {
+      // Trackpad pinch arrives as ctrl+wheel. Ordinary scrolling remains ordinary scrolling.
+      if (!event.ctrlKey && !event.metaKey) return
+      event.preventDefault()
+      changeZoom(zoom * Math.exp(-event.deltaY * 0.005), { x: event.clientX, y: event.clientY })
+    }
+    panel.addEventListener('wheel', wheel, { passive: false })
+    return () => panel.removeEventListener('wheel', wheel)
+  }, [zoom])
 
   async function download() {
     setDownloadError('')
@@ -122,7 +166,7 @@ export function PdfEvidence({
           <button
             aria-label="Zoom out"
             disabled={zoom <= 0.5}
-            onClick={() => setZoom(Math.max(0.5, zoom - 0.25))}
+            onClick={() => changeZoom(zoom - 0.25)}
           >
             <Minus size={16} />
           </button>
@@ -132,6 +176,7 @@ export function PdfEvidence({
             onClick={() => {
               setZoom(1)
               setRotation(0)
+              setFocusRequest((value) => value + 1)
             }}
             className="w-12 font-mono"
           >
@@ -140,7 +185,7 @@ export function PdfEvidence({
           <button
             aria-label="Zoom in"
             disabled={zoom >= 3}
-            onClick={() => setZoom(Math.min(3, zoom + 0.25))}
+            onClick={() => changeZoom(zoom + 0.25)}
           >
             <Plus size={16} />
           </button>
@@ -270,6 +315,7 @@ export function PdfEvidence({
             )}
           </div>
           <div
+            ref={scroller}
             className="min-h-0 flex-1 overflow-auto bg-canvas p-5"
             aria-label="Original PDF page"
           >
@@ -284,6 +330,7 @@ export function PdfEvidence({
               <p role="status">Loading page…</p>
             ) : (
               <div
+                ref={sheet}
                 className="relative mx-auto shrink-0"
                 style={{
                   width: sideways ? height : width,

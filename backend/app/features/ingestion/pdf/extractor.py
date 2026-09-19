@@ -56,10 +56,14 @@ def extract_pdf(
         number, lines = page["number"], page["lines"]
         text = "\n".join(line.text for line in lines)
         chars = len(text.strip())
+        warnings.extend(
+            {"code": code, "page": number, "stage": "native"} for code in page.get("warnings", [])
+        )
         needs_ocr = (
             chars < 40
             or text.count("\ufffd") / max(1, chars) > 0.02
             or (page["image_ratio"] > 0.5 and bool(set(unresolved(fields)) - {"currency"}))
+            or (page.get("suspect_spacing", False) and bool(set(unresolved(fields)) - {"currency"}))
         )
         report = {
             "page": number,
