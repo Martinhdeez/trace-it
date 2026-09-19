@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="TRACE_", env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+psycopg://trace:trace@localhost:5432/trace"
+    # Empty disables Bearer access. Never put the production token in source control.
+    api_token: SecretStr = SecretStr("")
     # Process packs, where a source's connector configuration lives (`<pack>/sources.json`).
     # In Docker this resolves to the /processes mount.
     processes_dir: Path = Path(__file__).resolve().parents[3] / "processes"

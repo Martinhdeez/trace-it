@@ -5,6 +5,7 @@ umask 077
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 unset DOCKER_HOST DOCKER_CONTEXT COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES
 unset POSTGRES_PASSWORD TRACE_ENV_FILE TRACE_MODEL_DIR TRACE_AUTH_FILE TRACE_PORT
+unset TRACE_DATABASE_USER TRACE_DATABASE_PASSWORD TRACE_DATABASE_URL TRACE_APP_DATABASE_PASSWORD
 [[ "$EUID" == 0 && "$#" == 4 ]]
 revision=$1 backend=$2 frontend=$3 actor=$4
 [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
@@ -65,7 +66,19 @@ trap rollback ERR
 "${compose[@]}" exec -T db pg_restore --list < "$backup/database.dump" > "$backup/database.list"
 "${compose[@]}" run --rm --no-deps -T backend python -c \
   'import sys, tarfile; t=tarfile.open(fileobj=sys.stdout.buffer, mode="w|gz"); t.add("/srv/.data", arcname="data"); t.close()' > "$backup/ingestion.tar.gz"
-"${compose[@]}" run --rm --no-deps -T backend alembic upgrade head
+# Runtime may be restricted; only this one-off migration container receives owner credentials.
+set -a
+source secrets/compose.env
+set +a
+export TRACE_DATABASE_URL="postgresql+psycopg://trace:${POSTGRES_PASSWORD}@db:5432/trace"
+"${compose[@]}" run --rm --no-deps -T -e TRACE_DATABASE_URL backend alembic upgrade head
+if [[ "${TRACE_DATABASE_USER:-trace}" == trace_app ]]; then
+  export TRACE_APP_DATABASE_PASSWORD="${TRACE_DATABASE_PASSWORD:?Missing runtime database password}"
+  "${compose[@]}" run --rm --no-deps -T -e TRACE_DATABASE_URL -e TRACE_APP_DATABASE_PASSWORD \
+    backend python -m app.features.database_api.provision
+  unset TRACE_APP_DATABASE_PASSWORD
+fi
+unset TRACE_DATABASE_URL
 if [[ ! -f INITIALIZED ]]; then
   # Seed the bundled use case and users once. Rule publication remains a manager action.
   "${compose[@]}" run --rm --no-deps -T backend python -m app.cli load /processes/invoice-payment.json

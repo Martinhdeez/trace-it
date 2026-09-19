@@ -41,6 +41,115 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/db/tables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tables
+         * @description Registered Trace-it application tables only; audit tables are read-only.
+         */
+        get: operations["listDatabaseTables"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/db/tables/{table_name}/schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Schema
+         * @description Columns, generated values, keys, checks and indexes. Names are not SQL expressions.
+         */
+        get: operations["getDatabaseTableSchema"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/db/tables/{table_name}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rows
+         * @description Primary-key ordered pages, including an etag for each complete row.
+         */
+        get: operations["listDatabaseRows"];
+        put?: never;
+        /**
+         * Create
+         * @description Insert one row and audit it atomically. Omit generated columns.
+         */
+        post: operations["createDatabaseRow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/db/tables/{table_name}/row": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Row */
+        get: operations["getDatabaseRow"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete
+         * @description Delete exactly one row by primary key and etag; foreign keys remain enforced.
+         */
+        delete: operations["deleteDatabaseRow"];
+        options?: never;
+        head?: never;
+        /**
+         * Update
+         * @description Update one locked row if its etag still matches; requires a reason.
+         */
+        patch: operations["updateDatabaseRow"];
+        trace?: never;
+    };
+    "/db/tables/{table_name}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export
+         * @description A bounded JSONL page. Follow X-Next-Offset until it is absent.
+         */
+        get: operations["exportDatabaseRows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/processes/{process_id}/versions": {
         parameters: {
             query?: never;
@@ -2120,6 +2229,118 @@ export interface components {
             covered: number[];
             /** Id */
             id: number;
+        };
+        /** DatabaseCreate */
+        DatabaseCreate: {
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+            /** Reason */
+            reason: string;
+        };
+        /** DatabaseDelete */
+        DatabaseDelete: {
+            /** Key */
+            key: {
+                [key: string]: unknown;
+            };
+            /** Expected Etag */
+            expected_etag: string;
+            /** Reason */
+            reason: string;
+        };
+        /** DatabaseRow */
+        DatabaseRow: {
+            /** Key */
+            key: {
+                [key: string]: unknown;
+            };
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+            /** Etag */
+            etag: string;
+        };
+        /** DatabaseRows */
+        DatabaseRows: {
+            /** Rows */
+            rows: components["schemas"]["DatabaseRow"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Next Offset */
+            next_offset: number | null;
+        };
+        /** DatabaseSchema */
+        DatabaseSchema: {
+            /** Name */
+            name: string;
+            /** Primary Key */
+            primary_key: string[];
+            /** Writable */
+            writable: boolean;
+            /** Columns */
+            columns: {
+                [key: string]: unknown;
+            }[];
+            /** Foreign Keys */
+            foreign_keys: {
+                [key: string]: unknown;
+            }[];
+            /** Unique Constraints */
+            unique_constraints: {
+                [key: string]: unknown;
+            }[];
+            /** Check Constraints */
+            check_constraints: {
+                [key: string]: unknown;
+            }[];
+            /** Indexes */
+            indexes: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** DatabaseTable */
+        DatabaseTable: {
+            /** Name */
+            name: string;
+            /** Primary Key */
+            primary_key: string[];
+            /** Writable */
+            writable: boolean;
+        };
+        /** DatabaseUpdate */
+        DatabaseUpdate: {
+            /** Key */
+            key: {
+                [key: string]: unknown;
+            };
+            /** Expected Etag */
+            expected_etag: string;
+            /** Reason */
+            reason: string;
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+        };
+        /** DatabaseWriteResult */
+        DatabaseWriteResult: {
+            /** Key */
+            key: {
+                [key: string]: unknown;
+            };
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+            /** Etag */
+            etag: string;
+            /** Change Id */
+            change_id: number;
         };
         /** DecisionOut */
         DecisionOut: {
@@ -4721,6 +4942,267 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    listDatabaseTables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseTable"][];
+                };
+            };
+        };
+    };
+    getDatabaseTableSchema: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listDatabaseRows: {
+        parameters: {
+            query?: {
+                /** @description JSON equality filters, e.g. {"id":1} */
+                filters?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseRows"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    createDatabaseRow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseWriteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getDatabaseRow: {
+        parameters: {
+            query: {
+                /** @description Complete primary key as JSON, e.g. {"id":1} */
+                key: string;
+            };
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseRow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deleteDatabaseRow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseDelete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseWriteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    updateDatabaseRow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseWriteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exportDatabaseRows: {
+        parameters: {
+            query?: {
+                filters?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                table_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

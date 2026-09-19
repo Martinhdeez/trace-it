@@ -1,16 +1,19 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import logfire
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import text
 
 from app.common.exceptions import TraceError
+from app.core.api_auth import bearer_identity
 from app.core.database import Session
 from app.core.events import configure_observability, unhandled_error
 from app.features.agents.router import router as agents_router
 from app.features.alerts.router import router as alerts_router
+from app.features.database_api.router import router as database_router
 from app.features.decisions.router import router as decisions_router
 from app.features.ingestion.process_router import router as ingestion_router
 from app.features.ingestion.router import create_router as create_extraction_router
@@ -41,9 +44,14 @@ app = FastAPI(
     title="trace-it",
     version="0.1.0",
     lifespan=lifespan,
+    dependencies=[Depends(bearer_identity)],
     description=(
         "Deterministic decision processes with rules compiled to code by agents.\n\n"
-        "Identify with the `X-User-Id` header (see `POST /login`). Errors are "
+        "Use `Authorization: Bearer <API_TOKEN>` for every application endpoint and "
+        "the `/db` administration endpoints. Bearer calls act as the dedicated API manager; "
+        "`X-User-Id` is ignored. Browser/HTTP Basic callers continue to identify with "
+        "`X-User-Id` (see `POST /login`). `/db` always requires Bearer authentication. "
+        "See the [API guide](guide) for examples, permissions and deployment details. Errors are "
         '`{"code", "message"}`, except request validation (422), which keeps FastAPI\'s '
         '`{"detail": [...]}`.'
     ),
@@ -65,6 +73,11 @@ async def trace_error(_: Request, error: TraceError) -> JSONResponse:
 app.add_exception_handler(Exception, unhandled_error)
 
 
+@app.get("/guide", include_in_schema=False, response_class=PlainTextResponse)
+async def api_guide() -> str:
+    return (Path(__file__).resolve().parents[2] / "docs" / "production-api.md").read_text()
+
+
 @app.get("/health", tags=["system"], operation_id="health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -78,6 +91,7 @@ async def ready(session: Session) -> dict[str, str]:
 
 
 for router in (
+    database_router,
     versions_router,
     users_router,
     processes_router,

@@ -26,7 +26,7 @@ services:
     image: ${TRACE_BACKEND_IMAGE:?Set TRACE_BACKEND_IMAGE}
     env_file: ["${TRACE_ENV_FILE:-./.env.runtime}"]
     environment:
-      TRACE_DATABASE_URL: postgresql+psycopg://trace:${POSTGRES_PASSWORD}@db:5432/trace
+      TRACE_DATABASE_URL: postgresql+psycopg://${TRACE_DATABASE_USER:-trace}:${TRACE_DATABASE_PASSWORD:-${POSTGRES_PASSWORD}}@db:5432/trace
       TRACE_PROCESSES_DIR: /processes
       TRACEPAY_DATA_DIR: /srv/.data
       TRACEPAY_MODEL_DIR: /srv/.models

@@ -105,6 +105,9 @@ def resolve(model: Model | str, local_endpoint: str | None = None) -> Model | st
     """`helmcode:<model>` runs on Helmcode's OpenAI-compatible API (EU inference, key in
     `HELMCODE_API_KEY`); any other `provider:model` string goes to PydanticAI as is."""
     if isinstance(model, str) and model.startswith("local:"):
+        from app.core.api_boundary import endpoint
+
+        endpoint(local_endpoint, settings.local_base_url)
         return OpenAIChatModel(
             model.removeprefix("local:"),
             provider=OpenAIProvider(
