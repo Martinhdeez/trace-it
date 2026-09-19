@@ -178,8 +178,6 @@ def main() -> None:
     command = commands.add_parser("check-outcomes", help="Check an outcomes JSONL for a batch")
     command.add_argument("output", type=Path)
     command.add_argument("--files", type=Path, required=True, help="Folder with the batch's PDFs")
-    command = commands.add_parser("seed-hiring", help="Install the production hiring demo")
-    command.add_argument("file", type=Path, help="The hiring case process pack")
     args = parser.parse_args()
     if args.command == "load":
         asyncio.run(load(args.file, args.compile, args.activate, args.manager_id))
@@ -187,13 +185,8 @@ def main() -> None:
         asyncio.run(sync_source(args.file, args.source))
     elif args.command == "export":
         asyncio.run(export(args.file, args.files, args.output))
-    elif args.command == "check-outcomes":
-        check_outcomes(args.output, args.files)
     else:
-        from app.bootstrap import seed_hiring_case
-
-        process_id, decided = asyncio.run(seed_hiring_case(args.file))
-        print(f"Hiring case process {process_id}: {decided} new decisions")
+        check_outcomes(args.output, args.files)
 
 
 if __name__ == "__main__":
