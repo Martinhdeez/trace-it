@@ -1,6 +1,5 @@
 export const paths = {
   landing: '/',
-  login: '/login',
   processes: '/processes',
   newProcess: '/processes/new',
   process: (id: number | string) => `/processes/${id}`,

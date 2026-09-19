@@ -26,15 +26,15 @@ export class ApiError extends Error {
 }
 
 let userId: number | null = null
-let onUnauthenticated: (() => void) | null = null
+let onIdentityRejected: (() => void) | null = null
 
 export function setUserId(id: number | null) {
   userId = id
 }
 
-/** Called when the backend refuses the signed-in user's identity (401, or a 422 on `x-user-id`). */
-export function setOnUnauthenticated(callback: (() => void) | null) {
-  onUnauthenticated = callback
+/** Called when the backend refuses the identity: 401, 403, or a 422 on `x-user-id`. */
+export function setOnIdentityRejected(callback: (() => void) | null) {
+  onIdentityRejected = callback
 }
 
 function headers(extra?: HeadersInit): Headers {
@@ -46,7 +46,7 @@ function headers(extra?: HeadersInit): Headers {
 async function fail(response: Response): Promise<never> {
   let code = 'http_error'
   let message = `${response.status} ${response.statusText}`
-  let badIdentity = response.status === 401
+  let badIdentity = response.status === 401 || response.status === 403
   try {
     const body = await response.json()
     if (typeof body?.code === 'string') code = body.code
@@ -63,8 +63,8 @@ async function fail(response: Response): Promise<never> {
   } catch {
     // Body was not the `{code, message}` envelope. Keep the status text.
   }
-  // With no user set the header was never sent, and the console already shows Login.
-  if (badIdentity && userId != null) onUnauthenticated?.()
+  // The session asks for its identity again; the caller still gets the error to show.
+  if (badIdentity) onIdentityRejected?.()
   throw new ApiError(response.status, code, message)
 }
 
