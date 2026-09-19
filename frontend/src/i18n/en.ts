@@ -19,10 +19,14 @@ export const en: Messages = {
     runs: 'Runs',
     signIn: 'Sign in',
     anonymous: 'anonymous',
+    menu: 'Menu',
+    close: 'Close',
+    collapse: 'Collapse sidebar',
+    expand: 'Expand sidebar',
   },
   processes: {
     delete: 'Delete process',
-    confirmDelete: 'Delete this process?',
+    confirmDelete: 'Delete this process and all its history?',
     deleting: 'Deleting…',
   },
   planes: {

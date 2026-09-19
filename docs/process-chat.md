@@ -5,6 +5,17 @@ Process chat extends the saved discovery conversation. All endpoints require a m
 change the published process. The console's Definition tab opens this conversation first;
 the manual definition editor remains available for small direct edits.
 
+## One authoring chat
+
+The console exposes one process chat for questions, evidence and changes. It does not ask the
+manager to choose between "ask" and "propose". The assistant keeps the current plan unchanged
+when a message only asks for an explanation. A requested change comes back as a complete,
+reviewable plan.
+
+The chat can propose changes to context, fields, outcomes, reviewer settings, rules, sources,
+connectors, guidance and acceptance examples. Every change waits for review, compilation and
+explicit publication.
+
 ## Explain first
 
 Start with `POST /process-drafts` and `{"process_id": 1}`. Resume with
@@ -14,10 +25,12 @@ Start with `POST /process-drafts` and `{"process_id": 1}`. Resume with
 {"revision": 1, "message": "Why are these cases being escalated?"}
 ```
 
-Messages default to `mode: "discuss"`. The response retains the proposed plan, accepted
-proposals and prepared preview. Only the saved conversation revision advances. The answer
-includes evidence references and clarification questions. Use the returned revision for
-subsequent requests, including publication of an unchanged prepared proposal.
+API clients may still use `mode: "discuss"` for a read-only answer. The manager console sends
+authoring messages in revision mode, so questions and changes stay in the same conversation.
+The response retains the proposed plan, accepted proposals and prepared preview. Only the saved
+conversation revision advances. The answer includes evidence references and clarification
+questions. Use the returned revision for subsequent requests, including publication of an
+unchanged prepared proposal.
 
 The assistant sees the published process definition, this conversation's proposals, recent cases and their
 human resolutions, reviewer recommendations and bounded trace evidence. Sampling includes
@@ -26,10 +39,10 @@ statistical analysis. Evidence and source inspection remain read-only. A separat
 version draft is visible for discussion but cannot be overwritten by chat publication.
 Finish that draft before preparing this conversation's proposals.
 
-## Propose changes explicitly
+## Propose changes through the same chat
 
-Use `mode: "revise"` when asking for edits. The manager console exposes this as **Proponer
-cambios** and selects it automatically when evidence is attached:
+The lower-level endpoint accepts `mode: "revise"` for API clients. The manager console uses it
+for every authoring message, so the interface stays one chat:
 
 ```json
 {
@@ -40,8 +53,9 @@ cambios** and selects it automatically when evidence is attached:
 ```
 
 Revision mode returns a proposed configuration and questions, plus a `changes` list showing
-the difference from the conversation's starting plan. It clears earlier acceptance and
-previews. Nothing changes in the published version. The process keeps its name and ID.
+the difference from the conversation's starting plan. A real configuration change clears earlier
+acceptance and previews; an explanatory answer keeps them. Nothing changes in the published
+version. The process keeps its name and ID.
 
 Supported edits include deterministic rules, process description and conventions, symbols,
 outcome definitions and priorities, source mappings, reviewer settings and subjective

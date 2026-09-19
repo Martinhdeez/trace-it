@@ -216,21 +216,38 @@ async def test_not_escalated_gives_409(case, monkeypatch) -> None:
         assert r.status_code == 404, r.text
 
 
-async def test_a_long_answer_is_sent_back(case, monkeypatch) -> None:
-    """Concise by contract: over the character caps (schema) or the sentence limits
-    (validator), the model is asked again."""
+async def test_a_long_answer_is_trimmed_without_asking_again(case, monkeypatch) -> None:
+    """Latency: over the character caps or the sentence limits, the text is cut in place;
+    backticks and rule codes are rewritten; a made-up reference is dropped. One call."""
     essay = {
         **SUGGESTION,
-        "why": ["Se escaló por el importe. Además hay otras cosas que contar aquí."],
+        "why": ["Se escaló por el `importe` y R01.\nAdemás hay otras cosas que contar aquí."],
         "reasoning": "x" * 400,
+        "evidence": ["symbol:amount", "escalation: amount > 1000"],
     }
-    calls = script(monkeypatch, [essay, {**essay, "reasoning": "Corto."}, SUGGESTION])
+    calls = script(monkeypatch, [essay])
     async with session_factory() as s:
         suggestion = await assistant.suggest(s, case["escalated"])
-    assert suggestion == assistant.Suggestion(**SUGGESTION)
-    first, second = retry_prompts(calls[-1])
-    assert "at most 320 characters" in first
-    assert "Be concise: why[0] must be one line and one sentence" in second
+    assert len(calls) == 1 and retry_prompts(calls[-1]) == []
+    assert suggestion.why == ["Se escaló por el importe y la regla 1."]
+    assert len(suggestion.reasoning) == 320 and suggestion.reasoning.endswith("…")
+    assert suggestion.evidence == ["symbol:amount"]
+
+
+async def test_an_extra_option_and_a_file_name_need_no_second_call(case, monkeypatch) -> None:
+    """Keeping it escalated is not an option when a rule escalated it: dropped in place. A
+    file name is fine for a manager, even with an underscore."""
+    extra = {
+        **SUGGESTION,
+        "reasoning": "Como hosteleria_A_F26-0726.pdf, se paga.",
+        "options": [*SUGGESTION["options"], KEEP],
+    }
+    calls = script(monkeypatch, [extra])
+    async with session_factory() as s:
+        suggestion = await assistant.suggest(s, case["escalated"])
+    assert len(calls) == 1 and retry_prompts(calls[-1]) == []
+    assert [o.decision for o in suggestion.options] == ["PAGAR", "NO_PAGAR"]
+    assert suggestion.reasoning == extra["reasoning"]
 
 
 async def test_every_option_carries_its_rule(case, monkeypatch) -> None:
@@ -245,14 +262,20 @@ async def test_every_option_carries_its_rule(case, monkeypatch) -> None:
 
 
 async def test_no_rule_is_a_valid_answer(case, monkeypatch) -> None:
-    half = {**NO_RULE, "proposed_rule": "Pay it."}  # no rule and a rule at once
-    calls = script(monkeypatch, [half, {**NO_RULE, "no_rule_reason": None}, NO_RULE])
+    # no rule and a rule at once: "no rule" wins, fixed in place
+    half = {**NO_RULE, "proposed_rule": "Pay it.", "proposed_type": "requirement"}
+    calls = script(monkeypatch, [half])
     async with session_factory() as s:
         suggestion = await assistant.suggest(s, case["escalated"])
-    assert suggestion.proposed_rule is None and suggestion.no_rule_reason.startswith("Falta")
+    assert suggestion.proposed_rule is None and suggestion.proposed_type is None
+    assert suggestion.no_rule_reason.startswith("Falta") and len(calls) == 1
     assert suggestion.decision == "NO_PAGAR"  # still a final decision
-    first, second = retry_prompts(calls[-1])
-    assert "proposed_rule must be null" in first and "or no_rule_reason" in second
+    # neither a rule nor a reason: sent back
+    calls = script(monkeypatch, [{**NO_RULE, "no_rule_reason": None}, NO_RULE])
+    async with session_factory() as s:
+        await assistant.suggest(s, case["escalated"])
+    [retry] = retry_prompts(calls[-1])
+    assert "or no_rule_reason" in retry
 
 
 async def escalate_as(case, reason: str, fired_reason: str | None = None) -> None:
@@ -273,26 +296,33 @@ async def test_an_engine_escalation_keeps_a_person_deciding(case, monkeypatch) -
     to keep the case escalated and say a person decides."""
     await escalate_as(case, "MISSING_DATA: amount")
     kept = {**NO_RULE, "decision": "ESCALAR", "options": [*NO_RULE["options"], KEEP]}
-    calls = script(monkeypatch, [NO_RULE, {**kept, "no_rule_reason": None}, kept])
+    calls = script(monkeypatch, [NO_RULE, kept])
     async with session_factory() as s:
         suggestion = await assistant.suggest(s, case["escalated"])
     assert suggestion.decision == "ESCALAR" and suggestion.no_rule_reason
     assert user_json(calls[0])["escalation"]["engine_code"] == "MISSING_DATA"
-    first, second = retry_prompts(calls[-1])
+    [first] = retry_prompts(calls[-1])
     assert "for: NO_PAGAR, PAGAR, ESCALAR (ESCALAR: 'mantener escalado / pedir el dato'" in first
+    calls = script(monkeypatch, [{**kept, "no_rule_reason": None}, kept])
+    async with session_factory() as s:
+        await assistant.suggest(s, case["escalated"])
+    [second] = retry_prompts(calls[-1])
     assert "MISSING_DATA is an engine escalation, not a rule" in second
 
 
 async def test_jargon_and_closing_without_a_person_are_sent_back(case, monkeypatch) -> None:
     closes = {**SUGGESTION, "reasoning": "Se paga y el caso se cierra sin intervención humana."}
     coded = {**SUGGESTION, "why": ["El `amount` de symbol:amount supera la regla R01."]}
-    calls = script(monkeypatch, [closes, coded, SUGGESTION])
-    async with session_factory() as s:
-        suggestion = await assistant.suggest(s, case["escalated"])
-    assert suggestion == assistant.Suggestion(**SUGGESTION)
-    first, second = retry_prompts(calls[-1])
-    assert "reasoning says the case closes without a person" in first
-    assert "why[0] uses ['R01', '`', 'symbol:']" in second
+    for wrong, said in (
+        (closes, "reasoning says the case closes without a person"),
+        (coded, "why[0] uses ['symbol:']"),  # the backticks and R01 were fixed in place
+    ):
+        calls = script(monkeypatch, [wrong, SUGGESTION])
+        async with session_factory() as s:
+            suggestion = await assistant.suggest(s, case["escalated"])
+        assert suggestion == assistant.Suggestion(**SUGGESTION)
+        [retry] = retry_prompts(calls[-1])
+        assert said in retry
 
 
 async def test_both_invoices_of_one_order_are_advised_consistently(case, monkeypatch) -> None:
@@ -304,6 +334,7 @@ async def test_both_invoices_of_one_order_are_advised_consistently(case, monkeyp
     await escalate_as(case, "x", "Same purchase order as: factura_41082.pdf")
     paired = {
         **SUGGESTION,
+        "decision": "PAGAR",
         "reasoning": "Se paga la primera recibida, esta; factura_41082.pdf es el duplicado.",
     }
     calls = script(monkeypatch, [SUGGESTION, paired])
@@ -316,8 +347,61 @@ async def test_both_invoices_of_one_order_are_advised_consistently(case, monkeyp
         "NO_PAGAR",
         "after",
     )
+    assert user_json(calls[0])["escalation"]["first_received"] == "a"  # this case, by name
     [retry] = retry_prompts(calls[-1])
     assert "involves other cases (factura_41082.pdf)" in retry
+
+
+async def test_the_pair_is_advised_against_the_computed_first(case, monkeypatch) -> None:
+    """Live demo bug: case 1 proposed PAGAR while saying the other invoice, "the first
+    received", is paid. Which one came first is computed (invoice date, then arrival) and
+    the text and the decision must agree with it."""
+    async with session_factory() as s:
+        (await s.get(Instance, case["old"])).name = "factura_41082.pdf"
+        (await s.get(Instance, case["escalated"])).name = "catering.pdf"
+        await s.commit()
+    await escalate_as(case, "x", "Same purchase order as: factura_41082.pdf")
+    wrong_first = {
+        **SUGGESTION,
+        "decision": "NO_PAGAR",
+        "reasoning": "Se paga la primera recibida, factura_41082.pdf, y esta no.",
+    }
+    pays_other = {
+        **SUGGESTION,
+        "decision": "PAGAR",
+        "reasoning": "Es un duplicado: se paga factura_41082.pdf y esta no.",
+    }
+    right = {
+        **SUGGESTION,
+        "decision": "PAGAR",
+        "reasoning": "Esta es la primera recibida: se paga esta y factura_41082.pdf no.",
+    }
+    for wrong, said in (
+        (wrong_first, "the first received is catering.pdf (escalation.first_received)"),
+        (pays_other, "you say factura_41082.pdf is the one paid, so this case is not"),
+    ):
+        calls = script(monkeypatch, [wrong, right])
+        async with session_factory() as s:
+            suggestion = await assistant.suggest(s, case["escalated"])
+        assert suggestion.decision == "PAGAR"
+        [retry] = retry_prompts(calls[-1])
+        assert said in retry
+    calls = script(monkeypatch, [right])
+    async with session_factory() as s:
+        await assistant.suggest(s, case["escalated"])
+    assert len(calls) == 1
+
+
+def test_arrival_goes_by_invoice_date_then_by_order():
+    first, later, undated = (
+        Instance(id=i, name=str(i), symbols=symbols)
+        for i, symbols in (
+            (3, {"date": {"value": "2026-01-02", "origin": "text"}}),
+            (1, {"date": {"value": "2026-02-01", "origin": "text"}}),
+            (2, {}),
+        )
+    )
+    assert sorted([undated, later, first], key=assistant.arrival) == [first, later, undated]
 
 
 async def test_the_decision_assistant_runs_without_reasoning_under_a_tight_cap(monkeypatch):
@@ -342,3 +426,6 @@ async def test_the_decision_assistant_runs_without_reasoning_under_a_tight_cap(m
     [model_settings] = received
     assert model_settings["openai_reasoning_effort"] == "none"
     assert model_settings["max_tokens"] <= 1500
+    # a stalled request moves on fast: short timeout, no hidden SDK repeats, one retry
+    assert model_settings["timeout"] <= 15
+    assert setup.settings.limits["http_retries"] == 0 and setup.settings.retries == 1

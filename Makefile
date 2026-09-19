@@ -138,6 +138,10 @@ eval-compiler:  # opt-in, calls real LLMs (keys in .env); writes backend/evals/r
 eval-norm:  # opt-in, real LLMs: the client's norm -> rules -> code -> batch 1 vs golden
 	cd backend && uv run python -u -m evals.eval_norm
 
+bench-advice:  # real LLMs: advice latency on the demo cases. DB=<a copy of a database where the pack ran> [N=5]
+	cd backend && TRACE_DATABASE_URL=postgresql+psycopg://trace:trace@localhost:5432/$(or $(DB),$(error DB=<database> is required)) \
+		PYDANTIC_AI_NO_BANNER=1 uv run --env-file ../.env python ../tools/bench_advice.py -n $(or $(N),5)
+
 demo-llm-down:  # real LLMs: the primary model's provider is unreachable, a fallback answers (ADR 0019)
 	cd backend && OPENAI_BASE_URL=http://127.0.0.1:9/v1 OPENAI_API_KEY=unreachable PYDANTIC_AI_NO_BANNER=1 \
 		uv run --env-file ../.env python ../tools/demo_llm_down.py

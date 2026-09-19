@@ -240,6 +240,91 @@ No component changed in #165; `tsc -b` passes on the current `Queue.tsx`.
 - (#167) An `ESCALAR` option: render it like any other option, but label its button
   "Mantener escalado" rather than "Aceptar", and never style it as closing the case.
 
+## Latency
+
+Both agents run on the pack's `assistant` role. A call is one request to
+`helmcode:deepseek-v4-flash` with reasoning off, about 4k tokens in and 800 out. It takes
+about 3 s for the decision assistant and 1.7 s for the reviewer agent. The slow calls did
+not come from the context: building it takes 20-50 ms. They had three causes:
+
+- **Provider stalls.** About 1 request in 10 to Helmcode hangs for 90-100 s before it
+  answers. It is still one request, with no failed attempt. The 98 s demo call was one of
+  these, and we reproduced it twice. The old 120 s timeout never cut them. When it did fire,
+  the OpenAI SDK silently repeated the request up to twice (`max_retries=2`). That is 360 s
+  on one model before the chain moved on, and `failed_attempts` did not show it: glm5.3-flash
+  took 193 s this way.
+- **Validator retries.** Each `ModelRetry` is a whole extra call. The duplicate-order case
+  failed on its first answer every time (the decision was `ESCALAR`). Two of 5 runs used all
+  3 retries and returned a 502.
+- **Reasoning tokens** (before #170). With `max_tokens` 4000 and reasoning on,
+  deepseek-v4.1-flash used up to 9k output tokens and was cut. The chain then fell back to
+  glm5.3, and the call took 306-327 s.
+
+The role's settings (`processes/invoice-payment/use-case.json`):
+
+| Setting | Value | Why |
+|---|---|---|
+| `model` | `helmcode:deepseek-v4-flash` | The only fast model on our Helmcode plan. Gemini and Claude return 402, glm5.3-flash took 73 s, gemma4 29 s and qwen3.6 21 s |
+| `fallback_models` | deepseek-v4-flash, then qwen3.6 | A stall is per request, so a new request to the same model is the fastest fallback |
+| `timeout_seconds` | 12 | Four times the usual answer; a stall is cut there |
+| `limits.http_retries` | 0 | No hidden SDK repeats: a timeout goes straight to the next model and shows in `failed_attempts` |
+| `retries` | 1 | At most one extra call for a real error |
+
+The validators fix trivial problems in place, with no extra call. They:
+
+- cut a Spanish text to its sentence and character limits;
+- remove backticks and write `R09` as «la regla 9»;
+- drop a made-up evidence reference and an extra "keep it escalated" option;
+- keep "no rule" when a rule came with it;
+- accept a file name even when it contains an underscore.
+
+`ModelRetry` is left for real errors: the wrong decision set, a missing rule or reason,
+jargon that is still there, a case that "closes without a person", invented values, and a
+rule on fields that do not exist.
+
+**Duplicate pairs.** The context now states which invoice of the pair came first, as a fact
+(`escalation.first_received`, `arrival`). It goes by invoice `date`, then by the order the
+invoices arrived. In the live demo, case 1 proposed PAGAR and in the same answer said the
+other invoice, "the first received", was paid. `consistent_pair` sends such an answer back.
+Only the first invoice may be called the first received. The decision must also match the
+invoice the text pays: if the text pays the other invoice, this one is not paid, and the
+reverse.
+
+### Benchmark
+
+```bash
+createdb -T <a database where the pack ran> trace_bench_advice   # a copy: spans are written
+make bench-advice DB=trace_bench_advice N=5
+```
+
+`tools/bench_advice.py` runs the decision assistant on the demo cases: the 10 % VAT case,
+both invoices of the duplicate order, and MISSING_DATA. It runs the reviewer agent on a
+resolved 10 % VAT case. The settings come from `use-case.json` in the checkout, so running
+it on two branches compares them. For each case it prints p50, p95 and max latency, tokens,
+validator retries, fallbacks, the decisions, and one sample answer. Each request carries a
+unique id, because Helmcode caches identical temperature-0 requests and answers them in
+0.35 s. Without a key, it skips.
+
+Measured on 2026-09-19 on a copy of the demo database, N=4 (20 calls each):
+
+| Case | Before (dev): p50 / p95 | Retries | Decisions | After: p50 / p95 | Retries | Decisions |
+|---|---|---|---|---|---|---|
+| duplicate, catering | 6.5 / 7.9 s | 5 | NO_PAGAR ×4 | 3.7 / 5.0 s | 0 | NO_PAGAR ×4 |
+| duplicate, factura_41082 | 9.8 / 11.2 s | 8 | NO_PAGAR ×4 | 6.2 / 6.5 s | 4 | PAGAR ×4 |
+| 10 % VAT | 3.5 / 6.2 s | 1 | PAGAR ×4 | 3.6 / 3.9 s | 0 | PAGAR ×4 |
+| MISSING_DATA | 3.6 / 3.6 s | 0 | ESCALAR ×4 | 3.6 / 3.6 s | 0 | ESCALAR ×4 |
+| reviewer, 10 % VAT | 1.7 / 94.8 s (a stall) | 1 | rule ×4 | 1.9 / 2.2 s | 0 | rule ×4 |
+| **all** | **6.0 / 11.2 s, max 94.8 s** | 15 | | **3.6 / 6.2 s, max 6.5 s** | 4 | |
+
+Before, both invoices of the duplicate order got NO_PAGAR, so the order was never paid.
+After, the invoice dated first (factura_41082, 7 April) gets PAGAR and the other gets
+NO_PAGAR. factura_41082 still needs one retry every time: its first answer pays it in the
+text but proposes NO_PAGAR. An earlier N=5 run on dev returned two 502s on the duplicate,
+and a stall of 94-100 s showed up in about 1 run in 10.
+
+The p50 is set by the provider's speed, about 250 output tokens per second over about 600
+tokens. Getting below 3 s needs a shorter answer or a streamed one.
+
 ## Rejected vs ignored
 
 | | Status | `outcome` | Event | Who |

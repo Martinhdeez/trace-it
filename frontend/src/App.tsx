@@ -14,6 +14,7 @@ import { Rule } from './routes/Rule'
 import { Settings } from './routes/Settings'
 import { Definition } from './routes/Definition'
 import { MailNotifications } from './components/process/MailNotifications'
+import { Metrics } from './routes/Metrics'
 import { ProcessSettings } from './routes/ProcessSettings'
 import { paths } from './lib/paths'
 import { useSession } from './state/session'
@@ -31,19 +32,21 @@ export default function App() {
         <Route path="/processes/:processId" element={<Inbox />} />
         <Route path="/processes/:processId/panel" element={<Process />} />
         <Route path="/processes/:processId/chat" element={<ProcessChat />} />
+        <Route path="/processes/:processId/definition" element={<Legacy to={paths.processChat} />} />
         <Route path="/processes/:processId/definition/*" element={<Definition />} />
         <Route path="/processes/:processId/review" element={<Queue />} />
         <Route path="/processes/:processId/reception" element={<Legacy to={paths.processSettings} />} />
+        <Route path="/processes/:processId/metrics" element={<Metrics />} />
         <Route path="/processes/:processId/settings" element={<ProcessSettings />} />
         <Route path="/processes/:processId/instances" element={<Instances />} />
         <Route path="/processes/:processId/rules/:ruleId" element={<Rule />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/processes/:processId/rules" element={<Legacy to={paths.definition} />} />
+        <Route path="/processes/:processId/rules" element={<Legacy to={paths.definitionManual} />} />
         <Route path="/processes/:processId/knowledge" element={<Legacy to={paths.definitionSources} />} />
         <Route path="/processes/:processId/sources" element={<Legacy to={paths.definitionSources} />} />
         <Route path="/processes/:processId/queue" element={<Legacy to={paths.review} />} />
-        <Route path="/processes/:processId/audit" element={<Legacy to={paths.definition} />} />
-        <Route path="/processes/:processId/versions" element={<Legacy to={paths.definition} />} />
+        <Route path="/processes/:processId/audit" element={<Legacy to={paths.definitionManual} />} />
+        <Route path="/processes/:processId/versions" element={<Legacy to={paths.definitionManual} />} />
       </Route>
       <Route path="*" element={<Navigate to={paths.processes} replace />} />
     </Routes>

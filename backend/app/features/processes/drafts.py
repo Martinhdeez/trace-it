@@ -125,6 +125,12 @@ def changes(data):
     ]
 
 
+def plan_changed(before: dict, after: dict) -> bool:
+    """A conversational answer is not a configuration edit just because its prose changed."""
+    fields = (set(before) | set(after)) - {"summary", "questions"}
+    return any(before.get(field) != after.get(field) for field in fields)
+
+
 async def save(session, draft_id, revision, data, user, step):
     draft, _ = await read(session, draft_id, revision, lock=True)
     draft.revision += 1
@@ -304,10 +310,13 @@ async def message(session, draft_id, body, user):
         # A revision answers a question; it never renames the process. A model that omits
         # the name would otherwise blank it, and preparation would refuse the whole draft.
         plan.name = data["plan"].get("name", "")
+    before_plan = data["plan"]
     data["plan"] = plan.model_dump()
     data["messages"].append({"role": "assistant", "text": plan.summary})
-    invalidate(data)
-    if draft.process_id:  # each change of an existing process, as a proposal to settle
+    edited = plan_changed(before_plan, data["plan"])
+    if edited:
+        invalidate(data)
+    if edited and draft.process_id:  # each change of an existing process, as a proposal to settle
         from app.features.proposals import service as proposals
 
         await proposals.from_chat(session, draft, data, body.revision + 1)

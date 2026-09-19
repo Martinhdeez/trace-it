@@ -72,7 +72,7 @@ export function Rule() {
       crumbs={[
         { label: 'Procesos', to: paths.processes },
         { label: process.data?.name ?? '…', to: paths.process(processId) },
-        { label: 'Definición', to: paths.definition(processId) },
+        { label: 'Definición', to: paths.processChat(processId) },
         { label: `Regla ${ruleId}` },
       ]}
       actions={
@@ -118,7 +118,7 @@ export function Rule() {
       }
     >
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-10 pt-4 sm:px-6">
         {rule.isError ? <ErrorNotice error={rule.error} /> : null}
 
         <PageIntro

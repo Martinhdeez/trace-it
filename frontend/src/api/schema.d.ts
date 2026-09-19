@@ -682,8 +682,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Delete an unpublished process without runtime history
-         * @description A process with cases, source loads, published versions or other append-only history is kept.
+         * Permanently delete a process and all its history
+         * @description Deletes the process and every process-owned case, source, version, file, proposal, mail and audit record.
          */
         delete: operations["deleteProcess"];
         options?: never;

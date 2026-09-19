@@ -40,7 +40,7 @@ export function TracePane({
   const [document, setDocument] = useState<{ instanceId: number; symbol?: string } | null>(null)
   if (!instance) {
     return (
-      <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col items-center justify-center">
+      <aside className="flex min-h-[240px] min-w-0 flex-1 flex-col items-center justify-center lg:h-full lg:min-h-0">
         <EmptyState icon={FileSearch} title="Elige un documento">
           Verás su decisión, las reglas que saltaron y la evidencia de cada dato.
         </EmptyState>
@@ -72,7 +72,7 @@ export function TracePane({
         : AlertTriangle
 
   return (
-    <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-6 pb-4">
+    <aside className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pb-4 sm:px-6 lg:h-full lg:overflow-y-auto">
       <DocumentHeader instance={instance} onOpen={() => setDocument({ instanceId: instance.id })} />
       {mailOrigin && <details className="mb-4 rounded-lg border border-hairline p-3 text-sm">
         <summary>Recibido por correo · {String(mailOrigin.original_name ?? instance.name)}</summary>
@@ -83,7 +83,7 @@ export function TracePane({
         <DocumentPopup instance={instance} trace={trace} initialSymbol={document.symbol} onClose={() => setDocument(null)} />
       ) : null}
 
-      <div className="mx-auto w-full max-w-[820px] rounded-[16px] bg-surface px-6 py-6 ring-1 ring-line">
+      <div className="mx-auto w-full max-w-[820px] rounded-[16px] bg-surface px-4 py-6 ring-1 ring-line sm:px-6">
         <div className="flex items-start gap-4">
           <span
             className={cn(

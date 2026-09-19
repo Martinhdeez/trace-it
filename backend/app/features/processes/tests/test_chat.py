@@ -60,6 +60,25 @@ async def test_discussion_preserves_accepted_proposals_and_preview(api, monkeypa
     assert published["published_process_id"] is not None
 
 
+async def test_revision_question_preserves_accepted_proposals_and_preview(api, monkeypatch):
+    draft = await prepare_new(api, monkeypatch)
+    answer = copy.deepcopy(draft["plan"])
+    answer["summary"] = "Explained the current threshold without changing the process."
+    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [answer]}))
+
+    revised = await post(
+        api,
+        draft,
+        "messages",
+        mode="revise",
+        message="Explain the current threshold without changing it.",
+    )
+
+    assert revised["reviews"] == draft["reviews"]
+    assert revised["preview"] == draft["preview"]
+    assert revised["changes"] == draft["changes"]
+
+
 async def test_chat_reads_past_cases_and_separate_draft_without_changing_them(api, monkeypatch):
     initial = await post(api, await prepare_new(api, monkeypatch), "publish")
     pid = initial["published_process_id"]

@@ -1,7 +1,7 @@
 import { paths } from './paths'
 
 export const DEFINITION_TABS = [
-  { id: 'normas', label: 'Normas', path: paths.definition },
+  { id: 'normas', label: 'Normas', path: paths.definitionManual },
   { id: 'contexto', label: 'Contexto', path: paths.definitionContext },
   { id: 'inputs', label: 'Inputs', path: paths.definitionInputs },
   { id: 'fuentes', label: 'Fuentes de verdad', path: paths.definitionSources },

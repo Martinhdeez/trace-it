@@ -17,7 +17,7 @@ export function ProcessChat() {
     queryFn: () => api.getProcess(processId),
   })
 
-  if (!isManager) return <Navigate to={paths.definition(processId)} replace />
+  if (!isManager) return <Navigate to={paths.definitionManual(processId)} replace />
 
   return (
     <ProcessScreen
@@ -28,7 +28,7 @@ export function ProcessChat() {
         { label: 'Definición' },
       ]}
       actions={
-        <Link to={paths.definition(processId)}>
+        <Link to={paths.definitionManual(processId)}>
           <Button tone="ghost">Editar a mano</Button>
         </Link>
       }

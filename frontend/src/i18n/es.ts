@@ -18,10 +18,14 @@ export const es = {
     runs: 'Ejecuciones',
     signIn: 'Entrar',
     anonymous: 'sin identificar',
+    menu: 'Menú',
+    close: 'Cerrar',
+    collapse: 'Contraer menú',
+    expand: 'Expandir menú',
   },
   processes: {
     delete: 'Eliminar proceso',
-    confirmDelete: '¿Eliminar este proceso?',
+    confirmDelete: '¿Eliminar este proceso y todo su historial?',
     deleting: 'Eliminando…',
   },
   planes: {

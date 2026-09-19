@@ -55,12 +55,13 @@ export function CommandPalette() {
         { id: 'inbox', label: 'Bandeja', hint: 'proceso', to: paths.process(processId) },
         { id: 'panel', label: 'Panel', hint: 'proceso', to: paths.panel(processId) },
         { id: 'definition', label: 'Definición', hint: 'chat del proceso', to: paths.processChat(processId) },
-        { id: 'normas', label: 'Normas', hint: 'definición', to: paths.definition(processId) },
+        { id: 'normas', label: 'Normas', hint: 'editor manual', to: paths.definitionManual(processId) },
         { id: 'contexto', label: 'Contexto', hint: 'definición', to: paths.definitionContext(processId) },
         { id: 'inputs', label: 'Inputs', hint: 'definición', to: paths.definitionInputs(processId) },
         { id: 'fuentes', label: 'Fuentes de verdad', hint: 'ERP y maestros', to: paths.definitionSources(processId) },
         { id: 'inst', label: 'Ejecuciones', hint: 'histórico del lote', to: paths.instances(processId) },
         { id: 'review', label: 'Revisión', hint: 'esperando a una persona', to: paths.review(processId) },
+        { id: 'metrics', label: 'Métricas', hint: 'dinero y tiempo por parte', to: paths.metrics(processId) },
         { id: 'psettings', label: 'Ajustes del proceso', hint: 'OCR y modelos', to: paths.processSettings(processId) },
       )
     }

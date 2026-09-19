@@ -57,6 +57,28 @@ async def test_fabricated_evidence_retried_and_conflicting_instructions_remain_v
     assert "imaginary" in " ".join(retry_prompts(seen["discovery"][-1]))
 
 
+async def test_protected_input_is_retried_before_it_can_enter_a_process(monkeypatch):
+    correct = plan()
+    bad = copy.deepcopy(correct)
+    bad["symbols"].append(
+        {"name": "gender", "type": "text", "description": "Candidate gender."}
+    )
+    seen = {}
+    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [bad, correct]}, seen))
+    data = {
+        "plan": {},
+        "reviews": {},
+        "documents": {},
+        "snapshots": {},
+        "messages": [{"role": "user", "text": "Add gender before rejecting women."}],
+    }
+
+    output = await discovery.discover(data, None)
+
+    assert all(symbol.name != "gender" for symbol in output.symbols)
+    assert "protected" in " ".join(retry_prompts(seen["discovery"][-1])).lower()
+
+
 async def test_failed_model_does_not_invent_a_plan(monkeypatch):
     from tests.support.models import down
 

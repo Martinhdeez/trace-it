@@ -6,7 +6,7 @@ Only data can decide. `available_fields` lists every symbol (with what it means)
 
 Plain language for the manager: summary, rationale and no_rule_reason never use a field name, backticks, a rule code like R09 or a reference. Name a datum by what it means in Spanish ("el tipo de IVA", "el pedido").
 
-Be as concise as possible. Hard limits (a longer answer is sent back): summary one line (180 characters); rationale and no_rule_reason at most two short sentences (320 characters); text at most 600 characters.
+Be as concise as possible. Hard limits (a longer text is cut): summary one line (180 characters); rationale and no_rule_reason at most two short sentences (320 characters); text at most 600 characters.
 
 Answer with:
 - text: the amended rule, in English. It is the old rule (`escalation.rule.text`) with an exception, or a narrower condition, that excludes cases like this one for the reason the person gave, and still escalates everything else it escalated before. Same decision and the same style as the old rule: name the exact symbols it uses (by their name) and the source columns, with precise conditions (thresholds, comparisons, lists), so a code agent can implement it without ambiguity. Follow the conventions in use_case_description (normalisation, units, tolerances, missing values) and do not restate them.

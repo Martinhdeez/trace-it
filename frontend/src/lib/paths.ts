@@ -12,19 +12,22 @@ export const paths = {
   /** The console: panel, definition, runs, review and settings, one tab each. */
   panel: (id: number | string) => `/processes/${id}/panel`,
   processChat: (id: number | string) => `/processes/${id}/chat`,
+  /** The direct editor, kept as a fallback to the unified process chat. */
   definition: (id: number | string) => `/processes/${id}/definition`,
+  definitionManual: (id: number | string) => `/processes/${id}/definition/manual`,
   definitionContext: (id: number | string) => `/processes/${id}/definition/contexto`,
   definitionInputs: (id: number | string) => `/processes/${id}/definition/inputs`,
   definitionSources: (id: number | string) => `/processes/${id}/definition/fuentes`,
   knowledge: (id: number | string) => `/processes/${id}/definition/fuentes`,
-  versions: (id: number | string) => `/processes/${id}/definition`,
+  versions: (id: number | string) => `/processes/${id}/definition/manual`,
   review: (id: number | string) => `/processes/${id}/review`,
   // reviewer-agent FE-4/5 (docs/reviewer-agent.md): a case opened in Revisión. If merging a
   // newer version from Carlos, keep his paths and preserve: review?i=<instance>.
   reviewCase: (processId: number | string, instanceId: number | string) =>
     `/processes/${processId}/review?i=${instanceId}`,
+  metrics: (id: number | string) => `/processes/${id}/metrics`,
   processSettings: (id: number | string) => `/processes/${id}/settings`,
-  rules: (id: number | string) => `/processes/${id}/definition`,
+  rules: (id: number | string) => `/processes/${id}/definition/manual`,
   rule: (processId: number | string, ruleId: number | string) =>
     `/processes/${processId}/rules/${ruleId}`,
   instances: (id: number | string, runId?: number) =>
@@ -32,7 +35,7 @@ export const paths = {
   instance: (processId: number | string, instanceId: number | string) =>
     `/processes/${processId}/instances?i=${instanceId}`,
   queue: (id: number | string) => `/processes/${id}/review`,
-  audit: (id: number | string) => `/processes/${id}/definition`,
+  audit: (id: number | string) => `/processes/${id}/definition/manual`,
   sources: (id: number | string) => `/processes/${id}/definition/fuentes`,
   settings: '/settings',
 } as const
