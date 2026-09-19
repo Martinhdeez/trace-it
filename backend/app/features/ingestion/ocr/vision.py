@@ -61,7 +61,7 @@ class VisionFallback:
                     "model": model,
                     "endpoint": self._endpoint(provider, model),
                     "prompt": PROMPT if provider == "gemini" else COMPATIBLE_PROMPT,
-                    "generation": GENERATION
+                    "generation": {**GENERATION, "maxOutputTokens": self.settings.vision_max_tokens}
                     if provider == "gemini"
                     else self._generation(provider),
                 }
@@ -78,9 +78,8 @@ class VisionFallback:
         base = self.settings.vlm_url if provider == "compatible" else self.settings.helmcode_url
         return base.rstrip("/") + "/chat/completions"
 
-    @staticmethod
-    def _generation(provider):
-        result = {"temperature": 0, "max_tokens": 2500}
+    def _generation(self, provider):
+        result = {"temperature": 0, "max_tokens": self.settings.vision_max_tokens}
         if provider == "helmcode":
             result["reasoning_effort"] = "none"
         return result
@@ -138,7 +137,7 @@ class VisionFallback:
         endpoint = self._endpoint(provider, model)
         if provider == "gemini":
             prompt = PROMPT if fields is None else prompt
-            generation = GENERATION
+            generation = {**GENERATION, "maxOutputTokens": self.settings.vision_max_tokens}
 
             def call(mark_network_attempt):
                 with httpx.Client(
@@ -150,6 +149,7 @@ class VisionFallback:
                         self.settings.gemini_api_key,
                         [png],
                         before_request=mark_network_attempt,
+                        max_tokens=self.settings.vision_max_tokens,
                         **({"prompt": prompt} if fields is not None else {}),
                     )
                 content = output_text(response)

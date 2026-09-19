@@ -2,6 +2,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+from app.features.processes.execution import ExecutionSettings
+
 
 class SymbolExtraction(BaseModel):
     """Optional hints for finding a process symbol in an input document."""
@@ -40,6 +42,7 @@ class ProcessIn(BaseModel):
     # the pack, loaded first). Without it the process gets a use case of its own, with the
     # same name and this `description`.
     use_case: str | None = None
+    execution: ExecutionSettings | None = None
     description: str | None = None
     decision_types: list[DecisionTypeIO]
     symbols: list[SymbolIO] = []

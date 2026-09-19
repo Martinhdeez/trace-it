@@ -89,7 +89,9 @@ async def upload_document(
     mode: Annotated[Literal["local", "api", "hybrid"] | None, Form()] = None,
 ):
     try:
-        await process_service.require_process(session, process_id)
+        from app.features.versions.service import lock
+
+        await lock(session, process_id)
         with events.span("upload_document", process_id=process_id, file=file.filename) as span:
             try:
                 with events.span("store_file"):
@@ -101,6 +103,9 @@ async def upload_document(
                 options = ExtractOptions(
                     mode=mode, ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or []
                 )
+                from .runtime import for_process
+
+                service, options = await for_process(session, process_id, service, options)
                 instance, stored = await process_service.existing_document(
                     session, process_id, item, service, options
                 )

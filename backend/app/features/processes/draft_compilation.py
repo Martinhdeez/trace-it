@@ -1,10 +1,10 @@
 """Compile reviewed rules without activating them; reuse the engine and historical audit."""
 
 import asyncio
+from dataclasses import replace
 
 from app.common.exceptions import ConflictError
 from app.features.agents import compiler, normalizer, sandbox
-from app.features.agents.llm import Setup
 from app.features.decisions import service as decisions
 from app.features.decisions.engine import Outcomes, decide
 from app.features.processes.draft_schemas import DraftPlan
@@ -118,8 +118,8 @@ async def compile_plan(
         # default over the outcome the user just approved.
         setup = setups.get("normalizer")
         if setup:
-            setup = Setup(
-                setup.settings.model_copy(update={"failed_check_decision": None}), setup.config_id
+            setup = replace(
+                setup, settings=setup.settings.model_copy(update={"failed_check_decision": None})
             )
         text = (
             f"{proposal.text}\nRule type: {proposal.type}. "
@@ -263,6 +263,7 @@ async def review_preview(session, process_id, before, after, inputs, tables):
     snapshots = []
     for configuration, source_tables in ((before, None), (after, tables)):
         snapshot = deepcopy(captured)
+        snapshot["execution"] = deepcopy(configuration.get("execution", {}))
         for key in ("process", "rules", "guidance", "agents"):
             snapshot[key] = deepcopy(configuration[key])
         if source_tables is not None:

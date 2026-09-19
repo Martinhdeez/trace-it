@@ -89,3 +89,36 @@ async def discard(process_id: int, revision: int, session: Session, user: Curren
         raise ConflictError("The draft changed; fetch it again")
     await session.delete(draft)
     await session.commit()
+
+
+@router.get("/processes/{process_id}/execution")
+async def execution_settings(process_id: int, session: Session, user: CurrentUser) -> dict:
+    """Editable values and preset previews; reading never creates a draft."""
+    from app.features.processes import execution as choices
+    from app.features.versions import configuration
+    from app.features.versions.model import ProcessDraft
+
+    manager(user)
+    version = await service.active(session, process_id, required=False)
+    draft = await session.get(ProcessDraft, process_id)
+    snapshot = (
+        draft.snapshot
+        if draft
+        else version.snapshot
+        if version
+        else (await configuration.workspace(session, process_id))
+    )
+    current = choices.read(snapshot)
+    presets = {}
+    for name in choices.PRESETS:
+        try:
+            presets[name] = {"settings": choices.preset(current, name).model_dump(mode="json")}
+        except (ValueError, TypeError, KeyError) as error:
+            presets[name] = {"error": str(error)}
+    return {
+        "settings": current.model_dump(mode="json"),
+        "revision": draft.revision if draft else None,
+        "version_id": version.id if version else None,
+        "presets": presets,
+        "decision_review": snapshot["process"].get("decision_review"),
+    }

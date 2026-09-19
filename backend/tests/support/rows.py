@@ -23,6 +23,9 @@ async def publish_fixture(session: AsyncSession, process_id: int):
 
     row = await service.lock(session, process_id)
     snapshot = await configuration.workspace(session, process_id)
+    # Legacy fake fixtures use injected readers and scripted role models.
+    # Execution-configuration tests publish through the real draft endpoints.
+    snapshot.pop("execution", None)
     # Scripted tests resolve their role models through llm.model_for.
     for config in snapshot["agents"].values():
         config["settings"]["model"] = None

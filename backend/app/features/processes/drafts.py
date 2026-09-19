@@ -13,6 +13,7 @@ from app.features.agents import discovery
 from app.features.decisions import service as decisions
 from app.features.ingestion.model import File
 from app.features.processes import draft_compilation as compilation
+from app.features.processes import execution as execution_choices
 from app.features.processes import service
 from app.features.processes.draft_schemas import (
     AcceptanceExample,
@@ -95,6 +96,7 @@ async def output(session, draft_id):
         connectors=list(await connectors(session, draft)),
         preview=data.get("preview"),
         changes=changes(data),
+        execution=execution_choices.read(data) if "agents" in data else None,
     )
 
 
@@ -204,6 +206,9 @@ async def start(session, body: DraftStart, user):
         "preview": None,
         "base_fingerprint": await fingerprint(session, body.process_id),
     }
+    pinned = base or {"agents": await config.agents(session, body.use_case_id or 0)}
+    choices = body.execution or execution_choices.read(pinned)
+    execution_choices.write(data, choices)
     session.add(DiscoveryRevision(draft_id=draft.id, number=1, author_id=user.id, data=data))
     await session.commit()
     return await output(session, draft.id)
@@ -239,7 +244,11 @@ async def message(session, draft_id, body, user):
         {"role": "user", "text": body.message, "author": user.name, "mode": body.mode}
     )
     await conversation_context(session, draft, data)
-    setups = await use_cases.setups(session, draft.use_case_id) if draft.use_case_id else {}
+    setups = (
+        config.setups(data)
+        if "agents" in data
+        else (await use_cases.setups(session, draft.use_case_id) if draft.use_case_id else {})
+    )
     if body.mode == "discuss":
         with events.span("discuss_process", process_id=draft.process_id, draft_id=draft_id):
             answer = await discovery.discuss(data, setups.get("discovery"))
@@ -357,13 +366,22 @@ async def prepare(session, draft_id, revision, user):
     compilation.ready(plan, data["reviews"])
     await check_base(session, draft, data, plan)
     tables = workbooks.materialize(plan, data)
-    setups = await use_cases.setups(session, draft.use_case_id) if draft.use_case_id else {}
+    setups = (
+        config.setups(data)
+        if "agents" in data
+        else (await use_cases.setups(session, draft.use_case_id) if draft.use_case_id else {})
+    )
     with events.span("compile_process_draft", draft_id=draft_id, author=user.name):
         compiled = await compilation.compile_plan(
             plan, tables, setups, data["base_configuration"], data.get("base_sources")
         )
+        preview_base = copy.deepcopy(data["base_configuration"])
+        if preview_base is not None and "agents" in data:
+            # Paired reviewer calls use the selected draft models on both inputs.
+            # A local-only draft must never send a baseline call to an old cloud model.
+            execution_choices.write(preview_base, execution_choices.read(data))
         data["preview"] = await compilation.preview(
-            session, draft.process_id, plan, tables, compiled, data["base_configuration"]
+            session, draft.process_id, plan, tables, compiled, preview_base
         )
     if draft.process_id:
         await versions.lock(session, draft.process_id)
@@ -461,6 +479,8 @@ async def publish(session, draft_id, revision, user):
     base = data["base_configuration"] or await config.workspace(session, process.id)
     snapshot = compilation.candidate(plan, data["preview"]["compilations"], base)
     snapshot["rules"] = [config.artifact(rule) for rule in published]
+    if "agents" in data:
+        execution_choices.write(snapshot, execution_choices.read(data))
     impact = await versions.inspect(
         session,
         snapshot,
@@ -519,3 +539,12 @@ async def publish(session, draft_id, revision, user):
 
     await after_publish(process.id, version.id)
     return await output(session, draft.id)
+
+
+async def configure_execution(session, draft_id, body, user):
+    manager(user)
+    _, data = await read(session, draft_id, body.revision)
+    selected = body.execution.model_copy(update={"preset": "custom"})
+    execution_choices.write(data, selected)
+    invalidate(data)
+    return await save(session, draft_id, body.revision, data, user, "configure_discovery_execution")

@@ -6,7 +6,9 @@ import re
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from contextlib import suppress
+from copy import copy
 from pathlib import Path
 
 from filelock import FileLock
@@ -60,6 +62,35 @@ class ExtractionService:
         self.stop = threading.Event()
         self.threads = []
         self.slots = threading.BoundedSemaphore(settings.workers)
+        self.configured_services = OrderedDict()
+        self.configuration_lock = threading.Lock()
+        self.execution_hash = None
+
+    def configured(self, config):
+        """Request-local readers/settings, sharing storage, locks and worker limits."""
+        from app.features.processes.execution import ingestion_settings
+
+        key = fingerprint(config.model_dump(mode="json", exclude={"agents", "preset"}))
+        with self.configuration_lock:
+            if key in self.configured_services:
+                self.configured_services.move_to_end(key)
+                return self.configured_services[key]
+            service = copy(self)
+            service.settings = ingestion_settings(config, self.settings)
+            if (
+                service.settings.model_dir != self.settings.model_dir
+                or service.settings.verification_model_dir
+                != (self.settings.verification_model_dir or self.settings.model_dir / "verify")
+            ):
+                service.ocr = LocalOCR(service.settings)
+            service.vlm = VisionFallback(service.settings)
+            service.judge = TextJudge(service.settings)
+            service.execution_hash = key
+            self.configured_services[key] = service
+            # Eviction never invalidates a reader already held by an in-flight operation.
+            if len(self.configured_services) > 8:
+                self.configured_services.popitem(last=False)
+            return service
 
     def get_result(self, extraction_id: str):
         result = self.store.result(extraction_id)
@@ -181,6 +212,9 @@ class ExtractionService:
                 options={
                     "mode": options.mode,
                     "ocr": options.ocr,
+                    "secondary_ocr": options.secondary_ocr,
+                    "focused_verification": options.focused_verification,
+                    "source_verification": options.source_verification,
                     "vlm": vision,
                     "jev": judge,
                     "verify_fields": sorted(set(options.verify_fields)),
@@ -238,6 +272,7 @@ class ExtractionService:
             extraction_id=item["id"],
             pipeline_version=PIPELINE_VERSION,
             options=options.model_dump(),
+            execution_hash=self.execution_hash,
         ) as span:
             result = self._extract(item, options)
             provenance = result.data.get("provenance", {})
@@ -293,6 +328,7 @@ class ExtractionService:
                 judgment = data.get("committee", {}).get("text_judge", {})
                 data["provenance"] = {
                     "cache_key": key,
+                    "execution_hash": self.execution_hash,
                     "pipeline_version": PIPELINE_VERSION,
                     "options": options.model_dump(),
                     "ocr_models": self.ocr.signature() if metrics["ocr_calls"] else None,

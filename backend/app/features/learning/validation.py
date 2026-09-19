@@ -11,14 +11,7 @@ from app.features.learning.evidence import cases
 from app.features.processes.model import DecisionType, Symbol
 from app.features.rules.model import ENFORCED, Rule
 from app.features.rules.service import rule_hash
-from app.features.use_cases.schemas import AgentSettings
-
-
-def setups(snapshot: dict) -> dict[str, llm.Setup]:
-    return {
-        role: llm.Setup(AgentSettings.model_validate(value["settings"]), value["config_id"])
-        for role, value in snapshot["agents"].items()
-    }
+from app.features.versions.configuration import setups
 
 
 def rule(data: dict, process_id: int) -> Rule:

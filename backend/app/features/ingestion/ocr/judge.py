@@ -23,7 +23,7 @@ class TextJudge:
 
     @property
     def configured(self):
-        return bool(self._chain())
+        return bool(self.settings.judge_url and self.settings.jev_model) or bool(self._chain())
 
     def _chain(self):
         return [
@@ -38,6 +38,13 @@ class TextJudge:
         ]
 
     def signature(self):
+        if self.settings.judge_url:
+            return {
+                "endpoint": self.settings.judge_url,
+                "model": self.settings.jev_model,
+                "max_tokens": self.settings.judge_max_tokens,
+                "instructions": INSTRUCTIONS,
+            }
         return {
             "chain": [
                 {
@@ -50,7 +57,7 @@ class TextJudge:
                     else self.settings.helmcode_text_model,
                     "generation": {
                         "temperature": 0,
-                        "max_tokens": 1500,
+                        "max_tokens": self.settings.judge_max_tokens,
                         "reasoning_effort": "none",
                         "response_format": {"type": "json_object"},
                     }
@@ -88,6 +95,9 @@ class TextJudge:
             "questions": questions,
         }
 
+        if self.settings.judge_url:
+            return self._compatible(payload, questions)
+
         failure = None
         namespace = str(self.settings.data_dir)
         for index, provider in enumerate(self._chain()):
@@ -121,7 +131,9 @@ class TextJudge:
         questions = payload["questions"]
 
         def call(mark_network_attempt):
-            with httpx.Client(timeout=self.settings.vlm_timeout, follow_redirects=False) as client:
+            with httpx.Client(
+                timeout=self.settings.judge_timeout, follow_redirects=False
+            ) as client:
                 mark_network_attempt()
                 response = client.post(
                     URL,
@@ -164,7 +176,7 @@ class TextJudge:
         endpoint = self.settings.helmcode_url.rstrip("/") + "/chat/completions"
         generation = {
             "temperature": 0,
-            "max_tokens": 1500,
+            "max_tokens": self.settings.judge_max_tokens,
             "reasoning_effort": "none",
             "response_format": {"type": "json_object"},
         }
@@ -209,7 +221,9 @@ class TextJudge:
             }
 
         def call(mark_network_attempt):
-            with httpx.Client(timeout=self.settings.vlm_timeout, follow_redirects=False) as client:
+            with httpx.Client(
+                timeout=self.settings.judge_timeout, follow_redirects=False
+            ) as client:
                 mark_network_attempt()
                 response = client.post(
                     endpoint,
@@ -248,3 +262,63 @@ class TextJudge:
             fallback=fallback,
         )
         return validate(data)
+
+    def _compatible(self, payload, questions):
+        """The local/compatible judge can select existing candidates, never create facts."""
+        body = {
+            "model": self.settings.jev_model,
+            "temperature": 0,
+            "max_tokens": self.settings.judge_max_tokens,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": INSTRUCTIONS
+                    + ' Return JSON mapping each field to a candidate or "none".',
+                },
+                {"role": "user", "content": json.dumps(payload)},
+            ],
+        }
+        endpoint = self.settings.judge_url.rstrip("/") + "/chat/completions"
+
+        def call(mark_network_attempt):
+            headers = {}
+            if self.settings.judge_api_key:
+                headers["Authorization"] = "Bearer " + self.settings.judge_api_key
+            with httpx.Client(
+                timeout=self.settings.judge_timeout, follow_redirects=False
+            ) as client:
+                mark_network_attempt()
+                response = client.post(endpoint, headers=headers, json=body)
+            record_response("jev", response.status_code)
+            response.raise_for_status()
+            result = response.json()
+            record_response("jev", response.status_code, result)
+            choice = result["choices"][0]
+            if choice.get("finish_reason") != "stop":
+                raise ValueError("Truncated or incomplete judge response")
+            selected = json.loads(choice["message"]["content"])
+            if set(selected) != set(questions) or any(
+                value not in questions[name]["criteria"] for name, value in selected.items()
+            ):
+                raise ValueError("Judge must select existing candidates only")
+            return {
+                "answers": {
+                    name: {"type": "choice", "choice": value} for name, value in selected.items()
+                },
+                "usage": result.get("usage", {}),
+            }
+
+        data = recorded_call(
+            self.settings.data_dir / "provider-journal" / "jev",
+            {"endpoint": endpoint, "payload": body},
+            call,
+            provider="jev",
+            model=self.settings.jev_model,
+            operation="text_selection",
+        )
+        return {
+            "role": "textual_recommendation_only",
+            "visual_vote": False,
+            "model": self.settings.jev_model,
+            **data,
+        }

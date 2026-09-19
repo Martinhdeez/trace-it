@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # compiler: writes a rule's code; tester: writes its tests and reviews disputes;
 # assistant: suggests how to resolve an escalated case; normalizer: turns a norm in
@@ -39,7 +39,9 @@ class AgentSettings(BaseModel):
     # rejected answer (ModelRetry) never switches (ADR 0019).
     fallback_models: list[str] = Field([], examples=[["helmcode:glm5.3-flash"]])
     # Per request to the provider; None: the provider's own default.
-    timeout_seconds: float | None = None
+    timeout_seconds: float | None = Field(default=None, gt=0, le=3600)
+    retries: int | None = Field(default=None, ge=0, le=10)
+    request_limit: int | None = Field(default=None, ge=1, le=100)
     # Domain guidance appended to the role's platform prompt.
     instructions: str = ""
     # PydanticAI model settings, e.g. {"temperature": 0}.
@@ -50,6 +52,19 @@ class AgentSettings(BaseModel):
     # normalizer: the decision of a check whose failure the norm does not name (ADR 0017).
     # A decision type of the process, never the default. None: the prompt's own fallbacks.
     failed_check_decision: str | None = None
+
+    @field_validator("limits")
+    @classmethod
+    def bounded_effort(cls, limits):
+        for name, minimum, maximum in (
+            ("max_attempts", 1, 20),
+            ("max_reviews", 0, 20),
+            ("min_tests", 1, 100),
+        ):
+            value = limits.get(name)
+            if value is not None and (not minimum <= value <= maximum or value != int(value)):
+                raise ValueError(f"{name} must be an integer between {minimum} and {maximum}")
+        return limits
 
 
 class UseCaseOut(BaseModel):

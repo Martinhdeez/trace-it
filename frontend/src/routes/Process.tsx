@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { api } from '../api/client'
 import { keys } from '../api/queries'
+import { ProcessExecutionSettings } from '../components/process/ExecutionSettings'
 import { ExportButton } from '../components/process/ExportButton'
 import {
   revokePreview,
@@ -239,6 +240,7 @@ export function Process() {
         <Runs processId={processId} runs={runs} documentCount={counts.data?.total ?? 0} />
 
         <Split counts={counts.data} instances={instances.data ?? []} />
+        <ProcessExecutionSettings processId={processId} />
       </div>
     </ProcessScreen>
   )

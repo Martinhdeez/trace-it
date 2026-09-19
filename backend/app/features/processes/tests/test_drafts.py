@@ -22,6 +22,19 @@ from app.main import app
 from tests.support.models import per_role, user_json
 
 
+def scripted_pinned_models(monkeypatch):
+    """Discovery now pins models; keep these workflow tests on the scripted role seam."""
+    from dataclasses import replace
+
+    original = llm.chain
+
+    def chain(setup, role, failed):
+        config = setup.settings.model_copy(update={"model": None, "fallback_models": []})
+        return original(replace(setup, settings=config), role, failed)
+
+    monkeypatch.setattr(llm, "chain", chain)
+
+
 def plan(name=None, threshold=100, field="amount", default="PAY", review="REVIEW"):
     return {
         "name": name or f"discovery-{uuid.uuid4().hex[:10]}",
@@ -117,7 +130,8 @@ def scripts(proposal, threshold=100, field="amount", broken=False):
 
 
 @pytest.fixture
-async def api():
+async def api(monkeypatch):
+    scripted_pinned_models(monkeypatch)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         user = await client.post(
             "/users",
