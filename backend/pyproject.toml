@@ -25,6 +25,7 @@ dependencies = [
     "python-dotenv>=1,<2",
     "numpy>=2,<3",
     "opencv-python>=4.11,<5",
+    "logfire[fastapi,httpx,sqlalchemy]>=5.1.0",
 ]
 
 [dependency-groups]
@@ -63,3 +64,6 @@ packages = ["app"]
 quote-style = "double"
 indent-style = "space"
 docstring-code-format = true
+
+[tool.logfire]
+ignore_no_config = true

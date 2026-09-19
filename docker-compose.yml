@@ -34,6 +34,14 @@ services:
       interval: 2s
       retries: 30
 
+  # Optional live monitoring (ADR 0018): `docker compose --profile observability up -d`, UI at
+  # http://localhost:6006. Point the backend at it with
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://phoenix:6006 (in Docker) or http://localhost:6006.
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    profiles: [observability]
+    ports: ["6006:6006"]
+
 volumes:
   db:
   ingestion_data:
