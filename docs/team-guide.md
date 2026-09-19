@@ -126,7 +126,7 @@ children nest by themselves across `await`, `gather` and threads.
 | `GET /traces/{trace_id}` | One trace as a tree (`children`) |
 | `GET /instances/{id}/trace` | An invoice's journey: file, reading spans, symbols with origin, decisions with each rule's answer (rule text, norm rule), resolutions, exports, `exported_decision` |
 | `GET /rules/{id}/trace` | How a rule was produced (norm sentence, normalizer run, each compilation: tester, coder attempts, test runs, reviews, impact check, activation) and its runtime in process runs (fired, errors, p50/p95) |
-| `GET /processes/{id}/metrics?since=` | Runs, instances/s, p50/p95 per step type, LLM calls/retries/errors/tokens by model and role, decisions by outcome, escalations by cause (`MISSING_DATA`, `RULE_ERROR`, `RULE_NEEDS_DATA`, `RULE_CONFLICT`), escalated and pending |
+| `GET /processes/{id}/metrics?since=` | Completed runs (refused ones are `run_process` errors), instances/s, p50/p95 per step type, LLM calls/retries/errors/tokens by model and role, decisions by outcome, escalations by cause (`MISSING_DATA`, `RULE_ERROR`, `RULE_NEEDS_DATA`, `RULE_CONFLICT`), escalated and pending |
 
 Each `llm_run` span holds the exact instructions, user message, output and retry prompts.
 Cost is tokens (`input_tokens`, `output_tokens`).

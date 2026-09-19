@@ -70,7 +70,7 @@ class InstanceTrace(BaseModel):
 class RuleRuntime(BaseModel):
     """The rule's code in process runs: `evaluate_rule` spans under `run_process`."""
 
-    runs: int
+    runs: int  # completed runs; refused ones are `run_process` errors in `steps`
     instances: int
     fired: int
     errors: int
@@ -113,7 +113,7 @@ class LlmStats(BaseModel):
 
 class ProcessMetrics(BaseModel):
     since: datetime | None
-    runs: int
+    runs: int  # completed runs; refused ones are `run_process` errors in `steps`
     instances_decided: int  # by the engine, in those runs
     instances_per_second: float | None
     steps: list[StepStats]  # every step type: rule compilations, LLM runs, rules, syncs...

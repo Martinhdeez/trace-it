@@ -221,7 +221,7 @@ async def metrics(session: AsyncSession, process_id: int, since: datetime | None
                 func.count(),
                 func.sum(Event.data["instances"].as_integer()),
                 func.sum(Event.duration_ms),
-            ).where(*spans, Event.step == "run_process")
+            ).where(*spans, Event.step == "run_process", Event.status == "ok")
         )
     ).one()
 

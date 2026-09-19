@@ -64,7 +64,9 @@ audit must survive without any external service.
   (tester), `coder_attempt` > (`llm_run`, `run_tests`), `impact_check`, `activate_rule`;
   `run_process` (escalations by cause, `MISSING_DATA` included) > `evaluate_rule` per
   rule (instances, fired, errors) + a `decision` point
-  per instance (fired rules, reason, `rules_hash`); `upload_document` > `store_file`,
+  per instance (fired rules, reason, `rules_hash`); `reprocess` the same, with unchanged,
+  changed and conflicts; a run or reprocess refused with 409 (rules compiling, none
+  enforced) is an `error` span, so it shows in the metrics; `upload_document` > `store_file`,
   `extraction` > `native_text`, `ocr`, `vision`, `text_judge`, then the `ingest_document`
   point with the reading and symbols; `sync_source` (the
   connector's requests, retries, 429s, logins, pages); `suggest_escalation`;

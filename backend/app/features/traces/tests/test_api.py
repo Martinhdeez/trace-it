@@ -3,8 +3,10 @@ setup as `decisions/tests/test_api.py`: seeded instances and rules, the sandbox 
 
 import pytest
 
+from app.core.database import session_factory
 from app.features.agents import sandbox
 from app.features.decisions.tests.test_api import FAKE_SANDBOX, client, create_process
+from app.features.rules.model import Rule
 
 
 @pytest.fixture
@@ -65,3 +67,37 @@ async def test_run_journey_and_metrics(fake_sandbox: None) -> None:
         assert metrics["decisions_by_outcome"] == {"PAGAR": 1, "NO_PAGAR": 2, "ESCALAR": 1}
         assert metrics["escalated"] == 0 and metrics["pending"] == 1
         assert set(metrics["failures"].values()) == {0}
+
+
+async def test_reprocess_and_a_refused_run_are_spans(fake_sandbox: None) -> None:
+    async with client() as api:
+        process_id, _ = await create_process(api, "manager")
+        await api.post(f"/processes/{process_id}/run")
+        r = await api.post(f"/processes/{process_id}/reprocess", params={"dry_run": True})
+        assert r.status_code == 200, r.text
+        [span] = (
+            await api.get("/traces", params={"process_id": process_id, "name": "reprocess"})
+        ).json()
+        assert span["data"]["dry_run"] is True and span["data"]["unchanged"] == 3
+        assert span["data"]["changed"] == 0 and span["data"]["conflicts"] == 0
+
+        # A run refused while a rule compiles (409) is an error span, counted in metrics.
+        async with session_factory() as session:
+            session.add(
+                Rule(
+                    process_id=process_id,
+                    text="t",
+                    type="prohibition",
+                    decision="ESCALAR",
+                    status="compiling",
+                )
+            )
+            await session.commit()
+        assert (await api.post(f"/processes/{process_id}/run")).status_code == 409
+        runs = (
+            await api.get("/traces", params={"process_id": process_id, "name": "run_process"})
+        ).json()
+        assert runs[0]["status"] == "error" and "still compiling" in runs[0]["data"]["error"]
+        metrics = (await api.get(f"/processes/{process_id}/metrics")).json()
+        [run] = [s for s in metrics["steps"] if s["step"] == "run_process"]
+        assert run["count"] == 2 and run["errors"] == 1 and metrics["runs"] == 1
