@@ -39,7 +39,7 @@ process of the "500 Sombras de Alberto" challenge is the first pack. No LLM ever
 make setup      # Postgres + API in Docker, pack loaded        make test       # unit tests
 make erp        # the challenge ERP bridge (other terminal)    make test-e2e   # golden + API flow
 make demo       # decide the 500 invoices -> output/outcomes.jsonl
-make reset-db   # only if your database predates the squashed 0001 migration
+make reset-db   # only for a database older than migration 0001
 ```
 
 Details: `docs/team-guide.md`. Why things are the way they are: `docs/adr/README.md`.

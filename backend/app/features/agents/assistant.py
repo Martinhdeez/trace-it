@@ -21,29 +21,11 @@ from app.features.ingestion.model import File, Instance
 from app.features.ingestion.symbols import flatten_symbols
 from app.features.processes.model import DecisionType, Process
 from app.features.rules.model import Rule
+from app.features.use_cases import service as use_cases
+from app.features.use_cases.model import UseCase
 
 MAX_TEXT = 12_000  # chars of the file's text sent to the model
 MAX_RESOLUTIONS = 10
-
-SYSTEM = """\
-You assist a person who must resolve a case that an automatic, rule-based decision process \
-sent to a person (its decision type requires a human). You do not decide: you suggest, and \
-the person decides.
-
-Given the case, answer with:
-- decision: the decision you would take. It MUST be exactly one of decision_types. Avoid the \
-types in human_decision_types: those only send the case to a person, who needs a final one.
-- reasoning: why, citing the concrete symbol values (with their origin) and the rule(s) \
-that fired. Be brief and factual. Write in English.
-- proposed_rule: ONE new rule, in English, that would resolve this case and similar future \
-ones automatically. It must be general enough to cover similar cases but not broader: name \
-the exact symbols it uses (by their name) and where each comes from, with precise conditions \
-(thresholds, comparisons, lists), so a code agent can implement it without ambiguity. Follow the \
-conventions in process_description (normalisation, units, tolerances, missing values) and do \
-not restate them in the rule. Do not restate an existing rule. Follow how people resolved \
-past cases when they are relevant.
-- proposed_type: "requirement" if the rule states a condition that must hold, \
-"prohibition" if it states a condition that must not happen."""
 
 
 class Suggestion(BaseModel):
@@ -58,9 +40,8 @@ class Deps:
     decision_types: list[str]
 
 
-assistant = Agent(
-    None, output_type=Suggestion, instructions=SYSTEM, deps_type=Deps, name="assistant", retries=1
-)
+# Its platform prompt is `prompts/assistant.md`; the use case adds guidance and model.
+assistant = Agent(None, output_type=Suggestion, deps_type=Deps, name="assistant", retries=1)
 
 
 @assistant.output_validator
@@ -103,10 +84,11 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
     )
 
     process = await session.get(Process, pid)
+    use_case = await session.get(UseCase, process.use_case_id)
     fired = [r for r in latest.results if r.get("fires")]
     context = {
         # conventions every rule of the process follows; the proposed rule must too
-        "process_description": process.description if process else "",
+        "use_case_description": use_case.description,
         "decision_types": types,
         "human_decision_types": human,
         "case": {
@@ -151,7 +133,16 @@ async def suggest(session: AsyncSession, instance_id: int) -> Suggestion:
         raise NotFoundError(f"Instance {instance_id} does not exist")
     context, types = await _context(session, instance)
     prompt = json.dumps(context, ensure_ascii=False, default=str)
-    suggestion, trace = await llm.run(assistant, "assistant", prompt, deps=Deps(types))
+    process = await session.get(Process, instance.process_id)
+    setup = (await use_cases.setups(session, process.use_case_id)).get("assistant")
+    suggestion, trace = await llm.run(
+        assistant,
+        "assistant",
+        prompt,
+        instructions=llm.prompt("assistant"),
+        setup=setup,
+        deps=Deps(types),
+    )
     events.record(
         session,
         "suggest_escalation",

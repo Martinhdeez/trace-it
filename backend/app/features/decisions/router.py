@@ -59,7 +59,8 @@ async def list_instances(
     operation_id="listEvents",
     summary="The trace of a process, newest first",
     description="Every recorded step: `decision`, `resolution`, `ingest_document`, "
-    "`compile_rule`, `suggest_escalation`, `sync_source`, `sync_source_failed`. "
+    "`compile_rule`, `normalize_norm`, `suggest_escalation`, `sync_source`, "
+    "`sync_source_failed`. "
     "Filter with `step` and `instance_id`.",
 )
 async def list_events(

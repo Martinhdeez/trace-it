@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: setup compile activate demo erp erp-sync test test-db test-e2e eval-compiler check down reset-db
+.PHONY: setup compile activate demo erp erp-sync test test-db test-e2e eval-compiler eval-norm check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 
@@ -50,6 +50,9 @@ test-e2e: test-db  # golden outcomes of batch 1 + API flow (needs the challenge 
 
 eval-compiler:  # opt-in, calls real LLMs (keys in .env); writes backend/evals/reports/
 	cd backend && uv run python -m evals.eval_compiler
+
+eval-norm:  # opt-in, real LLMs: the client's norm -> rules -> code -> batch 1 vs golden
+	cd backend && uv run python -u -m evals.eval_norm
 
 check:
 	cd backend && uv run ruff check . && uv run ruff format --check .

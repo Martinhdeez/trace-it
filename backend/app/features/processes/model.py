@@ -5,13 +5,15 @@ from app.core.database import Base, created_at
 
 
 class Process(Base):
-    """A configured decision process: its rules, decision types, symbols and history."""
+    """A configured decision process: its rules, decision types, symbols and history. It
+    belongs to a use case, whose description (domain conventions) and agent configuration
+    it shares with the use case's other processes."""
 
     __tablename__ = "processes"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
-    description: Mapped[str] = mapped_column(default="")
+    use_case_id: Mapped[int] = mapped_column(ForeignKey("use_cases.id"), index=True)
     created_at: Mapped[created_at]
 
 

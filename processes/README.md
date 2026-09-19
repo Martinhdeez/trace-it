@@ -14,19 +14,21 @@ cd backend && uv run python -m app.cli load ../processes/invoice-payment.json --
 `POST /processes/definition` with the same JSON as the body is the only way to create a process over the API; there is no other creation endpoint. A definition that fails validation is rejected without touching the database: 422 over HTTP, an error message from the CLI.
 
 Loading is idempotent (`backend/app/features/processes/definition.py`):
-- the process is looked up by `name` and created if missing; its `description` is updated;
+- the CLI first loads the pack's use case, `<pack>/use-case.json`, if it exists (see below);
+- the process is looked up by `name` and created if missing, inside the use case named by `use_case` (which must exist: 409 otherwise). Without `use_case`, the process gets a use case of its own, with the process's name and `description`;
 - decision types and symbols are created or updated by `name`;
 - a rule enters as `draft` only if the process has no rule with the same text; existing rules, active ones included, are never touched. To change a rule, change its text: it enters as a new draft;
 - users are created by `email` if they do not exist.
 
-`--compile` compiles every draft without validated code with the two agents and prints one line per rule; one failure does not stop the others. `--activate` activates every draft whose code is validated.
+`--compile` compiles every draft without validated code with the two agents and prints one line per rule; one failure does not stop the others. A rule that needs data the process lacks becomes `blocked`: enforced, every instance escalates (`docs/team-guide.md`, rule life cycle). `--activate` activates every draft whose code is validated.
 
 ## Format
 
 | Field | Required | What it is |
 |---|---|---|
 | `name` | yes | Unique name of the process |
-| `description` | no | Free text. The compiler and the assistant receive it with every rule: put the conventions shared by all rules here (normalisation, units, what to do when a value is missing) |
+| `use_case` | no | Name of the use case the process belongs to. Its description and agent configuration apply to the process. Give `use_case` or `description`, not both (422) |
+| `description` | no | Only without `use_case`: the description of the process's own use case. Free text the compiler and the assistant receive with every rule: the conventions shared by all rules (normalisation, units, what to do when a value is missing) |
 | `decision_types` | yes | `[{name, priority, is_default, requires_human}]`. The highest `priority` wins when several rules fire. Exactly one `is_default` (applies when none fires) and it cannot be `requires_human`. Priorities must be distinct. At least one type must be `requires_human` |
 | `symbols` | no | `[{name, type, description}]`: what extraction fills in for each instance and the rules read |
 | `rules` | no | `[{text, type, decision, code}]`. `type`: `requirement` (fires if it does not hold) or `prohibition` (fires if it holds). `decision`: one of the `decision_types`. `code` (optional): path, relative to the definition, of a file defining `evaluate(instance, sources, others)`; see `rules-v3/` below |
@@ -41,6 +43,18 @@ Names inside a definition (process, decision types, symbols, sources) are the pr
 ## `rules-v3/`: hand-written code
 
 The invoice rules point at `rules-v3/r01-...py` to `r16-...py`, one file per rule in the order of the JSON. A rule that arrives with its code passes the sandbox's static check and is stored validated (`report.origin = "hand-written"`), so `--activate` runs the whole process without any model. Only the CLI resolves `code` paths, never `POST /processes/definition` (a client-supplied path would read any file the backend can); over HTTP such a rule is refused with 409. The compiler can regenerate the same rules from their texts, and `make eval-compiler` compares its output with these files. Where each rule comes from: `docs/invoice-payment-rules.md`.
+
+## `invoice-payment/use-case.json`: the use case and its agents
+
+A use case is what the app is used for (e.g. "Invoice payment"); a process is one set of rules inside it (ADR 0011). A pack may carry `<pack-name>/use-case.json`, loaded before the process:
+
+| Field | What it is |
+|---|---|
+| `name` | Unique name of the use case; the process's `use_case` names it |
+| `description` | The domain conventions every rule follows, shown to the compiler, tester and assistant |
+| `agents` | `{role: settings}`, roles `compiler`, `tester`, `assistant`, `normalizer`. Settings: `model` (`provider:model` or `helmcode:<id>`; default `TRACE_<ROLE>_MODEL`), `instructions` (domain guidance appended to the platform prompt in `backend/app/features/agents/prompts/`), `model_settings` (e.g. `{"temperature": 0}`), `limits` (compiler: `max_attempts`, `auto_activate_max_change`; tester: `min_tests`, `max_reviews`), `examples` (`[{text, type, code}]`, `code` a path relative to this file; the compiler sees the examples of the other rules, never the one being compiled) |
+
+Loading never overrides what was changed at runtime: a role with no stored version gets the file's settings as version 1, active; settings that differ from every stored version enter as a new, inactive version, for a manager to activate (`POST /agent-configs/{id}/activate`).
 
 ## `invoice-payment/sources.json`: source connectors
 

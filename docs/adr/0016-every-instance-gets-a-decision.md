@@ -41,6 +41,9 @@ frontend, and a second answer to "what does this case need from me".
 - A rule whose code fails, returns something malformed or is missing, and a tie between
   different types at the top priority, decide the escalation type. The reason is
   `RULE_ERROR <id>: ...` or `RULE_CONFLICT: ...`; every rule's result is still recorded.
+- A `blocked` rule (its agents answered NeedsData, ADR 0004) has no code on purpose: it
+  escalates every instance with `RULE_NEEDS_DATA <id>: missing <what>`, so the manager
+  reads what data to add instead of a generic "without code".
 - Instance states are `PENDING` (no symbols yet, or not run) and `DECIDED`. There is no
   `REVIEW`, no `review_reason`, no `human_kind`.
 - The exported decision is the engine's latest decision for the instance (ADR 0009 kept
@@ -66,8 +69,9 @@ frontend, and a second answer to "what does this case need from me".
 - `decisions/engine.py` (`Outcomes`, `decide`); `decisions/service.py` (`outcomes`, `run`,
   `export`); `processes/definition.py` refuses a definition without a `requires_human` type.
 - Tests: `test_engine.py` (failed rule → `ESCALAR` with `RULE_ERROR`, tie → `RULE_CONFLICT`,
-  malformed answer, rule without code), `test_sandbox_integration.py` (the same against
-  the real sandbox, including a whole-batch timeout), `test_api.py` (run, queue, resolve,
+  malformed answer, rule without code, blocked rule → `RULE_NEEDS_DATA`), `test_sandbox_integration.py` (the same against
+  the real sandbox, including a whole-batch timeout and an invoice missing a symbol the
+  rule reads), `test_api.py` (run, queue, resolve,
   export; a person's decision exported only when the engine never decided; the real sandbox
   through the service).
 - `make demo` on batch 1: `PAGAR 433 / NO_PAGAR 36 / ESCALAR 31`, 500 lines, no instance

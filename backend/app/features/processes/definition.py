@@ -22,6 +22,8 @@ from app.features.processes.service import get
 from app.features.rules.model import Rule
 from app.features.rules.schemas import RuleIn
 from app.features.rules.service import rule_hash
+from app.features.use_cases import service as use_cases
+from app.features.use_cases.model import UseCase
 from app.features.users.model import User
 from app.features.users.schemas import UserIn
 
@@ -58,6 +60,8 @@ class Definition(ProcessIn):
         for r in self.rules:
             if r.decision not in types:
                 raise ValueError(f"{r.decision!r} is not a decision type: {r.text[:60]}")
+        if self.use_case and self.description is not None:
+            raise ValueError("The description belongs to the use case: give one or the other")
         return self
 
 
@@ -95,11 +99,17 @@ async def load_definition(
     rule as a draft unless the process already has one with the same text, and create missing
     users by email. Existing rules are never touched. `base` is the folder a rule's `code`
     path is resolved from; without it, a rule that names a code file is refused."""
+    if data.use_case:
+        use_case = await session.scalar(select(UseCase).where(UseCase.name == data.use_case))
+        if use_case is None:
+            raise ConflictError(f"Use case {data.use_case!r} does not exist: load it first")
+    else:
+        use_case = await use_cases.ensure(session, data.name, data.description or "")
     process = await session.scalar(select(Process).where(Process.name == data.name))
     if process is None:
-        process = Process(name=data.name)
+        process = Process(name=data.name, use_case_id=use_case.id)
         session.add(process)
-    process.description = data.description
+    process.use_case_id = use_case.id
     await session.flush()
 
     for t in data.decision_types:
@@ -121,3 +131,13 @@ async def load_definition(
         new_rules=len(rules),
         new_users=len(users),
     )
+
+
+async def load_pack(session: AsyncSession, file: Path) -> LoadResult:
+    """What `python -m app.cli load` does: the pack's use case (`<pack>/use-case.json`), if
+    it has one, then the process with its rules' code files."""
+    use_case_file = file.with_suffix("") / use_cases.FILE
+    if use_case_file.exists():
+        await use_cases.load(session, use_cases.read_file(use_case_file))
+    data = Definition.model_validate_json(file.read_text(encoding="utf-8"))
+    return await load_definition(session, data, file.parent)

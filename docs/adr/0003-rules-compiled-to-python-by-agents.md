@@ -54,7 +54,7 @@ def evaluate(instance: dict, sources: dict[str, list[dict]], others: list[dict])
 - We run LLM-written code. That is only acceptable with ADR 0004 (verification) and
   ADR 0005 (sandbox).
 - A rule's meaning is its text; the code is a derived artefact, identified by
-  `hash(text, code A, code B)` and recompiled when the text changes.
+  `hash(text, code)` and recompiled when the text changes.
 - Ambiguous text produces ambiguous code. The fix is to clarify the text, not to edit
   code by hand.
 

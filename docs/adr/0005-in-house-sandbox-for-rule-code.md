@@ -13,7 +13,7 @@ Threat model. The code is not written by an external attacker, but it is not tru
 either: (1) a model can write something harmful by mistake; (2) an indirect prompt
 injection path exists: invoice text (e.g. `factura_1936`) → escalation assistant's
 proposed rule → a manager approves it → compilers turn it into code. The manager's approval
-and the blind double compilation (ADR 0004) reduce but do not close that path.
+and the blind tester (ADR 0004) reduce but do not close that path.
 
 ## Alternatives considered
 - **Cloud sandboxes (E2B, Modal).**

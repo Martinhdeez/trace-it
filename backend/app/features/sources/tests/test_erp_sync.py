@@ -21,7 +21,7 @@ from app.features.sources.http_connector import HttpConnector
 from app.features.sources.model import Source
 from app.features.sources.tests.conftest import SOURCES_JSON, erp_config, start_erp
 from app.main import app
-from tests.support import challenge
+from tests.support import challenge, rows
 
 SEED_ORIGIN = "erp:test-seed"
 
@@ -34,8 +34,7 @@ def expected_rows() -> list[dict]:
 
 async def new_process() -> int:
     async with session_factory() as session:
-        process = Process(name=f"erp-sync-{uuid.uuid4().hex[:8]}")
-        session.add(process)
+        process = await rows.process(session, f"erp-sync-{uuid.uuid4().hex[:8]}")
         await session.commit()
         return process.id
 

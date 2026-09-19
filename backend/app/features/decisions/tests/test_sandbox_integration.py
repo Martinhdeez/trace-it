@@ -65,6 +65,14 @@ def test_a_failing_instance_only_affects_itself() -> None:
     assert "AttributeError" in verdicts[1].reason
 
 
+def test_an_invoice_missing_a_symbol_the_rule_reads_escalates() -> None:
+    """Extraction could not read the IBAN at all: the rule raises, the invoice is not paid."""
+    [verdict] = decide_with_sandbox([{"nif": "B96233419"}])
+
+    assert verdict.decision == "ESCALAR"
+    assert verdict.reason.startswith("RULE_ERROR 1:") and "KeyError" in verdict.reason
+
+
 def test_a_whole_batch_failure_escalates_every_instance() -> None:
     loop = "def evaluate(instance, sources, others):\n    while True:\n        pass\n"
 

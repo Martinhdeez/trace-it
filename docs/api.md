@@ -19,13 +19,14 @@ activating rules need it. CORS is open.
 | Reading evidence | `GET /instances/{id}/document` | what extraction read, field by field |
 | Assistant | `GET /instances/{id}/suggestion` | decision, reasoning and a proposed rule. 409 if not escalated, 502 if the model failed |
 | Resolve | `POST /instances/{id}/resolve` `{decision, reason}` | adds a decision; the engine's stays |
-| Rules | `GET /processes/{id}/rules?status=` | draft, active, retired |
-| Rule | `GET /rules/{id}` | `code`, `tests`, `report` (`report.alternative` is agent B's code) |
-| Rule lifecycle | `POST /processes/{id}/rules`, `POST /rules/{id}/compile`, `GET /rules/{id}/impact`, `POST /rules/{id}/activate`, `POST /rules/{id}/retire` | impact = `unchanged`, `changes`, `conflicts`; activate/retire need a manager |
+| Rules | `GET /processes/{id}/rules?status=` | compiling, draft, active, blocked, retired |
+| Rule | `GET /rules/{id}` | `code`, `tests`, `report` (`valid`, `tests`, `discrepancies`, `attempts`, `reviews`; `needs_data` when blocked) |
+| Norm | `POST /processes/{id}/norm`, `GET /processes/{id}/norm-rules` | the client's norm split into norm rules, each with its rules |
+| Rule lifecycle | `POST /processes/{id}/rules` (compiles in the background), `POST /rules/{id}/compile`, `GET /rules/{id}/impact`, `POST /rules/{id}/activate`, `POST /rules/{id}/retire` | impact = `unchanged`, `changes`, `conflicts`; activate/retire need a manager |
 | Sources | `GET /processes/{id}/sources` | current load per source: rows count, origin, `loaded_at` |
 | Source rows | `GET /processes/{id}/sources/{name}` | same plus `data` |
 | Sync the ERP | `POST /processes/{id}/sources/{name}/sync`, `GET .../diff` | |
-| Audit trail | `GET /processes/{id}/events?step=&instance_id=&limit=` | newest first. Steps: `decision`, `resolution`, `ingest_document`, `compile_rule`, `suggest_escalation`, `sync_source`, `sync_source_failed` |
+| Audit trail | `GET /processes/{id}/events?step=&instance_id=&limit=` | newest first. Steps: `decision`, `resolution`, `ingest_document`, `compile_rule`, `normalize_norm`, `suggest_escalation`, `sync_source`, `sync_source_failed` |
 | Findings | `GET /processes/{id}/findings` | past decisions a later rule says were wrong |
 | Run | `POST /processes/{id}/run` | decides every PENDING instance with symbols |
 | Export | `GET /processes/{id}/export` | `outcomes.jsonl`; 409 while anything is undecided |

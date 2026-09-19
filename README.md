@@ -13,8 +13,9 @@ September 2026): 500 supplier invoices, a chaotic workbook and a 2009 ERP, decid
    the same application.
 2. **Ingestion** reads each PDF (native text, OCR, vision) and the workbook; the ERP is
    read through a fault-tolerant HTTP connector into versioned snapshots.
-3. **Rules become Python** through two blind agents that write code and tests for the same
-   rule text; a rule is only valid when both agree on every test and on the whole history.
+3. **Rules become Python** through two agents: a tester writes tests from the rule text
+   alone, and a coder iterates until its code passes them (disputes are settled by the
+   tester from the text). A valid rule activates by itself if it barely changes history.
    The invoice rules also ship hand-written, so the process runs without any model.
 4. The **engine** runs every active rule in a sandbox; the highest-priority decision type
    that fired wins, the default applies when none does, and a rule that cannot be evaluated
