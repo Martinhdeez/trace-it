@@ -11,8 +11,11 @@ import { Empty, ErrorNotice, Notice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
 import { PageIntro } from '../components/shell/Well'
 import { cn } from '../lib/cn'
+import { t } from '../i18n'
 import { paths } from '../lib/paths'
 import { byPriority, humanOutcomes } from '../lib/process'
+
+const REVIEW_TAB = 'review'
 
 /**
  * What is waiting on a person: every outcome the process marked
@@ -31,18 +34,26 @@ export function Queue() {
     queryFn: () => api.queue(processId),
   })
   const human = byPriority(humanOutcomes(process.data))
-  const tabs = useMemo(
-    () =>
-      human.map((outcome) => ({
-        value: outcome.nombre,
-        label: outcome.nombre.replaceAll('_', ' '),
-        count: (escalated.data ?? []).filter((item) => item.decision === outcome.nombre).length,
-      })),
-    [human, escalated.data],
-  )
+  const queued = useMemo(() => escalated.data ?? [], [escalated.data])
+  // A case the reviewer disagreed with keeps its decision but still waits for a person,
+  // so it gets its own tab instead of hiding under the outcome.
+  const tabs = useMemo(() => {
+    const outcomes = human.map((outcome) => ({
+      value: outcome.nombre,
+      label: outcome.nombre.replaceAll('_', ' '),
+      count: queued.filter((item) => item.decision === outcome.nombre && !item.review_pending)
+        .length,
+    }))
+    const review = queued.filter((item) => item.review_pending).length
+    return review > 0
+      ? [...outcomes, { value: REVIEW_TAB, label: t('queue.review'), count: review }]
+      : outcomes
+  }, [human, queued])
 
   const tab = params.get('tipo') ?? human[0]?.nombre ?? ''
-  const items = (escalated.data ?? []).filter((item) => item.decision === tab)
+  const items = queued.filter((item) =>
+    tab === REVIEW_TAB ? item.review_pending : item.decision === tab && !item.review_pending,
+  )
   const selectedId = params.get('i') ? Number(params.get('i')) : undefined
   const current = items.find((item) => item.id === selectedId) ?? items[0]
 
@@ -63,7 +74,7 @@ export function Queue() {
       <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
         <PageIntro
           kicker="Revisión"
-          title={tab.replaceAll('_', ' ') || 'Cola'}
+          title={tabs.find((item) => item.value === tab)?.label ?? (tab.replaceAll('_', ' ') || 'Cola')}
           description="Excepciones que el proceso no cierra. Tu decisión queda en el histórico y puede volverse una regla nueva, desde Definición."
         />
 
@@ -92,7 +103,7 @@ export function Queue() {
                   >
                     <FileText size={13} strokeWidth={1.5} className="shrink-0 text-faint" />
                     <span className="min-w-0 flex-1 truncate font-mono text-[12px]">
-                      {item.nombre}
+                      {item.name}
                     </span>
                   </button>
                 </li>
@@ -105,7 +116,7 @@ export function Queue() {
               key={current.id}
               process={process.data}
               instanceId={current.id}
-              name={current.nombre}
+              name={current.name}
               currentDecision={current.decision}
             />
           ) : null}
@@ -185,7 +196,7 @@ function Resolve({
         </div>
         {currentDecision ? (
           <p className="mt-1.5">
-            <StatusBadge value={currentDecision} />
+            <StatusBadge value={currentDecision} decisionTypes={process.tipos_decision} />
           </p>
         ) : null}
       </div>

@@ -17,7 +17,7 @@ import type {
   VersionOut,
   DocumentEvidence,
   Instance,
-  InstanceState,
+  InstanceOut,
   NormResult,
   NormRule,
   Process,
@@ -338,16 +338,8 @@ export const liveClient: ApiClient = {
   saveDraft: (processId, body: DraftIn) => put<VersionDraft>(`/processes/${processId}/draft`, body),
 
   run: (processId) => post<RunSummary>(`/processes/${processId}/run`),
-  listInstances: async (processId, state?: InstanceState) => {
-    // Current backend has no REVIEW state: unread documents remain PENDING.
-    if (state === 'REVISION') return []
-    const items = await get<RawInstance[]>(
-      `/processes/${processId}/instances${query({
-        status: state === 'DECIDIDA' ? 'DECIDED' : state === 'PENDIENTE' ? 'PENDING' : undefined,
-      })}`,
-    )
-    return items.map(instance)
-  },
+  listInstances: (processId, filters) =>
+    get<InstanceOut[]>(`/processes/${processId}/instances${query({ ...filters })}`),
   getInstance: async (id) => {
     const raw = await get<{
       id: number
@@ -416,10 +408,7 @@ export const liveClient: ApiClient = {
   },
   getDocument: (instanceId) =>
     get<DocumentEvidence>(`/instances/${instanceId}/document`),
-  queue: (processId, outcome?: string) =>
-    get<RawInstance[]>(`/processes/${processId}/queue${query({ type: outcome })}`).then((items) =>
-      items.map(instance),
-    ),
+  queue: (processId) => get<InstanceOut[]>(`/processes/${processId}/queue`),
   suggestion: async (instanceId) => {
     const raw = await get<{
       decision: string

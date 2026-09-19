@@ -13,7 +13,6 @@ import type {
   Impact,
   Instance,
   InstanceDetail,
-  InstanceState,
   LlmConfig,
   Process,
   ProcessDefinition,
@@ -623,12 +622,7 @@ export const mockClient: ApiClient = {
   saveDraft: noMock,
 
   run: noMock,
-  listInstances: (processId, state?: InstanceState) =>
-    wait(
-      ofProcess(processId)
-        .map((item) => item.instance)
-        .filter((item) => !state || item.estado === state),
-    ),
+  listInstances: noMock,
 
   getInstance: async (id) => {
     const item = row(id)
@@ -644,19 +638,7 @@ export const mockClient: ApiClient = {
 
   getDocument: () => wait(null),
 
-  queue: (processId, outcome?: string) => {
-    const human = new Set(
-      processById(processId)
-        .tipos_decision.filter((item) => item.requiere_persona)
-        .map((item) => item.nombre),
-    )
-    const wanted = outcome ? new Set([outcome]) : human
-    return wait(
-      ofProcess(processId)
-        .filter((item) => item.instance.decision && wanted.has(item.instance.decision))
-        .map((item) => item.instance),
-    )
-  },
+  queue: noMock,
 
   suggestion: async (instanceId) => {
     const item = row(instanceId)

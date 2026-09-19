@@ -33,6 +33,9 @@ export const es = {
     down: 'Caída',
     none: 'Sin sincronizar',
   },
+  queue: {
+    review: 'Revisión del revisor',
+  },
   roles: {
     manager: 'Responsable',
     operator: 'Operador',
