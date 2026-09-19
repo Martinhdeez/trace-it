@@ -19,13 +19,6 @@ class ConflictError(TraceError):
     code = "conflict"
 
 
-class NotImplementedYetError(TraceError):
-    """A contract that exists but whose owner has not filled it in yet."""
-
-    status_code = 501
-    code = "not_implemented"
-
-
 class PermissionDeniedError(TraceError):
     status_code = 403
     code = "permission_denied"

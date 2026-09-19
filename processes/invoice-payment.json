@@ -1,0 +1,48 @@
+{
+  "name": "Invoice payment",
+  "use_case": "Invoice payment",
+  "decision_types": [
+    {"name": "ESCALAR", "priority": 3, "requires_human": true},
+    {"name": "NO_PAGAR", "priority": 2},
+    {"name": "PAGAR", "priority": 1, "is_default": true}
+  ],
+  "symbols": [
+    {"name": "file_id", "type": "text", "description": "Exact name of the PDF (NFC)."},
+    {"name": "issuer_nif", "type": "text", "description": "NIF/CIF of the issuing supplier. Never the customer's (A58231074, Banco Miralmar)."},
+    {"name": "issuer_name", "type": "text", "description": "Name of the issuer as printed. Trace only; no rule decides with it."},
+    {"name": "iban", "type": "text", "description": "Payment IBAN printed on the invoice."},
+    {"name": "invoice_number", "type": "text", "description": "Invoice number as printed (FA-5077, 2026/0811-B, F26-0233)."},
+    {"name": "date", "type": "text", "description": "Issue date as YYYY-MM-DD with the printed numbers, uncorrected: 31/02/2026 -> \"2026-02-31\". Accepts DD/MM/YYYY and '6 de abril de 2026'. Never None because the date is impossible."},
+    {"name": "purchase_order", "type": "text", "description": "Purchase order reference (PO-YYYY-NNNN)."},
+    {"name": "base", "type": "number", "description": "Taxable base / Subtotal."},
+    {"name": "vat_rate", "type": "number", "description": "Printed VAT percentage (21 in 'IVA (21%)')."},
+    {"name": "vat_amount", "type": "number", "description": "Printed VAT amount."},
+    {"name": "total", "type": "number", "description": "Printed total (TOTAL, IMPORTE TOTAL, TOTAL A PAGAR, Total factura). Not Subtotal nor 'Suma y sigue'."},
+    {"name": "free_text", "type": "text", "description": "Text that is not a header, a line item or totals (notes, notices, terms). Always stored. No rule reads it: it only feeds the embedded-instructions warning in the trace."}
+  ],
+  "rules": [
+    {"type": "requirement", "decision": "ESCALAR", "text": "The symbols `issuer_nif`, `iban`, `purchase_order`, `date`, `base`, `vat_rate`, `vat_amount` and `total` are all other than `None`. Reason: list of the missing ones.", "code": "rules-v3/r01-symbols-present.py"},
+    {"type": "requirement", "decision": "NO_PAGAR", "text": "There is at least one row in `suppliers` whose normalised `nif` equals the normalised `issuer_nif`.", "code": "rules-v3/r02-known-supplier.py"},
+    {"type": "requirement", "decision": "NO_PAGAR", "text": "If there are rows in `suppliers` with that `nif`, and all of them have the same `id` and normalised `iban`, then that `iban` equals the normalised `iban` of the invoice. If there are no rows, it does not fire (R02). If the rows disagree with each other, it does not fire (R04).", "code": "rules-v3/r03-master-iban.py"},
+    {"type": "prohibition", "decision": "ESCALAR", "text": "There are two or more rows in `suppliers` with the same normalised `nif` as `issuer_nif` and a different `id` or a different normalised `iban` (identical repeated rows do NOT count).", "code": "rules-v3/r04-inconsistent-master.py"},
+    {"type": "requirement", "decision": "NO_PAGAR", "text": "There is a row in `orders` whose `purchase_order` equals the `purchase_order` of the invoice.", "code": "rules-v3/r05-order-exists.py"},
+    {"type": "requirement", "decision": "NO_PAGAR", "text": "With the `orders` row of that `purchase_order`: if `orders.nif` is not empty, it equals `issuer_nif`; if it is empty, `orders.supplier_id` equals the `id` of the `suppliers` row with `nif = issuer_nif` (if that row does not exist, it does not fire).", "code": "rules-v3/r06-order-of-the-supplier.py"},
+    {"type": "requirement", "decision": "NO_PAGAR", "text": "With the `orders` row of that `purchase_order`: `total` matches `orders.total_amount` (±0.01). The **total** of the invoice is compared, not the base.", "code": "rules-v3/r07-order-amount.py"},
+    {"type": "requirement", "decision": "NO_PAGAR", "text": "`vat_amount` matches (±0.01) `round(base * vat_rate / 100, 2)`, using the printed `vat_rate`.", "code": "rules-v3/r08-correct-vat.py"},
+    {"type": "prohibition", "decision": "ESCALAR", "text": "`vat_rate` is other than 21.", "code": "rules-v3/r09-usual-vat-rate.py"},
+    {"type": "requirement", "decision": "NO_PAGAR", "text": "`total` matches (±0.01) `base + vat_amount`, using the printed values. The text of the invoice does not change the calculation.", "code": "rules-v3/r10-total-adds-up.py"},
+    {"type": "requirement", "decision": "NO_PAGAR", "text": "`date` is a real calendar date (valid `YYYY-MM-DD`: month 1-12 and a day that exists in that month and year).", "code": "rules-v3/r11-real-date.py"},
+    {"type": "prohibition", "decision": "NO_PAGAR", "text": "If `date` is valid: `date` is later than `parameters.cut_off_date`.", "code": "rules-v3/r12-date-not-in-future.py"},
+    {"type": "requirement", "decision": "NO_PAGAR", "text": "There is a row in `erp` whose `purchase_order` equals `purchase_order`. Only evaluated if R05 does not fire.", "code": "rules-v3/r13-entry-in-erp.py"},
+    {"type": "requirement", "decision": "NO_PAGAR", "text": "With the `orders` and `erp` rows of that `purchase_order`: `erp.amount` matches `orders.total_amount` (±0.01) **and** `erp.supplier_id` equals `orders.supplier_id` **and**, if both `nif` are not empty, they are equal. Reason: fields that differ.", "code": "rules-v3/r14-erp-matches-orders.py"},
+    {"type": "prohibition", "decision": "NO_PAGAR", "text": "With the `erp` row of that `purchase_order`: `erp.status` is `PAGADA` (in fact: other than `PENDIENTE`).", "code": "rules-v3/r15-order-already-paid.py"},
+    {"type": "prohibition", "decision": "ESCALAR", "text": "There is at least one instance in `others` with the same normalised `purchase_order`. Each instance in `others` is identified by its `_instance` key (its file name). Reason: the `_instance` values with that purchase order.", "code": "rules-v3/r16-duplicate-order.py"}
+  ],
+  "users": [
+    {"name": "Martín", "email": "martin@trace-it.local", "role": "manager"},
+    {"name": "Mateo", "email": "mateo@trace-it.local", "role": "operator"},
+    {"name": "Álvaro", "email": "alvaro@trace-it.local", "role": "operator"},
+    {"name": "Carlos", "email": "carlos@trace-it.local", "role": "operator"},
+    {"name": "Varsovia", "email": "varsovia@trace-it.local", "role": "operator"}
+  ]
+}

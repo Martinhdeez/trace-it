@@ -1,26 +1,43 @@
-from fastapi import FastAPI, Request
+from contextlib import asynccontextmanager
+
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.common.exceptions import TraceError
-from app.features.agentes.router import router as agentes_router
-from app.features.decisiones.router import router as decisiones_router
-from app.features.llm.router import router as llm_router
-from app.features.procesos.router import router as procesos_router
-from app.features.reglas.router import router as reglas_router
-from app.features.usuarios.router import router as usuarios_router
+from app.features.agents.router import router as agents_router
+from app.features.decisions.router import router as decisions_router
+from app.features.ingestion.process_router import router as ingestion_router
+from app.features.ingestion.router import create_router as create_extraction_router
+from app.features.ingestion.runtime import ingestion_lifespan
+from app.features.processes.router import router as processes_router
+from app.features.rules import service as rules_service
+from app.features.rules.router import router as rules_router
+from app.features.sources.router import router as sources_router
+from app.features.use_cases.router import router as use_cases_router
+from app.features.users.dependencies import current_user
+from app.features.users.router import router as users_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with ingestion_lifespan(app):
+        await rules_service.resume_compilations()
+        yield
+
 
 app = FastAPI(
     title="trace-it",
     version="0.1.0",
+    lifespan=lifespan,
     description=(
         "Deterministic decision processes with rules compiled to code by agents.\n\n"
-        "Identify with the `X-Usuario-Id` header (see `POST /login`). Errors are "
-        '`{"code", "message"}`; 501 means the contract exists but is not implemented yet.'
+        "Identify with the `X-User-Id` header (see `POST /login`). Errors are "
+        '`{"code", "message"}`.'
     ),
 )
 
-# ponytail: open CORS for the hackathon frontend; restrict origins if deployed.
+# Open CORS for the hackathon frontend; restrict origins if deployed.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
@@ -31,17 +48,21 @@ async def trace_error(_: Request, error: TraceError) -> JSONResponse:
     )
 
 
-@app.get("/salud", tags=["sistema"], operation_id="health")
-async def salud() -> dict[str, str]:
-    return {"estado": "ok"}
+@app.get("/health", tags=["system"], operation_id="health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 for router in (
-    usuarios_router,
-    procesos_router,
-    reglas_router,
-    decisiones_router,
-    llm_router,
-    agentes_router,
+    users_router,
+    processes_router,
+    rules_router,
+    decisions_router,
+    agents_router,
+    ingestion_router,
+    sources_router,
+    use_cases_router,
 ):
     app.include_router(router)
+
+app.include_router(create_extraction_router(), dependencies=[Depends(current_user)])

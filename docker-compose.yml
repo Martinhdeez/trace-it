@@ -18,14 +18,22 @@ services:
     environment:
       TRACE_DATABASE_URL: postgresql+psycopg://trace:trace@db:5432/trace
       TRACE_ERP_URL: http://host.docker.internal:8009
+      TRACEPAY_DATA_DIR: /srv/.data
+      TRACEPAY_MODEL_DIR: /srv/.models
     ports: ["${BACKEND_PORT:-8000}:8000"]
-    volumes: ["./backend/app:/srv/app", "./backend/alembic:/srv/alembic", "./procesos:/procesos:ro"]
+    volumes:
+      - ./backend/app:/srv/app
+      - ./backend/alembic:/srv/alembic
+      - ./processes:/processes:ro
+      - ./.models:/srv/.models:ro
+      - ingestion_data:/srv/.data
     depends_on:
       db: {condition: service_healthy}
     healthcheck:  # healthy once migrations ran and the API answers
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/salud')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 2s
       retries: 30
 
 volumes:
   db:
+  ingestion_data:

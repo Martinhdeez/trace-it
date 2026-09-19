@@ -1,29 +1,66 @@
-# trace-it: arranque rápido. Ver docs/guia-equipo.md.
-.PHONY: setup compilar erp test down reset-db
+# trace-it: quick start. See docs/team-guide.md.
+.PHONY: setup compile activate demo erp erp-sync test test-db test-e2e eval-compiler eval-norm check down reset-db
 
-CARGAR = docker compose exec -T backend python -m app.cli cargar /procesos/pago-facturas.json
+LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 
 setup:
 	test -f .env || cp .env.example .env
 	docker compose up -d --build --wait
 	docker compose exec -T backend alembic upgrade head
-	$(CARGAR)
-	@echo "Listo: API en http://localhost:$${BACKEND_PORT:-8000}/docs"
+	$(LOAD)
+	@echo "Ready: API at http://localhost:$${BACKEND_PORT:-8000}/docs"
 
-compilar:  # needs LLM keys in .env
-	$(CARGAR) --compilar
+compile:  # needs LLM keys in .env
+	$(LOAD) --compile
+
+activate:  # put into the process every rule whose code is already validated
+	$(LOAD) --activate
+
+# The whole process over the challenge corpus -> output/outcomes.jsonl. Needs `make erp`
+# running in another terminal, and writes to the database `make setup` filled.
+demo:
+	test -f .env || cp .env.example .env
+	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
+	cd backend && set -a && . ../.env && set +a && uv run python -m app.cli load ../processes/invoice-payment.json --activate
+	cd backend && set -a && . ../.env && set +a && uv run python ../tools/demo_run.py
 
 erp:
 	test -f .context/500-sombras-de-alberto/alberto_erp.py || git submodule update --init .context/500-sombras-de-alberto
 	cd .context/500-sombras-de-alberto && python3 alberto_erp.py
 
-test:
-	docker compose up db -d --wait
-	cd backend && uv run alembic upgrade head && uv run pytest
+erp-sync:  # needs `make erp` running; writes a new erp snapshot (docs/sources-http.md)
+	cd backend && uv run python -m app.cli sources sync ../processes/invoice-payment.json
+
+
+# Tests use their own database (recreated each run), never the one `make setup` fills.
+TEST_DB_URL ?= postgresql+psycopg://trace:trace@localhost:5432/trace_test
+PREPARE_DB = cd backend && TRACE_DATABASE_URL=$(TEST_DB_URL) uv run python -m tests.support.prepare_db
+PYTEST = cd backend && TRACE_DATABASE_URL=$(TEST_DB_URL) uv run pytest -rs
+
+test-db:
+	$(PREPARE_DB) || (docker compose up db -d --wait && $(PREPARE_DB))
+	cd backend && TRACE_DATABASE_URL=$(TEST_DB_URL) uv run alembic upgrade head
+
+test: test-db  # fast unit tests
+	$(PYTEST) -m "not e2e and not llm"
+
+test-e2e: test-db  # golden outcomes of batch 1 + API flow (needs the challenge submodule)
+	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
+	$(PYTEST) -m "e2e and not llm"
+
+eval-compiler:  # opt-in, calls real LLMs (keys in .env); writes backend/evals/reports/
+	cd backend && uv run python -m evals.eval_compiler
+
+eval-norm:  # opt-in, real LLMs: the client's norm -> rules -> code -> batch 1 vs golden
+	cd backend && uv run python -u -m evals.eval_norm
+
+check:
+	cd backend && uv run ruff check . && uv run ruff format --check .
+	$(MAKE) test test-e2e
 
 down:
 	docker compose down
 
 reset-db:
-	@echo "AVISO: borra la base de datos (procesos, reglas, decisiones, usuarios). Luego: make setup"
+	@echo "WARNING: deletes the database (processes, rules, decisions, users). Then: make setup"
 	docker compose down -v

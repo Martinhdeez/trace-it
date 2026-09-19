@@ -11,8 +11,20 @@ dependencies = [
     "pydantic-settings>=2.6",
     "python-multipart>=0.0.20",
     "httpx>=0.28",
-    "litellm>=1.60",
+    "pydantic-ai-slim[anthropic,google,openai]>=2.0",
     "openpyxl>=3.1",
+    "pydantic>=2.10,<3",
+    "pymupdf>=1.25,<2",
+    "rapidocr>=3.9,<4",
+    "onnxruntime>=1.20,<2",
+    "pillow>=11,<13",
+    "huggingface-hub>=1.0,<2",
+    "pyyaml>=6,<7",
+    "filelock>=3.16,<5",
+    "fal-client>=0.10,<1",
+    "python-dotenv>=1,<2",
+    "numpy>=2,<3",
+    "opencv-python>=4.11,<5",
 ]
 
 [dependency-groups]
@@ -31,4 +43,23 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["app"]
+testpaths = ["app", "tests", "evals"]
+addopts = "-m 'not llm'"
+markers = [
+    "e2e: end to end against the challenge data (golden outcomes, API flow with the database)",
+    "llm: calls real LLM providers; opt-in with `make eval-compiler`",
+    "integration: requires official local material",
+    "ocr: requires downloaded OCR weights",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
