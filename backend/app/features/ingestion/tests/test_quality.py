@@ -35,6 +35,19 @@ def test_profile_validates_bytes_not_just_a_manifest(verified_settings):
         quality.validate_quality_profile(verified_settings)
 
 
+def test_dictionary_newlines_are_portable_but_content_is_pinned(verified_settings, monkeypatch):
+    expected = {**quality.MODEL_FILES, "rec/keys.txt": hashlib.sha256(b"a\nb\n").hexdigest()}
+    monkeypatch.setattr(quality, "MODEL_FILES", expected)
+    path = verified_settings.model_dir / "rec/keys.txt"
+    for content in (b"a\nb\n", b"a\r\nb\r\n"):
+        path.write_bytes(content)
+        result = quality.validate_quality_profile(verified_settings)
+        assert result["model_sha256"]["rec/keys.txt"] == hashlib.sha256(content).hexdigest()
+    path.write_bytes(b"a\nc\n")
+    with pytest.raises(RuntimeError, match="rec/keys.txt"):
+        quality.validate_quality_profile(verified_settings)
+
+
 @pytest.mark.parametrize(
     "change",
     [

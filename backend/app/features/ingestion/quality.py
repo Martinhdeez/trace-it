@@ -1,5 +1,7 @@
 """Pin the evaluated OCR committee; experiments require an explicit opt-out."""
 
+import hashlib
+
 from app.features.ingestion.cache import file_identity
 from app.features.ingestion.config import Settings
 
@@ -8,11 +10,11 @@ MODEL_FILES = {
     "det/inference.yml": "98069072e1b6b37d727fd9d9f11725faa46d6ea0de012f2ed26caea011c37699",
     "det/inference.onnx": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
     "rec/inference.onnx": "7888113072263cb471b93f66dd5e2ad70548dc526fa1ace760d0d973dd121498",
-    "rec/keys.txt": "5ddc5c6086d61db3e1485f1237e059b89df9a228cebdac40a54406c6005bca67",
+    "rec/keys.txt": "ccbcc45730b3fbbd9050c5bc74db6a99067141ef1035e3d14889a84a6b9b1aff",
     "verify/det/inference.onnx": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
     "verify/det/inference.yml": "98069072e1b6b37d727fd9d9f11725faa46d6ea0de012f2ed26caea011c37699",
     "verify/rec/inference.onnx": "d9dc333c9c7b042c6dffb8e33d72b6f65c9c1d463d0a3c2f78174fea55e94752",
-    "verify/rec/keys.txt": "1ea29636956177e400af712d9782e7693f3fb25f98617bed10479d2965a836fd",
+    "verify/rec/keys.txt": "d1979e9f794c464c0d2e0b70a7fe14dd978e9dc644c0e71f14158cdf8342af1b",
 }
 VISUAL_MODEL = "gemini-3.1-flash-lite"
 JUDGE_MODEL = "jev-1.13.0"
@@ -29,8 +31,13 @@ def validate_quality_profile(settings: Settings) -> dict:
     problems = []
     hashes = {}
     for name, expected in MODEL_FILES.items():
-        hashes[name] = file_identity(settings.model_dir / name)
-        if hashes[name] != expected:
+        path = settings.model_dir / name
+        hashes[name] = actual = file_identity(path)
+        # The downloader writes dictionaries with the host's newline convention.
+        # Compare their content portably, but retain the actual byte hash in evidence.
+        if actual is not None and name.endswith("keys.txt"):
+            actual = hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+        if actual != expected:
             problems.append(f"missing or different OCR file: {name}")
     if settings.vlm_url and settings.vlm_model:
         problems.append("custom visual providers require the experimental profile")
