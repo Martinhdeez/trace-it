@@ -130,17 +130,18 @@ def _combine(
     if failures:
         return verdict(outcomes.escalate, " | ".join(failures))
 
-    fired = [rule for rule, r in zip(rules, results, strict=True) if r.fires]
+    fired = [(rule, r) for rule, r in zip(rules, results, strict=True) if r.fires]
     if not fired:
         return verdict(outcomes.default, "")
 
-    highest = max(outcomes.priorities[r.decision] for r in fired)
-    winners = [r for r in fired if outcomes.priorities[r.decision] == highest]
-    decisions = sorted({r.decision for r in winners})
+    highest = max(outcomes.priorities[rule.decision] for rule, _ in fired)
+    winners = [(rule, r) for rule, r in fired if outcomes.priorities[rule.decision] == highest]
+    decisions = sorted({rule.decision for rule, _ in winners})
     if len(decisions) > 1:
         tie = f"RULE_CONFLICT: {', '.join(decisions)} share priority {highest}"
         return verdict(outcomes.escalate, tie)
-    return verdict(decisions[0], " | ".join(r.text for r in winners))
+    # The rule's own reason code; its text stays on the rule, joined by `rule_id`.
+    return verdict(decisions[0], " | ".join(r.reason or rule.text for rule, r in winners))
 
 
 def decide(
