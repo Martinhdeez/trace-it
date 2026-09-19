@@ -11,6 +11,8 @@ import type {
   ProcessMetrics,
   ProcessSummary,
   PublishIn,
+  RunDetail,
+  RunOut,
   RunSummary,
   SourceDetail,
   SourceOut,
@@ -319,6 +321,8 @@ export const liveClient: ApiClient = {
   saveDraft: (processId, body: DraftIn) => put<VersionDraft>(`/processes/${processId}/draft`, body),
 
   run: (processId) => post<RunSummary>(`/processes/${processId}/run`),
+  listRuns: (processId) => get<RunOut[]>(`/processes/${processId}/runs`),
+  getRun: (id) => get<RunDetail>(`/runs/${id}`),
   listInstances: (processId, filters) =>
     get<InstanceOut[]>(`/processes/${processId}/instances${query({ ...filters })}`),
   getInstance: (id) => get<InstanceDetail>(`/instances/${id}`),

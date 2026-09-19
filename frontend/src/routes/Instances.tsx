@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
 import { api } from '../api/client'
@@ -9,9 +9,10 @@ import { TracePane } from '../components/run/TracePane'
 import { ProcessScreen } from '../components/process/ProcessScreen'
 import { ExportButton } from '../components/process/ExportButton'
 import { Input } from '../components/shell/Controls'
-import { ErrorNotice } from '../components/shell/Notice'
+import { ErrorNotice, Notice } from '../components/shell/Notice'
 import { cn } from '../lib/cn'
 import { t } from '../i18n'
+import { formatRunDate } from '../lib/format'
 import { paths } from '../lib/paths'
 
 export function Instances() {
@@ -31,25 +32,51 @@ export function Instances() {
     status: filter === 'PENDING' ? 'PENDING' : undefined,
     decision: filter !== 'TODAS' && filter !== 'PENDING' ? filter : undefined,
   }
+  // With `?run=`, the list is the cases that run decided. The filter lives in the URL,
+  // so the browser's Back returns to the Panel.
+  const runId = params.get('run') ? Number(params.get('run')) : undefined
+  const run = useQuery({
+    queryKey: keys.run(runId ?? 0),
+    queryFn: () => api.getRun(runId!),
+    enabled: Boolean(runId),
+  })
   const instances = useQuery({
     queryKey: keys.instances(processId, filters),
     queryFn: () => api.listInstances(processId, filters),
+    enabled: !runId,
   })
   const summary = useQuery({
     queryKey: keys.summary(processId),
     queryFn: () => api.summary(processId),
   })
 
-  const rows = useMemo(() => instances.data ?? [], [instances.data])
-  const total = summary.data?.instances ?? rows.length
+  const rows = useMemo(() => {
+    if (!runId) return instances.data ?? []
+    const needle = text.toLowerCase()
+    return (run.data?.decisions ?? [])
+      .map((item) => ({
+        id: item.instance_id,
+        name: item.name,
+        status: 'DECIDED',
+        decision: item.decision,
+        review_pending: false,
+      }))
+      .filter((item) => !needle || item.name.toLowerCase().includes(needle))
+      .filter((item) => filter === 'TODAS' || item.decision === filter)
+  }, [runId, instances.data, run.data, text, filter])
+  const total = runId ? (run.data?.decisions.length ?? 0) : (summary.data?.instances ?? rows.length)
+  const select = (id: number) =>
+    setParams(runId ? { run: String(runId), i: String(id) } : { i: String(id) })
 
   const selectedId = params.get('i') ? Number(params.get('i')) : rows[0]?.id
   const selectedVisible = rows.some((item) => item.id === selectedId)
 
   useEffect(() => {
     if (!rows.length || selectedVisible) return
-    setParams({ i: String(rows[0].id) })
-  }, [rows, selectedVisible, setParams])
+    setParams(runId ? { run: String(runId), i: String(rows[0].id) } : { i: String(rows[0].id) }, {
+      replace: true,
+    })
+  }, [rows, selectedVisible, setParams, runId])
 
   const detail = useQuery({
     queryKey: keys.instance(selectedId ?? 0),
@@ -62,10 +89,10 @@ export function Instances() {
     enabled: Boolean(selectedId),
   })
 
-  const outcomes = Object.entries(summary.data?.by_decision ?? {}).sort(([a], [b]) =>
-    a.localeCompare(b),
-  )
-  const pending = summary.data?.by_status.PENDING ?? 0
+  const outcomes = Object.entries(
+    (runId ? run.data?.by_decision : summary.data?.by_decision) ?? {},
+  ).sort(([a], [b]) => a.localeCompare(b))
+  const pending = runId ? 0 : (summary.data?.by_status.PENDING ?? 0)
 
   return (
     <ProcessScreen
@@ -78,9 +105,23 @@ export function Instances() {
       actions={<ExportButton processId={processId} />}
     >
 
-      {instances.isError ? (
+      {instances.isError || run.isError ? (
         <div className="px-8 py-4">
-          <ErrorNotice error={instances.error} />
+          <ErrorNotice error={instances.error ?? run.error} />
+        </div>
+      ) : null}
+      {run.data ? (
+        <div className="px-8 py-4">
+          <Notice
+            title={`Ejecución del ${formatRunDate(run.data.started_at)} · v${run.data.version_number}`}
+            action={
+              <Link to={paths.process(processId)} className="text-[12px] text-muted hover:text-ink">
+                Volver
+              </Link>
+            }
+          >
+            {run.data.decided} decisiones
+          </Notice>
         </div>
       ) : null}
 
@@ -90,7 +131,7 @@ export function Instances() {
           decisionTypes={process.data?.tipos_decision}
           total={total}
           selectedId={selectedId}
-          onSelect={(item) => setParams({ i: String(item.id) })}
+          onSelect={(item) => select(item.id)}
           header={
             <div className="space-y-1.5">
               <Input
