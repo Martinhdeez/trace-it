@@ -57,7 +57,12 @@ Not rules:
 - **IBAN mod-97 and NIF check-letter validators:** they would belong to extraction, which the application does not have yet; they are not business rules.
 - **Date before the order:** the norm does not ask for it and it does not happen in batch 1.
 
-Result on the 471 text invoices (golden, `backend/tests/golden/`): 433 PAGAR, 36 NO_PAGAR, 2 ESCALAR (R16). `make demo` over all 500 PDFs: PAGAR 433 / NO_PAGAR 36 / ESCALAR 31, identical to the golden on every text PDF; the 29 scans have no text layer and R01 escalates them.
+Historical text-layer result on the 471 native PDFs (golden,
+`backend/tests/golden/`): 433 PAGAR, 36 NO_PAGAR, 2 ESCALAR (R16). The former
+demo gave 433 PAGAR / 36 NO_PAGAR / 31 ESCALAR over all 500 PDFs because the
+29 scans had no text layer and R01 escalated them. The current `make demo`
+uploads through the production API and runs OCR on scans, so its result may
+differ from that baseline.
 
 ## 3. Team decisions
 

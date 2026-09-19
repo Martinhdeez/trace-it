@@ -40,8 +40,8 @@ this guide. Python **3.12** is required by `backend/pyproject.toml`; the lockfil
 installs RapidOCR, ONNX Runtime (CPU), PyMuPDF, OpenCV, Pillow, openpyxl and the
 provider clients. Do not install a separate PaddlePaddle training environment or
 Tesseract. The production reader renders PDFs with PyMuPDF; host Poppler is only
-needed for the legacy demo and golden-reference tools. The Docker image includes
-Poppler and OpenCV's Linux system libraries.
+needed for historical text-layer benchmarks and golden-reference tools. The
+Docker image includes Poppler and OpenCV's Linux system libraries.
 
 The corpus should contain 500 PDFs under
 `.context/500-sombras-de-alberto/facturas/` and
@@ -233,9 +233,35 @@ reproduce the full committee's results.
 ## 6. Run all 500 PDFs through the production process API
 
 Use a fresh process/database for a comparable run. Uploading a previously
-decided instance does not replace its symbols or decision. First load and
+decided instance does not replace its symbols or decision. The demo compares
+filename and SHA-256 against existing instances: matching `DECIDED` files skip
+OCR and retain stored symbols; matching `PENDING` files are re-extracted. Its
+`output/extractions.jsonl` records each selected PDF, with `reused: true`
+and stored symbols for a skipped decided file. First load and
 activate the pack as above, then load sources, upload **all** PDFs, and only
 then run the engine so duplicate-order checks see the whole batch.
+
+The demo command automates that same sequence using the running Docker backend
+and ERP. From the repository root, after steps 1-4:
+
+```text
+make demo
+```
+
+It activates the hand-written rules, logs in as the seeded manager, uploads the
+workbook, syncs the ERP, uploads PDFs with `ocr=true`, runs pending decisions and
+writes `output/outcomes.jsonl` and `output/detail.json`. For a small local-only
+check, run `make demo DEMO_ARGS="--limit 5 --local-only"`. This disables
+Gemini/Jev calls, but still uses the downloaded OCR weights. `DEMO_ARGS` can
+also pass `--invoices <directory>`, `--book <workbook.xlsx>`,
+`--cutoff YYYY-MM-DD`, `--output <directory>` and `--api-url <url>`.
+The demo defaults to cut-off `2026-09-18`; pass `--cutoff 2026-09-19`
+to match the manual evaluation below. `--limit` restricts uploads; the engine
+and export still cover all instances already in the process.
+On Windows PowerShell, run these through a Make installation or invoke
+`uv run --project backend --locked --env-file .env python tools/demo_run.py`
+after activating the pack in Docker. The commands below show each API call
+directly, which is useful for inspecting extraction evidence.
 
 These examples continue in the same shell as section 5. Replace the example
 process ID with the one printed by `load`. The cut-off `2026-09-19` matches the
@@ -286,9 +312,9 @@ reference. Keep the per-file API responses: they include extraction evidence and
 the stored symbols. `/v1/batches` is an extraction-only endpoint; it does not
 create process instances, and accepts at most 100 files per request.
 
-`make demo` / `tools/demo_run.py` use the legacy text-layer extractor and do not
-exercise this OCR committee. Their baseline escalates the scans. Use the API
-sequence above when reproducing the integrated OCR work.
+`make demo` uses these production endpoints. With `--limit`, it uploads only the
+selected PDFs, while run/export still cover the whole process. Use a fresh
+process and omit that option for a comparable 500-invoice run.
 
 ## 7. Optional: extraction only, without Docker
 
@@ -310,8 +336,9 @@ repository's `.models/` and `.data/`. Use one server per data directory;
 `TRACEPAY_WORKERS` controls internal jobs, not Uvicorn processes.
 
 On Debian/Ubuntu hosts, OpenCV may need
-`sudo apt-get install libgl1 libglib2.0-0`. If using the legacy demo or golden
-tools, also install `poppler-utils` (macOS: `brew install poppler`). Windows
+`sudo apt-get install libgl1 libglib2.0-0`. If using the historical text-layer
+benchmark or golden tools, also install `poppler-utils` (macOS:
+`brew install poppler`). Windows
 users can use the Docker image for those tools instead of installing Poppler.
 
 ## Reproducibility and troubleshooting

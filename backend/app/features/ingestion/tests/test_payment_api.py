@@ -194,6 +194,39 @@ async def test_unverified_identifier_cannot_be_promoted_from_proposal(payment_ap
     assert run.json()["by_decision"] == {"ESCALAR": 1}, run.text
 
 
+async def test_scanned_pdf_upload_uses_both_ocr_readers_before_decision(payment_api):
+    from .conftest import lines
+
+    client, process_id, service, _ = payment_api
+    assert (await load_sources(client, process_id)).status_code == 201
+    calls = []
+
+    def read(image, page, size):
+        calls.append((image, page, size))
+        return lines(VALID, "ocr", 0.99)
+
+    service.ocr.recognize = read
+    service.ocr.verify = read
+    response = await client.post(
+        f"/processes/{process_id}/files",
+        files={"file": ("scan.pdf", pdf_bytes(""))},
+        data={"ocr": "true", "vlm": "false", "jev": "false"},
+    )
+    assert response.status_code == 201, response.text
+    upload = response.json()
+    assert len(calls) == 2
+    assert all(image and page == 1 for image, page, _ in calls)
+    assert upload["extraction"]["metrics"]["ocr_calls"] == 2
+    assert upload["extraction"]["metrics"]["ocr_verification_calls"] == 1
+    assert upload["extraction"]["metrics"]["vlm_calls"] == 0
+    assert upload["extraction"]["metrics"]["jev_calls"] == 0
+    assert upload["symbols"]["issuer_nif"]["value"] == "B98120774"
+    assert upload["symbols"]["total"]["value"] == "1802.90"
+    run = await client.post(f"/processes/{process_id}/run")
+    assert run.status_code == 200, run.text
+    assert run.json()["by_decision"] == {"PAGAR": 1}, run.text
+
+
 async def test_printed_impossible_date_reaches_the_invalid_date_rule(payment_api):
     client, process_id, _, _ = payment_api
     await load_sources(client, process_id)

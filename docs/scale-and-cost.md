@@ -23,9 +23,13 @@ the engine.
 | LLMs | Helmcode `deepseek-v4-flash` for every role (the provider reports `deepseek-v4.1-flash`), fallbacks `glm5.3` / `qwen3.6` (ADR 0019), concurrency 5 |
 | Data | Batch 1: 500 PDFs (471 with a text layer, 29 scans), the challenge workbook, 516 ERP entries |
 
-Reproduce: `make setup` on a scratch database, `make erp`, `make demo`, then
-`tools/bench_scale.py` (`engine`, `extract`, `upload`; see its docstring). Durations come from
-our own spans (ADR 0018) through `GET /traces` and `GET /processes/{id}/metrics`.
+These measurements used the 2026-09-19 text-layer demo and an API upload on a
+machine without OCR weights. The current `make demo` uses the production upload
+API and runs OCR on scans when weights are installed, so it will have different
+throughput and possibly different outcomes. To repeat the engine measurements,
+use a scratch database and `tools/bench_scale.py` (`engine`, `extract`, `upload`;
+see its docstring). Durations came from spans (ADR 0018) through `GET /traces`
+and `GET /processes/{id}/metrics`.
 
 ## 2. Measured throughput
 
@@ -66,9 +70,9 @@ A dry-run reprocess is the engine alone (same `decide_all` as a run, nothing wri
 | Demo path, `tools/extractor.py` (pdftotext + regex, no model) | all 500 PDFs, one thread | 4.9 s, **101 PDFs/s** (29 scans detected and left without symbols) |
 | Upload API `POST /processes/{id}/files`, cold cache, one sequential client | all 500 PDFs | 18.0 s, **27.8 files/s**; text PDF median 18 ms (max 65 ms), scan median 134 ms |
 | Spans of the same uploads | `upload_document` / `native_text` p50 | 16 ms / 2 ms |
-| Whole batch 1, `demo_run.py` (ingest, ERP sync, run, export) | one run | 15 s inside the script (30 s wall with `uv` start-up) |
+| Historical text-layer `demo_run.py` (ingest, ERP sync, run, export) | one run | 15 s inside the script (30 s wall with `uv` start-up) |
 
-**OCR is not measured on this machine**: the local ONNX weights are not downloaded
+**OCR was not measured on this machine**: the local ONNX weights were not downloaded
 (`.models/` is absent; `python -m app.features.ingestion.tools.download_models`), so each
 scan's two OCR readers fail fast with `ProviderUnavailable` and the scan escalates with
 `MISSING_DATA`. That is the 134 ms above: not OCR. The teammate's benchmark with OCR

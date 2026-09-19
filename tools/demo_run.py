@@ -1,162 +1,244 @@
-"""Run the whole invoice process over the challenge corpus and write `outcomes.jsonl`.
+"""Upload challenge invoices through the production API, decide and export them.
 
-    make demo          # or: PYTHONPATH=backend:tools uv run --project backend \
-                       #       python tools/demo_run.py
-
-Stand-in for ingestion, sources and extraction, which are not built yet. Everything to their
-right — the rules, the engine, the decision history, the export — is the real application,
-called through its own API. When those features land, this script goes away.
+Requires `make setup`, downloaded OCR models and `make erp`. See tools/README.md.
 """
 
-# ruff: noqa: E402 - the imports below need `sys.path` set first.
 import argparse
 import asyncio
 import hashlib
 import json
+import os
 import sys
 import time
-from collections import Counter
+from datetime import date
 from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import httpx
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "backend")]
-
-from app.core import events
-from app.core.database import session_factory
-from app.features.ingestion.model import File, Instance
-from app.features.sources.model import Source
-from app.main import app
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.dialects.postgresql import insert
-
-import extractor
-import workbook
-
 CHALLENGE = ROOT / ".context/500-sombras-de-alberto"
 
 
-async def ingest(process_id: int, invoices: Path, book: Path, cutoff: str, limit: int | None):
-    """Everything ingestion and extraction will do for real.
+async def authenticate(api: httpx.AsyncClient, email: str, process_id: int | None) -> int:
+    login = await api.post("/login", json={"email": email})
+    login.raise_for_status()
+    api.headers["X-User-Id"] = str(login.json()["id"])
+    if process_id is not None:
+        return process_id
+    response = await api.get("/processes")
+    response.raise_for_status()
+    matches = [p["id"] for p in response.json() if p["name"] == "Invoice payment"]
+    if len(matches) != 1:
+        raise ValueError("Load the invoice pack with `make setup`, or select --process ID.")
+    return matches[0]
 
-    The ERP is not loaded here: `features/sources` has a real connector for it, driven by
-    `processes/invoice-payment/sources.json`. Only the spreadsheet has no connector yet.
-    """
-    sources = workbook.sources(str(book), cutoff)
-    print("spreadsheet: " + ", ".join(f"{k}={len(v)}" for k, v in sources.items()))
 
-    read = scans = 0
-    async with session_factory() as session:
-        for name, rows in sources.items():
-            session.add(Source(process_id=process_id, name=name, origin="demo", rows=rows))
-        for path in sorted(invoices.glob("*.pdf"))[:limit]:
-            content = path.read_bytes()
-            text = extractor.text_of(path)
-            if extractor.is_scan(text):
-                symbols, scans = {}, scans + 1
-            else:
-                # Stored with provenance: rule code only ever sees the values (ADR 0008).
-                symbols = {
-                    name: {"value": value, "origin": "pdf-text"}
-                    for name, value in extractor.symbols(path.name, text).items()
-                    if value
-                }
-                read += 1
-            digest = hashlib.sha256(content).hexdigest()
-            # A file already stored (same bytes under another name, or a second run over
-            # the same folder) is not stored twice, and an instance is never reset.
-            await session.execute(
-                insert(File)
-                .values(hash=digest, name=path.name, content=content, text=text)
-                .on_conflict_do_nothing()
-            )
-            instance_id = await session.scalar(
-                insert(Instance)
-                .values(process_id=process_id, file_hash=digest, name=path.name, symbols=symbols)
-                .on_conflict_do_nothing()
-                .returning(Instance.id)
-            )
-            if instance_id is not None:  # the same audit point as the ingestion API
-                events.record(
-                    session,
-                    "ingest_document",
-                    process_id=process_id,
-                    instance_id=instance_id,
-                    data={"file": path.name, "reader": "pdf-text", "symbols": symbols},
+async def run(
+    api: httpx.AsyncClient,
+    process_id: int,
+    files: list[Path],
+    book: Path,
+    cutoff: str,
+    output: Path,
+    *,
+    local_only: bool = False,
+) -> None:
+    """Publish a complete set of artifacts only after the whole run succeeds."""
+    output.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix=".demo-", dir=output) as temporary:
+        staging = Path(temporary)
+        await _run(api, process_id, files, book, cutoff, staging, local_only=local_only)
+        for name in ("extractions.jsonl", "outcomes.jsonl", "detail.json"):
+            (staging / name).replace(output / name)
+    print(f"written to {output}")
+
+
+async def _run(
+    api: httpx.AsyncClient,
+    process_id: int,
+    files: list[Path],
+    book: Path,
+    cutoff: str,
+    output: Path,
+    *,
+    local_only: bool,
+) -> None:
+    """Load sources before extraction; decide only after every upload succeeds."""
+    prefix = f"/processes/{process_id}"
+    with book.open("rb") as stream:
+        response = await api.post(
+            f"{prefix}/sources/workbook",
+            files={
+                "file": (
+                    book.name,
+                    stream,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
-        await session.commit()
-    print(f"extraction: {read} read from the text layer, {scans} scans left without symbols")
-
-
-async def decide(process_id: int, output: Path):
-    """From here on it is the application, through its own API."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://demo", timeout=None
-    ) as api:
-        # The ERP through its own connector: sessions, retries and paging are its problem.
-        r = await api.post(f"/processes/{process_id}/sources/erp/sync")
-        if r.status_code != 200:
-            sys.exit(f"the ERP sync failed ({r.status_code}): {r.text[:300]}\nIs `make erp` up?")
-        sync = r.json()
-        stats = sync["stats"]
-        print(
-            f"erp sync: {sync['rows']} rows, {stats['pages']} pages, "
-            f"{stats['retries']} retries, {stats['logins']} logins, {stats['duration_ms']}ms"
+            },
+            data={"cut_off_date": cutoff},
         )
+    response.raise_for_status()
+    print(f"workbook: {book.name}", flush=True)
+    response = await api.post(f"{prefix}/sources/erp/sync")
+    response.raise_for_status()
+    print(f"erp sync: {response.json()['rows']} rows", flush=True)
 
-        started = time.monotonic()
-        r = await api.post(f"/processes/{process_id}/run")
-        r.raise_for_status()
-        print(f"\nrun: {r.json()}  ({time.monotonic() - started:.0f}s)")
+    response = await api.get(f"{prefix}/instances")
+    response.raise_for_status()
+    existing = response.json()
 
-        r = await api.get(f"/processes/{process_id}/export")
-        if r.status_code != 200:
-            sys.exit(f"export refused ({r.status_code}): {r.text[:300]}")
-        output.mkdir(parents=True, exist_ok=True)
-        (output / "outcomes.jsonl").write_text(r.text + "\n", encoding="utf-8")
-        print(f"export: {len(r.text.splitlines())} lines")
-
-        detail, reasons = [], Counter()
-        for i in (await api.get(f"/processes/{process_id}/instances")).json():
-            d = (await api.get(f"/instances/{i['id']}")).json()
-            latest = d["decisions"][-1]
-            detail.append(
-                {
-                    "file_id": i["name"],
-                    "result": latest["decision"],
-                    "rules_that_fired": [x["reason"] for x in latest["results"] if x["fires"]],
-                    "symbols": d["symbols"],
-                }
+    options = {"ocr": True}
+    if local_only:
+        options.update(vlm=False, jev=False)
+    reused = 0
+    with (output / "extractions.jsonl").open("w", encoding="utf-8") as evidence:
+        for index, path in enumerate(files, 1):
+            match = None
+            candidates = sorted(
+                (i for i in existing if i["name"] == path.name),
+                key=lambda i: i["id"],
+                reverse=True,
             )
-            if latest["decision"] != "PAGAR":
-                reasons[(latest["decision"], (latest["reason"] or "")[:60])] += 1
-        (output / "detail.json").write_text(
-            json.dumps(detail, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+            if candidates:
+                with path.open("rb") as stream:
+                    digest = hashlib.file_digest(stream, "sha256").hexdigest()
+                for candidate in candidates:
+                    response = await api.get(f"/instances/{candidate['id']}")
+                    response.raise_for_status()
+                    if response.json()["file_hash"] == digest:
+                        if candidate["id"] != candidates[0]["id"]:
+                            raise ValueError(
+                                f"{path.name} matches a historical instance, but export selects "
+                                "a newer version. Use a fresh process to evaluate these files."
+                            )
+                        match = response.json()
+                        break
+            if match is None:
+                with path.open("rb") as stream:
+                    response = await api.post(
+                        f"{prefix}/files",
+                        files={"file": (path.name, stream, "application/pdf")},
+                        data={key: str(value).lower() for key, value in options.items()},
+                    )
+                response.raise_for_status()
+                upload = response.json()
+            else:
+                upload = {
+                    "instance_id": match["id"],
+                    "name": path.name,
+                    "file_hash": digest,
+                    "status": match["status"],
+                    "created": False,
+                    "reused": True,
+                    "symbols": match["symbols"],
+                }
+            # Re-extract pending matches without uploading them twice. The fallback
+            # also covers a concurrent upload; decided evidence is never overwritten.
+            if not upload["created"] and upload["status"] == "PENDING":
+                response = await api.post(
+                    f"/instances/{upload['instance_id']}/extract", json=options
+                )
+                response.raise_for_status()
+                upload = response.json()
+            elif not upload["created"]:
+                reused += 1
+            evidence.write(json.dumps({"file_id": path.name, **upload}, ensure_ascii=False) + "\n")
+            evidence.flush()
+            print(f"upload {index}/{len(files)}: {path.name} ({upload['status']})", flush=True)
+    if reused:
+        print(f"Preserved {reused} already-decided instances; their stored symbols are unchanged.")
 
-    print("\nwhy an invoice is not paid:")
-    for (decision, reason), times in reasons.most_common(20):
-        print(f"  {times:3}x {decision:9} {reason}")
-    print(f"\nwritten to {output}")
+    response = await api.post(f"{prefix}/run")
+    response.raise_for_status()
+    print(f"run: {response.json()}", flush=True)
+    response = await api.get(f"{prefix}/export")
+    response.raise_for_status()
+    outcomes = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    (output / "outcomes.jsonl").write_text(response.text.rstrip() + "\n", encoding="utf-8")
+    if duplicates := response.headers.get("X-Duplicate-Names"):
+        print(f"Export uses the newest instance for duplicate names: {duplicates}")
+
+    response = await api.get(f"{prefix}/instances")
+    response.raise_for_status()
+    by_name = {i["name"]: i for i in sorted(response.json(), key=lambda i: i["id"])}
+    detail = []
+    for outcome in outcomes:
+        instance = by_name[outcome["file_id"]]
+        response = await api.get(f"/instances/{instance['id']}")
+        response.raise_for_status()
+        document = response.json()
+        # Match export: latest engine decision, falling back to a human decision.
+        decisions = document["decisions"]
+        latest = next((d for d in reversed(decisions) if d["author"] == "engine"), decisions[-1])
+        detail.append(
+            {
+                **outcome,
+                "rules_that_fired": [r["reason"] for r in latest["results"] if r["fires"]],
+                "symbols": document["symbols"],
+            }
+        )
+    (output / "detail.json").write_text(
+        json.dumps(detail, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(f"export: {len(outcomes)} invoices (whole process)")
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--api-url", default=f"http://127.0.0.1:{os.getenv('BACKEND_PORT', '8000')}"
+    )
+    parser.add_argument("--email", default="martin@trace-it.local")
+    parser.add_argument("--process", type=int, help="default: discover the Invoice payment process")
+    parser.add_argument("--invoices", type=Path, default=CHALLENGE / "facturas")
+    parser.add_argument("--book", type=Path, default=CHALLENGE / "FINAL_v7_DEFINITIVO_ahorasi.xlsx")
+    parser.add_argument("--cutoff", type=date.fromisoformat, default="2026-09-18")
+    parser.add_argument("--output", type=Path, default=ROOT / "output")
+    parser.add_argument("--limit", type=int, help="upload first N PDFs; run/export whole process")
+    parser.add_argument("--local-only", action="store_true", help="disable VLM/Jev; keep local OCR")
+    parser.add_argument(
+        "--timeout", type=float, default=900, help="HTTP timeout in seconds for OCR"
+    )
+    args = parser.parse_args(argv)
+    if args.limit is not None and args.limit < 1:
+        parser.error("--limit must be positive")
+    if args.timeout <= 0:
+        parser.error("--timeout must be positive")
+    if not args.book.is_file():
+        parser.error(f"Workbook not found: {args.book}")
+    args.files = sorted(args.invoices.glob("*.pdf"))[: args.limit]
+    if not args.files:
+        parser.error(f"No PDFs found in {args.invoices}")
+    return args
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--process", type=int, default=1)
-    parser.add_argument("--invoices", type=Path, default=CHALLENGE / "facturas")
-    parser.add_argument(
-        "--book", type=Path, default=CHALLENGE / "FINAL_v7_DEFINITIVO_ahorasi.xlsx"
-    )
-    parser.add_argument("--cutoff", default="2026-09-18", help="`parameters.cut_off_date`")
-    parser.add_argument("--output", type=Path, default=ROOT / "output")
-    parser.add_argument("--limit", type=int, help="only the first N invoices")
-    args = parser.parse_args()
-
+    args = parse_args()
     started = time.monotonic()
-    # One trace for the ingestion, one `ingest_document` point per new instance (ADR 0018).
-    with events.span("demo_ingest", process_id=args.process, reader="pdf-text"):
-        await ingest(args.process, args.invoices, args.book, args.cutoff, args.limit)
-    await decide(args.process, args.output)
+    async with httpx.AsyncClient(
+        base_url=args.api_url.rstrip("/"), timeout=httpx.Timeout(args.timeout, connect=10)
+    ) as api:
+        process_id = await authenticate(api, args.email, args.process)
+        await run(
+            api,
+            process_id,
+            args.files,
+            args.book,
+            args.cutoff.isoformat(),
+            args.output,
+            local_only=args.local_only,
+        )
     print(f"total: {time.monotonic() - started:.0f}s")
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except httpx.HTTPStatusError as exc:
+        sys.exit(
+            f"API {exc.request.url.path}: HTTP {exc.response.status_code}: "
+            f"{exc.response.text[:500]}"
+        )
+    except (httpx.RequestError, OSError, ValueError) as exc:
+        sys.exit(f"Demo failed: {exc}")
