@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import uuid
@@ -53,6 +54,11 @@ async def run(args):
     settings = Settings(data_dir=output / "data", ocr_profile="verified", vlm_timeout=120)
     profile = validate_quality_profile(settings)
     service = ExtractionService(settings)
+    if args.reader_cache_from:
+        for name in ("reader-cache", "provider-journal"):
+            source = args.reader_cache_from / name
+            if source.is_dir():
+                shutil.copytree(source, settings.data_dir / name)
     spec = json.loads((ROOT / "processes/invoice-payment.json").read_text(encoding="utf-8"))
     spec["name"] = "Verified OCR corpus " + uuid.uuid4().hex[:12]
     spec.pop("use_case", None)
@@ -202,7 +208,10 @@ async def run(args):
                 "outcomes_sha256": digest(output / "outcomes.jsonl"),
                 "fresh_process": True,
                 "fresh_extraction_store": True,
-                "fresh_provider_journal": True,
+                "fresh_provider_journal": not bool(args.reader_cache_from),
+                "reader_cache_source": str(args.reader_cache_from)
+                if args.reader_cache_from
+                else None,
                 "rerun_decided": repeated["decided"],
                 "run": result,
             }
@@ -224,6 +233,11 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--cutoff", required=True)
     parser.add_argument("--expected-files", type=int, default=500)
+    parser.add_argument(
+        "--reader-cache-from",
+        type=Path,
+        help="Reuse content-addressed reader evidence only; extraction and decisions remain fresh",
+    )
     args = parser.parse_args()
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
