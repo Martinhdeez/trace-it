@@ -77,5 +77,12 @@ Provider failures preserve available evidence. Journals prevent resending reques
 delivery is uncertain; inspect them before a deliberate retry. Journals contain document
 data and stay outside Git.
 
+The implemented evidence and provider-tracing contract is recorded in
+[ADR 0022](../adr/0022-ocr-evidence-and-provider-tracing.md). Follow the
+[trace API guide](api.md#tracing-readers-and-provider-usage) to inspect a document's
+model calls and distinguish network usage from saved responses. The
+[fal.ai review](fal-fallback.md) evaluates possible additional visual readers;
+[ADR 0023](../adr/0023-fal-visual-fallback-evaluation.md) records that proposed extension.
+
 See [API](api.md), [committee](committee.md), [integration](architecture.md),
 [audit](corpus-audit.md) and [validation](extraction-validation.md).

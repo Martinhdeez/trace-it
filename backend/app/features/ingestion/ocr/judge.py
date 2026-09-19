@@ -2,7 +2,7 @@
 
 import httpx
 
-from .journal import recorded_call
+from .journal import record_response, recorded_call
 
 URL = "https://api.typesafe.ai/v1/systemone"
 INSTRUCTIONS = (
@@ -55,16 +55,19 @@ class TextJudge:
             "questions": questions,
         }
 
-        def call():
+        def call(mark_network_attempt):
             with httpx.Client(timeout=self.settings.vlm_timeout, follow_redirects=False) as client:
+                mark_network_attempt()
                 response = client.post(
                     URL,
                     headers={"Authorization": "Bearer " + self.settings.jev_api_key},
                     json=payload,
                 )
+            record_response("jev", response.status_code)
             if not response.is_success:
                 raise RuntimeError(f"Jev returned HTTP {response.status_code}")
             data = response.json()
+            record_response("jev", response.status_code, data)
             if set(data["answers"]) != set(questions):
                 raise ValueError("Jev omitted or added questions")
             for name, answer in data["answers"].items():
@@ -85,7 +88,9 @@ class TextJudge:
             self.settings.data_dir / "provider-journal" / "jev",
             {"endpoint": URL, "payload": payload},
             call,
-            reader="jev",
+            provider="jev",
+            model=self.settings.jev_model,
+            operation="text_selection",
         )
         return {
             "role": "textual_recommendation_only",

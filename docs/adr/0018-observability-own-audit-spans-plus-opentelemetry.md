@@ -154,17 +154,19 @@ The same spans, cut three ways so that each question has its own view. `PLANES` 
 `features/traces/service.py` maps every span name to exactly one plane.
 `traces/tests/test_planes.py` reads every `events.span`/`events.record` call in
 `backend/app` and `tools`, and fails if a span has no plane or if a plane lists a span that
-nothing emits. An `llm_run` always belongs to `agents`, whichever step called it, so all
-tokens are counted in one place.
+nothing emits. An `llm_run` always belongs to `agents`, whichever step called it, so
+agent tokens are counted in one place. OCR `provider_call` operations belong to
+`ingestion`; their separate reported usage excludes journal replay (ADR 0022).
 
 | Plane | Spans | Key metrics | Endpoint |
 |---|---|---|---|
-| ingestion | `upload_document`, `store_file`, `extraction`, `native_text`, `ocr`, `vision`, `text_judge`, `focused_read`, `ingest_document`, `reextract_document`, `extract_document`, `upload_workbook`, `load_workbook`, `sync_source` | files, files/s (first reading's start to last reading's end), pages, OCR/vision/judge/focused calls, cache hits, abstentions (declared symbols read as null) by field, errors, p50/p95 per step | `GET /processes/{id}/metrics/ingestion`, `GET /metrics/ingestion` |
+| ingestion | `upload_document`, `store_file`, `extraction`, `native_text`, `ocr`, `vision`, `text_judge`, `focused_read`, `provider_call`, `ingest_document`, `reextract_document`, `extract_document`, `upload_workbook`, `load_workbook`, `sync_source` | files, files/s (first reading's start to last reading's end), pages, OCR/vision/judge/focused calls, cache hits, provider attempts/replays/reported tokens, abstentions (declared symbols read as null) by field, errors, p50/p95 per step | `GET /processes/{id}/metrics/ingestion`, `GET /metrics/ingestion` |
 | agents | `load_use_case`, `load_definition`, `configure_agent`, `activate_agent_config`, `save_rule`, `norm`, `normalize_norm`, `compile_rules`, `compile_rule`, `coder_attempt`, `run_tests`, `impact_check`, `activate_rule`, `retire_rule`, `llm_run`, `demo_llm_down`, `learn_norms`, `validate_norm`, `adopt_norm`, `reject_norm` | tokens in/out/cached, requests, retries, fallbacks, truncations and errors by model, role (agent), rule, norm rule and use case; tokens per hour; compile success rate, attempts per compilation; per norm: tokens and seconds from the norm to its last rule active | `GET /processes/{id}/metrics/agents`, `GET /metrics/agents` |
 | execution | `run_process`, `evaluate_rule`, `decision`, `reprocess`, `review_decision`, `suggest_escalation`, `resolution`, `export_outcomes` | runs, invoices/s, per-rule evaluations, fired, errors and p50/p95; decisions by type; escalations by cause (`MISSING_DATA`, `RULE_ERROR`...); the human queue; pending; resolutions by author; engine decision to a person's decision (p50/p95 s) | `GET /processes/{id}/metrics/execution`, `GET /metrics/execution` |
 
-All of these take `since`. `GET /processes/{id}/metrics` is unchanged: its `llm[]` only
-gains fields. Live: `GET /health/planes` gives each plane `ok`, `degraded` or `down` from
+All of these take `since`. `GET /processes/{id}/metrics` retains its existing fields:
+`llm[]` gains fields and `providers[]` adds OCR provider usage (ADR 0022).
+Live: `GET /health/planes` gives each plane `ok`, `degraded` or `down` from
 its error rate and p95 over the last `TRACE_HEALTH_WINDOW_MINUTES`, measured against
 `TRACE_HEALTH_*` thresholds. `GET /events/stream` sends every new span as a server-sent
 event named after its plane; it polls `events` by id every second and can filter by plane

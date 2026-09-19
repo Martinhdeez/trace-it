@@ -4,6 +4,7 @@ from dataclasses import replace
 import httpx
 import pytest
 
+from app.features.ingestion.ocr.errors import ProviderUnavailable
 from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.pdf.committee import reconcile
 
@@ -44,7 +45,7 @@ def test_text_judge_checks_typed_candidates_and_reuses_journal(settings, monkeyp
     readers = {"primary": lines("NIF: B98120774", "ocr", 0.99)}
     fields, _, _ = reconcile(readers, settings.ocr_min_confidence)
     if invented:
-        with pytest.raises(ValueError, match="Invalid Jev selection"):
+        with pytest.raises(ProviderUnavailable, match="jev call unavailable"):
             judge.select(readers, fields)
     else:
         first = judge.select(readers, fields)

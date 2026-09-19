@@ -74,6 +74,18 @@ def test_unconfigured_visual_reader_does_not_report_a_network_request(settings):
     assert result.metrics["vlm_calls_this_request"] == 0
 
 
+def test_partial_compatible_configuration_keys_the_active_gemini_fallback(settings):
+    configured = replace(
+        settings, vlm_url="https://unused.example", vlm_model=None, gemini_api_key="test-key"
+    )
+    item = {"sha256": "same", "kind": "invoice"}
+    first = ExtractionService(configured, NoOCR())
+    assert first.vlm.signature()["model"] == configured.gemini_model
+    assert first.vlm.signature()["endpoint"] is None
+    second = ExtractionService(replace(configured, gemini_model="gemini-changed"), NoOCR())
+    assert first.cache_key(item, ExtractOptions()) != second.cache_key(item, ExtractOptions())
+
+
 def test_models_changed_in_place_invalidate_without_manifest_edits(settings):
     model = settings.model_dir / "rec/inference.onnx"
     model.parent.mkdir(parents=True)

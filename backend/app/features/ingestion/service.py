@@ -196,9 +196,24 @@ class ExtractionService:
         return fingerprint(config)
 
     def extract(self, item, options: ExtractOptions):
-        with events.span("extraction", kind=item["kind"], sha256=item["sha256"]) as span:
+        with events.span(
+            "extraction",
+            kind=item["kind"],
+            sha256=item["sha256"],
+            extraction_id=item["id"],
+            pipeline_version=PIPELINE_VERSION,
+            options=options.model_dump(),
+        ) as span:
             result = self._extract(item, options)
-            span.set(cache_hit=result.cache_hit, warnings=len(result.warnings), **result.metrics)
+            provenance = result.data.get("provenance", {})
+            span.set(
+                cache_hit=result.cache_hit,
+                cached_from_extraction_id=provenance.get("cached_from_extraction_id"),
+                ocr_models=provenance.get("ocr_models"),
+                warnings=len(result.warnings),
+                warning_codes=sorted({warning["code"] for warning in result.warnings}),
+                **result.metrics,
+            )
             return result
 
     def _extract(self, item, options: ExtractOptions):
@@ -210,6 +225,10 @@ class ExtractionService:
             cached = self.store.cached(key)
             if cached:
                 result = ExtractionResult.model_validate(cached)
+                result.data["provenance"] = {
+                    **result.data.get("provenance", {}),
+                    "cached_from_extraction_id": result.id,
+                }
                 result.id, result.file_id = item["id"], item["file_id"]
                 result.cache_hit = True
                 result.metrics = {
@@ -241,7 +260,11 @@ class ExtractionService:
                     "options": options.model_dump(),
                     "ocr_models": self.ocr.signature() if metrics["ocr_calls"] else None,
                     "ocr_dpi": self.settings.ocr_dpi if metrics["ocr_calls"] else None,
-                    "visual_model": (self.settings.vlm_model or self.settings.gemini_model)
+                    "visual_model": (
+                        self.settings.vlm_model
+                        if self.settings.vlm_url and self.settings.vlm_model
+                        else self.settings.gemini_model
+                    )
                     if metrics["vlm_calls"]
                     else None,
                     "text_judge_model": self.settings.jev_model

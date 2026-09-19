@@ -8,7 +8,7 @@ import time
 import uuid
 
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
@@ -94,6 +94,10 @@ async def latest_evidence(session, instance_id):
         .where(
             Event.instance_id == instance_id,
             Event.step.in_(("ingest_document", "extract_document")),
+            or_(
+                Event.step == "extract_document",
+                Event.data["created"].as_boolean().is_not(False),
+            ),
         )
         .order_by(Event.id.desc())
         .limit(1)

@@ -1,8 +1,12 @@
 ---
-status: proposed
+status: superseded by 0022
 ---
 
 # Extract symbols with two independent readings and deterministic validators, never retrying on a failed check
+
+This proposal was superseded by [ADR 0022](0022-ocr-evidence-and-provider-tracing.md).
+The implemented production pipeline uses native parsing, two local OCR readers and
+selective visual verification. The text below preserves the original proposal.
 
 ## Context
 The engine is only as right as the symbols it gets (ADR 0002). Batch 1 has 500 PDFs in at

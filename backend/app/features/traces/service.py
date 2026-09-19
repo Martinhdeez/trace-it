@@ -16,6 +16,7 @@ from app.common.exceptions import NotFoundError
 from app.core.config import settings
 from app.core.database import session_factory
 from app.core.events import Event
+from app.features.agents import decision_reviewer
 from app.features.agents.llm import TRUNCATED
 from app.features.decisions import service as decisions
 from app.features.decisions.model import ENGINE, Decision
@@ -37,6 +38,7 @@ from app.features.traces.schemas import (
     Plane,
     PlaneHealth,
     ProcessMetrics,
+    ProviderStats,
     RuleResultOut,
     RuleRunStats,
     RuleRuntime,
@@ -63,6 +65,7 @@ PLANES: dict[str, Plane] = {
     "ocr": _INGESTION,
     "vision": _INGESTION,
     "text_judge": _INGESTION,
+    "provider_call": _INGESTION,
     "focused_read": _INGESTION,
     "ingest_document": _INGESTION,
     "reextract_document": _INGESTION,
@@ -183,7 +186,18 @@ async def instance_trace(session: AsyncSession, instance_id: int) -> InstanceTra
         )
         rows += list(await session.scalars(exports))
     engine = [d for d in history if d.author == ENGINE]
-    exported = (engine or history or [None])[-1]
+    automatic = engine[-1] if engine else None
+    human = next((d for d in reversed(history) if d.author != ENGINE), None)
+    exported = automatic or human
+    if automatic:
+        review = (await decision_reviewer.for_decisions(session, [automatic])).get(automatic.id)
+        if review:
+            if human and human.id > automatic.id:
+                exported = human
+            elif review.requires_human:
+                exported = None
+    if instance.status == "PENDING":
+        exported = None
     return InstanceTrace(
         id=instance.id,
         process_id=instance.process_id,
@@ -357,6 +371,45 @@ async def _runs(session: AsyncSession, where: list) -> tuple[int, int, float | N
     return runs, instances, round(instances / run_ms * 1000, 1) if run_ms else None
 
 
+async def _providers(session: AsyncSession, where: list) -> list[ProviderStats]:
+    """Group journal calls; replayed response tokens never count as new network usage."""
+    provider = Event.data["provider"].astext
+    model = Event.data["model"].astext
+    operation = Event.data["operation"].astext
+    network = Event.data["network_attempted"].as_boolean().is_(True)
+    replay = Event.data["outcome"].astext == "replay"
+    rows = await session.execute(
+        select(
+            provider,
+            model,
+            operation,
+            func.count(),
+            func.count().filter(network),
+            func.count().filter(replay),
+            _ERRORS,
+            func.coalesce(func.sum(Event.data["input_tokens"].as_integer()).filter(network), 0),
+            func.coalesce(func.sum(Event.data["output_tokens"].as_integer()).filter(network), 0),
+        )
+        .where(*where, Event.step == "provider_call")
+        .group_by(provider, model, operation)
+        .order_by(provider, model, operation)
+    )
+    return [
+        ProviderStats(
+            provider=p,
+            model=m,
+            operation=o,
+            attempts=c,
+            network_requests=n,
+            replays=replays,
+            errors=e,
+            input_tokens=tokens_in,
+            output_tokens=tokens_out,
+        )
+        for p, m, o, c, n, replays, e, tokens_in, tokens_out in rows
+    ]
+
+
 def _decided(process_id: int | None, since: datetime | None) -> list:
     where = []
     if process_id is not None:
@@ -407,6 +460,7 @@ async def metrics(session: AsyncSession, process_id: int, since: datetime | None
         instances_per_second=per_second,
         steps=await _steps(session, spans),
         llm=await _llm_stats(session, spans, model, role),
+        providers=await _providers(session, spans),
         decisions_by_outcome=by_outcome,
         failures=failures,
         escalated=escalated,
@@ -494,6 +548,7 @@ async def _ingestion(session: AsyncSession, where: list, base: dict) -> Ingestio
         vision_calls=calls[2],
         judge_calls=calls[3],
         focused_reads=calls[4],
+        providers=await _providers(session, where),
         cache_hits=calls[5],
         abstentions=sum(abstentions.values()),
         abstentions_by_field=abstentions,

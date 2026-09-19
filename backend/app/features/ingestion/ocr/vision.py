@@ -10,7 +10,7 @@ from app.features.ingestion.config import Settings
 
 from .errors import ProviderUnavailable
 from .gemini import GENERATION, PROMPT, generate, output_text
-from .journal import recorded_call
+from .journal import record_response, recorded_call
 from .transcript import remote_lines, transcript_warnings
 
 COMPATIBLE_PROMPT = (
@@ -39,27 +39,28 @@ class VisionFallback:
         )
 
     def signature(self):
+        compatible = bool(self.settings.vlm_url and self.settings.vlm_model)
         return {
-            "endpoint": self.settings.vlm_url,
-            "model": self.settings.vlm_model
-            if self.settings.vlm_url
-            else self.settings.gemini_model,
+            "endpoint": self.settings.vlm_url if compatible else None,
+            "model": self.settings.vlm_model if compatible else self.settings.gemini_model,
             "configured": self.configured,
-            "prompt": COMPATIBLE_PROMPT if self.settings.vlm_url else PROMPT,
-            "generation": {"temperature": 0, "max_tokens": 2500}
-            if self.settings.vlm_url
-            else GENERATION,
+            "prompt": COMPATIBLE_PROMPT if compatible else PROMPT,
+            "generation": {"temperature": 0, "max_tokens": 2500} if compatible else GENERATION,
         }
 
     def transcribe(self, png: bytes, page: int, point_size: tuple[float, float]):
-        if not self.settings.vlm_url and self.settings.gemini_api_key:
+        if not (self.settings.vlm_url and self.settings.vlm_model) and self.settings.gemini_api_key:
 
-            def call():
+            def call(mark_network_attempt):
                 with httpx.Client(
                     timeout=self.settings.vlm_timeout, follow_redirects=False
                 ) as client:
                     response = generate(
-                        client, self.settings.gemini_model, self.settings.gemini_api_key, [png]
+                        client,
+                        self.settings.gemini_model,
+                        self.settings.gemini_api_key,
+                        [png],
+                        before_request=mark_network_attempt,
                     )
                 transcript = output_text(response)
                 if transcript_warnings(transcript):
@@ -75,7 +76,9 @@ class VisionFallback:
                     "image": hashlib.sha256(png).hexdigest(),
                 },
                 call,
-                reader="vlm",
+                provider="gemini",
+                model=self.settings.gemini_model,
+                operation="image_transcription",
             )
             return remote_lines(output_text(response), page, point_size)
         if not self.settings.vlm_url or not self.settings.vlm_model:
@@ -104,28 +107,32 @@ class VisionFallback:
             ],
         }
 
-        def call():
+        def call(mark_network_attempt):
             with (
                 self.lock,
                 httpx.Client(timeout=self.settings.vlm_timeout, follow_redirects=False) as client,
             ):
+                mark_network_attempt()
                 response = client.post(
                     self.settings.vlm_url.rstrip("/") + "/chat/completions",
                     json=body,
                     headers=headers,
                 )
+                record_response("vision", response.status_code)
                 if not response.is_success:
                     raise ProviderUnavailable(
                         f"Vision provider returned HTTP {response.status_code}"
                     )
-                text = response.json()["choices"][0]["message"]["content"]
+                data = response.json()
+                record_response("vision", response.status_code, data)
+                text = data["choices"][0]["message"]["content"]
             if not isinstance(text, str) or not text.strip() or len(text) > 50000:
                 raise ValueError("Invalid VLM response")
             if transcript_warnings(text):
                 raise ProviderUnavailable("Repetitive visual transcript")
-            return text
+            return {"text": text, "usage": data.get("usage", {})}
 
-        text = recorded_call(
+        result = recorded_call(
             self.settings.data_dir / "provider-journal" / "vision",
             {
                 "endpoint": self.settings.vlm_url,
@@ -135,8 +142,11 @@ class VisionFallback:
                 "image": hashlib.sha256(png).hexdigest(),
             },
             call,
-            reader="vlm",
+            provider="vision",
+            model=self.settings.vlm_model,
+            operation="image_transcription",
         )
+        text = result["text"] if isinstance(result, dict) else result
         return [
             TextLine(
                 id=f"p{page}:vlm:{i}",
