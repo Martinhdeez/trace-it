@@ -40,6 +40,17 @@ Deterministic and idempotent: the same inputs give byte-identical files. `test_b
 
 `confidence` is `high` when the outcome follows from the norm's wording, `medium` (21 files) when it rests on a team decision above or the invoice carries injected instructions, `none` for the scans. `why` lists every finding (`AMOUNT_NE_PO: 12874.4 vs 12847.4`) and the notes (`INVISIBLE_CHARS`, `INJECTED_TEXT`); a clean file says `clean: no finding`.
 
+## The norm-driven process
+
+The golden checks the hand-written rules, whose decisions are explicit. The rules the
+normalizer writes from the norm (ADR 0017) take the decision of a failed check from the use
+case policy `failed_check_decision` whenever the norm does not name one. The invoice use
+case sets `NO_PAGAR` (product owner, 2026-09-19: a rule not complied with rejects; a rule
+that cannot be applied escalates), which matches the decisions above except the duplicate
+order, which the golden escalates as a team decision. The golden is not changed to follow
+the policy: `make eval-norm` reports the difference, and `docs/mentor-questions.md` lists the
+doubts that would move either side.
+
 ## When the golden and the rules disagree
 
 Do not weaken the test. Investigate and decide which side is wrong. Meanwhile add the file to `KNOWN_MISMATCHES` in `golden.py` with the reason; it runs as a strict `xfail`, so CI fails as soon as the disagreement goes away. To change a decision above, edit `build_golden.py`, rebuild, and commit the script with both `.jsonl` files.

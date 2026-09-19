@@ -31,6 +31,9 @@ class AgentSettings(BaseModel):
     # compiler: max_attempts, auto_activate_max_change; tester: min_tests, max_reviews.
     limits: dict[str, float] = {}
     examples: list[Example] = []
+    # normalizer: the decision of a check whose failure the norm does not name (ADR 0017).
+    # A decision type of the process, never the default. None: the prompt's own fallbacks.
+    failed_check_decision: str | None = None
 
 
 class UseCaseOut(BaseModel):

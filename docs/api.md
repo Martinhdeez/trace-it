@@ -28,8 +28,8 @@ activating rules, document extraction and source uploads need it. CORS is open.
 | Sync the ERP | `POST /processes/{id}/sources/{name}/sync`, `GET .../diff` | |
 | Audit trail | `GET /processes/{id}/events?step=&instance_id=&limit=` | newest first. Steps: `decision`, `resolution`, `ingest_document`, `compile_rule`, `normalize_norm`, `suggest_escalation`, `sync_source`, `sync_source_failed` |
 | Findings | `GET /processes/{id}/findings` | past decisions a later rule says were wrong |
-| Run | `POST /processes/{id}/run` | decides every PENDING instance with symbols |
-| Reprocess | `POST /processes/{id}/reprocess?dry_run=` (optional `{"names": [...]}`) | decides the DECIDED instances again with the current rules and sources; appends a new engine decision only where it changes; an instance a person decided last is never touched and comes back in `conflicts` |
+| Run | `POST /processes/{id}/run` | decides every PENDING instance with symbols; 409 while a rule is `compiling` or when no rule is `active`/`blocked` |
+| Reprocess | `POST /processes/{id}/reprocess?dry_run=` (optional `{"names": [...]}`) | decides the DECIDED instances again with the current rules and sources; appends a new engine decision only where it changes; an instance a person decided last is never touched and comes back in `conflicts`. Same 409 as Run |
 | Export | `GET /processes/{id}/export` | `outcomes.jsonl`; 409 while anything is undecided. One batch only: `make export-batch` (`docs/runbook-batch2.md`) |
 | Upload | `POST /processes/{id}/files` (multipart `file`) | stores the PDF and fills declared invoice-payment symbols from verified readings |
 | Workbook | `POST /processes/{id}/sources/workbook` (multipart `file`, optional `cut_off_date`) | appends supplier/order snapshots; never replaces ERP |
