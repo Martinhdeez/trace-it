@@ -56,6 +56,7 @@ async def test_discussion_preserves_accepted_proposals_and_preview(api, monkeypa
         assert discussed[key] == draft[key]
     assert discussed["revision"] == draft["revision"] + 1
     assert discussed["messages"][-1]["evidence"] == ["chat:1"]
+    assert discussed["messages"][-1]["trace_id"] == discussed["trace_id"]
     published = await post(api, discussed, "publish")
     assert published["published_process_id"] is not None
 

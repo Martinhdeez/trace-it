@@ -18,6 +18,7 @@ import type {
   DiscoverySession,
   DiscoverySessionSummary,
   Proposal,
+  SpanNode,
   ValidationChange,
 } from '../../api/contracts'
 import { families, keys } from '../../api/queries'
@@ -95,6 +96,7 @@ function messageOf(value: Record<string, unknown>): DiscoveryMessage | null {
     questions: Array.isArray(value.questions)
       ? value.questions.filter((item): item is string => typeof item === 'string')
       : undefined,
+    trace_id: typeof value.trace_id === 'string' ? value.trace_id : undefined,
   }
 }
 
@@ -364,8 +366,16 @@ export function ProcessDraftChat({
     },
   })
 
-  const messages = (current?.messages ?? []).flatMap((value) => {
+  const messages = (current?.messages ?? []).flatMap((value, index, values) => {
     const message = messageOf(value)
+    if (
+      message?.role === 'assistant' &&
+      !message.trace_id &&
+      current?.trace_id &&
+      !values.slice(index + 1).some((later) => later.role === 'assistant')
+    ) {
+      message.trace_id = current.trace_id
+    }
     return message ? [message] : []
   })
   const visibleMessages = send.isPending && send.variables
@@ -579,6 +589,9 @@ export function ProcessDraftChat({
                           <li key={question}>{question}</li>
                         ))}
                       </ul>
+                    ) : null}
+                    {message.role === 'assistant' && message.trace_id ? (
+                      <ThinkingTrace traceId={message.trace_id} />
                     ) : null}
                   </div>
                 </li>
@@ -848,6 +861,50 @@ export function ProcessDraftChat({
         </div>
       </aside>
     </div>
+  )
+}
+
+function ThinkingTrace({ traceId }: { traceId: string }) {
+  const trace = useQuery({
+    queryKey: ['trace', traceId],
+    queryFn: () => api.getAuditTrace(traceId),
+  })
+
+  return (
+    <details className="mt-3 border-t border-current/10 pt-2">
+      <summary className="cursor-pointer font-mono text-[10px] text-faint">
+        Traza de razonamiento
+      </summary>
+      {trace.isPending ? (
+        <p className="mt-2 text-[11px] text-faint">Cargando traza…</p>
+      ) : trace.error ? (
+        <p className="mt-2 text-[11px] text-nopagar">No se pudo cargar la traza.</p>
+      ) : (
+        <div className="mt-2 space-y-2">
+          {trace.data?.map((span) => <ThinkingSpan key={span.span_id} span={span} />)}
+        </div>
+      )}
+    </details>
+  )
+}
+
+function ThinkingSpan({ span }: { span: SpanNode }) {
+  return (
+    <details className="rounded-[8px] bg-canvas px-2.5 py-2 ring-1 ring-line">
+      <summary className="cursor-pointer font-mono text-[10px] text-muted">
+        {span.step} · {span.status} · {span.duration_ms == null ? '—' : `${span.duration_ms} ms`}
+      </summary>
+      {span.data ? (
+        <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-4 text-ink">
+          {JSON.stringify(span.data, null, 2)}
+        </pre>
+      ) : null}
+      {span.children.length ? (
+        <div className="mt-2 space-y-2 border-l border-line pl-2">
+          {span.children.map((child) => <ThinkingSpan key={child.span_id} span={child} />)}
+        </div>
+      ) : null}
+    </details>
   )
 }
 

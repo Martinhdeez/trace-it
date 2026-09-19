@@ -673,6 +673,7 @@ async def test_a_revision_returns_the_trace_of_the_agent_run_it_performed(api, m
 
     trace_id = draft["trace_id"]
     assert trace_id and len(trace_id) == 32
+    assert draft["messages"][-1]["trace_id"] == trace_id
     spans = (await api.get(f"/traces/{trace_id}")).json()
     steps = {s["step"] for s in spans} | {c["step"] for s in spans for c in s["children"]}
     assert "discover_process" in steps and "llm_run" in steps

@@ -300,6 +300,7 @@ async def message(session, draft_id, body, user):
                     "text": answer.message,
                     "evidence": answer.evidence,
                     "questions": answer.questions,
+                    "trace_id": span.trace_id,
                 }
             )
             return await save(session, draft_id, body.revision, data, user, "discuss_process")
@@ -312,7 +313,9 @@ async def message(session, draft_id, body, user):
         plan.name = data["plan"].get("name", "")
     before_plan = data["plan"]
     data["plan"] = plan.model_dump()
-    data["messages"].append({"role": "assistant", "text": plan.summary})
+    data["messages"].append(
+        {"role": "assistant", "text": plan.summary, "trace_id": span.trace_id}
+    )
     edited = plan_changed(before_plan, data["plan"])
     if edited:
         invalidate(data)

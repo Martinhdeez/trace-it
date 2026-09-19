@@ -242,6 +242,7 @@ export type DiscoveryMessage = {
   mode?: 'discuss' | 'revise'
   evidence?: string[]
   questions?: string[]
+  trace_id?: string
 }
 
 /** A past decision a later rule says was wrong. A notice, never a correction. */
@@ -322,6 +323,8 @@ export interface ApiClient {
   getDocument(instanceId: number): Promise<ExtractionResult>
   /** The decision, its rule results with their text, the file and the span tree. */
   getTrace(instanceId: number): Promise<InstanceTrace>
+  /** The complete span tree for one recorded operation. */
+  getAuditTrace(traceId: string): Promise<SpanNode[]>
   /** Where the stored PDF is served, for an iframe or a download link. */
   fileUrl(instanceId: number): string
   /** Everything waiting for a person, including cases the reviewer disagreed with. */
