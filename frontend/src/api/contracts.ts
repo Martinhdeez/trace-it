@@ -11,6 +11,48 @@ export type User = components['schemas']['UserOut']
 
 export type Role = User['role']
 
+type Schemas = components['schemas']
+export type ProcessSummary = Schemas['ProcessSummary']
+export type ExecutionMetrics = Schemas['ExecutionMetrics']
+export type ProcessMetrics = Schemas['ProcessMetrics']
+export type PlaneHealth = Schemas['PlaneHealth']
+export type VersionDraft = Schemas['VersionDraftOut']
+export type VersionOut = Schemas['VersionOut']
+export type PublishIn = Schemas['PublishIn']
+export type DraftIn = Schemas['DraftIn']
+export type ExecutionOut = Schemas['ExecutionOut']
+export type ExecutionSettings = Schemas['ExecutionSettings']
+export type AgentSettings = Schemas['AgentSettings']
+export type ExtractionSettings = Schemas['ExtractionSettings']
+export type DecisionReview = Schemas['DecisionReviewConfig']
+export type Preset = Exclude<ExecutionSettings['preset'], 'custom'>
+
+/** The backend leaves `validation` as free JSON; these are the fields the console reads. */
+export type HistoricalCoverage = {
+  evaluated: number
+  not_evaluable: number
+  partial: number
+  none: number
+  total?: number
+}
+export type HistoricalCaseWithoutCoverage = {
+  instance_id: number
+  name: string
+  missing_symbols: string[]
+  evaluated_rules: number[]
+  unavailable_rules: { rule_id: number; symbol: string }[]
+}
+export type ValidationReport = {
+  valid: boolean
+  hash: string
+  coverage?: HistoricalCoverage
+  not_evaluable?: HistoricalCaseWithoutCoverage[]
+  conflicts?: { instance_id: number; reason?: string }[]
+  errors?: { instance_id: number; reason?: string }[]
+  error?: string
+  [key: string]: unknown
+}
+
 export type UserInput = {
   nombre: string
   email: string
@@ -323,6 +365,18 @@ export interface ApiClient {
   ruleImpact(id: number): Promise<Impact>
   activateRule(id: number): Promise<RuleDetail>
   retireRule(id: number): Promise<RuleDetail>
+
+  summary(processId: number): Promise<ProcessSummary>
+  planeMetrics(processId: number, plane: 'execution'): Promise<ExecutionMetrics>
+  processMetrics(processId: number): Promise<ProcessMetrics>
+  planesHealth(): Promise<PlaneHealth[]>
+  /** 404 when the process has no draft. */
+  getDraft(processId: number): Promise<VersionDraft>
+  validateDraft(processId: number): Promise<VersionDraft>
+  publishDraft(processId: number, body: PublishIn): Promise<VersionOut>
+  listVersions(processId: number): Promise<VersionOut[]>
+  getExecution(processId: number): Promise<ExecutionOut>
+  saveDraft(processId: number, body: DraftIn): Promise<VersionDraft>
 
   run(processId: number): Promise<RunSummary>
   listInstances(processId: number, state?: InstanceState): Promise<Instance[]>

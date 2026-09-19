@@ -229,3 +229,33 @@ Merge order inside a wave: the smallest API diff first, then `make openapi` on e
 | D3 | Where does the Playwright check live? | (1) `frontend/e2e/`. (2) `tests/integration/` with its own `package.json` | **(2).** `frontend/` is Carlos's, and a new devDependency there conflicts with his lockfile on every package. The check covers both sides, so it sits outside both |
 | D4 | Is the assistant's proposal part of B0's path? | (1) Yes, with a scripted model behind a backend setting. (2) No: the path resolves a case directly | **(2).** No test may need an LLM key (AGENTS.md), and a new test-only setting is code for one test. It only holds if the escalation detail does not call the assistant when it opens. If pkg 5 makes that call automatically, Carlos makes it a click, or the check allows an `llm_error` notice on that panel only |
 | D5 | Does B0 run the scan in CI? | (1) Yes, with the 98 MB of OCR weights cached. (2) The text PDF only in CI, and the scan run locally | **(1) if the job stays under about 10 minutes, otherwise (2).** Decide after B0's first CI run |
+
+## B5 result: the handoff against `openapi.json` (2026-09-19, integration at fa24f2d)
+
+Every endpoint row of packages 1-11 was checked, by method, path, request fields and response fields, against `frontend/openapi.json`. Package 0, 0b and 12 name no endpoint.
+
+| Pkg | Endpoints | Result |
+|---|---|---|
+| 1 | `login`, `me` | All present |
+| 2 | `getProcess`, `getProcessSummary`, `getProcessPlaneMetrics` (execution), `getProcessMetrics`, `getPlanesHealth`, draft `get`/`validate`/`publish`, `listProcessVersions`, `getExecutionSettings` | All present |
+| 3 | `uploadProcessDocument`, `extractInstanceDocument`, `runProcess` (`down_sources`), `uploadProcessWorkbook` (`cut_off_date` required), `listSources`, `getSource`, `syncSource` | All present |
+| 4 | `getQueue` (`type`), `listInstances` (`status`, `decision`, `q`), `getInstance` (`reviews[]`) | All present, `review_pending` included |
+| 5 | `getInstance`, `getSuggestion`, `resolveInstance`, `createRule` | Present |
+| 5 | `POST /instances/{id}/proposal`, `ResolveIn.proposal_id`, `POST /proposals/{id}/accept` and `/reject` | Missing, known: #93 |
+| 6 | `getInstance`, `getInstanceTrace` (`file.size_bytes`, `rule_results[].rule_text`, `exported_decision`, `spans[]` tree), `getInstanceFile`, `getInstanceDocument` | Present. `FieldReading.symbol` is missing, known: **B1** |
+| 7 | `listRuns`, `getRun` | Present. The handoff said `execution_id` and `escalations`; the API names them `id` and `escalation_reasons`. Fixed in the handoff, no backend change |
+| 8 | `analyzeProcessCases`, `getNormProposal` | Present |
+| 8 | `GET /processes/{id}/proposals`, accept and reject | Missing, known: #93 |
+| 9 | `editProcessDraft` (`description`, `symbols`), `loadDefinition`, rule create, compile, get, impact, activate and retire, `normalizeNorm`, the four `process-drafts` operations | Present. `SymbolIO.type` is a free string, known: **B2** |
+| 10 | `listAlerts` (`status`), `ackAlert` | Present, `resolved_by_decision_id` included |
+| 11 | `getExecutionSettings`, `editProcessDraft` (`execution`, `decision_review`), `getUseCase`, `configureAgent` | All present |
+
+**Missing endpoints:** none new. Every miss is already #93, B1 or B2. Run this check again after #93 merges.
+
+**Package 2 was missing a sequence, now documented.** In a live demo on v1.0, a process whose rules came from a compiled norm returned 409 on every run. It needs `POST /rules/{id}/activate` for each rule, then `draft/validate`, then `draft/publish`, all as the manager. The handoff's package 2 now lists these steps with their endpoints and errors.
+
+**New item B9, not built: activate and publish in one call.** Today it takes 2 + n calls, and the client must carry `revision` and `validation.hash` from validate to publish.
+- **What:** `POST /processes/{id}/draft/publish` with `{rule_ids?, reason}` and no `validation_hash`. It stages the rules, validates, and publishes only if the validation is valid, all under the process lock. It answers 409 with the validation report when it is not valid.
+- The two-step flow stays for the Panel, where the manager reviews the coverage before publishing.
+- **Why:** the demo's 409, and one call for the tools and the runbook.
+- **Size:** S.
