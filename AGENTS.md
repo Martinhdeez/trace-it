@@ -37,8 +37,10 @@ process of the "500 Sombras de Alberto" challenge is the first pack. No LLM ever
 ## Running
 
 ```bash
+make up         # ERP bridge + setup + sources: all a local run needs
 make setup      # Postgres + API in Docker, pack loaded        make test       # unit tests
 make erp        # the challenge ERP bridge (other terminal)    make test-e2e   # golden + API flow
+make sources    # master workbook + ERP snapshot, no invoices (needs setup + erp)
 make demo       # upload the 500 invoices through the API (including OCR), then decide/export
 make reset-db   # only for a database older than migration 0001
 ```

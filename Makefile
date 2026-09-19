@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync backup export-batch check-outcomes test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down hiring-data hiring-demo check down reset-db
+.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync sources up backup export-batch check-outcomes test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down hiring-data hiring-demo check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 DEMO_ARGS ?=
@@ -59,6 +59,17 @@ trace-decision:
 erp:  # ERP_PORT=<port> if 8009 is taken; start `make setup` with the same ERP_PORT
 	test -f .context/500-sombras-de-alberto/alberto_erp.py || git submodule update --init .context/500-sombras-de-alberto
 	cd .context/500-sombras-de-alberto && python3 alberto_erp.py --puerto $${ERP_PORT:-8009}
+
+sources:  # needs `make setup` and `make erp`: master workbook + ERP snapshot, no invoices
+	test -f .env || cp .env.example .env
+	uv run --project backend --locked --env-file .env python tools/demo_run.py --sources-only $(DEMO_ARGS)
+
+up:  # everything for local work: ERP bridge in the background (log: .erp.log), API, pack, sources
+	test -f .context/500-sombras-de-alberto/alberto_erp.py || git submodule update --init .context/500-sombras-de-alberto
+	lsof -iTCP:$${ERP_PORT:-8009} -sTCP:LISTEN >/dev/null || (nohup $(MAKE) erp > .erp.log 2>&1 &)
+	$(MAKE) setup
+	$(MAKE) sources
+	@echo "Ready: ERP on :$${ERP_PORT:-8009}, API on :$${BACKEND_PORT:-8000}. Console: cd frontend && npm run dev"
 
 erp-sync:  # needs `make erp` running; writes a new erp snapshot (docs/sources-http.md)
 	cd backend && uv run python -m app.cli sources sync ../processes/invoice-payment.json

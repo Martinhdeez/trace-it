@@ -11,7 +11,7 @@ import { ErrorNotice, Notice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
 import { NestedCard, PageIntro } from '../components/shell/Well'
 import { t } from '../i18n'
-import { JsonHighlight } from '../lib/jsonHighlight'
+import { JsonHighlight, PythonHighlight } from '../lib/jsonHighlight'
 import { cn } from '../lib/cn'
 import { paths } from '../lib/paths'
 import { ruleLabel } from '../lib/process'
@@ -207,16 +207,14 @@ export function Rule() {
           <div className="grid gap-3 lg:grid-cols-2">
             <NestedCard label="evaluate.py · compilador">
               {code ? (
-                <pre className="max-h-[420px] overflow-auto bg-[#161615] px-3 py-3 font-mono text-[12px] leading-5 text-[#eceae4]">
-                  {code}
-                </pre>
+                <PythonHighlight code={code} className="h-[420px]" />
               ) : (
                 <p className="px-3.5 py-6 text-[13px] text-muted">Todavía no hay código.</p>
               )}
             </NestedCard>
             <NestedCard label={`tester ciego · ${tests?.length ?? 0} casos`}>
               {tests?.length ? (
-                <JsonHighlight value={tests} />
+                <JsonHighlight value={tests} className="h-[420px]" />
               ) : (
                 <p className="px-3.5 py-6 text-[13px] text-muted">Todavía no hay tests.</p>
               )}

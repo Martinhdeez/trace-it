@@ -54,17 +54,8 @@ async def run(
     print(f"written to {output}")
 
 
-async def _run(
-    api: httpx.AsyncClient,
-    process_id: int,
-    files: list[Path],
-    book: Path,
-    cutoff: str,
-    output: Path,
-    *,
-    local_only: bool,
-) -> None:
-    """Load sources before extraction; decide only after every upload succeeds."""
+async def load_sources(api: httpx.AsyncClient, process_id: int, book: Path, cutoff: str) -> None:
+    """The master workbook (suppliers, orders, parameters) and a fresh ERP snapshot."""
     prefix = f"/processes/{process_id}"
     with book.open("rb") as stream:
         response = await api.post(
@@ -84,6 +75,20 @@ async def _run(
     response.raise_for_status()
     print(f"erp sync: {response.json()['rows']} rows", flush=True)
 
+
+async def _run(
+    api: httpx.AsyncClient,
+    process_id: int,
+    files: list[Path],
+    book: Path,
+    cutoff: str,
+    output: Path,
+    *,
+    local_only: bool,
+) -> None:
+    """Load sources before extraction; decide only after every upload succeeds."""
+    await load_sources(api, process_id, book, cutoff)
+    prefix = f"/processes/{process_id}"
     response = await api.get(f"{prefix}/instances")
     response.raise_for_status()
     existing = response.json()
@@ -213,6 +218,9 @@ def parse_args(argv=None):
     parser.add_argument("--limit", type=int, help="upload first N PDFs; run/export whole process")
     parser.add_argument("--local-only", action="store_true", help="disable VLM/Jev; keep local OCR")
     parser.add_argument(
+        "--sources-only", action="store_true", help="load the workbook and sync the ERP, then stop"
+    )
+    parser.add_argument(
         "--timeout", type=float, default=900, help="HTTP timeout in seconds for OCR"
     )
     args = parser.parse_args(argv)
@@ -223,7 +231,7 @@ def parse_args(argv=None):
     if not args.book.is_file():
         parser.error(f"Workbook not found: {args.book}")
     args.files = sorted(args.invoices.glob("*.pdf"))[: args.limit]
-    if not args.files:
+    if not args.files and not args.sources_only:
         parser.error(f"No PDFs found in {args.invoices}")
     return args
 
@@ -235,6 +243,9 @@ async def main() -> None:
         base_url=args.api_url.rstrip("/"), timeout=httpx.Timeout(args.timeout, connect=10)
     ) as api:
         process_id = await authenticate(api, args.email, args.process)
+        if args.sources_only:
+            await load_sources(api, process_id, args.book, args.cutoff.isoformat())
+            return
         await run(
             api,
             process_id,
