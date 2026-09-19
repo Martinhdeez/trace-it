@@ -116,6 +116,7 @@ export type ValidationReport = {
   coverage?: HistoricalCoverage
   not_evaluable?: HistoricalCaseWithoutCoverage[]
   conflicts?: ValidationChange[]
+  resolved_by_person?: ResolvedByPerson[]
   errors?: { instance_id: number; name?: string; reason?: string }[]
   error?: string
   [key: string]: unknown
@@ -129,6 +130,10 @@ export type ValidationChange = {
   after: string
   reason?: string
 }
+
+// reviewer-agent FE-4 (docs/reviewer-agent.md): the manager's own cases in the validation report.
+// If merging a newer version from Carlos, keep his types and preserve: `after` vs `resolution`.
+export type ResolvedByPerson = ValidationChange & { resolution: string; resolved_by: string }
 
 export type ProcessOut = Schemas['ProcessOut']
 /** A process as the API returns it: decision types and symbols in the pack's shape. */

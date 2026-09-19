@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { ValidationReport, VersionDraft, VersionOut } from '../../api/contracts'
 import { keys } from '../../api/queries'
 import { Button, Field, Textarea } from '../shell/Controls'
 import { ErrorNotice } from '../shell/Notice'
+import { t } from '../../i18n'
 import { HistoricalCoverage } from './HistoricalCoverage'
 import { ValidationImpact } from './ValidationImpact'
 
@@ -30,6 +31,15 @@ export function PublishDraft({
   const [reason, setReason] = useState('')
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const validation = validationOf(draft)
+  // reviewer-agent FE-4 (docs/reviewer-agent.md): an accepted suggestion compiles in the
+  // background, so the draft is not ready yet. If merging a newer version from Carlos, keep his
+  // UI and preserve: Validar and Publicar stay disabled while any rule has status `compiling`.
+  const compilingRules = useQuery({
+    queryKey: keys.rules(processId, 'compiling'),
+    queryFn: () => api.listRules(processId, 'compiling'),
+    refetchInterval: (query) => (query.state.data?.length ? 2_000 : false),
+  })
+  const compiling = (compilingRules.data?.length ?? 0) > 0
 
   const validate = useMutation({
     mutationFn: () => api.validateDraft(processId),
@@ -62,9 +72,11 @@ export function PublishDraft({
         Publicar incluye todos los cambios de este borrador. La validación comprueba los hechos
         guardados; no repite el OCR ni mide la calidad de un modelo.
       </p>
-      <Button disabled={busy || blocked} onClick={() => validate.mutate()}>
+      <Button disabled={busy || blocked || compiling} onClick={() => validate.mutate()}>
         Validar
       </Button>
+      {compiling && <p role="status" className="text-[12px] text-muted">{t('reviewerAgent.compiling')}</p>}
+      {compilingRules.isError && <ErrorNotice error={compilingRules.error} />}
       {validate.isError && <ErrorNotice error={validate.error} />}
       {validation && (
         <div role="status" className="space-y-3">
@@ -95,7 +107,7 @@ export function PublishDraft({
           </Field>
           <Button
             tone="primary"
-            disabled={busy || blocked || !validation.valid}
+            disabled={busy || blocked || compiling || !validation.valid}
             onClick={() => publish.mutate()}
           >
             Publicar
