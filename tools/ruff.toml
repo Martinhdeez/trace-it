@@ -1,0 +1,6 @@
+# Same rules as the backend. `tools/` sits outside it, so ruff needs its own copy here.
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

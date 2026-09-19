@@ -1,0 +1,25 @@
+"""Every table registered on `Base.metadata`, for Alembic."""
+
+from app.core.database import Base
+from app.core.events import Event
+from app.features.decisions.model import Decision, Finding
+from app.features.ingestion.model import File, Instance
+from app.features.processes.model import DecisionType, Process, Symbol
+from app.features.rules.model import Rule
+from app.features.sources.model import Source
+from app.features.users.model import User
+
+__all__ = [
+    "Base",
+    "Decision",
+    "DecisionType",
+    "Event",
+    "File",
+    "Finding",
+    "Instance",
+    "Process",
+    "Rule",
+    "Source",
+    "Symbol",
+    "User",
+]
