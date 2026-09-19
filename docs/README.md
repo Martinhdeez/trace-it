@@ -8,6 +8,7 @@ Start with the [root README](../README.md) for what the system does, then:
 | [CONVENTIONS.md](CONVENTIONS.md) | Language, naming and the contracts every feature shares |
 | [team-guide.md](team-guide.md) | Git flow, backend layout, running and testing locally |
 | [api.md](api.md) | The API, screen by screen, for whoever builds the console |
+| [integration.md](integration.md) | Frontend-backend reconciliation: direction per feature, shared vocabulary, open questions, work order ([detailed plan](integration-plan.md)) |
 | [learning.md](learning.md) | On-demand norm proposals, validation and manager adoption |
 | [decision-review.md](decision-review.md) | Optional decision advice, human approval, fallback and export behavior |
 | [key-decisions.md](key-decisions.md), [adr/](adr/README.md) | The five key decisions; the detailed ADRs behind them. ADR 0001 wins over everything else |
