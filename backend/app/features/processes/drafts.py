@@ -268,6 +268,10 @@ async def message(session, draft_id, body, user):
     data["plan"] = plan.model_dump()
     data["messages"].append({"role": "assistant", "text": plan.summary})
     invalidate(data)
+    if draft.process_id:  # each change of an existing process, as a proposal to settle
+        from app.features.proposals import service as proposals
+
+        await proposals.from_chat(session, draft, data, body.revision + 1)
     return await save(session, draft_id, body.revision, data, user, "revise_process_draft")
 
 

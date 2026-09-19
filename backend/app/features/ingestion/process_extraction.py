@@ -176,15 +176,8 @@ async def read_document(session, process_id, service, item, options):
     snapshot = {**plan.model_dump(mode="json"), "fingerprint": plan.fingerprint}
     if sources is None:
         result = await run_in_threadpool(service.extract_schema, item, options, plan)
-        return (
-            result,
-            schema_symbols(result, plan.fields),
-            {
-                "adapter": "schema",
-                **metadata,
-                "extraction_plan": snapshot,
-            },
-        )
+        context = {"adapter": "schema", **metadata, "extraction_plan": snapshot}
+        return name_symbols(result, context), schema_symbols(result, plan.fields), context
     reading = await run_in_threadpool(
         extract_for_payment,
         service,
@@ -218,7 +211,27 @@ async def read_document(session, process_id, service, item, options):
         context["base_extraction_id"] = reading.result.id
     symbols = payment_symbols(result, names)
     symbols.update(schema_symbols(result, extra))
-    return result, symbols, context
+    return name_symbols(result, context), symbols, context
+
+
+def name_symbols(result, context):
+    """Set each reading's `symbol`: the process symbol it feeds, or None.
+
+    `context` is what the ingestion event records (`adapter`, `extraction_plan`), so older
+    evidence is named the same way when it is read back. The result may be a cached
+    reading, so it is copied, never changed in place.
+    """
+    names = {field["name"] for field in context.get("extraction_plan", {}).get("fields", [])}
+    by_field = (
+        {field: name for name, field in PAYMENT_FIELDS.items()}
+        if context.get("adapter", "").startswith("invoice-payment")
+        else {}
+    )
+    result = result.model_copy(deep=True)
+    for field, reading in result.fields.items():
+        symbol = by_field.get(field, field)
+        reading.symbol = symbol if symbol in names else None
+    return result
 
 
 def schema_symbols(result, fields):

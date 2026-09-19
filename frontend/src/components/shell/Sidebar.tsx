@@ -6,6 +6,7 @@ import mark from '../../assets/trace-mark-clear.png'
 import { api, mode } from '../../api/client'
 import { keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
+import { ErrorNotice } from './Notice'
 import { StatusBadge } from './StatusBadge'
 import { t } from '../../i18n'
 import { paths, processFromPath } from '../../lib/paths'
@@ -92,24 +93,28 @@ export function Sidebar() {
           </NavLink>
         </div>
 
-        <ul className="flex flex-col gap-0.5">
-          {(processes.data ?? []).map((item) => {
-            const open = item.id === activeId
-            return (
-              <li key={item.id}>
-                <NavItem to={paths.process(item.id)} active={open}>
-                  <span className="min-w-0 truncate">{item.nombre}</span>
-                </NavItem>
-              </li>
-            )
-          })}
-        </ul>
+        {processes.isError ? (
+          <ErrorNotice error={processes.error} />
+        ) : (
+          <ul className="flex flex-col gap-0.5">
+            {(processes.data ?? []).map((item) => {
+              const open = item.id === activeId
+              return (
+                <li key={item.id}>
+                  <NavItem to={paths.process(item.id)} active={open}>
+                    <span className="min-w-0 truncate">{item.nombre}</span>
+                  </NavItem>
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
         <div className="mt-auto pb-4 pt-6">
           <NavItem to={paths.settings} end>
-            <span className="min-w-0 truncate">{user?.nombre ?? t('nav.signIn')}</span>
+            <span className="min-w-0 truncate">{user?.name ?? t('nav.signIn')}</span>
             <span className="shrink-0 font-mono text-[10px] text-faint">
-              {user?.rol ?? t('nav.anonymous')}
+              {user ? t(`roles.${user.role}`) : t('nav.anonymous')}
             </span>
           </NavItem>
         </div>

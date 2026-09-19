@@ -16,6 +16,7 @@ from app.features.learning import evidence, validation
 from app.features.learning.model import Adoption, Analysis, Proposal, Validation
 from app.features.learning.schemas import AdoptionOut, AnalysisOut, ProposalOut, ValidationOut
 from app.features.processes.model import Process
+from app.features.proposals import service as proposals
 from app.features.rules.model import NormRule, Rule
 
 
@@ -128,9 +129,17 @@ async def analyze(
         )
         session.add(row)
         await session.flush()
-        session.add_all([Proposal(analysis_id=row.id, **p.model_dump()) for p in result.proposals])
+        norms = [Proposal(analysis_id=row.id, **p.model_dump()) for p in result.proposals]
+        session.add_all(norms)
+        await session.flush()
+        unified = proposals.from_learning(row, norms, result.definition_changes)
+        session.add_all(unified)
         await session.commit()
-        span.set(analysis_id=row.id, proposals=len(result.proposals))
+        span.set(
+            analysis_id=row.id,
+            proposals=len(result.proposals),
+            proposal_ids=[p.id for p in unified],
+        )
     return await get(session, row.id)
 
 
@@ -287,6 +296,8 @@ async def approve(
             },
         )
         adopted.snapshot = {**adopted.snapshot, **candidate, "version_id": published.id}
+        outcome = {"adoption_id": adopted.id, "version_id": published.id, "rule_ids": rule_ids}
+        await proposals.settle_norm(session, row.id, "accepted", author, outcome)
         await session.commit()
         span.set(adoption_id=adopted.id, rule_ids=rule_ids)
     from app.features.alerts.service import after_publish
@@ -310,5 +321,8 @@ async def reject(session: AsyncSession, proposal_id: int, reason: str, author: s
             snapshot={},
         )
         session.add(record)
+        await session.flush()
+        outcome = {"adoption_id": record.id, "reason": reason}
+        await proposals.settle_norm(session, row.id, "rejected", author, outcome)
         await session.commit()
     return out(AdoptionOut, record)

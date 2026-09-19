@@ -32,6 +32,8 @@ from app.features.decisions.schemas import (
 from app.features.ingestion.model import Instance
 from app.features.ingestion.symbols import flatten_symbols, scan
 from app.features.processes.service import get as get_process
+from app.features.proposals.model import ManagerProposal
+from app.features.proposals.service import settle
 from app.features.rules.model import Rule
 from app.features.sources import service as sources
 from app.features.sources.model import Source
@@ -596,20 +598,31 @@ async def resolve(
         raise ConflictError(f"{data.decision!r} is not a decision type of this process")
 
     previous = (await latest_decisions(session, [instance])).get(instance.id)
-    session.add(
-        Decision(
-            instance_id=instance.id,
-            decision=data.decision,
-            results=[],  # a person decides on the evidence, not by running the rules
-            rules_hash=previous.rules_hash if previous else "",
-            version_id=previous.version_id
-            if previous
-            else (await versions.active(session, instance.process_id)).id,
-            execution_id=previous.execution_id if previous else None,
-            author=user.name,
-            reason=data.reason,
-        )
+    proposal = None
+    if data.proposal_id is not None:
+        proposal = await session.get(ManagerProposal, data.proposal_id, with_for_update=True)
+        if proposal is None or proposal.instance_id != instance.id or proposal.status != "open":
+            raise ConflictError(f"Proposal {data.proposal_id} is not open for this instance")
+        if previous is None or previous.id != proposal.payload["decision_id"]:
+            raise ConflictError("The case changed since the proposal; ask for a new one")
+    row = Decision(
+        instance_id=instance.id,
+        decision=data.decision,
+        results=[],  # a person decides on the evidence, not by running the rules
+        rules_hash=previous.rules_hash if previous else "",
+        version_id=previous.version_id
+        if previous
+        else (await versions.active(session, instance.process_id)).id,
+        execution_id=previous.execution_id if previous else None,
+        author=user.name,
+        reason=data.reason,
     )
+    session.add(row)
+    if proposal:
+        await session.flush()
+        accepted = data.decision == proposal.payload["proposed"]
+        outcome = {"decision_id": row.id, "decision": data.decision}
+        settle(proposal, "accepted" if accepted else "rejected", user.name, outcome)
     instance.status = "DECIDED"
     events.record(
         session,
@@ -622,6 +635,7 @@ async def resolve(
             "reason": data.reason,
             "before": previous.decision if previous else None,
             "previous_author": previous.author if previous else None,
+            **({"proposal_id": proposal.id} if proposal else {}),
         },
     )
     await session.commit()

@@ -7,6 +7,7 @@ import { cn } from '../../lib/cn'
 import { PROCESS_TABS, processTabFromPath } from '../../lib/processTabs'
 import { countsOf, waitingOnPerson } from '../../lib/process'
 import { CountChip } from '../shell/Controls'
+import { ErrorNotice } from '../shell/Notice'
 import { Topbar, type Crumb } from '../shell/Topbar'
 
 export function ProcessScreen({
@@ -43,29 +44,36 @@ export function ProcessTabs({ processId }: { processId: number }) {
     select: countsOf,
   })
   const waiting = waitingOnPerson(process.data, counts.data)
+  const error = process.error ?? counts.error
 
   return (
     <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-hairline px-8">
-      {PROCESS_TABS.map((tab) => {
-        const active = current === tab.id
-        const count = tab.id === 'review' ? waiting : undefined
-        return (
-          <Link
-            key={tab.id}
-            to={tab.path(processId)}
-            aria-current={active ? 'page' : undefined}
-            className={cn(
-              'relative -mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-[13px] tracking-[-0.01em]',
-              active
-                ? 'border-ink text-ink'
-                : 'border-transparent text-muted hover:text-ink',
-            )}
-          >
-            {tab.label}
-            {count ? <CountChip>{count}</CountChip> : null}
-          </Link>
-        )
-      })}
+      {error ? (
+        <ErrorNotice error={error} />
+      ) : (
+        <>
+          {PROCESS_TABS.map((tab) => {
+            const active = current === tab.id
+            const count = tab.id === 'review' ? waiting : undefined
+            return (
+              <Link
+                key={tab.id}
+                to={tab.path(processId)}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'relative -mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-[13px] tracking-[-0.01em]',
+                  active
+                    ? 'border-ink text-ink'
+                    : 'border-transparent text-muted hover:text-ink',
+                )}
+              >
+                {tab.label}
+                {count ? <CountChip>{count}</CountChip> : null}
+              </Link>
+            )
+          })}
+        </>
+      )}
     </nav>
   )
 }

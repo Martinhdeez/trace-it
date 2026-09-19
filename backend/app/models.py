@@ -13,6 +13,7 @@ from app.features.processes.model import (
     Process,
     Symbol,
 )
+from app.features.proposals.model import ManagerProposal
 from app.features.rules.model import NormRule, Rule
 from app.features.sources.model import Source
 from app.features.use_cases.model import AgentConfig, UseCase
@@ -21,6 +22,7 @@ from app.features.versions.model import Execution, ProcessDraft, ProcessVersion
 
 __all__ = [
     "Alert",
+    "ManagerProposal",
     "Execution",
     "ProcessDraft",
     "ProcessVersion",

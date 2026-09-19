@@ -36,6 +36,12 @@ pytestmark = pytest.mark.skipif(not _db_available(), reason="Local Postgres not 
 SUGGESTION = {
     "decision": "NO_PAGAR",
     "reasoning": "amount=5000 (text) exceeds the limit of the rule 'amount > 1000'",
+    "why": ["The invoice is over 1000, and amounts above it need a person."],
+    "options": [
+        {"decision": "PAGAR", "consequence": "The invoice is paid."},
+        {"decision": "NO_PAGAR", "consequence": "The invoice is not paid."},
+    ],
+    "evidence": ["symbol:amount", "file"],
     "proposed_rule": "If amount (invoice text) > 4000 and supplier (Excel) = 'ACME', do not pay",
     "proposed_type": "prohibition",
 }

@@ -4,14 +4,14 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.features.processes.execution import ExecutionSettings
-from app.features.processes.schemas import DecisionReviewConfig, DecisionTypeIO, SymbolIO
+from app.features.processes.schemas import DecisionReviewConfig, DecisionTypeIO, SymbolIn
 
 
 class DraftIn(BaseModel):
     # Omitted fields retain the candidate; explicit null disables review.
     description: str | None = None
     decision_types: list[DecisionTypeIO] | None = None
-    symbols: list[SymbolIO] | None = None
+    symbols: list[SymbolIn] | None = None
     acceptance_examples: list[dict[str, Any]] | None = None
     decision_review: DecisionReviewConfig | None = None
     rule_ids: list[int] | None = None

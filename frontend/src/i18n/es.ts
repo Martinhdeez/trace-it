@@ -19,6 +19,10 @@ export const es = {
     signIn: 'Entrar',
     anonymous: 'sin identificar',
   },
+  roles: {
+    manager: 'Responsable',
+    operator: 'Operador',
+  },
   common: {
     loading: 'Cargando…',
     empty: 'Nada por aquí todavía.',

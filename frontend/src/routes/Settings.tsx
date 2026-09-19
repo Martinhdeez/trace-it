@@ -6,15 +6,18 @@ import { Empty, ErrorNotice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
 import { Topbar } from '../components/shell/Topbar'
 import { NestedCard, PageIntro } from '../components/shell/Well'
+import { t } from '../i18n'
 import { useSession } from '../state/session'
 import { useTheme, type Theme } from '../state/theme'
 
 export function Settings() {
-  const { user, use, signOut } = useSession()
+  const { user, signIn, signOut } = useSession()
   const queryClient = useQueryClient()
 
   const users = useQuery({ queryKey: keys.users, queryFn: () => api.listUsers() })
   const llm = useQuery({ queryKey: keys.llm, queryFn: () => api.listLlmConfig() })
+
+  const switchUser = useMutation({ mutationFn: (email: string) => signIn(email) })
 
   const change = useMutation({
     mutationFn: ({ role, model }: { role: string; model: string }) =>
@@ -51,12 +54,13 @@ export function Settings() {
                 y retirar reglas solo lo puede hacer un responsable.
               </p>
               {users.isError ? <ErrorNotice error={users.error} /> : null}
+              {switchUser.isError ? <ErrorNotice error={switchUser.error} /> : null}
               <ul className="space-y-1">
                 {(users.data ?? []).map((candidate) => (
                   <li key={candidate.id}>
                     <button
                       type="button"
-                      onClick={() => use(candidate)}
+                      onClick={() => switchUser.mutate(candidate.email)}
                       className={
                         candidate.id === user?.id
                           ? 'flex w-full items-center justify-between rounded-[10px] bg-well px-3 py-2 text-left ring-1 ring-line'
@@ -64,15 +68,15 @@ export function Settings() {
                       }
                     >
                       <span className="text-[13px]">
-                        {candidate.nombre}
+                        {candidate.name}
                         <span className="ml-2 font-mono text-[11px] text-faint">
                           {candidate.email}
                         </span>
                       </span>
                       <StatusBadge
-                        value={candidate.rol === 'responsable' ? 'activa' : 'borrador'}
+                        value={candidate.role === 'manager' ? 'activa' : 'borrador'}
                       >
-                        {candidate.rol}
+                        {t(`roles.${candidate.role}`)}
                       </StatusBadge>
                     </button>
                   </li>

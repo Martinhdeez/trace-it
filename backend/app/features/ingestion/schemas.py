@@ -29,6 +29,7 @@ class ExtractOptions(BaseModel):
 
 class FieldReading(BaseModel):
     value: str | None = None
+    symbol: str | None = None  # the process symbol this reading feeds, if any
     proposed_value: str | None = None
     proposed_by: str | None = None
     verification: str = "unverified"

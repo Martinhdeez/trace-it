@@ -113,6 +113,7 @@ benchmark and golden-reference tools also need `pdftotext` (poppler).
 | `make test` | Unit tests (`-m "not e2e and not llm"`) |
 | `make test-e2e` | Golden outcomes of batch 1 and the API flow (needs the challenge submodule) |
 | `make check` | `ruff check`, `ruff format --check` (backend and `tools/`), then `test` and `test-e2e`. Run before every PR |
+| `make e2e-integration` | The demo path through the real console and API in Chromium, on a fresh `trace_e2e_test` database with the frozen pack; no LLM key (`tests/integration/README.md`). Run before every PR into `integration` |
 | `make eval-compiler` | Opt-in, calls real LLMs: compiles the 16 rules and compares with `rules-v3/`; report in `backend/evals/reports/` |
 | `make eval-norm` | Opt-in, calls real LLMs: the client's `Norma_Pagos_v3` -> normalizer -> compiler -> batch 1 vs golden; report in `backend/evals/reports/` |
 | `make demo-llm-down` | Opt-in, calls real LLMs (Helmcode): the normalizer's primary provider is unreachable and a fallback model answers; prints the `llm_run` span (ADR 0019) |
