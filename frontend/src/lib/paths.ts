@@ -3,6 +3,7 @@ export const ALERTS_TAB = 'alertas'
 
 export const paths = {
   landing: '/',
+  docs: (slug?: string) => (slug ? `/docs/${slug}` : '/docs'),
   processes: '/processes',
   newProcess: '/processes/new',
   /** The manager's inbox: what waits for them, and what was already decided. */
