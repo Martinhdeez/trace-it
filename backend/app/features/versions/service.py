@@ -319,10 +319,13 @@ async def inspect(session, snapshot: dict, inputs: dict, *, tables: dict | None 
         validation_missing=validation_missing,
     )
     changes, conflicts, errors, not_evaluable, already_escalated = [], [], [], [], []
+    resolved_by_person = []
     escalate = config.outcomes(snapshot).escalate
     unchanged = 0
     for instance in selected:
-        previous = instance["decision"]
+        # R01: compare with the engine's last word; a person's resolution never blocks.
+        latest = instance["decision"]
+        previous = instance.get("engine_decision") or latest
         verdict = verdicts[instance["id"]]
         missing = validation_missing.get(instance["id"], [])
         unavailable = []
@@ -389,9 +392,15 @@ async def inspect(session, snapshot: dict, inputs: dict, *, tables: dict | None 
             "after": verdict.decision,
             "reason": verdict.reason,
         }
-        (
-            conflicts if previous["author"] != "engine" or previous["pending_review"] else changes
-        ).append(change)
+        if latest["author"] != "engine":
+            # Information only: the person's decision stays as it is.
+            resolved_by_person.append(
+                {**change, "resolution": latest["decision"], "resolved_by": latest["author"]}
+            )
+        elif previous["pending_review"]:
+            conflicts.append(change)
+        else:
+            changes.append(change)
     if baseline and newly_required:
         if tables is None:
             from app.features.sources.model import Source
@@ -410,6 +419,7 @@ async def inspect(session, snapshot: dict, inputs: dict, *, tables: dict | None 
         "example_validation": examples,
         "not_evaluable": not_evaluable,
         "already_escalated": already_escalated,
+        "resolved_by_person": resolved_by_person,
         "coverage": {
             "total": len(selected),
             "evaluated": len(selected) - len(not_evaluable),
