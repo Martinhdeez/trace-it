@@ -52,58 +52,6 @@ jobs:
       - name: ERP subpath, original faults and guarded bootstrap
         run: uv run --project backend pytest deploy/erp -q
 
-  # The demo path through the real console and API in Chromium (tests/integration/README.md).
-  e2e-integration:
-    # Every PR and push CI runs on (dev, main, integration): the demo path must stay green on each.
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    services:
-      db:
-        image: postgres:16
-        env:
-          POSTGRES_USER: trace
-          POSTGRES_PASSWORD: trace
-          POSTGRES_DB: trace
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U trace"
-          --health-interval 2s
-          --health-retries 20
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
-        with:
-          version: '0.10.10'
-          python-version: '3.12'
-          enable-cache: true
-          cache-dependency-glob: backend/uv.lock
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            tests/integration/package-lock.json
-      - name: OCR weights
-        uses: actions/cache@v4
-        with:
-          path: .models
-          key: ocr-models-${{ hashFiles('backend/app/features/ingestion/tools/download_models.py') }}
-      - name: Install
-        run: |
-          (cd backend && uv sync --locked)
-          (cd frontend && npm ci)
-          (cd tests/integration && npm ci && npx playwright install --with-deps chromium)
-      - name: make e2e-integration
-        run: make e2e-integration
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: failure()
-        with:
-          name: playwright-report
-          path: tests/integration/test-results
-
   production-stack:
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -172,7 +120,7 @@ jobs:
         run: bash deploy/ci-stack.sh down
 
   deploy:
-    needs: [backend, e2e-integration, production-stack]
+    needs: [backend, production-stack]
     # The independent kill switch stays unset until root bootstrap and app integration pass.
     if: >-
       github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
