@@ -50,7 +50,13 @@ from app.features.traces.schemas import (
     TokenStats,
 )
 
-FAILURES = ("MISSING_DATA", "RULE_ERROR", "RULE_NEEDS_DATA", "RULE_CONFLICT")
+FAILURES = (
+    "MISSING_DATA",
+    "RULE_ERROR",
+    "RULE_NEEDS_DATA",
+    "RULE_COMPILE_FAILED",
+    "RULE_CONFLICT",
+)
 LIFECYCLE = ("save_rule", "compile_rule", "activate_rule", "retire_rule", "impact_check")
 
 # Every span name, in exactly one monitoring plane. `test_planes.py` fails when the code

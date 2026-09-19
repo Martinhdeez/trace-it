@@ -50,6 +50,10 @@ frontend, and a second answer to "what does this case need from me".
 - A `blocked` rule (its agents answered NeedsData, ADR 0004) has no code on purpose: it
   escalates every instance with `RULE_NEEDS_DATA <id>: missing <what>`, so the manager
   reads what data to add instead of a generic "without code".
+- A rule whose compilation on save failed (every LLM down, tokens out, output still
+  malformed; ADR 0004, 0020) is `blocked` too, with no code and `report.error`: it
+  escalates every instance with `RULE_COMPILE_FAILED <id>: <error>` until it compiles.
+  A rule that cannot be applied escalates; the older rules never decide without it.
 - Instance states are `PENDING` (no symbols yet, or not run) and `DECIDED`. There is no
   `REVIEW`, no `review_reason`, no `human_kind`.
 - The exported decision is the engine's latest decision for the instance (ADR 0009 kept
@@ -78,7 +82,8 @@ frontend, and a second answer to "what does this case need from me".
 - `decisions/engine.py` (`Outcomes`, `decide`); `decisions/service.py` (`outcomes`, `run`,
   `export`); `processes/definition.py` refuses a definition without a `requires_human` type.
 - Tests: `test_engine.py` (failed rule → `ESCALAR` with `RULE_ERROR`, tie → `RULE_CONFLICT`,
-  malformed answer, rule without code, blocked rule → `RULE_NEEDS_DATA`, a required symbol
+  malformed answer, rule without code, blocked rule → `RULE_NEEDS_DATA`, failed compile →
+  `RULE_COMPILE_FAILED`, a required symbol
   missing or no symbols at all → `MISSING_DATA`), `test_sandbox_integration.py` (the same against
   the real sandbox, including a whole-batch timeout and an invoice missing a symbol the
   rule reads), `test_api.py` (run, queue, resolve, a required symbol missing,

@@ -133,11 +133,11 @@ async def test_when_every_model_fails_the_run_fails_closed(
     assert [f["model"] for f in span["failed_attempts"]] == ["primary", "backup"]
 
 
-async def test_a_rule_whose_models_all_fail_stays_a_draft_with_the_error(
+async def test_a_rule_whose_models_all_fail_is_blocked_with_the_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Through the API: the use case's chain is used and a compilation it cannot serve
-    leaves a draft, never a rule stuck in `compiling`."""
+    leaves the rule `blocked` (it escalates, ADR 0020), never stuck in `compiling`."""
     monkeypatch.setattr(llm, "resolve", lambda name: down(name))
     suffix = uuid.uuid4().hex[:8]
     definition = {
@@ -165,7 +165,7 @@ async def test_a_rule_whose_models_all_fail_stays_a_draft_with_the_error(
         assert r.status_code == 201, r.text
         rule = (await api.get(f"/rules/{r.json()['id']}")).json()
 
-    assert rule["status"] == "draft"
+    assert rule["status"] == "blocked"
     assert rule["report"]["valid"] is False
     assert "every model failed: primary: " in rule["report"]["error"]
     assert "; backup: " in rule["report"]["error"]

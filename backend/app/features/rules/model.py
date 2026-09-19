@@ -9,7 +9,8 @@ from app.core.database import Base, created_at
 
 RULE_TYPES = ("requirement", "prohibition")
 # compiling: its code is being written in the background. blocked: it needs data the process
-# does not have, so it is enforced by escalating every instance (ADR 0004, 0016).
+# does not have, or its compilation failed, so it is enforced by escalating every instance
+# (ADR 0004, 0016, 0020).
 RULE_STATUSES = ("compiling", "draft", "active", "blocked", "retired")
 ENFORCED = ("active", "blocked")  # the statuses the engine runs
 
