@@ -38,6 +38,7 @@ async def get(session: AsyncSession, process_id: int) -> ProcessDetail:
         name=process.name,
         use_case_id=process.use_case_id,
         description=(await session.get(UseCase, process.use_case_id)).description,
+        decision_review=process.decision_review,
         decision_types=[DecisionTypeIO.model_validate(t, from_attributes=True) for t in types],
         symbols=[SymbolIO.model_validate(s, from_attributes=True) for s in symbols],
     )

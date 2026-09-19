@@ -1,5 +1,6 @@
 ---
-status: accepted
+status: superseded
+superseded_by: 0021
 ---
 
 # Combine rule findings by decision-type priority only; process context never enters the automatic decision
