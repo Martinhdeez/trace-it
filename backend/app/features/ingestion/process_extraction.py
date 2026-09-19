@@ -76,7 +76,7 @@ async def reextract_document(session, instance_id, user_id, service, options):
             "symbols": symbols,
             **context,
         },
-        latency_ms=round(result.metrics.get("extraction_ms", 0)),
+        duration_ms=round(result.metrics.get("extraction_ms", 0)),
     )
     await session.commit()
     return {

@@ -9,8 +9,8 @@ process of the "500 Sombras de Alberto" challenge is the first pack. No LLM ever
 
 | Path | What |
 |---|---|
-| `backend/app/features/{users,processes,rules,decisions,ingestion,sources,agents}` | One folder per feature: `model.py`, `schemas.py`, `service.py`, `router.py`, `tests/` |
-| `backend/app/core/` | settings (`TRACE_*`), database, `events.py` (the trace table) |
+| `backend/app/features/{users,processes,rules,decisions,ingestion,sources,agents,traces}` | One folder per feature: `model.py`, `schemas.py`, `service.py`, `router.py`, `tests/` |
+| `backend/app/core/` | settings (`TRACE_*`), database, `events.py` (spans: the audit trail, ADR 0018) |
 | `backend/app/cli.py` | `load <pack> [--compile] [--activate]`, `sources sync <pack>` |
 | `processes/` | Process packs; `invoice-payment.json` + `invoice-payment/sources.json` + `rules-v3/*.py` |
 | `tools/` | Demo stand-ins for extraction over the challenge corpus (`make demo`) |

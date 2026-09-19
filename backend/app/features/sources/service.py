@@ -196,44 +196,32 @@ async def sync(
         raise NotFoundError(f"Process {process_id} does not exist")
     connector = HttpConnector(config, transport)
     started = datetime.now(UTC)
-    try:
-        rows = await connector.download()
-    except SyncError as e:
-        events.record(
-            session,
-            "sync_source_failed",
-            process_id=process_id,
-            data={"source": name, "error": str(e), **connector.stats.__dict__},
-            latency_ms=connector.stats.duration_ms,
+    # The connector's stats (requests, retries, 429s, logins, pages) go on the span.
+    with events.span("sync_source", process_id=process_id, source=name) as span:
+        try:
+            rows = await connector.download()
+        except SyncError as e:
+            span.set(**connector.stats.__dict__)
+            raise SourceUnavailableError(
+                f"Sync of {name!r} failed; the previous snapshot stays current. {e}"
+            ) from e
+
+        origin = f"{name}:{started.isoformat(timespec='seconds')}|{connector.base_url}"
+        digest = rows_hash(rows)
+        source = Source(process_id=process_id, name=name, origin=origin, rows=rows)
+        session.add(source)
+        await session.flush()
+        diff = await diff_latest(session, process_id, name, config.key)
+        stats = connector.stats.__dict__
+        span.set(
+            source_id=source.id,
+            origin=origin,
+            rows=len(rows),
+            rows_hash=digest,
+            diff=diff.summary(),
+            **stats,
         )
         await session.commit()
-        raise SourceUnavailableError(
-            f"Sync of {name!r} failed; the previous snapshot stays current. {e}"
-        ) from e
-
-    origin = f"{name}:{started.isoformat(timespec='seconds')}|{connector.base_url}"
-    digest = rows_hash(rows)
-    source = Source(process_id=process_id, name=name, origin=origin, rows=rows)
-    session.add(source)
-    await session.flush()
-    diff = await diff_latest(session, process_id, name, config.key)
-    stats = connector.stats.__dict__
-    events.record(
-        session,
-        "sync_source",
-        process_id=process_id,
-        data={
-            "source": name,
-            "source_id": source.id,
-            "origin": origin,
-            "rows": len(rows),
-            "rows_hash": digest,
-            "diff": diff.summary(),
-            **stats,
-        },
-        latency_ms=connector.stats.duration_ms,
-    )
-    await session.commit()
     return SyncResult(
         source_id=source.id,
         origin=origin,

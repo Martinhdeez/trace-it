@@ -26,6 +26,7 @@ from sqlalchemy import select
 
 from app.common.exceptions import ConflictError
 from app.core.database import engine, session_factory
+from app.core.events import configure_observability
 from app.features.decisions import outcomes_file
 from app.features.decisions import service as decisions
 from app.features.processes.definition import Definition, load_pack
@@ -142,6 +143,7 @@ async def export(file: Path, files: Path, output: Path) -> None:
 
 
 def main() -> None:
+    configure_observability()
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     commands = parser.add_subparsers(dest="command", required=True)
     command = commands.add_parser("load", help="Load a process definition (JSON)")

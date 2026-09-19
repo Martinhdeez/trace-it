@@ -4,6 +4,7 @@
 import asyncio
 import json
 import uuid
+from collections import Counter
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -231,8 +232,24 @@ async def test_the_norm_becomes_norm_rules_whose_checks_compile(api, monkeypatch
         event = await s.scalar(
             select(Event).where(Event.step == "normalize_norm").order_by(Event.id.desc()).limit(1)
         )
-    assert event.data["model"] == "fake/model"
+        steps = Counter(await s.scalars(select(Event.step).where(Event.trace_id == event.trace_id)))
     assert event.data["output"]["norm_rules"][0]["number"] == 1
+    # One trace: the norm, its normalizer run, then the three checks compiled in the background.
+    assert steps["norm"] == 1 and steps["compile_rules"] == 1 and steps["compile_rule"] == 3
+    assert steps["llm_run"] == 1 + 3 * 2  # the normalizer, then a tester and a coder per check
+
+    # How the first check was produced: its norm sentence, the normalizer, its compilation.
+    trace = (await client.get(f"/rules/{ids[0]}/trace")).json()
+    assert trace["norm_rule_text"] == first["text"]
+    assert trace["normalization"]["data"]["checks"] == 3
+    [compilation] = trace["compilations"]
+    assert compilation["data"]["rule_status"] == "active"
+    assert [c["step"] for c in compilation["children"]] == [
+        "llm_run",
+        "coder_attempt",
+        "impact_check",
+        "activate_rule",
+    ]
 
 
 async def test_compilations_run_concurrently_up_to_the_limit(monkeypatch) -> None:

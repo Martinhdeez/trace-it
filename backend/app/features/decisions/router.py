@@ -75,10 +75,11 @@ async def list_instances(
     "/processes/{process_id}/events",
     operation_id="listEvents",
     summary="The trace of a process, newest first",
-    description="Every recorded step: `decision`, `resolution`, `ingest_document`, "
-    "`compile_rule`, `normalize_norm`, `suggest_escalation`, `sync_source`, "
-    "`sync_source_failed`. "
-    "Filter with `step` and `instance_id`.",
+    description="Every recorded step (span, ADR 0018): `decision`, `resolution`, "
+    "`ingest_document`, `upload_document`, `run_process`, `evaluate_rule`, `compile_rule`, "
+    "`llm_run`, `normalize_norm`, `suggest_escalation`, `sync_source`, `export_outcomes`... "
+    "A failed step has `status: error`. Filter with `step` and `instance_id`; "
+    "`GET /traces/{trace_id}` gives the tree a step belongs to.",
 )
 async def list_events(
     process_id: int,

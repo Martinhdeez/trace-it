@@ -11,7 +11,7 @@ from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
 from app.core.events import Event
 from app.features.agents import sandbox
-from app.features.decisions.engine import Outcomes, Verdict, decide
+from app.features.decisions.engine import Outcomes, RunDataset, Verdict, decide
 from app.features.decisions.model import ENGINE, Decision, Finding
 from app.features.decisions.schemas import (
     ChangeOut,
@@ -138,9 +138,34 @@ async def decide_all(
     ]
     dataset = [(i.id, flatten_symbols(i.symbols)) for i in selected]
     # One subprocess per rule, off the event loop.
-    return await asyncio.to_thread(
-        decide, rules, out, dataset, sources, population, sandbox.run_dataset
-    )
+    return await asyncio.to_thread(decide, rules, out, dataset, sources, population, _traced(rules))
+
+
+def _traced(rules: list[Rule]) -> RunDataset:
+    """`sandbox.run_dataset` with one `evaluate_rule` span per rule: how long its code took
+    over the whole dataset, and how many instances it fired on or failed. The engine stays
+    pure; the clock is here."""
+    by_code = {r.code: r.id for r in rules}
+
+    def run_dataset(code: str, instances: list, sources: dict, population: list) -> list:
+        with events.span("evaluate_rule", rule_id=by_code.get(code), instances=len(instances)) as s:
+            answers = sandbox.run_dataset(code, instances, sources, population)
+            fired = sum(isinstance(a, dict) and a.get("fires") is True for a in answers)
+            s.set(fired=fired, errors=sum(isinstance(a, BaseException) for a in answers))
+            return answers
+
+    return run_dataset
+
+
+def _causes(verdicts: list[Verdict]) -> dict[str, dict[str, int]]:
+    """Escalations by cause: MISSING_DATA, RULE_ERROR, RULE_NEEDS_DATA, RULE_CONFLICT."""
+    causes: Counter[str] = Counter()
+    for verdict in verdicts:
+        causes.update(r.reason.split(" ", 1)[0] for r in verdict.results if r.fires is None)
+        for cause in ("MISSING_DATA", "RULE_CONFLICT"):
+            if verdict.reason.startswith(cause):
+                causes[cause] += 1
+    return {"failures": dict(causes)}
 
 
 def _out(instance: Instance, decision: Decision | None) -> InstanceOut:
@@ -163,28 +188,30 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
     instance without symbols is not run and stays PENDING until extraction fills them.
     """
     await get_process(session, process_id)
-    rules = await ready_rules(session, process_id)
-    pending = [
-        i
-        for i in await session.scalars(
-            select(Instance)
-            .where(
-                Instance.process_id == process_id,
-                Instance.status == "PENDING",
+    with events.span("run_process", process_id=process_id) as span:
+        rules = await ready_rules(session, process_id)
+        pending = [
+            i
+            for i in await session.scalars(
+                select(Instance)
+                .where(
+                    Instance.process_id == process_id,
+                    Instance.status == "PENDING",
+                )
+                .order_by(Instance.id)
+                .with_for_update()
             )
-            .order_by(Instance.id)
-            .with_for_update()
-        )
-        if i.symbols is not None
-    ]
-    verdicts = await decide_all(session, process_id, rules, pending)
+            if i.symbols is not None
+        ]
+        verdicts = await decide_all(session, process_id, rules, pending)
 
-    count: Counter[str] = Counter()
-    for instance, verdict in zip(pending, verdicts, strict=True):
-        _append(session, process_id, instance, verdict)
-        count[verdict.decision] += 1
+        count: Counter[str] = Counter()
+        for instance, verdict in zip(pending, verdicts, strict=True):
+            _append(session, process_id, instance, verdict)
+            count[verdict.decision] += 1
 
-    await session.commit()
+        await session.commit()
+        span.set(instances=len(pending), rules=len(rules), by_decision=count, **_causes(verdicts))
     return RunSummary(decided=sum(count.values()), by_decision=dict(count))
 
 
@@ -208,7 +235,13 @@ def _append(
         "decision",
         process_id=process_id,
         instance_id=instance.id,
-        data={"decision": verdict.decision, "rules_hash": verdict.rules_hash, **trace},
+        data={
+            "decision": verdict.decision,
+            "rules_hash": verdict.rules_hash,
+            "fired": [r.rule_id for r in verdict.results if r.fires],
+            "reason": verdict.reason,
+            **trace,
+        },
     )
 
 
@@ -225,42 +258,53 @@ async def reprocess(
     answers the same without writing anything.
     """
     await get_process(session, process_id)
-    rules = await ready_rules(session, process_id)
-    query = (
-        select(Instance)
-        .where(Instance.process_id == process_id, Instance.status == "DECIDED")
-        .order_by(Instance.id)
-        .with_for_update()
-    )
-    if names is not None:
-        query = query.where(Instance.name.in_(names))
-    selected = [i for i in await session.scalars(query) if i.symbols is not None]
-    latest = await latest_decisions(session, selected)
-    verdicts = await decide_all(session, process_id, rules, selected)
-
-    unchanged = 0
-    changed: list[ChangeOut] = []
-    conflicts: list[ChangeOut] = []
-    for instance, verdict in zip(selected, verdicts, strict=True):
-        previous = latest[instance.id]
-        if verdict.decision == previous.decision:
-            unchanged += 1
-            continue
-        change = ChangeOut(
-            instance_id=instance.id,
-            name=instance.name,
-            before=previous.decision,
-            after=verdict.decision,
-            previous_author=previous.author,
-            reason=verdict.reason,
+    with events.span("reprocess", process_id=process_id, dry_run=dry_run) as span:
+        rules = await ready_rules(session, process_id)
+        query = (
+            select(Instance)
+            .where(Instance.process_id == process_id, Instance.status == "DECIDED")
+            .order_by(Instance.id)
+            .with_for_update()
         )
-        if previous.author != ENGINE:
-            conflicts.append(change)
-            continue
-        changed.append(change)
-        if not dry_run:
-            _append(session, process_id, instance, verdict, reprocess=True, previous=previous.id)
-    await (session.rollback() if dry_run else session.commit())
+        if names is not None:
+            query = query.where(Instance.name.in_(names))
+        selected = [i for i in await session.scalars(query) if i.symbols is not None]
+        latest = await latest_decisions(session, selected)
+        verdicts = await decide_all(session, process_id, rules, selected)
+
+        unchanged = 0
+        changed: list[ChangeOut] = []
+        conflicts: list[ChangeOut] = []
+        for instance, verdict in zip(selected, verdicts, strict=True):
+            previous = latest[instance.id]
+            if verdict.decision == previous.decision:
+                unchanged += 1
+                continue
+            change = ChangeOut(
+                instance_id=instance.id,
+                name=instance.name,
+                before=previous.decision,
+                after=verdict.decision,
+                previous_author=previous.author,
+                reason=verdict.reason,
+            )
+            if previous.author != ENGINE:
+                conflicts.append(change)
+                continue
+            changed.append(change)
+            if not dry_run:
+                _append(
+                    session, process_id, instance, verdict, reprocess=True, previous=previous.id
+                )
+        await (session.rollback() if dry_run else session.commit())
+        span.set(
+            instances=len(selected),
+            rules=len(rules),
+            unchanged=unchanged,
+            changed=len(changed),
+            conflicts=len(conflicts),
+            **_causes(verdicts),
+        )
     return ReprocessSummary(unchanged=unchanged, changes=changed, conflicts=conflicts)
 
 
@@ -443,6 +487,15 @@ async def export(
     exported only for an instance the engine never decided. `names` limits it to those
     instance names (one delivery batch); the others may still be pending.
     """
+    with events.span("export_outcomes", process_id=process_id, batch=len(names or ())) as span:
+        body, duplicates = await _export(session, process_id, names)
+        span.set(lines=body.count("\n") + 1 if body else 0, duplicates=len(duplicates))
+        return body, duplicates
+
+
+async def _export(
+    session: AsyncSession, process_id: int, names: set[str] | None
+) -> tuple[str, list[str]]:
     await get_process(session, process_id)
     # Two files can share a name: only the most recent instance of each name is exported.
     by_name: dict[str, Instance] = {}

@@ -3,6 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, BackgroundTasks, status
 
 from app.common.exceptions import PermissionDeniedError
+from app.core import events
 from app.core.database import Session
 from app.features.agents import normalizer
 from app.features.agents.normalizer import NormIn, NormOut
@@ -37,8 +38,10 @@ async def list_rules(
 async def create_rule(
     process_id: int, body: RuleIn, session: Session, background: BackgroundTasks
 ) -> RuleDetail:
-    rule = await service.create(session, process_id, body)
-    background.add_task(service.compile_all_in_background, [rule.id])
+    with events.span("save_rule", process_id=process_id) as span:
+        rule = await service.create(session, process_id, body)
+        span.set(rule_id=rule.id)
+    background.add_task(service.compile_all_in_background, [rule.id], span)
     return rule
 
 
@@ -63,9 +66,11 @@ async def normalize_norm(
     background: BackgroundTasks,
 ) -> NormOut:
     _manager_only(user)
-    out = await normalizer.normalize_norm(session, process_id, body.text)
+    # One trace: the normalizer, then every check's compilation in the background.
+    with events.span("norm", process_id=process_id) as span:
+        out = await normalizer.normalize_norm(session, process_id, body.text)
     ids = [c.rule_id for n in out.norm_rules for c in n.checks]
-    background.add_task(service.compile_all_in_background, ids)
+    background.add_task(service.compile_all_in_background, ids, span)
     return out
 
 

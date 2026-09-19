@@ -482,7 +482,8 @@ async def test_what_a_console_reads(fake_sandbox: None) -> None:
 
         # The trace of the process, newest first, filterable.
         steps = [e["step"] for e in (await api.get(f"/processes/{process_id}/events")).json()]
-        assert steps == ["resolution", "decision", "decision", "decision"]
+        # The run is a span with one child per rule; each decision is a point inside it.
+        assert steps == ["resolution", "run_process"] + ["evaluate_rule"] * 2 + ["decision"] * 3
         r = await api.get(f"/processes/{process_id}/events", params={"step": "resolution"})
         [event] = r.json()
         assert event["instance_id"] == escalated["id"]
