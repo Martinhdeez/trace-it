@@ -40,6 +40,10 @@ compose=(docker compose --env-file secrets/compose.env -p trace-it -f compose.ym
 for image in "$TRACE_BACKEND_IMAGE" "$TRACE_FRONTEND_IMAGE"; do
   [[ $(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image") == "$revision" ]]
 done
+# The preceding release may predate this optional service entirely.
+previous_criminal=$(docker ps -q \
+  --filter label=com.docker.compose.project=trace-it \
+  --filter label=com.docker.compose.service=criminal-records)
 mkdir -p backups releases
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 release="releases/$stamp-$revision.env"
@@ -57,7 +61,12 @@ rollback() {
     # shellcheck source=/dev/null
     source current.env
     set +a
-    "${compose[@]}" up -d --wait --wait-timeout 180 criminal-records backend frontend || true
+    "${compose[@]}" up -d --wait --wait-timeout 180 backend frontend || true
+    if [[ -n "$previous_criminal" ]]; then
+      "${compose[@]}" up -d --wait --wait-timeout 120 criminal-records || true
+    else
+      "${compose[@]}" stop criminal-records || true
+    fi
   else
     "${compose[@]}" stop criminal-records backend frontend || true
   fi
