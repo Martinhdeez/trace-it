@@ -83,6 +83,8 @@ implementation only served as a test oracle, at the price of a second full compi
    as it was, and hand-written rules never compile. App startup re-queues
    any rule a restart left in `compiling` (best effort: with the database down the API
    still starts, and they wait for the next start or a recompile). The manager never presses "compile".
+   **Superseded by ADR 0022 (atomic publication):** a failed compile now leaves a `draft`
+   that fails validation, so it cannot be published and the published version keeps deciding.
 8. Models are `provider:model` strings; any PydanticAI provider works, and
    `helmcode:<model>` uses Helmcode's OpenAI-compatible API. The tester should be a
    different model family from the coder, so a shared misreading is less likely.

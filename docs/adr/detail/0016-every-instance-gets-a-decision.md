@@ -54,6 +54,8 @@ frontend, and a second answer to "what does this case need from me".
   malformed; ADR 0004, 0020) is `blocked` too, with no code and `report.error`: it
   escalates every instance with `RULE_COMPILE_FAILED <id>: <error>` until it compiles.
   A rule that cannot be applied escalates; the older rules never decide without it.
+  **Superseded by ADR 0022 (atomic publication):** a failed compile now leaves a `draft` that
+  cannot be published; the published version keeps deciding with its complete rule set.
 - A rule that reads a live source whose pre-run sync failed does not run on an older
   snapshot: unless the rules that ran already decide the case, it escalates with the reason
   `SOURCE_UNAVAILABLE: <source>` (added by ADR 0028, which sets the precedence).

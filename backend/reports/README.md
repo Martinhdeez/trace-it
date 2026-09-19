@@ -12,7 +12,7 @@ The ERP snapshot and cut-off date are frozen for comparison with previous runs.
 
 The current result is **443 PAGAR, 36 NO_PAGAR and 21 ESCALAR**, using
 `invoice-v2.2.0+xlsx-v1.3` and the default 16-rule invoice pack. All 500 API decisions
-match the independent evaluator plus the current [scan policy](../../docs/adr/0025-scan-decision-policy.md).
+match the independent evaluator plus the current [scan policy](../../docs/adr/detail/0025-scan-decision-policy.md).
 That policy explains all 13 changes from the previous improved export. All 4,239
 compared fields in the 471 text PDFs are unchanged. The prior visual reference
 detects no accepted field errors; two previously documented missing-field coverage

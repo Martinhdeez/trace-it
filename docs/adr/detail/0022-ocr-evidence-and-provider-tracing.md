@@ -52,7 +52,7 @@ the shared event schema and OpenTelemetry export.
    their applied evidence; explicit re-extraction returns 409. The document endpoint
    excludes legacy non-applied duplicate extractions.
    Original events and decisions remain intact. See the
-   [cache and refresh contract](../ingestion/cache-and-quality.md).
+   [cache and refresh contract](../../ingestion/cache-and-quality.md).
 5. `make demo` uses the production workbook/PDF, ERP sync, run and export APIs.
    It keeps extraction evidence and uses the same decision export policy as the
    application, including optional human review. It does not write test symbols
@@ -76,7 +76,7 @@ the shared event schema and OpenTelemetry export.
    A completed journal response is replayed without another request. An incomplete
    or uncertain record blocks automatic resubmission. A definite HTTP refusal (4xx or
    503, e.g. a 429 rate limit) delivered nothing: it is journaled `refused` and the next
-   call tries again (2026-09-19, [resilience](../resilience.md)). A received response can
+   call tries again (2026-09-19, [resilience](../../resilience.md)). A received response can
    report usage even if its content is subsequently rejected. Secrets, raw images,
    transcripts and request payloads do not enter these provider spans; the protected
    local journal and document evidence retain the material needed for reproduction.

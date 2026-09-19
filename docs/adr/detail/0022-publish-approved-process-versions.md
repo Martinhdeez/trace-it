@@ -66,4 +66,4 @@ now explicitly validates and publishes before deciding cases.
 
 ## Related
 
-ADR 0001, 0004, 0008, 0015, 0017, 0021; [operation guide](../process-versions.md).
+ADR 0001, 0004, 0008, 0015, 0017, 0021; [operation guide](../../process-versions.md).

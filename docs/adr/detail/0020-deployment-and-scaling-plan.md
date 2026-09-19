@@ -57,7 +57,8 @@ costs and how it grows. What is already true:
   as ADR 0016 requires of a rule that cannot be evaluated. Done (2026-09-19): a rule whose
   compilation on save errors ends `blocked` with `report.error`, and the engine escalates
   every instance with `RULE_COMPILE_FAILED <id>: <error>` (`rules/service.py`
-  `_block_failed`, `decisions/engine.py`).
+  `_block_failed`, `decisions/engine.py`). **Superseded by ADR 0022 (atomic publication):**
+  the failed rule stays a `draft` that cannot be published; the published version keeps deciding.
 - **Cost is tracked in three parts** (`C_tokens + C_infra + C_people`) with the formulas of
   section 6; tokens and span counts come from our own metrics.
 

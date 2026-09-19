@@ -55,7 +55,7 @@ A manager saves a rule in plain language (`POST /processes/{id}/rules`); nobody 
 |---|---|---|
 | `compiling` | Saved; tester and coder are writing its tests and code in the background (1-4 min). A restart re-queues it | no |
 | `active` | Its code passed the tests and changes few past decisions (ADR 0004), or a manager activated it | yes |
-| `blocked` | The agents answered NeedsData: the process lacks a symbol or source it needs, and every instance escalates with `RULE_NEEDS_DATA` (ADR 0016) until the data exists and it is recompiled. Or its compile on save failed (`report.error`), and every instance escalates with `RULE_COMPILE_FAILED` until a recompile succeeds (ADR 0020) | yes, as an escalation |
+| `blocked` | The agents answered NeedsData: the process lacks a symbol or source it needs, and every instance escalates with `RULE_NEEDS_DATA` (ADR 0016) until the data exists and it is recompiled. (A failed compile on save used to block the rule with `RULE_COMPILE_FAILED`; superseded by ADR 0022: it now stays a `draft` that cannot be published) | yes, as an escalation |
 | `draft` | Compiled but waiting for a person: failing tests or too much impact | no |
 | `retired` | Taken out of the process by a manager | no |
 
@@ -72,7 +72,7 @@ A **use case** is what the app is used for (e.g. "Invoice payment"): its `descri
 | `PUT /use-cases/{id}/agents/{role}` | manager | Body `{config, note}`: a new version, active from now on |
 | `POST /agent-configs/{id}/activate` | manager | Activate an existing version: rollback, or adopt one loaded from the pack |
 
-**When a provider fails** (ADR 0019): a role's `fallback_models` are tried in order when the model before answers 5xx, 429 (after the SDK's two retries), times out (`timeout_seconds`) or refuses the connection. An answer a validator rejects never switches models. The `llm_run` span holds `chain`, `failed_attempts` (`[{model, error}]`) and `model`, the one that answered. When every model fails the run is a 502 and the rule is `blocked` with the error: every instance escalates with `RULE_COMPILE_FAILED` until a recompile succeeds (ADR 0020). The invoice use case starts every role on `deepseek-v4-flash` and falls back to `glm5.3` / `qwen3.6`. To see it: `make demo-llm-down` sends the normalizer's primary model to an unreachable address (`OPENAI_BASE_URL=http://127.0.0.1:9/v1`) and prints the span:
+**When a provider fails** (ADR 0019): a role's `fallback_models` are tried in order when the model before answers 5xx, 429 (after the SDK's two retries), times out (`timeout_seconds`) or refuses the connection. An answer a validator rejects never switches models. The `llm_run` span holds `chain`, `failed_attempts` (`[{model, error}]`) and `model`, the one that answered. When every model fails the run is a 502 and the rule stays a `draft` with the error; it cannot be published, so the published version keeps deciding (ADR 0022, atomic publication, supersedes the `blocked` behaviour of ADR 0020). The invoice use case starts every role on `deepseek-v4-flash` and falls back to `glm5.3` / `qwen3.6`. To see it: `make demo-llm-down` sends the normalizer's primary model to an unreachable address (`OPENAI_BASE_URL=http://127.0.0.1:9/v1`) and prints the span:
 
 ```
 chain: ["deepseek-v4-flash", "glm5.3", "qwen3.6"]
