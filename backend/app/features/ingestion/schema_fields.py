@@ -458,5 +458,6 @@ class SchemaFieldReader:
             model=model,
             operation="schema_selection",
             fallback=fallback,
+            force=self.settings.ocr_force_recompute,
         )
         return validate(result)

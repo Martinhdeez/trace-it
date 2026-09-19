@@ -133,6 +133,8 @@ async def reusable_evidence(session, instance, service, item, options):
     result = ExtractionResult.model_validate(event.data["extraction"])
     if instance.status == "DECIDED":
         return reused_result(result, started)
+    if service.settings.ocr_force_recompute:
+        return None
     plan, sources, schema_key = await payment_state(session, instance.process_id)
     if plan.fields and event.data.get("extraction_plan", {}).get("fingerprint") != plan.fingerprint:
         return None

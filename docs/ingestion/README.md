@@ -66,6 +66,7 @@ formulas or converts an unavailable formula result into zero.
 | `TRACEPAY_WORKERS` | 2, bounded to 1–8 |
 | `TRACEPAY_OCR_THREADS` | 4, bounded to 1–16 |
 | `TRACEPAY_OCR_CUDA` | 0; GPU needs a compatible ONNX runtime |
+| `TRACEPAY_OCR_FORCE_RECOMPUTE` | 0; 1 ignores extraction/OCR caches and the provider journal (spans say `outcome=forced`) |
 | `TRACEPAY_VLM_URL`, `TRACEPAY_VLM_MODEL`, `TRACEPAY_VLM_API_KEY` | Compatible visual server |
 | `GEMINI_API_KEY` | Gemini in the configured visual chain |
 | `TRACEPAY_GEMINI_MODEL` | `gemini-3.1-flash-lite` |

@@ -292,7 +292,7 @@ class ExtractionService:
         lock_path = self.settings.data_dir / "extraction-locks" / (key + ".lock")
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         with self.locks[int(key[:8], 16) % len(self.locks)], FileLock(str(lock_path), timeout=600):
-            cached = self.store.cached(key)
+            cached = not self.settings.ocr_force_recompute and self.store.cached(key)
             if cached:
                 result = ExtractionResult.model_validate(cached)
                 result.data["provenance"] = {
@@ -407,7 +407,7 @@ class ExtractionService:
             ) as span,
             self.locks[int(key[:8], 16) % len(self.locks)],
         ):
-            cached = self.store.cached(key)
+            cached = not self.settings.ocr_force_recompute and self.store.cached(key)
             if cached:
                 result = ExtractionResult.model_validate(cached)
                 previous_id = result.id

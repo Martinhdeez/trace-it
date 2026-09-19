@@ -77,6 +77,7 @@ def recorded_call(
     operation=None,
     reader=None,
     fallback=False,
+    force=False,
 ):
     reader = reader or (
         "schema"
@@ -93,7 +94,7 @@ def recorded_call(
     fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     path = directory / f"{fingerprint}.json"
     if provider is None:
-        return _recorded_call(path, identity, call, reader=reader)
+        return _recorded_call(path, identity, call, reader=reader, force=force)
 
     failure = None
     result = None
@@ -109,7 +110,7 @@ def recorded_call(
         network_succeeded=False,
     ) as trace:
         try:
-            result = _recorded_call(path, identity, call, trace, reader)
+            result = _recorded_call(path, identity, call, trace, reader, force)
         except Exception as exc:
             failure = exc
             trace.status = "error"
@@ -123,9 +124,10 @@ def recorded_call(
     return result
 
 
-def _recorded_call(path, identity, call, trace=None, reader=None):
+def _recorded_call(path, identity, call, trace=None, reader=None, force=False):
     with FileLock(str(path) + ".lock", timeout=60):
-        record = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+        exists = path.exists() and not force
+        record = json.loads(path.read_text(encoding="utf-8")) if exists else None
         if record is not None and record["state"] != "refused":  # refused: call again
             if trace is not None:
                 trace.set(journal_hit=True)
@@ -158,7 +160,10 @@ def _recorded_call(path, identity, call, trace=None, reader=None):
             record["response"] = call(mark_network_attempt) if trace else call()
             record["state"] = "complete"
             if trace is not None:
-                trace.set(outcome="success", network_succeeded=trace.data["network_attempted"])
+                trace.set(
+                    outcome="forced" if force else "success",
+                    network_succeeded=trace.data["network_attempted"],
+                )
                 if trace.data["network_attempted"]:
                     usage = _token_usage(trace.data["provider"], record["response"])
                     trace.set(**usage)
