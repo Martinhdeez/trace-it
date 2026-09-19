@@ -116,7 +116,7 @@ async def test_decide_resolve_and_export_through_the_api() -> None:
         )
         manager = {"X-User-Id": str(r.json()["id"])}
         rules = (await api.get(f"/processes/{process_id}/rules")).json()
-        assert len(rules) == 16
+        assert len(rules) == 17
         for rule in rules:
             r = await api.post(f"/rules/{rule['id']}/activate", headers=manager)
             assert r.status_code == 200, r.text
@@ -145,7 +145,7 @@ async def test_decide_resolve_and_export_through_the_api() -> None:
         assert (engine["author"], engine["decision"], len(engine["results"])) == (
             "engine",
             "ESCALAR",
-            16,
+            17,
         )
 
         # A person resolves it. The engine's decision stays; the person's is appended.

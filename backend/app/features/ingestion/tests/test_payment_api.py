@@ -174,7 +174,7 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
     }
     detail = (await client.get(f"/instances/{instance_id}")).json()
     assert len(detail["decisions"]) == 1
-    assert len(detail["decisions"][0]["results"]) == 16
+    assert len(detail["decisions"][0]["results"]) == 17
     summary = (await client.get(f"/processes/{process_id}/summary")).json()
     assert summary["instances"] == 1 and summary["by_decision"] == {"PAGAR": 1}
     assert (await client.post(f"/instances/{instance_id}/extract", json={})).status_code == 409

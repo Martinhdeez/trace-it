@@ -87,14 +87,18 @@ def approved_account(instance, sources):
 
 
 def evaluate(instance, sources, others):
-    """The invoice pays into the account the master approved, and the account it names is
-    a different one rather than the approved one misread (R17)."""
+    """An IBAN a few characters away from the approved one is far more likely our
+    misreading than the supplier's new account: a person looks instead of a refusal."""
     approved = approved_account(instance, sources)
     if approved is None:
         return passes()
     theirs = iban(instance.get("iban"))
     if theirs == approved:
         return passes()
-    if differences(theirs, approved) <= NEAR_MISS:
+    edits = differences(theirs, approved)
+    if edits > NEAR_MISS:
         return passes()
-    return fires("IBAN " + theirs + " is not the master's")
+    return fires(
+        "IBAN " + theirs + " differs from the master's " + approved
+        + " in " + str(edits) + " characters: read it again"
+    )
