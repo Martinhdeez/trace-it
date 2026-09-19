@@ -60,9 +60,7 @@ async def test_fabricated_evidence_retried_and_conflicting_instructions_remain_v
 async def test_protected_input_is_retried_before_it_can_enter_a_process(monkeypatch):
     correct = plan()
     bad = copy.deepcopy(correct)
-    bad["symbols"].append(
-        {"name": "gender", "type": "text", "description": "Candidate gender."}
-    )
+    bad["symbols"].append({"name": "gender", "type": "text", "description": "Candidate gender."})
     seen = {}
     monkeypatch.setattr(llm, "model_for", per_role({"discovery": [bad, correct]}, seen))
     data = {

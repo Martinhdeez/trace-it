@@ -257,7 +257,9 @@ async def test_chat_proposes_every_kind_and_accepting_stages_the_draft(api, monk
 
     # A new revision supersedes what is still open.
     draft = (await api.get(f"/process-drafts/{draft['id']}")).json()
-    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [changed]}))
+    changed_again = copy.deepcopy(changed)
+    changed_again["rules"][0]["text"] = "amount is greater than 200."
+    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [changed_again]}))
     await post(api, draft, "messages", message="Again.")
     everything = (await api.get(f"/processes/{pid}/proposals")).json()
     first = {p["id"]: p["status"] for p in everything if p["id"] in {k["id"] for k in listed}}

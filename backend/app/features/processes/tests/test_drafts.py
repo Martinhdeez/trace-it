@@ -264,9 +264,9 @@ async def test_stale_revision_rejection_and_chat_invalidate_preview(api, monkeyp
         f"/process-drafts/{draft['id']}/prepare", json={"revision": draft["revision"]}
     )
     assert r.status_code == 409 and "accept" in r.text
-    revised = plan(draft["plan"]["name"])
+    revised = plan(draft["plan"]["name"], threshold=101)
     monkeypatch.setattr(llm, "model_for", per_role({"discovery": [revised]}))
-    draft = await post(api, draft, "messages", message="Keep 100 after all.")
+    draft = await post(api, draft, "messages", message="Keep 101 after all.")
     assert draft["reviews"] == {} and draft["preview"] is None
 
 
