@@ -143,3 +143,26 @@ async def test_unknown_process_is_rejected_before_processing(process_api):
     )
     assert response.status_code == 404 and response.json()["code"] == "not_found"
     assert not list(service.objects.iterdir())
+
+
+async def test_upload_and_reextraction_are_each_one_trace_of_the_instance(process_api):
+    client, process_id, _ = process_api
+    content = pdf_bytes(VALID + "\n" + uuid.uuid4().hex)
+    r = await client.post(f"/processes/{process_id}/files", files={"file": ("t.pdf", content)})
+    instance_id = r.json()["instance_id"]
+    options = {"ocr": False, "vlm": False, "jev": False}
+    r = await client.post(f"/instances/{instance_id}/extract", json=options)
+    assert r.status_code == 200, r.text
+
+    journey = (await client.get(f"/instances/{instance_id}/trace")).json()
+
+    def tree(nodes):
+        return [(n["step"], tree(n["children"])) for n in nodes]
+
+    assert tree(journey["spans"]) == [
+        (
+            "upload_document",
+            [("store_file", []), ("extraction", [("native_text", [])]), ("ingest_document", [])],
+        ),
+        ("reextract_document", [("extraction", [("native_text", [])]), ("extract_document", [])]),
+    ]

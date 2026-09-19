@@ -70,7 +70,14 @@ audit must survive without any external service.
   `extraction` > `native_text`, `ocr`, `vision`, `text_judge`, then the `ingest_document`
   point with the reading and symbols; `sync_source` (the
   connector's requests, retries, 429s, logins, pages); `suggest_escalation`;
-  `export_outcomes`; `resolution`.
+  `export_outcomes`; `resolution`. Who changed what (author, before and after): `save_rule`,
+  `norm`, `compile_rule` (`author`: a person, `cli` or `auto`), `activate_rule` and
+  `retire_rule` (`before`/`after` status, `rule_hash`, `findings`), `impact_check` with
+  `preview` (GET impact), `configure_agent` and `activate_agent_config` (`use_case_id`, `role`,
+  `before_version`/`after_version`), `load_use_case`, `load_definition`, `resolution`
+  (`before`, `previous_author`, `reason`). A refused change (409) is an `error` span with its
+  author. The process feed (`GET /processes/{id}/events`) also lists its use case's
+  configuration spans; `GET /rules/{id}/trace` has the rule's `lifecycle`.
 - Read API (`features/traces`): `GET /traces`, `GET /traces/{trace_id}`,
   `GET /instances/{id}/trace`, `GET /rules/{id}/trace`, `GET /processes/{id}/metrics`.
 
@@ -101,6 +108,45 @@ audit must survive without any external service.
   `agents/tests/test_normalizer.py` (one trace from norm to three concurrent compilations,
   rule trace); `agents/tests/test_assistant.py` (retry prompts);
   `traces/tests/test_api.py` (run spans, instance journey, rule runtime, metrics).
+
+- Coverage audit (2026-09-19), every entry point on `dev` after #45, #46, #48 and the OCR
+  integration; gaps closed in the same change:
+
+  | Entry point | Before | After |
+  |---|---|---|
+  | Load pack / `POST /processes/definition` / CLI `load` | no span | `load_use_case`, `load_definition` |
+  | `PUT /use-cases/{id}/agents/{role}`, `POST /agent-configs/{id}/activate` | no span | `configure_agent`, `activate_agent_config` (author, versions) |
+  | Norm, save rule, recompile | spans without author | `author` on `norm`, `save_rule`, `compile_rule` |
+  | Compile: valid, `blocked`, LLM down, fallback | `compile_rule` tree, `llm_run` error / `failed_attempts` | unchanged (verified) |
+  | Activate (manual, CLI, auto) | `activate_rule` without author; refusal untraced | author, before/after, findings; 409 = error span |
+  | Retire | no span | `retire_rule` |
+  | `GET /rules/{id}/impact` | no span | `impact_check` (`preview`) |
+  | Run, refused run, reprocess (+dry run), decisions | spans | unchanged (verified) |
+  | Sandbox crash | `evaluate_rule` error | unchanged (tested) |
+  | Resolve | `resolution` with author | + previous decision and reason |
+  | Export full / per batch | `export_outcomes` (`batch`) | unchanged (verified) |
+  | Findings | not counted | `findings` on activate/retire |
+  | ERP sync, ERP down | `sync_source`, error | unchanged (verified live) |
+  | Upload PDF (store, native, OCR, vision, judge, `ingest_document`) | spans; OCR failure = error span | unchanged (tested) |
+  | Focused re-reading of identifiers (OCR/vision) | untraced model calls | `focused_read` per reader |
+  | `POST /instances/{id}/extract` | reading steps were orphan traces | `reextract_document` trace |
+  | `POST /processes/{id}/sources/workbook` | extraction was an orphan trace | `upload_workbook` trace |
+  | Assistant suggestion | `suggest_escalation` > `llm_run` | unchanged |
+  | `tools/demo_run.py` | wrote instances with no audit | `demo_ingest` > `ingest_document` per instance |
+  | `tools/bench_scale.py` | through the API | covered by the API spans |
+
+  Live check on a scratch database: pack loaded by the CLI, a second process, workbook, ERP
+  sync, 20 PDFs (2 scans, OCR) through `POST /processes/{id}/files`, the client's
+  `Norma_Pagos_v3` (1 normalizer call, 12 checks compiled and auto-activated with real
+  models), run (18 PAGAR, 2 ESCALAR), a suggestion, a person's resolution, an agent config
+  change and rollback, impact preview, dry-run reprocess, full and per-batch export, a
+  retirement, the ERP stopped (error span). Every step was in `/traces`; the scan's
+  `/instances/{id}/trace` read upload > store > extraction > native text > OCR x2 >
+  `ingest_document`, run > rules > decision, suggestion, resolution, exports.
+- Tests: `traces/tests/test_coverage.py` (config and rule changes with author and versions,
+  refusals, failed compile with every model down, sandbox crash);
+  `ingestion/tests/test_pdf.py` (OCR failure); `ingestion/tests/test_process_api.py`
+  (upload and re-extraction as one trace each; needs `TRACEPAY_TEST_POSTGRES=1`).
 
 ## Related
 ADR 0004, 0006, 0008, 0011, 0016, 0017.

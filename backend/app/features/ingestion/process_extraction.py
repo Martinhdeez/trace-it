@@ -58,27 +58,30 @@ async def reextract_document(session, instance_id, user_id, service, options):
         raise ConflictError(
             "Only pending instances can be re-extracted; decision history is immutable"
         )
-    original = await session.get(File, instance.file_hash)
-    item = await run_in_threadpool(service.ingest, io.BytesIO(original.content), instance.name)
-    result, symbols, context = await read_document(
-        session, instance.process_id, service, item, options
-    )
-    if symbols is not None:
-        instance.symbols = symbols
-    events.record(
-        session,
-        "extract_document",
-        process_id=instance.process_id,
-        instance_id=instance.id,
-        data={
-            "user_id": user_id,
-            "extraction": result.model_dump(mode="json"),
-            "symbols": symbols,
-            **context,
-        },
-        duration_ms=round(result.metrics.get("extraction_ms", 0)),
-    )
-    await session.commit()
+    links = {"process_id": instance.process_id, "instance_id": instance.id, "user_id": user_id}
+    # One trace: the reading steps, then the `extract_document` point with the symbols.
+    with events.span("reextract_document", **links):
+        original = await session.get(File, instance.file_hash)
+        item = await run_in_threadpool(service.ingest, io.BytesIO(original.content), instance.name)
+        result, symbols, context = await read_document(
+            session, instance.process_id, service, item, options
+        )
+        if symbols is not None:
+            instance.symbols = symbols
+        events.record(
+            session,
+            "extract_document",
+            process_id=instance.process_id,
+            instance_id=instance.id,
+            data={
+                "user_id": user_id,
+                "extraction": result.model_dump(mode="json"),
+                "symbols": symbols,
+                **context,
+            },
+            duration_ms=round(result.metrics.get("extraction_ms", 0)),
+        )
+        await session.commit()
     return {
         "instance_id": instance.id,
         "process_id": instance.process_id,

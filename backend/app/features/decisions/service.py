@@ -4,7 +4,7 @@ import logging
 from collections import Counter
 from dataclasses import asdict
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError, NotFoundError
@@ -401,9 +401,15 @@ async def list_events(
     instance_id: int | None = None,
     limit: int = 200,
 ) -> list[EventOut]:
-    """The trace of a process, newest first: runs, resolutions, compilations, syncs, uploads."""
-    await get_process(session, process_id)
-    query = select(Event).where(Event.process_id == process_id)
+    """The trace of a process, newest first: runs, resolutions, compilations, syncs, uploads,
+    and the changes to how its use case's agents work (who, which version before and after)."""
+    process = await get_process(session, process_id)
+    # ponytail: the use case's spans are matched on JSONB, not indexed; a `use_case_id`
+    # column on events if this feed gets slow.
+    of_use_case = (Event.process_id.is_(None)) & (
+        Event.data["use_case_id"].as_integer() == process.use_case_id
+    )
+    query = select(Event).where(or_(Event.process_id == process_id, of_use_case))
     if step is not None:
         query = query.where(Event.step == step)
     if instance_id is not None:
@@ -470,7 +476,13 @@ async def resolve(
         "resolution",
         process_id=instance.process_id,
         instance_id=instance.id,
-        data={"decision": data.decision, "author": user.name},
+        data={
+            "decision": data.decision,
+            "author": user.name,
+            "reason": data.reason,
+            "before": previous.decision if previous else None,
+            "previous_author": previous.author if previous else None,
+        },
     )
     await session.commit()
     return await get_instance(session, instance_id)

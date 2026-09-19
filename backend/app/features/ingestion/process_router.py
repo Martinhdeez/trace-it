@@ -153,14 +153,15 @@ async def upload_workbook(
 ):
     try:
         await process_service.require_process(session, process_id)
-        item = await run_in_threadpool(service.ingest, file.file, file.filename)
-        if item["kind"] != "workbook":
-            raise InvalidDocumentError("Reference sources must be an XLSX workbook")
-        result = await run_in_threadpool(
-            service.extract, item, ExtractOptions(ocr=False, vlm=False, jev=False)
-        )
-        content = await run_in_threadpool((service.objects / item["sha256"]).read_bytes)
-        return await load_workbook(session, process_id, user.id, result, content, cut_off_date)
+        with events.span("upload_workbook", process_id=process_id, file=file.filename):
+            item = await run_in_threadpool(service.ingest, file.file, file.filename)
+            if item["kind"] != "workbook":
+                raise InvalidDocumentError("Reference sources must be an XLSX workbook")
+            result = await run_in_threadpool(
+                service.extract, item, ExtractOptions(ocr=False, vlm=False, jev=False)
+            )
+            content = await run_in_threadpool((service.objects / item["sha256"]).read_bytes)
+            return await load_workbook(session, process_id, user.id, result, content, cut_off_date)
     except (ValueError, zipfile.BadZipFile, InvalidFileException, ParseError) as exc:
         raise InvalidDocumentError("Invalid or unsupported workbook") from exc
     finally:

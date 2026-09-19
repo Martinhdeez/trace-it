@@ -21,6 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "backend")]
 
+from app.core import events
 from app.core.database import session_factory
 from app.features.ingestion.model import File, Instance
 from app.features.sources.model import Source
@@ -68,11 +69,20 @@ async def ingest(process_id: int, invoices: Path, book: Path, cutoff: str, limit
                 .values(hash=digest, name=path.name, content=content, text=text)
                 .on_conflict_do_nothing()
             )
-            await session.execute(
+            instance_id = await session.scalar(
                 insert(Instance)
                 .values(process_id=process_id, file_hash=digest, name=path.name, symbols=symbols)
                 .on_conflict_do_nothing()
+                .returning(Instance.id)
             )
+            if instance_id is not None:  # the same audit point as the ingestion API
+                events.record(
+                    session,
+                    "ingest_document",
+                    process_id=process_id,
+                    instance_id=instance_id,
+                    data={"file": path.name, "reader": "pdf-text", "symbols": symbols},
+                )
         await session.commit()
     print(f"extraction: {read} read from the text layer, {scans} scans left without symbols")
 
@@ -142,7 +152,9 @@ async def main() -> None:
     args = parser.parse_args()
 
     started = time.monotonic()
-    await ingest(args.process, args.invoices, args.book, args.cutoff, args.limit)
+    # One trace for the ingestion, one `ingest_document` point per new instance (ADR 0018).
+    with events.span("demo_ingest", process_id=args.process, reader="pdf-text"):
+        await ingest(args.process, args.invoices, args.book, args.cutoff, args.limit)
     await decide(args.process, args.output)
     print(f"total: {time.monotonic() - started:.0f}s")
 
