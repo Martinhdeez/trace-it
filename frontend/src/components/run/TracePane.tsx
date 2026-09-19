@@ -108,7 +108,7 @@ export function TracePane({
             {results.map((outcome) => (
               <li key={outcome.rule_id} className="px-3 py-2">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[12px] text-ink">{outcome.rule_text ?? `Regla ${outcome.rule_id}`}</span>
+                  <span className="text-[12px] text-ink">{outcome.rule_summary || outcome.rule_text || `Regla ${outcome.rule_id}`}</span>
                   <span
                     className={cn(
                       'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px]',

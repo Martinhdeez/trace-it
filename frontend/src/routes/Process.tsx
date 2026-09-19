@@ -27,6 +27,7 @@ import { BatchRunPanel } from '../components/run/BatchRunPanel'
 import { Button } from '../components/shell/Controls'
 import { Overlay } from '../components/shell/Overlay'
 import { ErrorNotice, Notice } from '../components/shell/Notice'
+import { ExpandableText } from '../components/shell/ExpandableText'
 import { NestedCard } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { ALERTS_TAB, paths } from '../lib/paths'
@@ -280,7 +281,11 @@ export function Process() {
           <h1 className="mt-1 text-[32px] font-medium leading-[1.1] tracking-[-0.045em]">
             {process.data?.name ?? '…'}
           </h1>
-          <ProcessDescription key={processId} text={process.data?.description ?? ''} />
+          <ExpandableText
+            key={processId}
+            text={process.data?.description ?? ''}
+            className="mt-2 max-w-2xl text-[14.5px] leading-6 text-muted"
+          />
         </header>
 
         <Alerts
@@ -406,43 +411,6 @@ function Alerts({
         ))}
       </ul>
     </section>
-  )
-}
-
-/** The first paragraph says what the process decides; the conventions stay one click away. */
-function ProcessDescription({ text }: { text: string }) {
-  const [open, setOpen] = useState(false)
-  const full = text.trim()
-  if (!full) return null
-  const lead = full.split(/\n\s*\n/)[0]
-  const more = lead !== full || lead.length > 160
-
-  return (
-    <div className="mt-2 max-w-2xl">
-      <p
-        className={cn(
-          'whitespace-pre-line text-[14.5px] leading-6 text-muted',
-          !open && 'line-clamp-2',
-        )}
-      >
-        {open ? full : lead}
-      </p>
-      {more ? (
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen((next) => !next)}
-          className="mt-1 inline-flex items-center gap-1 text-[12.5px] text-faint hover:text-ink"
-        >
-          {open ? 'Ver menos' : 'Leer más'}
-          <ChevronDown
-            size={12}
-            strokeWidth={1.75}
-            className={cn('transition-transform', open && 'rotate-180')}
-          />
-        </button>
-      ) : null}
-    </div>
   )
 }
 

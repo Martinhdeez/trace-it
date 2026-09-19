@@ -27,12 +27,14 @@ import { ProcessScreen } from '../components/process/ProcessScreen'
 import { TruthSources } from '../components/process/TruthSources'
 import { Button, Input, Select, Textarea } from '../components/shell/Controls'
 import { ErrorNotice, Empty, Notice } from '../components/shell/Notice'
+import { ExpandableText } from '../components/shell/ExpandableText'
 import { NestedCard } from '../components/shell/Well'
 import { t } from '../i18n'
 import { cn } from '../lib/cn'
 import { definitionTabFromPath } from '../lib/definitionTabs'
 import { formatRunDate } from '../lib/format'
 import { paths } from '../lib/paths'
+import { ruleLabel } from '../lib/process'
 
 type Attachment = FilePreview & { file: File }
 
@@ -456,9 +458,10 @@ function RulesPane({
             <li key={rule.id} className="group flex h-9 items-center gap-2">
               <Link
                 to={paths.rule(processId, rule.id)}
+                title={rule.text}
                 className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink hover:text-ink"
               >
-                {rule.text}
+                {ruleLabel(rule)}
               </Link>
               <RuleStatus
                 status={status}
@@ -634,33 +637,54 @@ function ContextPane({
   })
 
   const dirty = value.trim() !== current.trim()
+  // Read first: the lead sentence, the conventions one click away. Editing is asked for.
+  const editing = text != null || !current.trim()
 
   return (
-    <NestedCard label="convenciones del agente">
-        <div className="space-y-3 px-3.5 py-3">
-          <Textarea
-            rows={8}
-            value={value}
-            onChange={(event) => setText(event.target.value)}
-            placeholder="NIF en mayúsculas, sin espacios. Importes en euros. Si falta el pedido, ESCALAR."
-          />
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[11px] text-faint">
-              Entra en cada compilación. No es una regla: es el marco. Queda en el borrador.
-            </p>
-            <Button
-              tone="primary"
-              disabled={!dirty || !process || save.isPending}
-              onClick={() => save.mutate()}
-            >
-              {save.isPending ? 'Guardando…' : 'Guardar'}
-            </Button>
-          </div>
-          {save.isError ? <ErrorNotice error={draftError(save.error)} /> : null}
-          {save.isSuccess ? <DraftSaved processId={processId} /> : null}
-        </div>
-      </NestedCard>
-    )
+    <NestedCard
+      label="convenciones del agente"
+      action={
+        editing && current.trim() ? (
+          <Button tone="ghost" disabled={save.isPending} onClick={() => setText(null)}>
+            Cancelar
+          </Button>
+        ) : !editing ? (
+          <Button tone="ghost" onClick={() => setText(current)}>
+            Editar
+          </Button>
+        ) : null
+      }
+    >
+      <div className="space-y-3 px-3.5 py-3">
+        {editing ? (
+          <>
+            <Textarea
+              rows={8}
+              value={value}
+              onChange={(event) => setText(event.target.value)}
+              placeholder="NIF en mayúsculas, sin espacios. Importes en euros. Si falta el pedido, ESCALAR."
+            />
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] text-faint">
+                Entra en cada compilación. No es una regla: es el marco. Queda en el borrador.
+              </p>
+              <Button
+                tone="primary"
+                disabled={!dirty || !process || save.isPending}
+                onClick={() => save.mutate()}
+              >
+                {save.isPending ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <ExpandableText text={current} className="text-[13px] leading-6 text-ink" />
+        )}
+        {save.isError ? <ErrorNotice error={draftError(save.error)} /> : null}
+        {save.isSuccess ? <DraftSaved processId={processId} /> : null}
+      </div>
+    </NestedCard>
+  )
 }
 
 function DraftSaved({ processId }: { processId: number }) {
@@ -748,7 +772,10 @@ function InputsPane({
                         {t(`symbolType.${symbol.type}`)}
                       </span>
                     </div>
-                    <p className="mt-0.5 text-[12px] text-muted">{symbol.description}</p>
+                    <ExpandableText
+                      text={symbol.description ?? ''}
+                      className="mt-0.5 text-[12px] leading-5 text-muted"
+                    />
                   </div>
                   <button
                     type="button"
@@ -946,7 +973,10 @@ function ProposalCard(
           Regla {check.rule_id} →
         </Link>
       </div>
-      <p className="mt-2 text-[13px] leading-6 text-ink">{check.text}</p>
+      <p className="mt-2 text-[13px] leading-6 text-ink">{ruleLabel(check)}</p>
+      {check.summary ? (
+        <ExpandableText text={check.text} className="mt-1 text-[12px] leading-5 text-muted" />
+      ) : null}
       {check.quote ? <p className="mt-1 text-[12px] text-muted">«{check.quote}»</p> : null}
     </li>
   )

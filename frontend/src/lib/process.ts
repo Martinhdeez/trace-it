@@ -18,3 +18,8 @@ export function humanOutcomes(process: ProcessDetail | undefined): DecisionType[
 export function byPriority(outcomes: DecisionType[]): DecisionType[] {
   return [...outcomes].sort((a, b) => b.priority - a.priority)
 }
+
+/** The one line a list shows for a rule: its summary, or its text when it has none. */
+export function ruleLabel(rule: { text: string; summary?: string | null }): string {
+  return rule.summary?.trim() || rule.text
+}
