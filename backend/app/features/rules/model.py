@@ -14,6 +14,21 @@ RULE_STATUSES = ("compiling", "draft", "active", "blocked", "retired")
 ENFORCED = ("active", "blocked")  # the statuses the engine runs
 
 
+class NormRule(Base):
+    """One sentence of the client's norm, exactly as written (ADR 0017). The unit the client
+    owns: its atomic checks are `Rule`s, each with one code and one decision."""
+
+    __tablename__ = "norm_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    process_id: Mapped[int] = mapped_column(ForeignKey("processes.id"))
+    number: Mapped[int]  # its position in the norm
+    text: Mapped[str]
+    # statements of the sentence that are not checkable conditions, as the normalizer read them
+    policies: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    created_at: Mapped[created_at]
+
+
 class Rule(Base):
     """A rule as text plus the code that runs for it (ADR 0003). The compiler writes the
     code with two blind agents and keeps the second one's work in `report` as evidence
@@ -30,6 +45,7 @@ class Rule(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     process_id: Mapped[int] = mapped_column(ForeignKey("processes.id"))
+    norm_rule_id: Mapped[int | None] = mapped_column(ForeignKey("norm_rules.id"))
     text: Mapped[str]
     type: Mapped[str]
     decision: Mapped[str]  # outcome produced when the rule fires

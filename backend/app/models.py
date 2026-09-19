@@ -5,7 +5,7 @@ from app.core.events import Event
 from app.features.decisions.model import Decision, Finding
 from app.features.ingestion.model import File, Instance
 from app.features.processes.model import DecisionType, Process, Symbol
-from app.features.rules.model import Rule
+from app.features.rules.model import NormRule, Rule
 from app.features.sources.model import Source
 from app.features.use_cases.model import AgentConfig, UseCase
 from app.features.users.model import User
@@ -19,6 +19,7 @@ __all__ = [
     "File",
     "Finding",
     "Instance",
+    "NormRule",
     "Process",
     "Rule",
     "Source",

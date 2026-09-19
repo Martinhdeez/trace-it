@@ -17,8 +17,8 @@ from app.features.decisions import audit
 from app.features.decisions.model import Decision
 from app.features.processes.model import DecisionType, Process, Symbol
 from app.features.processes.service import get as get_process
-from app.features.rules.model import ENFORCED, Rule
-from app.features.rules.schemas import RuleDetail, RuleIn, RuleOut
+from app.features.rules.model import ENFORCED, NormRule, Rule
+from app.features.rules.schemas import CheckOut, NormRuleOut, RuleDetail, RuleIn, RuleOut
 from app.features.use_cases import service as use_cases
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,34 @@ async def list_all(session: AsyncSession, process_id: int, status: str | None) -
     return [_out(r) for r in await session.scalars(query)]
 
 
+async def list_norm_rules(session: AsyncSession, process_id: int) -> list[NormRuleOut]:
+    """The sentences of the client's norm, each with its atomic rules (ADR 0017)."""
+    norm_rules = await session.scalars(
+        select(NormRule).where(NormRule.process_id == process_id).order_by(NormRule.id)
+    )
+    checks = await session.scalars(
+        select(Rule)
+        .where(Rule.process_id == process_id, Rule.norm_rule_id.is_not(None))
+        .order_by(Rule.id)
+    )
+    by_norm_rule: dict[int, list[CheckOut]] = {}
+    for r in checks:
+        by_norm_rule.setdefault(r.norm_rule_id, []).append(
+            CheckOut.model_validate(r, from_attributes=True)
+        )
+    return [
+        NormRuleOut(
+            id=n.id,
+            number=n.number,
+            text=n.text,
+            policies=n.policies,
+            created_at=n.created_at,
+            rules=by_norm_rule.get(n.id, []),
+        )
+        for n in norm_rules
+    ]
+
+
 async def get(session: AsyncSession, rule_id: int) -> RuleDetail:
     return _detail(await _rule(session, rule_id))
 
@@ -72,6 +100,12 @@ async def compile_rule(session: AsyncSession, rule_id: int) -> RuleDetail:
     return await _compile(session, rule)
 
 
+def _kept(rule: Rule, report: dict[str, Any]) -> dict[str, Any]:
+    """A new report for `rule` that keeps how the normalizer read it (ADR 0017)."""
+    norm = (rule.report or {}).get("norm")
+    return {**report, "norm": norm} if norm else report
+
+
 async def _compile(session: AsyncSession, rule: Rule) -> RuleDetail:
     symbols = list(
         await session.scalars(select(Symbol).where(Symbol.process_id == rule.process_id))
@@ -83,7 +117,7 @@ async def _compile(session: AsyncSession, rule: Rule) -> RuleDetail:
         # Fail closed: a rule the process cannot evaluate escalates every instance, whatever
         # its impact. It has no verdict on the past, so it records no audit findings.
         why = "needs data the process does not have: every instance escalates"
-        rule.report = {**result.report, "activation": {"auto": True, "why": why}}
+        rule.report = _kept(rule, {**result.report, "activation": {"auto": True, "why": why}})
         rule.status = "blocked"
         rule.activated_at = datetime.now(UTC)
         await session.commit()
@@ -91,7 +125,7 @@ async def _compile(session: AsyncSession, rule: Rule) -> RuleDetail:
     was_blocked = rule.status == "blocked"
     rule.status, rule.activated_at = "draft", None
     activation = await _auto_activation(session, rule, result, was_blocked)
-    rule.report = {**result.report, "activation": activation}
+    rule.report = _kept(rule, {**result.report, "activation": activation})
     await session.commit()
     if rule.report["activation"]["auto"]:
         return await activate(session, rule.id)
@@ -112,9 +146,24 @@ async def compile_in_background(rule_id: int) -> None:
                 return
             error = f"{type(e).__name__}: {e}"
             rule.status = "draft"
-            rule.report = {"valid": False, "error": error}
+            rule.report = _kept(rule, {"valid": False, "error": error})
             events.record(session, "compile_rule", data={"rule_id": rule_id, "error": error})
             await session.commit()
+
+
+async def compile_all_in_background(rule_ids: list[int]) -> None:
+    """Compile several saved rules concurrently, at most `compile_concurrency` at once.
+    One background job per request: FastAPI runs a request's background tasks one after
+    another."""
+    # ponytail: the bound is per job; two norms saved at once may double it. A module-wide
+    # semaphore if providers start refusing.
+    limit = asyncio.Semaphore(settings.compile_concurrency)
+
+    async def one(rule_id: int) -> None:
+        async with limit:
+            await compile_in_background(rule_id)
+
+    await asyncio.gather(*(one(i) for i in rule_ids))
 
 
 _jobs: set[asyncio.Task] = set()  # references, so a running compilation is not collected
@@ -130,7 +179,7 @@ async def resume_compilations() -> list[asyncio.Task]:
     except (SQLAlchemyError, OSError) as e:
         logger.warning("Rules left compiling were not resumed: %s", e)
         return []
-    tasks = [asyncio.create_task(compile_in_background(i)) for i in ids]
+    tasks = [asyncio.create_task(compile_all_in_background(ids))] if ids else []
     for task in tasks:
         _jobs.add(task)
         task.add_done_callback(_jobs.discard)
