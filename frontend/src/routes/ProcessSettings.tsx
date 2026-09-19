@@ -4,7 +4,7 @@ import { api } from '../api/client'
 import { keys } from '../api/queries'
 import { ProcessExecutionSettings } from '../components/process/ExecutionSettings'
 import { ProcessScreen } from '../components/process/ProcessScreen'
-import { MailGathering } from '../components/process/MailGathering'
+import { MailSettings } from '../components/process/MailSettings'
 import { paths } from '../lib/paths'
 
 export function ProcessSettings() {
@@ -25,7 +25,7 @@ export function ProcessSettings() {
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
         <div className="max-w-3xl">
-          <MailGathering processId={processId} />
+          <MailSettings processId={processId} />
           <ProcessExecutionSettings processId={processId} />
         </div>
       </div>

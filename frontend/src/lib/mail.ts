@@ -40,12 +40,6 @@ export function attachmentStatus(part: MailAttachment, message: MailMessage) {
   if (part.state === 'imported') return { label: message.state === 'evaluating' ? 'Evaluando reglas' : 'Lectura completada', tone: 'neutral' as MailTone }
   return { label: 'Recibido', tone: 'neutral' as MailTone }
 }
-export const activityLabels: Record<string, string> = {
-  received: 'Correo recibido', reading: 'Lectura iniciada', imported: 'Lectura registrada',
-  evaluating: 'Evaluación iniciada', completed: 'Procesamiento terminado',
-  failed: 'Procesamiento interrumpido', attachment_failed: 'Lectura interrumpida',
-  retry_requested: 'Reintento solicitado',
-}
 export function notificationText(event: MailActivity): string {
   const review = Number(event.data.review_count ?? 0), failed = Number(event.data.failed_count ?? 0)
   if (event.kind === 'completed' && event.data.state === 'ignored') return 'Correo recibido · Sin PDF adjunto'

@@ -20,7 +20,6 @@ import { MetricCells, PlaneDashboards } from '../components/process/PlaneDashboa
 import { PublishDraft } from '../components/process/PublishDraft'
 import { ReprocessAfterPublish } from '../components/process/ReprocessAfterPublish'
 import { ExportButton } from '../components/process/ExportButton'
-import { MailSummary } from '../components/process/MailStatus'
 import { ProcessAbout } from '../components/process/ProcessAbout'
 import {
   revokePreview,
@@ -317,8 +316,6 @@ export function Process() {
             description={process.data?.description ?? ''}
           />
         </header>
-
-        <MailSummary processId={processId} />
 
         <Alerts
           processId={processId}

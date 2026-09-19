@@ -3,7 +3,6 @@ import { paths } from './paths'
 export const PROCESS_TABS = [
   { id: 'panel', label: 'Panel', path: paths.panel },
   { id: 'definition', label: 'Definición', path: paths.processChat },
-  { id: 'reception', label: 'Recepción', path: paths.reception },
   { id: 'runs', label: 'Ejecuciones', path: paths.instances },
   { id: 'review', label: 'Revisión', path: paths.review },
   { id: 'settings', label: 'Ajustes', path: paths.processSettings },
@@ -22,7 +21,6 @@ export function processTabFromPath(pathname: string, processId: number): Process
   ) {
     return 'definition'
   }
-  if (pathname.startsWith(`${base}/reception`)) return 'reception'
   if (pathname.startsWith(`${base}/instances`)) return 'runs'
   if (pathname.startsWith(`${base}/review`)) return 'review'
   if (pathname.startsWith(`${base}/settings`)) return 'settings'
