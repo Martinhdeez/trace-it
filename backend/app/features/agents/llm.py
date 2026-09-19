@@ -5,6 +5,7 @@ turns every failure into one error the API answers with. Tests swap the model wi
 `agent.override(model=FunctionModel(...))` or by monkeypatching `model_for`: no network.
 """
 
+import os
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -13,6 +14,8 @@ from pydantic_ai import Agent, AgentRunError
 from pydantic_ai.exceptions import FallbackExceptionGroup
 from pydantic_ai.messages import RetryPromptPart
 from pydantic_ai.models import Model
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
 from app.common.exceptions import TraceError
 from app.core.config import settings
@@ -54,6 +57,17 @@ def model_for(role: str) -> Model | str:
     return getattr(settings, f"{role}_model")
 
 
+def resolve(model: Model | str) -> Model | str:
+    """`helmcode:<model>` runs on Helmcode's OpenAI-compatible API (EU inference, key in
+    `HELMCODE_API_KEY`); any other `provider:model` string goes to PydanticAI as is."""
+    if isinstance(model, str) and model.startswith("helmcode:"):
+        provider = OpenAIProvider(
+            base_url=settings.helmcode_base_url, api_key=os.environ.get("HELMCODE_API_KEY")
+        )
+        return OpenAIChatModel(model.removeprefix("helmcode:"), provider=provider)
+    return model
+
+
 def _cost(usage: Any) -> float | None:
     try:
         cost = usage.cost()
@@ -64,7 +78,7 @@ def _cost(usage: Any) -> float | None:
 
 async def run(agent: Agent, role: str, prompt: str, *, deps: Any = None) -> tuple[Any, Trace]:
     """One agent run for `role`. Returns the validated output and its trace."""
-    model = model_for(role)
+    model = resolve(model_for(role))
     start = time.perf_counter()
     try:
         result = await agent.run(prompt, model=model, deps=deps)

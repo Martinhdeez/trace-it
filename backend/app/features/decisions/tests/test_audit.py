@@ -4,11 +4,13 @@ Same setup as `test_api.py`: instances, sources and compiled rules inserted dire
 sandbox faked.
 """
 
+from collections.abc import Callable
+
 import pytest
 from httpx import AsyncClient
 
 from app.core.database import session_factory
-from app.features.agents import sandbox
+from app.features.agents import compiler, sandbox
 from app.features.decisions.tests.test_api import RULES_V3, assert_flat, client, create_process
 from app.features.rules.model import Rule
 from tests.support.fakes import dataset_runner
@@ -165,3 +167,62 @@ async def test_impact_gives_rule_code_flat_values(monkeypatch: pytest.MonkeyPatc
         monkeypatch.setattr(sandbox, "run_dataset", dataset_runner(RULES, seen))
         assert (await api.get(f"/rules/{rule_id}/impact")).status_code == 200
     assert_flat(seen[0])
+
+
+QUIET_RULE = "never_fires"
+QUIET = {**RULES, QUIET_RULE: lambda i, s, o: False}
+
+
+def compiled(code: str | None, valid: bool = True) -> Callable:
+    """`compiler.compile_rule` answering with `code`, as if the loop had ended so."""
+
+    async def compile_rule(session, rule, symbols):
+        return compiler.Compilation(code, [], {"valid": valid and code is not None})
+
+    return compile_rule
+
+
+async def compile_draft(
+    api: AsyncClient, monkeypatch: pytest.MonkeyPatch, code: str | None
+) -> dict:
+    process_id, _ = await prepare(api)
+    rule_id = await create_draft(process_id)
+    monkeypatch.setattr(compiler, "compile_rule", compiled(code))
+    r = await api.post(f"/rules/{rule_id}/compile")
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+async def test_a_valid_rule_that_changes_nothing_activates_itself(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sandbox, "run_dataset", dataset_runner(QUIET))
+    async with client() as api:
+        rule = await compile_draft(api, monkeypatch, QUIET_RULE)
+    assert rule["status"] == "active"
+    assert rule["report"]["activation"] == {
+        "auto": True,
+        "why": "changes 0/3 past decisions (limit 5%)",
+        "changed": 0,
+        "decided": 3,
+    }
+
+
+async def test_a_rule_that_changes_too_much_waits_for_a_person(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with client() as api:
+        rule = await compile_draft(api, monkeypatch, NEW_RULE)
+    assert rule["status"] == "draft"
+    assert rule["report"]["valid"] is True
+    assert rule["report"]["activation"]["auto"] is False
+    assert rule["report"]["activation"]["changed"] == 2
+
+
+async def test_a_rule_that_needs_data_stays_a_draft_without_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with client() as api:
+        rule = await compile_draft(api, monkeypatch, None)
+    assert rule["status"] == "draft" and rule["code"] is None and rule["hash"] is None
+    assert rule["report"]["activation"] == {"auto": False, "why": "not valid"}

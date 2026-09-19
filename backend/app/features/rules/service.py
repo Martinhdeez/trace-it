@@ -1,10 +1,12 @@
 import hashlib
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError, NotFoundError
+from app.core.config import settings
 from app.features.agents import compiler
 from app.features.decisions import audit
 from app.features.processes.model import DecisionType, Symbol
@@ -61,10 +63,39 @@ async def compile_rule(session: AsyncSession, rule_id: int) -> RuleDetail:
         await session.scalars(select(Symbol).where(Symbol.process_id == rule.process_id))
     )
     result = await compiler.compile_rule(session, rule, symbols)
-    rule.code, rule.tests, rule.report = result.code, result.tests, result.report
-    rule.hash = rule_hash(rule.text, rule.code)
+    rule.code, rule.tests = result.code, result.tests
+    rule.hash = rule_hash(rule.text, rule.code) if rule.code else None
+    rule.report = {**result.report, "activation": await _auto_activation(session, rule, result)}
     await session.commit()
+    if rule.report["activation"]["auto"]:
+        return await activate(session, rule.id)
     return _detail(rule)
+
+
+async def _auto_activation(
+    session: AsyncSession, rule: Rule, result: compiler.Compilation
+) -> dict[str, Any]:
+    """Whether a freshly compiled rule may enter the process without a person: its code
+    passed the tester's tests, it contradicts no decision a person took and it changes at
+    most `auto_activate_max_change` of the decisions already taken (ADR 0004)."""
+    if not result.report["valid"]:
+        return {"auto": False, "why": "not valid"}
+    impact = await audit.check(session, rule.process_id, await audit.proposal_with(session, rule))
+    changed = len(impact.changes) + len(impact.conflicts)
+    total = impact.unchanged + changed
+    share = changed / total if total else 0.0
+    limit = settings.auto_activate_max_change
+    why = (
+        f"{len(impact.conflicts)} decisions taken by a person would change"
+        if impact.conflicts
+        else f"changes {changed}/{total} past decisions (limit {limit:.0%})"
+    )
+    return {
+        "auto": not impact.conflicts and share <= limit,
+        "why": why,
+        "changed": changed,
+        "decided": total,
+    }
 
 
 async def _apply(session: AsyncSession, rule: Rule, proposed: list[Rule]) -> None:

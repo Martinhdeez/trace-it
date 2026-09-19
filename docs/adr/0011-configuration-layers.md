@@ -11,7 +11,7 @@ LLM result must say exactly which configuration and prompt produced it, so confi
 can be compared with data. A fresh machine must reproduce a known setup with one command.
 API keys and ERP credentials must never reach git or the database.
 
-Today the model per role is a setting (`TRACE_COMPILER_A_MODEL`, ..., ADR 0006) read at
+Today the model per role is a setting (`TRACE_COMPILER_MODEL`, ..., ADR 0006) read at
 start, and the prompts are Python constants (`SYSTEM`) in each agent module. Good enough
 for the hackathon; this ADR is what replaces it when tuning at runtime matters.
 
@@ -37,7 +37,7 @@ Three layers:
 | Runtime | PostgreSQL | agent config versions, rules, decisions, traces | the app, while it runs |
 | Secrets | `.env` (never committed) | API keys, ERP credentials | each deployment |
 
-- **Agent configuration** (`agent_config` table): per role (`compiler_a`, `compiler_b`,
+- **Agent configuration** (`agent_config` table): per role (`compiler`, `tester`,
   `extractor_1`, `extractor_2`, `assistant`, later `corrector`), append-only versions with
   model chain, settings, retries, request limit, prompt file, optional prompt override,
   author and note. At most one active version per role (partial unique index). Editing
