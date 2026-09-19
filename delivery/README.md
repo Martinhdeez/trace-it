@@ -117,7 +117,8 @@ account, and belongs in the escalation queue rather than in a refusal.
 
 ## Still open
 
-- `outcomes_lote2.jsonl` — batch 2 arrives Saturday 18:00. Follow `docs/runbook-batch2.md`.
+- `outcomes_lote2.jsonl` — the generated 40-invoice candidate is checked in at
+  20 PAGAR / 4 NO_PAGAR / 16 ESCALAR. Review the 16 escalations before submission.
 - `albertitos_plan.pdf` — the copy in the delivery repository still quotes
   `PAGAR 433 / NO_PAGAR 36 / ESCALAR 31` and says the scans escalate with `MISSING_DATA`.
   That is no longer what we ship. It needs one pass before Sunday; the jury may ask about
