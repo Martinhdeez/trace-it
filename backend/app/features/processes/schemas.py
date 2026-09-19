@@ -1,4 +1,17 @@
+from typing import Annotated, Literal
+
 from pydantic import BaseModel, Field
+
+from app.features.processes.execution import ExecutionSettings
+
+
+class SymbolExtraction(BaseModel):
+    """Optional hints for finding a process symbol in an input document."""
+
+    labels: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(
+        default_factory=list, max_length=12
+    )
+    source: Literal["document", "filename", "text", "none"] = "document"
 
 
 class SymbolIO(BaseModel):
@@ -6,6 +19,7 @@ class SymbolIO(BaseModel):
     type: str = Field(examples=["text", "number", "date"])
     description: str = ""
     required: bool = False  # missing, None or blank -> the instance escalates (ADR 0016)
+    extraction: SymbolExtraction | None = None
 
 
 class DecisionTypeIO(BaseModel):
@@ -28,6 +42,7 @@ class ProcessIn(BaseModel):
     # the pack, loaded first). Without it the process gets a use case of its own, with the
     # same name and this `description`.
     use_case: str | None = None
+    execution: ExecutionSettings | None = None
     description: str | None = None
     decision_types: list[DecisionTypeIO]
     symbols: list[SymbolIO] = []

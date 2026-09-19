@@ -19,12 +19,12 @@ PROMPT = (
 GENERATION = {"temperature": 0, "maxOutputTokens": 4096}
 
 
-def request_body(images: list[bytes]) -> dict:
+def request_body(images: list[bytes], prompt: str = PROMPT) -> dict:
     return {
         "contents": [
             {
                 "role": "user",
-                "parts": [{"text": PROMPT}]
+                "parts": [{"text": prompt}]
                 + [
                     {
                         "inlineData": {
@@ -36,7 +36,7 @@ def request_body(images: list[bytes]) -> dict:
                 ],
             }
         ],
-        "generationConfig": GENERATION,
+        "generationConfig": dict(GENERATION),
     }
 
 
@@ -47,15 +47,20 @@ def generate(
     images: list[bytes],
     *,
     before_request=None,
+    prompt: str = PROMPT,
+    max_tokens: int | None = None,
 ) -> dict:
     if not re.fullmatch(r"gemini-[a-zA-Z0-9._-]+", model):
         raise ValueError("Expected a Gemini model identifier, without a URL or models/ prefix")
     if before_request is not None:
         before_request()
+    body = request_body(images, prompt)
+    if max_tokens is not None:
+        body["generationConfig"]["maxOutputTokens"] = max_tokens
     response = client.post(
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
         headers={"x-goog-api-key": key},
-        json=request_body(images),
+        json=body,
     )
     record_response("gemini", response.status_code)
     if not response.is_success:

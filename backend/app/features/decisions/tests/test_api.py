@@ -209,12 +209,16 @@ async def test_run_resolve_and_export(fake_sandbox: None) -> None:
 
         r = await api.get(f"/processes/{process_id}/export")
         assert r.status_code == 200, r.text
-        assert [json.loads(line) for line in r.text.splitlines()] == [
+        lines = [json.loads(line) for line in r.text.splitlines()]
+        assert [{k: v for k, v in line.items() if k != "reason"} for line in lines] == [
             {"file_id": "factura_1217.pdf", "result": "PAGAR"},
             {"file_id": "FA-1016_papelería.pdf", "result": "NO_PAGAR"},
             {"file_id": "FA-5044_mensajería2.pdf", "result": "ESCALAR"},
             {"file_id": "FA-9999_sin_leer.pdf", "result": "NO_PAGAR"},
         ]
+        # Every line carries the engine's own reason code; a clean case says so explicitly.
+        assert all(line["reason"] for line in lines)
+        assert [line["reason"] for line in lines][0] == "NO_FINDING"
         # The file_id must survive byte for byte, accents included.
         assert "papeler\\u00eda" not in r.text
         assert "X-Duplicate-Names" not in r.headers
@@ -269,9 +273,11 @@ async def test_export_a_duplicate_name_gives_a_single_line(fake_sandbox: None) -
         assert r.status_code == 200, r.text
         output = [json.loads(line) for line in r.text.splitlines()]
         assert len(output) == 4
-        assert [s for s in output if s["file_id"] == "factura_1217.pdf"] == [
-            {"file_id": "factura_1217.pdf", "result": "NO_PAGAR"}
-        ]
+        assert [
+            {k: v for k, v in s.items() if k != "reason"}
+            for s in output
+            if s["file_id"] == "factura_1217.pdf"
+        ] == [{"file_id": "factura_1217.pdf", "result": "NO_PAGAR"}]
         assert json.loads(r.headers["X-Duplicate-Names"]) == ["factura_1217.pdf"]
 
 

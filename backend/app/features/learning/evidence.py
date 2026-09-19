@@ -55,6 +55,7 @@ async def capture(session: AsyncSession, process_id: int) -> dict:
     setups = version_config.setups(version.snapshot)
     return {
         "version_id": version.id,
+        "execution": version.snapshot.get("execution", {}),
         "process": process.model_dump(mode="json"),
         "files": {
             key: {"text": (text or "")[:12000], "truncated": bool(text and len(text) > 12000)}

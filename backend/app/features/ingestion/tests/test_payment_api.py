@@ -167,10 +167,14 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
     assert run.json() == {"decided": 1, "by_decision": {"PAGAR": 1}}, run.text
     assert (await client.post(f"/processes/{process_id}/run")).json()["decided"] == 0
     export = await client.get(f"/processes/{process_id}/export")
-    assert json.loads(export.text) == {"file_id": "invoice.pdf", "result": "PAGAR"}
+    assert json.loads(export.text) == {
+        "file_id": "invoice.pdf",
+        "result": "PAGAR",
+        "reason": "NO_FINDING",
+    }
     detail = (await client.get(f"/instances/{instance_id}")).json()
     assert len(detail["decisions"]) == 1
-    assert len(detail["decisions"][0]["results"]) == 16
+    assert len(detail["decisions"][0]["results"]) == 17
     summary = (await client.get(f"/processes/{process_id}/summary")).json()
     assert summary["instances"] == 1 and summary["by_decision"] == {"PAGAR": 1}
     assert (await client.post(f"/instances/{instance_id}/extract", json={})).status_code == 409
@@ -342,10 +346,28 @@ async def test_same_source_rows_reuse_evidence_but_changed_schema_refreshes(paym
         await rows.publish_fixture(session, process_id)
     generic = await client.post(f"/instances/{first['instance_id']}/extract", json={})
     assert generic.status_code == 200, generic.text
-    assert generic.json()["symbols"] is None
+    generic_data = generic.json()
+    plan = (await client.get(f"/processes/{process_id}/extraction-plan")).json()
+    symbols = generic_data["symbols"]
+    assert set(symbols) == {field["name"] for field in plan["fields"]}
+    assert "iban" not in symbols
+    assert all(
+        symbol["origin"] == f"document:{generic_data['extraction']['id']}"
+        for symbol in symbols.values()
+    )
+    assert (
+        generic_data["extraction"]["data"]["extraction_plan"]["fingerprint"] == plan["fingerprint"]
+    )
     async with session_factory() as session:
         instance = await session.get(Instance, first["instance_id"])
-        assert instance.symbols is None
+        assert instance.symbols == symbols
+        latest = await session.scalar(
+            select(Event)
+            .where(Event.instance_id == instance.id, Event.step == "extract_document")
+            .order_by(Event.id.desc())
+            .limit(1)
+        )
+        assert latest.data["adapter"] == "schema"
 
 
 async def test_concurrent_runs_do_not_duplicate_decisions(payment_api):

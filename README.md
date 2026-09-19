@@ -18,7 +18,7 @@ make demo                              # 500 invoices -> output/outcomes.jsonl
 make trace-decision FILE=scan_002.pdf  # follow one decision: evidence, versions, latency
 ```
 
-**Why it is built this way**: [architecture decisions](docs/adr/README.md). **Demo script
+**Why it is built this way**: [five key decisions](docs/key-decisions.md), one page with a diagram each. **Demo script
 for the jury**: [docs/defense.md](docs/defense.md).
 
 ## How it works
@@ -84,7 +84,7 @@ hand-written rules run without agent keys. See `.env.example` and the setup guid
 
 - [Team guide](docs/team-guide.md): git flow, layout, running and testing
 - [Conventions](docs/CONVENTIONS.md): language, naming, contracts
-- [Architecture decisions](docs/adr/README.md): what we chose and what we gave up
+- [Key decisions](docs/key-decisions.md): the five choices that shape trace-it, and what we gave up
 - [Process packs](processes/README.md), [invoice rules](docs/invoice-payment-rules.md),
   [ERP connector](docs/sources-http.md), [ingestion](docs/ingestion/README.md),
   [frontend](frontend/README.md)

@@ -54,6 +54,11 @@ frontend, and a second answer to "what does this case need from me".
   malformed; ADR 0004, 0020) is `blocked` too, with no code and `report.error`: it
   escalates every instance with `RULE_COMPILE_FAILED <id>: <error>` until it compiles.
   A rule that cannot be applied escalates; the older rules never decide without it.
+  **Superseded by ADR 0022 (atomic publication):** a failed compile now leaves a `draft` that
+  cannot be published; the published version keeps deciding with its complete rule set.
+- A rule that reads a live source whose pre-run sync failed does not run on an older
+  snapshot: unless the rules that ran already decide the case, it escalates with the reason
+  `SOURCE_UNAVAILABLE: <source>` (added by ADR 0028, which sets the precedence).
 - Instance states are `PENDING` (no symbols yet, or not run) and `DECIDED`. There is no
   `REVIEW`, no `review_reason`, no `human_kind`.
 - The exported decision is the engine's latest decision for the instance (ADR 0009 kept
@@ -95,4 +100,4 @@ frontend, and a second answer to "what does this case need from me".
   left without a result, identical to the golden reference on all 471 text PDFs.
 
 ## Related
-ADR 0001, 0002, 0004, 0008, 0009 (superseded), 0014, 0015.
+ADR 0001, 0002, 0004, 0008, 0009 (superseded), 0014, 0015, 0028 (`SOURCE_UNAVAILABLE`).

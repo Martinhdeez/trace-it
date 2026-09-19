@@ -4,6 +4,11 @@
 prerequisites, the two pinned OCR readers, API keys, Docker/standalone startup,
 scan checks and the full production API flow on Windows or Linux/macOS.
 
+Choose [local, API or hybrid execution](providers-and-modes.md), configure Helmcode
+fallbacks, and inspect usage/cost/latency through the same operator guide. The
+[500-document benchmark](benchmark-2026-09-19.md) records measured baseline quality
+and timings separately from the later Helmcode probe.
+
 The API returns as many field readings as it can from PDF and XLSX. Missing or conflicting
 fields retain available text and alternatives, without document review states.
 NIF, IBAN and purchase order separate verified transcriptions from proposals;
@@ -48,13 +53,22 @@ formulas or converts an unavailable formula result into zero.
 
 | Variable | Default or purpose |
 |---|---|
+| `TRACEPAY_OCR_MODE` | `hybrid`; choose `local` or `api` explicitly |
+| `TRACEPAY_VISION_PROVIDERS` | `compatible,gemini,helmcode`; configured entries only |
+| `TRACEPAY_TEXT_PROVIDERS` | `jev,helmcode`; candidate recommendations only |
+| `HELMCODE_API_KEY` | Optional OCR fallback and separately configured rule agents |
+| `TRACEPAY_HELMCODE_VISION_MODELS` | `qwen3.6,gemma4`; distinct visual readers |
+| `TRACEPAY_HELMCODE_TEXT_MODEL` | `qwen3.6` |
+| `TRACEPAY_PROVIDER_TIMEOUT_S` | 60 seconds per attempted provider request |
+| `TRACEPAY_HELMCODE_BILLING_MODE` | `unknown`; select `included` or `metered` with verified account terms |
 | `TRACEPAY_DATA_DIR` | `.data`: objects, SQLite results/jobs and journals |
 | `TRACEPAY_MODEL_DIR` | `.models`: pinned ONNX weights |
 | `TRACEPAY_WORKERS` | 2, bounded to 1–8 |
 | `TRACEPAY_OCR_THREADS` | 4, bounded to 1–16 |
 | `TRACEPAY_OCR_CUDA` | 0; GPU needs a compatible ONNX runtime |
+| `TRACEPAY_OCR_FORCE_RECOMPUTE` | 0; 1 ignores extraction/OCR caches and the provider journal (spans say `outcome=forced`) |
 | `TRACEPAY_VLM_URL`, `TRACEPAY_VLM_MODEL`, `TRACEPAY_VLM_API_KEY` | Compatible visual server |
-| `GEMINI_API_KEY` | Gemini when no compatible server is configured |
+| `GEMINI_API_KEY` | Gemini in the configured visual chain |
 | `TRACEPAY_GEMINI_MODEL` | `gemini-3.1-flash-lite` |
 | `TYPESAFE_API_KEY` | Jev textual selection |
 | `TRACEPAY_JEV_MODEL` | `jev-1.13.0` |
@@ -78,11 +92,11 @@ delivery is uncertain; inspect them before a deliberate retry. Journals contain 
 data and stay outside Git.
 
 The implemented evidence and provider-tracing contract is recorded in
-[ADR 0022](../adr/0022-ocr-evidence-and-provider-tracing.md). Follow the
+[ADR 0022](../adr/detail/0022-ocr-evidence-and-provider-tracing.md). Follow the
 [trace API guide](api.md#tracing-readers-and-provider-usage) to inspect a document's
 model calls and distinguish network usage from saved responses. The
 [fal.ai review](fal-fallback.md) evaluates possible additional visual readers;
-[ADR 0023](../adr/0023-fal-visual-fallback-evaluation.md) records that proposed extension.
+[ADR 0023](../adr/detail/0023-fal-visual-fallback-evaluation.md) records that proposed extension.
 
 See [API](api.md), [committee](committee.md), [integration](architecture.md),
 [audit](corpus-audit.md) and [validation](extraction-validation.md).

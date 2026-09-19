@@ -15,6 +15,8 @@ Logs en vivo: `tail -f demo-logs/api.log`
 ```sh
 # API :8010
 cd backend && (set -a; . ../.env; set +a; TRACE_DATABASE_URL=postgresql+psycopg://trace:trace@localhost:5432/trace_demo PYDANTIC_AI_NO_BANNER=1 nohup uv run uvicorn app.main:app --port 8010 > ../demo-logs/api.log 2>&1 &); cd ..
+# Forzar relectura de todos los PDFs y llamadas reales a Gemini/Jev (ignora cachés y journal):
+# añade TRACEPAY_OCR_FORCE_RECOMPUTE=1 antes de TRACE_DATABASE_URL en la línea anterior
 # Dashboard :8020
 sh demo-logs/dashboard/run.sh
 # ERP :8009 (si no responde)

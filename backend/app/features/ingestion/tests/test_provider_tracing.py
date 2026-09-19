@@ -1,10 +1,13 @@
+import hashlib
 import json
 from dataclasses import replace
+from types import SimpleNamespace
 
 import httpx
 import pytest
 
 from app.core import events
+from app.features.ingestion.ocr import errors
 from app.features.ingestion.ocr.errors import ProviderUnavailable
 from app.features.ingestion.ocr.journal import recorded_call
 from app.features.ingestion.ocr.judge import TextJudge
@@ -52,8 +55,9 @@ def test_gemini_provider_spans_distinguish_network_and_replay(settings, monkeypa
     assert [row["data"]["network_attempted"] for row in provider] == [True, False]
     assert [row["data"]["network_succeeded"] for row in provider] == [True, False]
     assert [row["data"]["journal_hit"] for row in provider] == [False, True]
-    assert all(row["data"]["input_tokens"] == 12 for row in provider)
-    assert all(row["data"]["output_tokens"] == 4 for row in provider)
+    assert provider[0]["data"]["input_tokens"] == 12
+    assert provider[0]["data"]["output_tokens"] == 4
+    assert "input_tokens" not in provider[1]["data"]
     assert all(row["parent_id"] == rows[-1]["span_id"] for row in provider)
     trace = json.dumps(rows, default=str)
     assert "secret-key" not in trace
@@ -85,6 +89,26 @@ def test_provider_failure_and_uncertain_replay_have_sanitized_spans(tmp_path, mo
     assert "secret-key" not in trace
     assert "private invoice content" not in trace
     assert "private response" not in trace
+
+
+def test_forced_call_ignores_started_journal_record(tmp_path, monkeypatch):
+    rows = []
+    monkeypatch.setattr(events, "_write", rows.extend)
+    identity = {"request": 1}
+    fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    (tmp_path / f"{fingerprint}.json").write_text(json.dumps({"state": "started"}))
+
+    def call(mark_network_attempt):
+        mark_network_attempt()
+        return {"fresh": True}
+
+    result = recorded_call(tmp_path, identity, call, provider="gemini", force=True)
+
+    assert result == {"fresh": True}
+    assert rows[0]["data"]["outcome"] == "forced"
+    assert rows[0]["data"]["request_fingerprint"] == fingerprint
+    record = json.loads((tmp_path / f"{fingerprint}.json").read_text())
+    assert record["state"] == "complete"
 
 
 def test_generic_vision_and_text_judge_calls_are_traced(settings, monkeypatch):
@@ -202,6 +226,9 @@ def test_rejected_200_response_keeps_billed_usage(
     journal = settings.data_dir / "provider-journal" / provider
     [record] = journal.glob("*.json")
     assert json.loads(record.read_text())["state"] == "uncertain_or_failed"
+    telemetry = json.loads(record.read_text())["telemetry"]
+    assert telemetry["http_status_code"] == 200
+    assert (telemetry["input_tokens"], telemetry["output_tokens"]) == expected
 
 
 def test_provider_http_failure_records_status_without_response_body(settings, monkeypatch):
@@ -226,4 +253,43 @@ def test_provider_http_failure_records_status_without_response_body(settings, mo
     assert call["data"]["http_status_code"] == 429
     assert call["data"]["network_attempted"] is True
     assert "input_tokens" not in call["data"]
+    assert call["data"]["cost_status"] == "unknown"
     assert "private response body" not in json.dumps(rows, default=str)
+
+
+def test_a_refused_call_is_retried_once_the_provider_is_back(settings, monkeypatch):
+    """A definite refusal can be retried after cooldown; uncertain delivery cannot."""
+    rows, answers = [], [httpx.Response(429, text="slow down")]
+    clock = [100.0]
+    monkeypatch.setattr(errors, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(errors, "_cooldown_until", {})
+    monkeypatch.setattr(events, "_write", rows.extend)
+    ok = {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": "TOTAL 1"}]}}]}
+    original_client = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: original_client(
+            transport=httpx.MockTransport(
+                lambda request: answers.pop() if answers else httpx.Response(200, json=ok)
+            ),
+            **kwargs,
+        ),
+    )
+    model = VisionFallback(replace(settings, gemini_api_key="secret-key"))
+    with pytest.raises(ProviderUnavailable):
+        model.transcribe(b"image", 1, (595, 842))
+    [record] = (settings.data_dir / "provider-journal" / "gemini").glob("*.json")
+    assert json.loads(record.read_text())["state"] == "refused"
+
+    with pytest.raises(ProviderUnavailable):
+        model.transcribe(b"image", 1, (595, 842))
+    assert len(rows) == 1  # Cooldown omits the network call and provider span.
+    clock[0] = 116.0
+    assert model.transcribe(b"image", 1, (595, 842))[0].text == "TOTAL 1"
+    calls = [row["data"] for row in rows if row["step"] == "provider_call"]
+    assert [(c["outcome"], c["network_attempted"]) for c in calls] == [
+        ("error", True),
+        ("success", True),
+    ]
+    assert json.loads(record.read_text())["state"] == "complete"

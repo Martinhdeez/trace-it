@@ -5,6 +5,14 @@ grows. Every figure says whether it was **measured** (with the command or log be
 **estimated** (with its arithmetic). Measurements are from 2026-09-19. Raw outputs:
 `demo-logs/scale/`. The decision behind the deployment and scaling plan: ADR 0020.
 
+For a separate Windows run with the full Gemini/Jev OCR committee, see the
+[500-document benchmark](ingestion/benchmark-2026-09-19.md): 19 min 11.7 s end to end,
+73 real provider requests and USD 0.02768012 of attributable token cost, plus one
+failed request with unknown usage. Its CPU, reader configuration and commit differ
+from the measurements below; do not combine their throughput or memory figures.
+Current [OCR modes and billing configuration](ingestion/providers-and-modes.md)
+explain local/API/hybrid operation and Helmcode's account-dependent costs.
+
 **Headline.**
 - Deciding costs **0 tokens** and no LLM runs per invoice (ADR 0002). Tokens are spent when a
   norm changes (**~150k tokens per 6-sentence norm, ~12.4k per rule**) and, optionally, when a
@@ -206,6 +214,10 @@ engine runs only `active` and `blocked` rules, so the older rule set decides and
 the new check would have stopped can be paid. ADR 0020 fixes it by treating such a check like
 a `blocked` rule (every instance escalates with the error) until it compiles, which is what
 ADR 0016 promises for a rule that cannot be evaluated.
+
+**Superseded by ADR 0022 (atomic publication):** step 3 and this gap no longer apply. A rule
+whose compile fails stays a `draft` that cannot be published, so the published version keeps
+deciding with its complete rule set; there is no `blocked` / `RULE_COMPILE_FAILED` for it.
 
 ### Budget per day, and running out
 

@@ -62,12 +62,12 @@ def reader_usage():
         _usage.reset(token)
 
 
-def cached_read(directory, identity, read, validate=lambda value: value):
+def cached_read(directory, identity, read, validate=lambda value: value, force=False):
     """Serialize identical local work across processes; never cache failed reads."""
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / (fingerprint(identity) + ".json")
     with FileLock(str(path) + ".lock", timeout=300):
-        if path.exists():
+        if path.exists() and not force:
             try:
                 record = json.loads(path.read_text(encoding="utf-8"))
                 if (

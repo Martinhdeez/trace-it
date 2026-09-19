@@ -134,7 +134,7 @@ async def test_provider_metrics_separate_network_usage_from_journal_replay() -> 
         assert response.status_code == 200, response.text
         metrics = response.json()
         assert metrics["llm"] == []
-        assert metrics["providers"] == [
+        expected = [
             {
                 "provider": "gemini",
                 "model": "gemini-test",
@@ -158,3 +158,6 @@ async def test_provider_metrics_separate_network_usage_from_journal_replay() -> 
                 "output_tokens": 1,
             },
         ]
+        assert [{key: row[key] for key in expected[0]} for row in metrics["providers"]] == expected
+        assert metrics["providers"][0]["blocked"] == 1
+        assert metrics["providers"][0]["unpriced_requests"] == 1

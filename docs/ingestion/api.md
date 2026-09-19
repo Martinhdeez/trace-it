@@ -9,7 +9,11 @@ Ingestion uses the existing `X-User-Id` header obtained through `POST /login`.
 
 ## Extraction
 
-`POST /v1/extractions`: multipart `file`, optional `ocr=true`, `vlm`, `jev` and
+`GET /v1/ocr/config` returns the default mode and configured provider/model chains
+without credentials. See [execution modes and provider billing](providers-and-modes.md).
+
+`POST /v1/extractions`: multipart `file`, optional `mode` (`local`, `api`, `hybrid`),
+`ocr=true`, `vlm`, `jev` and
 repeated `verify_fields` (`supplier_tax_id`, `payment_iban`, `purchase_order_ref`).
 The last option requests a bounded blind rereading; it never accepts expected values.
 No business fields are required as input.
@@ -28,7 +32,9 @@ Invoice fields expose `value`, `proposed_value`, `proposed_by`, `verification`,
 clear native evidence or reader corroboration for `value`; an unresolved conflict
 returns `value=null` and preserves `proposed_value` and candidates. Jev can propose
 an existing reading but cannot verify these identifiers. `selected_by=null` when
-no value is accepted. The other fields retain the best-reading v2.0 policy.
+no value is accepted. In local/hybrid modes, the other fields retain the
+best-reading v2.0 policy. API mode requires native evidence or independent visual
+corroboration for every accepted field; a lone visual proposal remains unconfirmed.
 Verification concerns transcription, not business validity: a clearly printed IBAN
 that differs from the master remains a document observation for the rules to reject.
 Raw text remains available when normalization fails. No reading means `null`, not an error.
@@ -56,8 +62,13 @@ The 201 response includes `instance_id`, `process_id`, `name`, `file_hash`,
 Original bytes/text are stored in PostgreSQL. New instances are `PENDING`. Processes
 declaring the invoice-payment symbols (`issuer_nif`, `iban`, `purchase_order`, `date`,
 `base`, `vat_rate`, `vat_amount`, `total`) automatically receive document-derived symbols
-in the current dev format: `{name: {value, origin}}`. Other processes keep `symbols=null`;
-their business vocabulary is not guessed. Missing readings never create a REVIEW state.
+in the current dev format: `{name: {value, origin}}`. Other processes extract their
+published declared fields through the schema adapter; invoice processes can add
+fields while preserving the default invoice parser. Missing readings never create
+a REVIEW state. Publishing field/rule changes updates the extraction contract on
+the next request; drafts do not affect an active version. Before the first
+publication, the adapter can read the initial process definition. Environment
+settings require a restart. See [process fields](../../processes/README.md).
 Re-uploading the same process,
 filename and content preserves the instance and any existing downstream decisions.
 Pending duplicates check extraction, source and symbol-schema freshness before reusing
@@ -118,7 +129,7 @@ No `tools/` module or evaluation script participates in this application flow.
 
 ## Tracing readers and provider usage
 
-The contract is recorded in [ADR 0022](../adr/0022-ocr-evidence-and-provider-tracing.md).
+The contract is recorded in [ADR 0022](../adr/detail/0022-ocr-evidence-and-provider-tracing.md).
 Use `GET /instances/{id}/trace` for the document journey. An upload requiring extraction contains
 `extraction` and its `native_text`, `ocr`, `vision`, `text_judge` and `focused_read`
 children as applicable. Remote readers add a `provider_call` child with provider,
@@ -128,7 +139,8 @@ The parent identifies the page and, for a crop, the field and reader.
 `GET /traces?process_id=7&name=provider_call` lists these operations. A complete
 journal replay has `journal_hit=true`, `outcome=replay` and
 `network_attempted=false`; an uncertain prior delivery has
-`outcome=blocked_uncertain` and is not automatically resubmitted. Errors retain
+`outcome=blocked_uncertain` and is not automatically resubmitted. A definite HTTP
+refusal (4xx, 503) is journaled `refused` and the next call sends it again. Errors retain
 their exception class and a safe description without provider bodies or secrets.
 `GET /traces/{trace_id}` reconstructs the hierarchy.
 

@@ -12,6 +12,7 @@ from app.common.normalization import fold
 from app.core import events
 from app.features.ingestion.ocr.bands import flatten_periodic_bands
 
+from .committee import independent_reader
 from .invoice import parse_invoice
 from .native import PDF_LOCK
 from .uncertainty import LABELS
@@ -107,6 +108,82 @@ def verify_identifiers(
     content, fields, readers, pages, settings, ocr, vlm, options, vision_enabled, metrics
 ):
     reports = {}
+    if not options.focused_verification:
+        return reports
+    if options.mode == "api":
+        if not vision_enabled:
+            return reports
+        sizes = {page["number"]: page["size"] for page in pages}
+        for name in sorted(CRITICAL_FIELDS):
+            field = fields[name]
+            forced = name in options.verify_fields
+            if not forced and field.value is not None:
+                continue
+            region = region_for(name, field, readers, sizes)
+            if region is None:
+                continue
+            page, box = region
+            report = {
+                "page": page,
+                "bbox": list(box),
+                "forced": forced,
+                "readers": {},
+                "errors": [],
+                "value": None,
+                "reason": "insufficient_independent_support",
+            }
+            try:
+                png = render_region(content, page, box, settings, dpi=150)
+                generated_readers = vlm.transcribe_readers(
+                    png, page, (box[2] - box[0], box[3] - box[1])
+                )
+                metrics["vlm_calls"] += len(generated_readers)
+                metrics["focused_calls"] = metrics.get("focused_calls", 0) + len(generated_readers)
+                for reader, generated in generated_readers.items():
+                    located = [
+                        line.model_copy(
+                            update={"id": f"{reader}:focus:{name}:" + line.id, "bbox": list(box)}
+                        )
+                        for line in generated
+                    ]
+                    parsed = parse_invoice(located, settings.ocr_min_confidence)[0][name]
+                    field.candidates.extend(parsed.candidates)
+                    valid = {
+                        c.value for c in parsed.candidates if c.value is not None and not c.error
+                    }
+                    report["readers"][reader] = {
+                        "value": next(iter(valid))
+                        if len(valid) == 1 and not any(c.error for c in parsed.candidates)
+                        else None,
+                        "candidates": [c.model_dump() for c in parsed.candidates],
+                    }
+                votes = {}
+                for candidate in field.candidates:
+                    if (
+                        candidate.evidence.method != "vlm"
+                        or candidate.value is None
+                        or candidate.error
+                    ):
+                        continue
+                    parts = candidate.evidence.locator.split(":", 3)
+                    if len(parts) >= 4 and parts[0] == "visual":
+                        votes.setdefault(candidate.value, set()).add(
+                            independent_reader(":".join(parts[:3]))
+                        )
+                original_values = {
+                    c.value for c in field.candidates if c.value is not None and not c.error
+                }
+                all_errors = any(c.error for c in field.candidates)
+                if len(original_values) == 1 and not all_errors:
+                    value = next(iter(original_values))
+                    if len(votes.get(value, set())) >= 2:
+                        report.update(value=value, reason="focused_independent_visual_agreement")
+                elif len(original_values) > 1 or all_errors:
+                    report["reason"] = "focused_conflict"
+            except Exception as exc:
+                report["errors"].append({"reader": "visual", "type": type(exc).__name__})
+            reports[name] = report
+        return reports
     if not options.ocr or not vision_enabled:
         return reports
     sizes = {page["number"]: page["size"] for page in pages}
@@ -140,7 +217,7 @@ def verify_identifiers(
         high_png = None
         for family, method, enabled, reader in (
             ("primary", "recognize", options.ocr, ocr),
-            ("secondary", "verify", options.ocr, ocr),
+            ("secondary", "verify", options.ocr and options.secondary_ocr, ocr),
             ("visual", "transcribe", vision_enabled, vlm),
             ("primary_scale", "recognize", options.ocr, ocr),
         ):
@@ -258,6 +335,8 @@ def verify_identifiers(
             if transformed is not None:
                 png, transform = transformed
                 for family, method in (("primary", "recognize"), ("secondary", "verify")):
+                    if family == "secondary" and not options.secondary_ocr:
+                        continue
                     if not hasattr(ocr, method):
                         continue
                     try:

@@ -51,19 +51,50 @@ def fires(reason):
 def passes():
     return {"fires": False, "reason": ""}
 
-def evaluate(instance, sources, others):
-    """The invoice pays into the account the master approved."""
+
+NEAR_MISS = 4  # a supplier's new account differs in 15-20 of 24 characters (docs)
+
+
+def differences(one, other):
+    """Single-character edits between two identifiers, for telling a misreading from
+    a different account. Levenshtein; both strings are 24 characters at most."""
+    if one == other:
+        return 0
+    previous = list(range(len(other) + 1))
+    for i, a in enumerate(one, 1):
+        current = [i]
+        for j, b in enumerate(other, 1):
+            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a != b)))
+        previous = current
+    return previous[-1]
+
+
+def approved_account(instance, suppliers):
+    """The one account the master approves for this invoice's supplier, or None when the
+    master cannot answer: no NIF, no IBAN on the invoice, no rows, or rows that disagree
+    (R02 and R04 already fire on those)."""
     nif = key(instance.get("issuer_nif"))
     if not nif or empty(instance.get("iban")):
-        return passes()
-    theirs = [r for r in rows(sources, "suppliers") if key(r.get("nif")) == nif]
+        return None
+    theirs = [r for r in suppliers if key(r.get("nif")) == nif]
     if not theirs:
-        return passes()
+        return None
     ids = {text(r.get("id")) for r in theirs}
     accounts = {iban(r.get("iban")) for r in theirs}
     if len(ids) > 1 or len(accounts) > 1:
+        return None
+    return accounts.pop()
+
+
+def evaluate(instance, sources, others):
+    """The invoice pays into the account the master approved, and the account it names is
+    a different one rather than the approved one misread (R17)."""
+    approved = approved_account(instance, rows(sources, "suppliers"))
+    if approved is None:
         return passes()
-    approved = accounts.pop()
-    if iban(instance.get("iban")) != approved:
-        return fires("IBAN " + iban(instance.get("iban")) + " is not the master's")
-    return passes()
+    theirs = iban(instance.get("iban"))
+    if theirs == approved:
+        return passes()
+    if differences(theirs, approved) <= NEAR_MISS:
+        return passes()
+    return fires("IBAN " + theirs + " is not the master's")

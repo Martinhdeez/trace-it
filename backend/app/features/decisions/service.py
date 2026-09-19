@@ -159,7 +159,7 @@ def _traced(rules: list[Rule]) -> RunDataset:
 
 def _causes(verdicts: list[Verdict]) -> dict[str, dict[str, int]]:
     """Escalations by cause: MISSING_DATA, RULE_ERROR, RULE_NEEDS_DATA, RULE_COMPILE_FAILED,
-    RULE_CONFLICT, UNVERIFIED_DATA, SCAN_REVIEW."""
+    RULE_CONFLICT, UNVERIFIED_DATA, SCAN_REVIEW, SOURCE_UNAVAILABLE."""
     causes: Counter[str] = Counter()
     for verdict in verdicts:
         causes.update(r.reason.split(" ", 1)[0] for r in verdict.results if r.fires is None)
@@ -191,11 +191,13 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
     Runs against the rules active now and the latest load of each source. A rule never
     reads the clock: anything like a cut-off date is a row in a source of truth. An
     instance without symbols is not run and stays PENDING until extraction fills them.
+    Live sources are synced first; one that fails is down for this run (ADR 0028).
     """
-    await versions.lock(session, process_id)
-    version = await versions.active(session, process_id)
-    process = await get_process(session, process_id)
     with events.span("run_process", process_id=process_id) as span:
+        down = await sources.sync_before_run(session, process_id)
+        await versions.lock(session, process_id)
+        version = await versions.active(session, process_id)
+        process = await get_process(session, process_id)
         rules = await ready_rules(session, process_id)
         pending = [
             i
@@ -210,8 +212,7 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
             )
             if i.symbols is not None
         ]
-        source_loads = list(await sources.current_loads(session, process_id))
-        inputs = await execution.capture(session, process_id)
+        source_loads, inputs = await _inputs(session, process_id, down)
         captured = Execution(process_id=process_id, version_id=version.id, inputs=inputs)
         session.add(captured)
         await session.flush()
@@ -244,8 +245,29 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
             count[verdict.decision] += 1
 
         await session.commit()
-        span.set(instances=len(pending), rules=len(rules), by_decision=count, **_causes(verdicts))
-    return RunSummary(decided=sum(count.values()), by_decision=dict(count))
+        span.set(
+            instances=len(pending),
+            rules=len(rules),
+            by_decision=count,
+            down_sources=down,
+            **_causes(verdicts),
+        )
+    return RunSummary(decided=sum(count.values()), by_decision=dict(count), down_sources=down)
+
+
+async def _inputs(
+    session: AsyncSession, process_id: int, down: dict[str, str]
+) -> tuple[list[Source], dict]:
+    """The current loads and captured execution inputs, without the loads of `down`
+    sources: a rule never reads an older snapshot of a source that failed to sync. The
+    down sources are part of the inputs, so a replay decides the same (ADR 0028)."""
+    loads = [s for s in await sources.current_loads(session, process_id) if s.name not in down]
+    inputs = await execution.capture(session, process_id)
+    if down:
+        kept = {s.id for s in loads}
+        inputs["source_ids"] = [i for i in inputs["source_ids"] if i in kept]
+        inputs["down"] = down
+    return loads, inputs
 
 
 def _append(
@@ -297,11 +319,14 @@ async def reprocess(
     where the engine would now say otherwise it is reported as a conflict.
     `names` limits it to those instance names (all decided instances if None); `dry_run`
     compares engine outcomes without writing or calling the optional reviewer.
+    Like a run, it syncs the live sources first (ADR 0028). A dry run does not: it writes
+    nothing, and it is what a sync's own alert detection calls (ADR 0026).
     """
-    await versions.lock(session, process_id)
-    version = await versions.active(session, process_id)
-    process = await get_process(session, process_id)
     with events.span("reprocess", process_id=process_id, dry_run=dry_run) as span:
+        down = {} if dry_run else await sources.sync_before_run(session, process_id)
+        await versions.lock(session, process_id)
+        version = await versions.active(session, process_id)
+        process = await get_process(session, process_id)
         rules = await ready_rules(session, process_id)
         query = (
             select(Instance)
@@ -314,8 +339,7 @@ async def reprocess(
         selected = [i for i in await session.scalars(query) if i.symbols is not None]
         latest = await latest_decisions(session, selected)
         reviews = await decision_reviewer.for_decisions(session, list(latest.values()))
-        source_loads = list(await sources.current_loads(session, process_id))
-        inputs = await execution.capture(session, process_id)
+        source_loads, inputs = await _inputs(session, process_id, down)
         captured = Execution(process_id=process_id, version_id=version.id, inputs=inputs)
         if not dry_run:
             session.add(captured)
@@ -375,9 +399,12 @@ async def reprocess(
             unchanged=unchanged,
             changed=len(changed),
             conflicts=len(conflicts),
+            down_sources=down,
             **_causes(verdicts),
         )
-    return ReprocessSummary(unchanged=unchanged, changes=changed, conflicts=conflicts)
+    return ReprocessSummary(
+        unchanged=unchanged, changes=changed, conflicts=conflicts, down_sources=down
+    )
 
 
 async def list_instances(
@@ -659,8 +686,17 @@ async def _export(
     undecided = [i.name for i in instances if i.id not in exported]
     if undecided:
         raise ConflictError(f"{len(undecided)} undecided instances: {', '.join(undecided[:5])}")
+    # `reason` is the rule's own reason code, as the engine recorded it (ADR 0002): no model
+    # is asked for it. The challenge allows trace fields beside the two required ones.
     body = "\n".join(
-        json.dumps({"file_id": i.name, "result": exported[i.id].decision}, ensure_ascii=False)
+        json.dumps(
+            {
+                "file_id": i.name,
+                "result": exported[i.id].decision,
+                "reason": exported[i.id].reason or "NO_FINDING",
+            },
+            ensure_ascii=False,
+        )
         for i in instances
     )
     return body, duplicates

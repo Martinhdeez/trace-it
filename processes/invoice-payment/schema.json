@@ -1,0 +1,20 @@
+{
+  "sources": {
+    "suppliers": {
+      "required": ["id", "nif", "iban"],
+      "optional": ["company_name"]
+    },
+    "orders": {
+      "required": ["purchase_order", "total_amount", "status"],
+      "optional": ["supplier_id", "nif", "order_date"]
+    },
+    "erp": {
+      "required": ["entry_id", "date", "supplier_id", "purchase_order", "amount", "status"],
+      "optional": ["nif"],
+      "sync_before_run": true
+    },
+    "parameters": {
+      "required": ["cut_off_date"]
+    }
+  }
+}

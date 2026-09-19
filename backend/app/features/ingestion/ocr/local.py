@@ -33,7 +33,9 @@ class LocalOCR:
     def signature(self):
         return {
             "primary": self._model_signature(self.settings.model_dir),
-            "verification": self._model_signature(self.settings.model_dir / "verify"),
+            "verification": self._model_signature(
+                self.settings.verification_model_dir or self.settings.model_dir / "verify"
+            ),
         }
 
     @staticmethod
@@ -73,10 +75,19 @@ class LocalOCR:
         }
 
     def verify(self, png: bytes, page: int, point_size: tuple[float, float]):
+        signatures = self.signature()
+        primary = signatures["primary"]["rec/inference.onnx"]
+        secondary = signatures["verification"]["rec/inference.onnx"]
+        if primary is not None and primary == secondary:
+            raise ProviderUnavailable("Verification requires different recognition weights")
         with self.lock:
             if self.verifier is None:
                 self.verifier = LocalOCR(
-                    replace(self.settings, model_dir=self.settings.model_dir / "verify")
+                    replace(
+                        self.settings,
+                        model_dir=self.settings.verification_model_dir
+                        or self.settings.model_dir / "verify",
+                    )
                 )
         lines = self.verifier.recognize(png, page, point_size)
         return [
@@ -101,6 +112,7 @@ class LocalOCR:
                 line.model_dump() for line in self._recognize(png, page, point_size, signature)
             ],
             validate=lambda values: [TextLine.model_validate(line).model_dump() for line in values],
+            force=self.settings.ocr_force_recompute,
         )
         return [TextLine.model_validate(line) for line in result]
 

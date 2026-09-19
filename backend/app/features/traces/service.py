@@ -7,7 +7,7 @@ import statistics
 from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import String, case, cast, func, or_, select
+from sqlalchemy import Numeric, String, case, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONPATH
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -26,6 +26,7 @@ from app.features.ingestion.model import File, Instance
 from app.features.processes.model import Process
 from app.features.processes.service import get as get_process
 from app.features.rules.model import NormRule, Rule
+from app.features.sources import service as sources
 from app.features.traces.schemas import (
     AgentsMetrics,
     CompileStats,
@@ -72,6 +73,7 @@ PLANES: dict[str, Plane] = {
     "ocr": _INGESTION,
     "vision": _INGESTION,
     "text_judge": _INGESTION,
+    "schema_fields": _INGESTION,
     "provider_call": _INGESTION,
     "focused_read": _INGESTION,
     "ingest_document": _INGESTION,
@@ -393,6 +395,18 @@ async def _providers(session: AsyncSession, where: list) -> list[ProviderStats]:
     operation = Event.data["operation"].astext
     network = Event.data["network_attempted"].as_boolean().is_(True)
     replay = Event.data["outcome"].astext == "replay"
+    blocked = Event.data["outcome"].astext == "blocked_uncertain"
+    known = Event.data["cost_status"].astext == "known"
+    included = Event.data["cost_status"].astext == "included"
+    unpriced = or_(
+        Event.data["cost_status"].astext.is_(None),
+        Event.data["cost_status"].astext.not_in(("known", "included")),
+    )
+    latency = func.coalesce(Event.data["network_latency_ms"].as_integer(), Event.duration_ms)
+
+    def network_sum(key):
+        return func.coalesce(func.sum(Event.data[key].as_integer()).filter(network), 0)
+
     rows = await session.execute(
         select(
             provider,
@@ -402,8 +416,22 @@ async def _providers(session: AsyncSession, where: list) -> list[ProviderStats]:
             func.count().filter(network),
             func.count().filter(replay),
             _ERRORS,
-            func.coalesce(func.sum(Event.data["input_tokens"].as_integer()).filter(network), 0),
-            func.coalesce(func.sum(Event.data["output_tokens"].as_integer()).filter(network), 0),
+            network_sum("input_tokens"),
+            network_sum("output_tokens"),
+            func.count().filter(blocked),
+            func.count().filter(network, Event.data["fallback"].as_boolean().is_(True)),
+            network_sum("total_tokens"),
+            network_sum("cached_tokens"),
+            network_sum("reasoning_tokens"),
+            func.coalesce(func.sum(latency).filter(network), 0),
+            func.percentile_cont(0.5).within_group(latency).filter(network),
+            func.percentile_cont(0.95).within_group(latency).filter(network),
+            func.coalesce(
+                func.sum(cast(Event.data["cost_usd"].astext, Numeric)).filter(network), 0
+            ),
+            func.count().filter(network, known),
+            func.count().filter(network, included),
+            func.count().filter(network, unpriced),
         )
         .where(*where, Event.step == "provider_call")
         .group_by(provider, model, operation)
@@ -420,8 +448,42 @@ async def _providers(session: AsyncSession, where: list) -> list[ProviderStats]:
             errors=e,
             input_tokens=tokens_in,
             output_tokens=tokens_out,
+            blocked=b,
+            fallbacks=f,
+            total_tokens=total,
+            cached_tokens=cached,
+            reasoning_tokens=reasoning,
+            network_latency_ms=latency_ms,
+            network_p50_ms=p50,
+            network_p95_ms=p95,
+            known_cost_usd=float(cost),
+            priced_requests=priced,
+            included_requests=included_count,
+            unpriced_requests=unpriced,
         )
-        for p, m, o, c, n, replays, e, tokens_in, tokens_out in rows
+        for (
+            p,
+            m,
+            o,
+            c,
+            n,
+            replays,
+            e,
+            tokens_in,
+            tokens_out,
+            b,
+            f,
+            total,
+            cached,
+            reasoning,
+            latency_ms,
+            p50,
+            p95,
+            cost,
+            priced,
+            included_count,
+            unpriced,
+        ) in rows
     ]
 
 
@@ -773,6 +835,13 @@ async def health(session: AsyncSession) -> list[PlaneHealth]:
             status, reason = "degraded", f"{errors}/{spans} spans failed"
         elif p95 is not None and limit is not None and p95 > limit:
             status, reason = "degraded", f"p95 {p95:.0f} ms over {limit} ms"
+        # A known outage needs no sample size (ADR 0028).
+        if (
+            status == "ok"
+            and p == Plane.ingestion
+            and (down := await sources.down_sources(session, since))
+        ):
+            status, reason = "degraded", f"sources down: {', '.join(down)}"
         out.append(
             PlaneHealth(
                 plane=p,

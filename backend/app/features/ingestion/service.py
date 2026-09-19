@@ -1,10 +1,14 @@
 import hashlib
+import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from contextlib import suppress
+from copy import copy
 from pathlib import Path
 
 from filelock import FileLock
@@ -17,8 +21,10 @@ from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.ocr.local import LocalOCR
 from app.features.ingestion.ocr.vision import VisionFallback
 from app.features.ingestion.pdf.extractor import extract_pdf
+from app.features.ingestion.pdf.schema import extract_schema_pdf
 from app.features.ingestion.readings import field_readings, full_text
-from app.features.ingestion.schemas import ExtractionResult, ExtractOptions
+from app.features.ingestion.schema_fields import SchemaFieldReader, normalize_schema_value
+from app.features.ingestion.schemas import ExtractionResult, ExtractOptions, FieldReading
 from app.features.ingestion.store import Store
 from app.features.sources.excel import extract_workbook
 
@@ -26,8 +32,24 @@ PIPELINE_VERSION = "invoice-v2.2.0+xlsx-v1.3"
 logger = logging.getLogger(__name__)
 
 
+def _used_visual_models(fields, data):
+    identities = set()
+    locators = [line.get("id", "") for line in data.get("lines", [])]
+    locators.extend(
+        candidate.evidence.locator
+        for field in fields.values()
+        for candidate in field.candidates
+        if candidate.evidence.method == "vlm"
+    )
+    for locator in locators:
+        for provider, model in re.findall(r"(?:^|:)visual:([^:]+):([^:]+):", locator):
+            if provider not in {"focus", "focus_high"}:
+                identities.add((provider, model))
+    return [{"provider": provider, "model": model} for provider, model in sorted(identities)]
+
+
 class ExtractionService:
-    def __init__(self, settings: Settings, ocr=None, vlm=None, judge=None):
+    def __init__(self, settings: Settings, ocr=None, vlm=None, judge=None, field_reader=None):
         self.settings = settings
         self.objects = settings.data_dir / "objects"
         self.objects.mkdir(parents=True, exist_ok=True)
@@ -35,10 +57,40 @@ class ExtractionService:
         self.ocr = ocr or LocalOCR(settings)
         self.vlm = vlm or VisionFallback(settings)
         self.judge = judge or TextJudge(settings)
+        self.field_reader = field_reader or SchemaFieldReader(settings)
         self.locks = [threading.Lock() for _ in range(64)]
         self.stop = threading.Event()
         self.threads = []
         self.slots = threading.BoundedSemaphore(settings.workers)
+        self.configured_services = OrderedDict()
+        self.configuration_lock = threading.Lock()
+        self.execution_hash = None
+
+    def configured(self, config):
+        """Request-local readers/settings, sharing storage, locks and worker limits."""
+        from app.features.processes.execution import ingestion_settings
+
+        key = fingerprint(config.model_dump(mode="json", exclude={"agents", "preset"}))
+        with self.configuration_lock:
+            if key in self.configured_services:
+                self.configured_services.move_to_end(key)
+                return self.configured_services[key]
+            service = copy(self)
+            service.settings = ingestion_settings(config, self.settings)
+            if (
+                service.settings.model_dir != self.settings.model_dir
+                or service.settings.verification_model_dir
+                != (self.settings.verification_model_dir or self.settings.model_dir / "verify")
+            ):
+                service.ocr = LocalOCR(service.settings)
+            service.vlm = VisionFallback(service.settings)
+            service.judge = TextJudge(service.settings)
+            service.execution_hash = key
+            self.configured_services[key] = service
+            # Eviction never invalidates a reader already held by an in-flight operation.
+            if len(self.configured_services) > 8:
+                self.configured_services.popitem(last=False)
+            return service
 
     def get_result(self, extraction_id: str):
         result = self.store.result(extraction_id)
@@ -53,6 +105,7 @@ class ExtractionService:
         return batch
 
     def submit_batch(self, items: list[dict], options: ExtractOptions):
+        options = options.normalized(self.settings)
         ident = uuid.uuid4().hex
         self.store.submit_batch(ident, items, options, self.settings.max_queued_files)
         return {"id": ident, "files": len(items), "status_url": f"/v1/batches/{ident}"}
@@ -91,6 +144,7 @@ class ExtractionService:
             temp.unlink(missing_ok=True)
 
     def cache_key(self, item, options):
+        options = options.normalized(self.settings)
         root = Path(__file__).resolve().parents[2]
         vision = options.vlm is True or (
             options.vlm is None and getattr(self.vlm, "configured", False)
@@ -103,6 +157,8 @@ class ExtractionService:
             "common/normalization.py",
             "features/ingestion/readings.py",
             "features/ingestion/schemas.py",
+            "features/ingestion/schema_fields.py",
+            "features/ingestion/config.py",
         ]
         invoice = [
             "pdf/extractor.py",
@@ -111,13 +167,21 @@ class ExtractionService:
             "pdf/committee.py",
             "pdf/uncertainty.py",
             "pdf/focused.py",
+            "pdf/schema.py",
         ]
         if options.ocr:
             invoice += ["ocr/bands.py", "ocr/preprocessing.py", "ocr/local.py"]
         if vision:
-            invoice += ["ocr/transcript.py", "ocr/vision.py", "ocr/gemini.py"]
+            invoice += [
+                "ocr/transcript.py",
+                "ocr/vision.py",
+                "ocr/gemini.py",
+                "ocr/journal.py",
+                "ocr/errors.py",
+                "ocr/pricing.py",
+            ]
         if judge:
-            invoice += ["ocr/judge.py"]
+            invoice += ["ocr/judge.py", "ocr/journal.py", "ocr/errors.py", "ocr/pricing.py"]
         paths = shared + (
             ["features/ingestion/" + path for path in invoice]
             if item["kind"] == "invoice"
@@ -146,7 +210,11 @@ class ExtractionService:
         else:
             config.update(
                 options={
+                    "mode": options.mode,
                     "ocr": options.ocr,
+                    "secondary_ocr": options.secondary_ocr,
+                    "focused_verification": options.focused_verification,
+                    "source_verification": options.source_verification,
                     "vlm": vision,
                     "jev": judge,
                     "verify_fields": sorted(set(options.verify_fields)),
@@ -196,6 +264,7 @@ class ExtractionService:
         return fingerprint(config)
 
     def extract(self, item, options: ExtractOptions):
+        options = options.normalized(self.settings)
         with events.span(
             "extraction",
             kind=item["kind"],
@@ -203,6 +272,7 @@ class ExtractionService:
             extraction_id=item["id"],
             pipeline_version=PIPELINE_VERSION,
             options=options.model_dump(),
+            execution_hash=self.execution_hash,
         ) as span:
             result = self._extract(item, options)
             provenance = result.data.get("provenance", {})
@@ -222,7 +292,7 @@ class ExtractionService:
         lock_path = self.settings.data_dir / "extraction-locks" / (key + ".lock")
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         with self.locks[int(key[:8], 16) % len(self.locks)], FileLock(str(lock_path), timeout=600):
-            cached = self.store.cached(key)
+            cached = not self.settings.ocr_force_recompute and self.store.cached(key)
             if cached:
                 result = ExtractionResult.model_validate(cached)
                 result.data["provenance"] = {
@@ -254,22 +324,23 @@ class ExtractionService:
                     fields, pages = {}, []
                     metrics = {"native_pages": 0, "ocr_calls": 0, "vlm_calls": 0}
                 elapsed = round((time.perf_counter() - started) * 1000, 2)
+                visual_models = _used_visual_models(fields, data)
+                judgment = data.get("committee", {}).get("text_judge", {})
                 data["provenance"] = {
                     "cache_key": key,
+                    "execution_hash": self.execution_hash,
                     "pipeline_version": PIPELINE_VERSION,
                     "options": options.model_dump(),
                     "ocr_models": self.ocr.signature() if metrics["ocr_calls"] else None,
                     "ocr_dpi": self.settings.ocr_dpi if metrics["ocr_calls"] else None,
-                    "visual_model": (
-                        self.settings.vlm_model
-                        if self.settings.vlm_url and self.settings.vlm_model
-                        else self.settings.gemini_model
-                    )
-                    if metrics["vlm_calls"]
-                    else None,
-                    "text_judge_model": self.settings.jev_model
-                    if metrics.get("jev_calls")
-                    else None,
+                    "visual_model": visual_models[0]["model"] if len(visual_models) == 1 else None,
+                    "visual_models": visual_models,
+                    "visual_chain": (
+                        self.vlm.signature().get("chain")
+                        if metrics["vlm_calls"] and hasattr(self.vlm, "signature")
+                        else None
+                    ),
+                    "text_judge_model": judgment.get("model"),
                 }
                 metrics.update(
                     {
@@ -292,7 +363,7 @@ class ExtractionService:
                 )
                 result = ExtractionResult(
                     **item,
-                    fields=field_readings(fields, data),
+                    fields=field_readings(fields, data, require_verified=options.mode == "api"),
                     text=full_text(data),
                     data=data,
                     warnings=warnings,
@@ -305,6 +376,156 @@ class ExtractionService:
                     for w in warnings
                 )
                 self.store.save(result, None if transient else key)
+                return result
+
+    def extract_schema(self, item, options, plan, fields=None, base=None):
+        """A schema-specific cache never replaces the invoice pipeline's observations."""
+        options = options.normalized(self.settings)
+        fields = plan.fields if fields is None else fields
+        config = {
+            "reader": self.cache_key(item, options),
+            "plan": plan.field_fingerprint,
+            "fields": [field.model_dump(mode="json") for field in fields],
+            "filename": item["file_id"],
+            "base": {
+                "fields": {name: field.model_dump() for name, field in base.fields.items()},
+                "lines": base.data.get("lines", []),
+                "warnings": base.warnings,
+            }
+            if base
+            else None,
+        }
+        key = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
+        started = time.perf_counter()
+        with (
+            events.span(
+                "extraction",
+                adapter="schema",
+                extraction_id=item["id"],
+                plan_hash=plan.fingerprint,
+                fields=[field.name for field in fields],
+            ) as span,
+            self.locks[int(key[:8], 16) % len(self.locks)],
+        ):
+            cached = not self.settings.ocr_force_recompute and self.store.cached(key)
+            if cached:
+                result = ExtractionResult.model_validate(cached)
+                previous_id = result.id
+                result.id, result.file_id = item["id"], item["file_id"]
+                result.cache_hit = True
+                result.data["provenance"]["cached_from_extraction_id"] = previous_id
+                result.data["provenance"]["plan_hash"] = plan.fingerprint
+                result.data["extraction_plan"] = {
+                    **plan.model_dump(mode="json"),
+                    "fingerprint": plan.fingerprint,
+                }
+                if base:
+                    result.data["base_extraction_id"] = base.id
+                result.warnings = [
+                    warning
+                    for warning in result.warnings
+                    if warning["code"]
+                    not in {"SCHEMA_INVALID_RULE_CODE", "SCHEMA_UNDECLARED_SYMBOL"}
+                ] + plan.warnings
+                result.metrics.update(
+                    request_ms=round((time.perf_counter() - started) * 1000, 2),
+                    ocr_calls_this_request=0,
+                    vlm_calls_this_request=0,
+                    jev_calls_this_request=0,
+                    schema_calls_this_request=0,
+                    ocr_cache_hits_this_request=0,
+                    vlm_cache_hits_this_request=0,
+                    jev_cache_hits_this_request=0,
+                    schema_cache_hits_this_request=0,
+                )
+                self.store.save(result)
+                span.set(cache_hit=True, cached_from_extraction_id=previous_id)
+                return result
+            with self.slots, reader_usage() as usage:
+                readings, data, warnings, pages, metrics = extract_schema_pdf(
+                    (self.objects / item["sha256"]).read_bytes(),
+                    options,
+                    self.settings,
+                    self.ocr,
+                    self.vlm,
+                    self.field_reader,
+                    fields,
+                    base,
+                )
+                visual_models = _used_visual_models(readings, data)
+                text = full_text(data)
+                for field in fields:
+                    if field.source != "document":
+                        value = {"filename": item["file_id"], "text": text}.get(field.source)
+                        if value is not None and field.type.lower() not in {"text", "string"}:
+                            try:
+                                value = normalize_schema_value(value, field.type.lower())
+                            except ValueError:
+                                value = None
+                                warnings.append(
+                                    {"code": "SCHEMA_INVALID_METADATA", "field": field.name}
+                                )
+                        readings[field.name] = FieldReading(
+                            value=value,
+                            verification="metadata" if value is not None else "missing",
+                            selected_by=field.source if value is not None else None,
+                        )
+                schema_data = {
+                    "extraction_plan": {
+                        **plan.model_dump(mode="json"),
+                        "fingerprint": plan.fingerprint,
+                    },
+                    "schema_fields": {
+                        name: reading.model_dump() for name, reading in readings.items()
+                    },
+                    "provenance": {
+                        "pipeline_version": plan.version,
+                        "options": options.model_dump(),
+                        "visual_model": (
+                            visual_models[0]["model"] if len(visual_models) == 1 else None
+                        ),
+                        "visual_models": visual_models,
+                        "visual_chain": (
+                            self.vlm.signature().get("chain")
+                            if metrics["vlm_calls"] and hasattr(self.vlm, "signature")
+                            else None
+                        ),
+                        "plan_hash": plan.fingerprint,
+                    },
+                }
+                if base:
+                    schema_data["base_extraction_id"] = base.id
+                elapsed = round((time.perf_counter() - started) * 1000, 2)
+                metrics.update(
+                    extraction_ms=elapsed,
+                    request_ms=elapsed,
+                    ocr_calls_this_request=metrics["ocr_calls"] - usage.get("ocr_cache_hits", 0),
+                    vlm_calls_this_request=(
+                        usage.get("vlm_requests", 0)
+                        if isinstance(self.vlm, VisionFallback)
+                        else metrics["vlm_calls"]
+                    ),
+                    jev_calls_this_request=0,
+                    schema_calls=usage.get("schema_journal_calls", 0),
+                    schema_calls_this_request=usage.get("schema_requests", 0),
+                    **{
+                        name + "_cache_hits_this_request": usage.get(name + "_cache_hits", 0)
+                        for name in ("ocr", "vlm", "jev", "schema")
+                    },
+                )
+                result = ExtractionResult(
+                    **item,
+                    fields={**readings, **(base.fields if base else {})},
+                    text=text,
+                    data={**(base.data if base else {}), **data, **schema_data},
+                    warnings=[*(base.warnings if base else []), *warnings, *plan.warnings],
+                    pages=pages,
+                    metrics=metrics,
+                    pipeline_version=(base.pipeline_version + "+" if base else "") + plan.version,
+                )
+                transient = any(w["code"].endswith("_ERROR") for w in result.warnings)
+                self.store.save(result, None if transient else key)
+                span.set(cache_hit=False, warnings=len(result.warnings), **metrics)
                 return result
 
     def start(self):

@@ -92,7 +92,7 @@ def test_extraction_trace_links_cached_evidence_without_new_reader_calls(setting
     replay = spans[1]["data"]
     assert replay["cache_hit"] is True
     assert replay["cached_from_extraction_id"] == first.id
-    assert replay["options"] == options.model_dump()
+    assert replay["options"] == options.normalized(settings).model_dump()
     assert replay["pipeline_version"] == second.pipeline_version
     assert replay["ocr_calls_this_request"] == replay["vlm_calls_this_request"] == 0
     assert replay["jev_calls_this_request"] == 0

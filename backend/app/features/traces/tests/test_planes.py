@@ -136,7 +136,7 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
         "ingest_document",
     }
     assert (ingestion["files"], ingestion["pages"], ingestion["ocr_calls"]) == (1, 2, 1)
-    assert ingestion["providers"] == [
+    expected_providers = [
         {
             "provider": "gemini",
             "model": provider_model,
@@ -149,6 +149,9 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
             "output_tokens": 4,
         }
     ]
+    assert [
+        {key: row[key] for key in expected_providers[0]} for row in ingestion["providers"]
+    ] == expected_providers
     assert (
         next(p for p in ingestion_everywhere["providers"] if p["model"] == provider_model)
         == (ingestion["providers"][0])
@@ -200,6 +203,10 @@ async def test_a_failed_llm_run_still_records_what_came_back(
     assert row["data"]["input_tokens"] == 0 and row["data"]["cached_tokens"] == 0
 
 
+async def _no_sources_down(*_) -> list[str]:
+    return []
+
+
 async def test_plane_health_follows_the_thresholds(monkeypatch: pytest.MonkeyPatch) -> None:
     for step in ("upload_document", "llm_run", "run_process"):
         with events.span(step):
@@ -209,6 +216,8 @@ async def test_plane_health_follows_the_thresholds(monkeypatch: pytest.MonkeyPat
         monkeypatch.setattr(settings, "health_down_error_rate", 2.0)
         monkeypatch.setattr(settings, "health_degraded_error_rate", 2.0)
         monkeypatch.setattr(settings, "health_p95_ms", {p: 10**9 for p in Plane})
+        # Other tests leave sources down in the shared database (ADR 0028).
+        monkeypatch.setattr(service.sources, "down_sources", _no_sources_down)
         healthy = (await api.get("/health/planes")).json()
         monkeypatch.setattr(settings, "health_p95_ms", {p: -1 for p in Plane})
         slow = (await api.get("/health/planes")).json()

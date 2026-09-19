@@ -13,10 +13,10 @@ from sqlalchemy import or_, select
 from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
 from app.core.events import Event
-from app.features.processes.service import get as get_process
 from app.features.sources.model import Source
 from app.features.sources.service import current_loads
 
+from .extraction_plan import load_extraction_plan
 from .model import File, Instance
 from .payment_verification import (
     PAYMENT_FIELDS,
@@ -28,13 +28,15 @@ from .schemas import ExtractionResult
 
 
 async def payment_state(session, process_id):
-    definitions = (await get_process(session, process_id)).symbols
-    names = {definition.name for definition in definitions}
-    adapter = "invoice-payment" if names >= REQUIRED_PAYMENT_SYMBOLS else "generic"
-    schema = [
-        [row.name, row.type, row.description, row.required]
-        for row in sorted(definitions, key=lambda row: row.name)
-    ]
+    plan = await load_extraction_plan(session, process_id)
+    names = {field.name for field in plan.fields}
+    adapter = (
+        "invoice-payment"
+        if names >= REQUIRED_PAYMENT_SYMBOLS
+        else "schema"
+        if plan.fields
+        else "generic"
+    )
     code = (
         inspect.getsource(inspect.getmodule(payment_symbols))
         if adapter == "invoice-payment"
@@ -42,21 +44,27 @@ async def payment_state(session, process_id):
     )
     schema_key = hashlib.sha256(
         json.dumps(
-            [adapter, schema, PAYMENT_FIELDS, sorted(REQUIRED_PAYMENT_SYMBOLS), code],
+            [
+                adapter,
+                plan.field_fingerprint,
+                PAYMENT_FIELDS,
+                sorted(REQUIRED_PAYMENT_SYMBOLS),
+                code,
+            ],
             sort_keys=True,
         ).encode()
     ).hexdigest()
     if not names >= REQUIRED_PAYMENT_SYMBOLS:
-        return names, None, schema_key
+        return plan, None, schema_key
     loads = await current_loads(session, process_id)
     current = {row.name: row for row in loads}
-    return names, current, schema_key
+    return plan, current, schema_key
 
 
 async def payment_context(session, process_id):
     """Keep the source workbook adapter's existing two-value contract."""
-    names, sources, _ = await payment_state(session, process_id)
-    return names, sources
+    plan, sources, _ = await payment_state(session, process_id)
+    return {field.name for field in plan.fields}, sources
 
 
 def source_ids(sources):
@@ -109,7 +117,7 @@ def reused_result(result, started):
     reused = result.model_copy(deep=True)
     reused.cache_hit = True
     reused.metrics["request_ms"] = round((time.perf_counter() - started) * 1000, 2)
-    for reader in ("ocr", "vlm", "jev"):
+    for reader in ("ocr", "vlm", "jev", "schema"):
         reused.metrics[f"{reader}_calls_this_request"] = 0
         reused.metrics[f"{reader}_cache_hits_this_request"] = 0
     return reused
@@ -117,6 +125,7 @@ def reused_result(result, started):
 
 async def reusable_evidence(session, instance, service, item, options):
     """Return matching persisted evidence, or None when a pending reading is stale."""
+    options = options.normalized(service.settings)
     started = time.perf_counter()
     event = await latest_evidence(session, instance.id)
     if event is None:
@@ -124,16 +133,23 @@ async def reusable_evidence(session, instance, service, item, options):
     result = ExtractionResult.model_validate(event.data["extraction"])
     if instance.status == "DECIDED":
         return reused_result(result, started)
-    _, sources, schema_key = await payment_state(session, instance.process_id)
+    if service.settings.ocr_force_recompute:
+        return None
+    plan, sources, schema_key = await payment_state(session, instance.process_id)
+    if plan.fields and event.data.get("extraction_plan", {}).get("fingerprint") != plan.fingerprint:
+        return None
     requested_key = service.cache_key(item, options)
     initial = event.data.get("initial_extraction", event.data["extraction"])
-    transient_codes = {"OCR_ERROR", "VLM_ERROR", "JEV_ERROR", "FOCUSED_READER_ERROR"}
     if any(
-        warning.get("code") in transient_codes
+        warning.get("code", "").endswith("_ERROR")
         for warning in result.warnings + initial.get("warnings", [])
     ):
         return None
+    # Schema readings have their own cache key. The request key and the field
+    # fingerprint together identify the underlying PDF reading and interpretation.
     initial_key = initial.get("data", {}).get("provenance", {}).get("cache_key")
+    if plan.fields and sources is None:
+        initial_key = event.data.get("request_cache_key")
     if not (
         initial_key == requested_key
         and event.data.get("request_cache_key") == requested_key
@@ -146,15 +162,29 @@ async def reusable_evidence(session, instance, service, item, options):
 
 
 async def read_document(session, process_id, service, item, options):
-    names, sources, schema_key = await payment_state(session, process_id)
+    options = options.normalized(service.settings)
+    plan, sources, schema_key = await payment_state(session, process_id)
+    names = {field.name for field in plan.fields}
     metadata = {
         "request_cache_key": service.cache_key(item, options),
         "schema_key": schema_key,
         "source_ids": source_ids(sources),
     }
-    if sources is None:
+    if not plan.fields:
         result = await run_in_threadpool(service.extract, item, options)
-        return result, None, metadata
+        return result, None, {"adapter": "generic", **metadata}
+    snapshot = {**plan.model_dump(mode="json"), "fingerprint": plan.fingerprint}
+    if sources is None:
+        result = await run_in_threadpool(service.extract_schema, item, options, plan)
+        return (
+            result,
+            schema_symbols(result, plan.fields),
+            {
+                "adapter": "schema",
+                **metadata,
+                "extraction_plan": snapshot,
+            },
+        )
     reading = await run_in_threadpool(
         extract_for_payment,
         service,
@@ -167,19 +197,53 @@ async def read_document(session, process_id, service, item, options):
         **metadata,
         "rechecked_fields": reading.triggers,
         "initial_extraction_id": reading.initial.id,
+        "extraction_plan": snapshot,
     }
     if reading.initial.id != reading.result.id:
         context["initial_extraction"] = reading.initial.model_dump(mode="json")
-    return reading.result, payment_symbols(reading.result, names), context
+    result = reading.result
+    # Keep every legacy invoice field (including the unused issuer_name) unchanged.
+    legacy = set(PAYMENT_FIELDS) | {"file_id", "free_text", "issuer_name"}
+    extra = [field for field in plan.fields if field.name not in legacy]
+    if extra:
+        result = await run_in_threadpool(
+            service.extract_schema,
+            {**item, "id": uuid.uuid4().hex},
+            options,
+            plan,
+            extra,
+            result,
+        )
+        context["adapter"] = "invoice-payment+schema"
+        context["base_extraction_id"] = reading.result.id
+    symbols = payment_symbols(result, names)
+    symbols.update(schema_symbols(result, extra))
+    return result, symbols, context
+
+
+def schema_symbols(result, fields):
+    """Only accepted readings reach the engine; proposals remain in document evidence."""
+    symbols = {}
+    readings = result.data.get("schema_fields", {})
+    for field in fields:
+        value = readings.get(field.name, {}).get("value")
+        if value is not None and field.type.lower() == "boolean":
+            value = {"true": True, "false": False}.get(value)
+        symbols[field.name] = {"value": value, "origin": f"document:{result.id}"}
+    return symbols
 
 
 async def reextract_document(session, instance_id, user_id, service, options):
     from app.features.versions.service import lock
 
+    options = options.normalized(service.settings)
     existing = await session.get(Instance, instance_id)
     if existing is None:
         raise NotFoundError(f"Instance {instance_id} does not exist")
     await lock(session, existing.process_id)
+    from .runtime import for_process
+
+    service, options = await for_process(session, existing.process_id, service, options)
     # The decision run takes the same row lock before reading symbols. Neither
     # operation can change the evidence after the other has decided the instance.
     instance = await session.scalar(
@@ -212,7 +276,6 @@ async def reextract_document(session, instance_id, user_id, service, options):
                 "extraction": existing,
                 "symbols": instance.symbols,
             }
-        previous = await latest_evidence(session, instance.id)
         if not (service.objects / instance.file_hash).exists():
             original = await session.get(File, instance.file_hash)
             item = await run_in_threadpool(
@@ -221,10 +284,7 @@ async def reextract_document(session, instance_id, user_id, service, options):
         result, symbols, context = await read_document(
             session, instance.process_id, service, item, options
         )
-        if symbols is not None:
-            instance.symbols = symbols
-        elif previous is not None and previous.data.get("adapter") == "invoice-payment":
-            instance.symbols = None
+        instance.symbols = symbols
         events.record(
             session,
             "extract_document",

@@ -1,11 +1,15 @@
 """Sync an HTTP source into a new snapshot, and compare snapshots.
 
 A sync downloads everything first and writes one `Source` row only if the download is
-complete; a failed sync leaves the previous snapshot current and records why.
+complete and its rows have the pack's canonical schema (`<pack>/schema.json`, ADR 0028); a
+failed sync writes nothing and records why. Sources the schema marks `sync_before_run` are
+synced at the start of every run; one that fails is down for that run, and no rule that
+reads it runs on an older snapshot.
 """
 
 import hashlib
 import json
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -18,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.exceptions import NotFoundError, TraceError
 from app.core import events
 from app.core.config import settings
+from app.core.events import Event
 from app.features.processes.model import Process
 from app.features.sources.http_connector import (
     HttpConnector,
@@ -32,6 +37,19 @@ from app.features.use_cases.model import UseCase
 class SourceUnavailableError(TraceError):
     status_code = 502
     code = "source_unavailable"
+
+
+class SourceSchema(BaseModel):
+    """The canonical shape rules see for one source, whatever system it comes from. A
+    connector maps its own fields to these names (`fields` in `sources.json`)."""
+
+    required: list[str]  # present and not blank in every row
+    optional: list[str] = []
+    sync_before_run: bool = False  # a live source: synced at the start of every run
+
+
+class SchemaFile(BaseModel):
+    sources: dict[str, SourceSchema]
 
 
 class Diff(BaseModel):
@@ -64,6 +82,11 @@ class SourceOut(BaseModel):
     origin: str
     rows: int
     loaded_at: datetime
+    # From the latest sync attempt: "down" when it failed (no run reads this load until a
+    # sync succeeds), "ok" when it worked, None for a source never synced (a workbook).
+    status: str | None = None
+    error: str | None = None
+    checked_at: datetime | None = None
 
 
 class SourceDetail(SourceOut):
@@ -92,10 +115,47 @@ def _out(load: Source) -> SourceOut:
     )
 
 
+async def sync_status(
+    session: AsyncSession, process_id: int | None = None, since: datetime | None = None
+) -> dict[tuple[int, str], Event]:
+    """The latest `sync_source` span per process and source (ADR 0028)."""
+    # ponytail: read from the audit spans, no status table; a table if spans are pruned.
+    name = Event.data["source"].astext
+    query = (
+        select(Event)
+        .where(Event.step == "sync_source")
+        .distinct(Event.process_id, name)
+        .order_by(Event.process_id, name, Event.id.desc())
+    )
+    if process_id is not None:
+        query = query.where(Event.process_id == process_id)
+    if since is not None:
+        query = query.where(Event.started_at >= since)
+    return {(e.process_id, e.data["source"]): e for e in await session.scalars(query)}
+
+
+async def down_sources(session: AsyncSession, since: datetime | None = None) -> list[str]:
+    """`<process id>:<source>` of every source whose latest sync failed."""
+    return sorted(
+        f"{p}:{name}"
+        for (p, name), e in (await sync_status(session, since=since)).items()
+        if e.status == "error"
+    )
+
+
 async def list_sources(session: AsyncSession, process_id: int) -> list[SourceOut]:
     if await session.get(Process, process_id) is None:
         raise NotFoundError(f"Process {process_id} does not exist")
-    return [_out(load) for load in await current_loads(session, process_id)]
+    status = await sync_status(session, process_id)
+    out = []
+    for load in await current_loads(session, process_id):
+        row = _out(load)
+        if (event := status.get((process_id, load.name))) is not None:
+            row.status = "down" if event.status == "error" else "ok"
+            row.error = (event.data or {}).get("error")
+            row.checked_at = event.started_at
+        out.append(row)
+    return out
 
 
 async def get_source(session: AsyncSession, process_id: int, name: str) -> SourceDetail:
@@ -116,6 +176,44 @@ async def get_source(session: AsyncSession, process_id: int, name: str) -> Sourc
 def pack_sources_file(pack_file: Path) -> Path:
     """`processes/invoice-payment.json` keeps its sources in `processes/invoice-payment/`."""
     return pack_file.with_suffix("") / "sources.json"
+
+
+def load_schema(pack_file: Path) -> dict[str, SourceSchema]:
+    """The pack's canonical source schema. No file: nothing to validate, nothing synced
+    before a run (an offline pack)."""
+    path = pack_file.with_suffix("") / "schema.json"
+    if not path.is_file():
+        return {}
+    return SchemaFile.model_validate_json(path.read_text(encoding="utf-8")).sources
+
+
+async def process_pack(session: AsyncSession, process_id: int) -> Path | None:
+    """The pack of the process's use case, if any."""
+    process = await session.get(Process, process_id)
+    if process is None:
+        raise NotFoundError(f"Process {process_id} does not exist")
+    use_case = await session.get(UseCase, process.use_case_id)
+    try:
+        return find_pack(use_case.name)
+    except NotFoundError:
+        return None
+
+
+def nonconforming(rows: list[dict[str, Any]], schema: SourceSchema, key: str) -> str | None:
+    """Why `rows` are not in the canonical schema, or None. A required field absent, None
+    or blank in any row fails the whole load: a rule would read it as "no data"."""
+    bad: dict[str, list[str]] = {}
+    for row in rows:
+        for field in schema.required:
+            if row.get(field) is None or not str(row[field]).strip():
+                bad.setdefault(field, []).append(str(row.get(key)))
+    return (
+        "; ".join(
+            f"{field} missing in {len(keys)} rows ({', '.join(keys[:5])})"
+            for field, keys in sorted(bad.items())
+        )
+        or None
+    )
 
 
 def find_pack(use_case: str) -> Path:
@@ -207,20 +305,27 @@ async def sync(
     name: str,
     config: HttpSourceConfig,
     transport: httpx.AsyncBaseTransport | None = None,
+    schema: SourceSchema | None = None,
 ) -> SyncResult:
     if await session.get(Process, process_id) is None:
         raise NotFoundError(f"Process {process_id} does not exist")
-    connector = HttpConnector(config, transport)
     started = datetime.now(UTC)
     # The connector's stats (requests, retries, 429s, logins, pages) go on the span.
     with events.span("sync_source", process_id=process_id, source=name) as span:
+        failed = f"Sync of {name!r} failed; the previous snapshot stays stored, unused by runs"
+        if schema and (unmapped := sorted(set(schema.required) - config.fields.keys())):
+            raise SourceUnavailableError(f"{failed}. No field mapped to canonical {unmapped}")
+        connector = None
         try:
+            connector = HttpConnector(config, transport)
             rows = await connector.download()
         except SyncError as e:
+            if connector:
+                span.set(**connector.stats.__dict__)
+            raise SourceUnavailableError(f"{failed}. {e}") from e
+        if schema and (problem := nonconforming(rows, schema, config.key)):
             span.set(**connector.stats.__dict__)
-            raise SourceUnavailableError(
-                f"Sync of {name!r} failed; the previous snapshot stays current. {e}"
-            ) from e
+            raise SourceUnavailableError(f"{failed}. Not the canonical schema: {problem}")
 
         origin = f"{name}:{started.isoformat(timespec='seconds')}|{connector.base_url}"
         digest = rows_hash(rows)
@@ -257,4 +362,35 @@ async def sync(
 
 async def sync_process(session: AsyncSession, process_id: int, name: str) -> SyncResult:
     config = await process_config(session, process_id, name)
-    return await sync(session, process_id, name, config)
+    pack = await process_pack(session, process_id)
+    schema = load_schema(pack).get(name) if pack else None
+    return await sync(session, process_id, name, config, schema=schema)
+
+
+async def sync_before_run(session: AsyncSession, process_id: int) -> dict[str, str]:
+    """Sync every live source of the process's use case (ADR 0028) and return the ones that
+    failed, name -> why: down for this run. Each attempt is a `sync_source` span under the
+    caller's (`run_process`, `reprocess`)."""
+    pack = await process_pack(session, process_id)
+    if pack is None:
+        return {}
+    down = {}
+    for name, schema in load_schema(pack).items():
+        if not schema.sync_before_run:
+            continue
+        try:
+            config = load_config(pack_sources_file(pack), name)
+        except TraceError as e:  # a broken configuration is an outage too: trace it
+            down[name] = e.message
+            with (
+                suppress(TraceError),
+                events.span("sync_source", process_id=process_id, source=name),
+            ):
+                raise
+            continue
+        try:
+            await sync(session, process_id, name, config, schema=schema)
+        except Exception as e:  # noqa: BLE001 - whatever failed, the source is down
+            await session.rollback()
+            down[name] = str(e)[:1000]
+    return down
