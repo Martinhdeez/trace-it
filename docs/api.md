@@ -23,6 +23,8 @@ activating rules, document extraction and source uploads need it. CORS is open.
 | Rule | `GET /rules/{id}` | `code`, `tests`, `report` (`valid`, `tests`, `discrepancies`, `attempts`, `reviews`; `needs_data` when blocked) |
 | Norm | `POST /processes/{id}/norm`, `GET /processes/{id}/norm-rules` | the client's norm split into norm rules, each with its rules |
 | Rule lifecycle | `POST /processes/{id}/rules` (compiles in the background), `POST /rules/{id}/compile`, `GET /rules/{id}/impact`, `POST /rules/{id}/activate`, `POST /rules/{id}/retire` | impact = `unchanged`, `changes`, `conflicts`; activate/retire need a manager |
+| Learning | `POST /processes/{id}/learning`, `GET /processes/{id}/learning` | Manager-only analysis and proposed norms; [full flow](learning.md) |
+| Norm proposal | `GET /norm-proposals/{id}`, `POST .../validate`, `POST .../approve`, `POST .../reject` | Isolated previews; explicit manager adoption with a validation ID |
 | Sources | `GET /processes/{id}/sources` | current load per source: rows count, origin, `loaded_at` |
 | Source rows | `GET /processes/{id}/sources/{name}` | same plus `data` |
 | Sync the ERP | `POST /processes/{id}/sources/{name}/sync`, `GET .../diff` | |
