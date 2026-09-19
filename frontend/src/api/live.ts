@@ -8,7 +8,8 @@ import type {
   DiscoverySessionSummary,
   DocumentUpload,
   DraftIn,
-  ExecutionMetrics,
+  Plane,
+  PlaneMetrics,
   ExecutionOut,
   ExtractionResult,
   Impact,
@@ -82,8 +83,8 @@ export const liveClient: ApiClient = {
   },
 
   summary: (processId) => get<ProcessSummary>(`/processes/${processId}/summary`),
-  planeMetrics: (processId, plane) =>
-    get<ExecutionMetrics>(`/processes/${processId}/metrics/${plane}`),
+  planeMetrics: <P extends Plane>(processId: number, plane: P) =>
+    get<PlaneMetrics[P]>(`/processes/${processId}/metrics/${plane}`),
   processMetrics: (processId) => get<ProcessMetrics>(`/processes/${processId}/metrics`),
   planesHealth: () => get<PlaneHealth[]>('/health/planes'),
   getDraft: (processId) => get<VersionDraft>(`/processes/${processId}/draft`),
