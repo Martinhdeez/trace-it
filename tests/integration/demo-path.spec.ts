@@ -133,8 +133,13 @@ test('the console acts as the manager, with no login screen', async () => {
   await expect(page.getByRole('link', { name: new RegExp(MANAGER.name) })).toBeVisible()
 })
 
-test('process panel shows the real process', async () => {
+test('the process inbox opens its real console panel', async () => {
   await page.getByRole('link', { name: PROCESS }).first().click()
+  await expect(page).toHaveURL(new RegExp(`/processes/${processId}$`))
+  await expect(page.getByText('Todo al día', { exact: true })).toBeVisible()
+  await realAndClean()
+  await page.getByRole('link', { name: 'Consola', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/processes/${processId}/panel$`))
   await expect(page.getByRole('heading', { level: 1, name: PROCESS })).toBeVisible()
   await realAndClean()
 })
@@ -324,7 +329,7 @@ test('pkgs 9, 11: definition and settings screens load real data', async () => {
 })
 
 test('pkg 7: run history lists the run', async () => {
-  await page.goto(`/processes/${processId}`)
+  await page.goto(`/processes/${processId}/panel`)
   // Two runs: the text PDFs, then the scan. The older one lists its own cases.
   const runs = page.getByRole('link', { name: /decisiones · v1/ })
   await expect(runs).toHaveCount(2)
@@ -335,7 +340,7 @@ test('pkg 7: run history lists the run', async () => {
     await expect(page.getByRole('button', { name: new RegExp(name.replace('.', '\\.')) })).toBeVisible()
   }
   await page.goBack()
-  await expect(page).toHaveURL(new RegExp(`/processes/${processId}$`))
+  await expect(page).toHaveURL(new RegExp(`/processes/${processId}/panel$`))
   await realAndClean()
 })
 
