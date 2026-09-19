@@ -14,10 +14,11 @@ compose=(docker compose --env-file /dev/null -p trace-it-ci -f deploy/compose.ym
 case "${1:-}" in
   up)
     mkdir -p "$TRACE_MODEL_DIR"
-    : > "$TRACE_ENV_FILE"
+    printf 'TRACEPAY_OCR_PROFILE=experimental\n' > "$TRACE_ENV_FILE"
     printf 'ci:%s\n' "$(openssl passwd -apr1 ci-only-password)" > "$TRACE_AUTH_FILE"
     "${compose[@]}" up -d --wait --wait-timeout 120 db
     "${compose[@]}" run --rm --no-deps backend alembic upgrade head
+    "${compose[@]}" run --rm --no-deps backend python -m app.cli load /processes/invoice-payment.json
     "${compose[@]}" up -d --wait --wait-timeout 180
     ;;
   down) "${compose[@]}" down --volumes ;;

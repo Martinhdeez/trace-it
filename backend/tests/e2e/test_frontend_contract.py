@@ -1,7 +1,7 @@
 """Release gates for the actual live client. Do not xfail integration gaps.
 
 The browser exercises rendering; these checks enumerate route/header/schema drift,
-including actions a smoke visit may not click. They intentionally fail on old main.
+including actions a smoke visit may not click.
 """
 
 import re
@@ -16,15 +16,16 @@ FRONTEND = Path(__file__).resolve().parents[3] / "frontend" / "src" / "api"
 
 
 def canonical(path: str) -> str:
-    path = re.sub(r"\$\{query\(.*?\)\}", "", path)
+    path = path.split("${query(", 1)[0]
     return re.sub(r"\$?\{[^}]+\}", "{}", path)
 
 
 def test_live_client_routes_exist_in_openapi():
     live = (FRONTEND / "live.ts").read_text(encoding="utf-8")
     calls = re.findall(
-        r"\b(get|getText|post|put|upload)(?:<[^;\n]*?>)?\(\s*['\"`]([^'\"`]+)['\"`]",
+        r"\b(get|getText|post|put|upload)(?:<.*?)?\(\s*(['\"`])(/.*?)\2",
         live,
+        re.S,
     )
     assert len(calls) >= 25, "The route audit no longer recognizes the live client"
     methods = {"getText": "get", "upload": "post"}
@@ -35,8 +36,12 @@ def test_live_client_routes_exist_in_openapi():
     }
     missing = sorted(
         f"{methods.get(method, method).upper()} {path}"
-        for method, path in calls
-        if (canonical(path), methods.get(method, method)) not in routes
+        for method, _, path in calls
+        if not any(
+            methods.get(method, method) == route_method
+            and re.fullmatch(re.escape(route).replace(r"\{\}", "[^/]+"), canonical(path))
+            for route, route_method in routes
+        )
     )
     assert not missing, "Live client calls absent from the API:\n" + "\n".join(missing)
 
@@ -49,9 +54,9 @@ def test_live_client_identity_header_matches_backend():
 
 
 def test_live_client_user_fields_match_api():
-    contract = (FRONTEND / "contracts.ts").read_text(encoding="utf-8")
-    user = re.search(r"export type User = \{(.*?)\n\}", contract, re.S)
+    contract = (FRONTEND / "live.ts").read_text(encoding="utf-8")
+    user = re.search(r"type RawUser = \{(.*?)\}", contract, re.S)
     assert user
-    fields = set(re.findall(r"^\s+(\w+):", user.group(1), re.M))
+    fields = set(re.findall(r"(?:^|;)\s*(\w+):", user.group(1)))
     schema = app.openapi()["components"]["schemas"]["UserOut"]
-    assert fields == set(schema["properties"]), "Map the live API user before rendering it"
+    assert fields == set(schema["properties"]), "The wire user type must match the API"

@@ -1,67 +1,52 @@
 # Validation record — 2026-09-19
 
-Candidate prepared against local `main`, commit
-`710d4212b2c7477857dca3aca094d8040bea6ce4` (latest `origin/main` at the initial fetch).
-This record covers the candidate published on `ci/vps-trace-it`, before integration
-with subsequent changes to `main`. It has not been merged into the release branch.
-No production image has been published and no VPS deployment has been activated.
+Release integration is based on `dev` ef3e079 and `main` 65bd45b (the same
+application tree), with the gated VPS deployment from ci/vps-trace-it reapplied.
+The old frontend/API blockers have been repaired by the application release.
 
-## Verified
+## Local release evidence
 
-- Production backend and frontend Docker images build successfully.
-- Frontend TypeScript/build and lint pass (four existing lint warnings).
-- Ruff passes; shell scripts pass ShellCheck; workflow passes actionlint.
-- Production Compose starts an isolated local PostgreSQL, API and nginx gateway;
-  all three health checks pass. Only the CI gateway binds `127.0.0.1:18174`.
-- Real PostgreSQL dump/restore recovers a sentinel row into an isolated database.
-- `make check` executed in Linux/Python 3.12 against an isolated test database:
-  292 unit/integration tests passed; 7 golden/API/evaluation tests passed;
-  3 new frontend-contract tests failed. Two OCR tests need weights; one existing
-  parameterized test is skipped because there is no known golden mismatch.
-- All 471 text invoice outcomes match the golden reference. The corpus contains
-  500 invoices; this does not certify extraction/decisions for the 29 scans.
-- Chromium: 3 passing tests (access protection; assets/deep links; no mock fallback),
-  2 failing tests (real process cannot render; PDF does not reach the engine).
-  Despite the latter soft assertion, persisted PDF evidence, human resolution,
-  append-only history and JSONL export assertions complete successfully.
-- Existing Windows checkout JSONL files were normalized to LF and `*.jsonl` now
-  has an explicit LF rule. The golden regeneration check passes under Linux.
+- Production backend and frontend Docker images build; lint and TypeScript pass.
+- Ruff, ShellCheck and actionlint pass.
+- All three production containers become healthy on an isolated database after
+  migrations 0001–0014. First-release use-case/user initialization succeeds.
+- `make check` on Linux/Python 3.12: 601 unit/integration tests and 11 golden/API/
+  evaluation tests pass. Two existing model-dependent OCR tests are skipped by
+  keyless CI; one golden mismatch case is empty. No release failure is suppressed.
+- All 471 text invoices match the golden reference; this is not a certification
+  of all 29 scanned challenge invoices.
+- Five Chromium tests pass: gateway authentication; assets/deep links under the
+  deployment prefix; real process/user rendering and configuration screens;
+  no mock fallback during API failure; published schema, PDF upload, persisted
+  symbols/evidence, automatic decision, append-only human resolution and export.
+- A PostgreSQL dump restores a sentinel row into a separate database.
+- The production OCR profile validates the local model hashes and configured keys.
+  A synthetic scan is correctly read by both local OCR models. A separate explicit
+  paid smoke check calls real visual providers, verifies NIF/IBAN/order, and reports
+  no extraction warnings. It records three provider attempts and two visual readers.
+  The text judge is unnecessary when image readers agree, so this check does not
+  certify its live availability. Paid calls remain enabled in production.
 
-## Release blockers, intentionally not fixed in this change
+## Deployment prerequisites
 
-1. The live client calls 29 route/method combinations absent from OpenAPI.
-2. It sends `X-Usuario-Id` instead of `X-User-Id`.
-3. It assumes `nombre`/`rol` while the API returns `name`/`role`.
-4. PDF ingestion persists evidence with unapproved symbols; `/run` leaves the
-   instance pending. Add a real approved-symbol handoff, not a test-only bypass.
+- Source `.env` was copied by SCP, with matching SHA-256 and mode 600; no secret
+  value is committed or printed. Provider keys stay server-side.
+- Root installed the restricted SSH command/sudoers. The operator confirmed the
+  release preparation script installed checked OCR weights and first-release
+  initialization, and enabled `/opt/trace-it/DEPLOY_ENABLED`.
+- The GitHub deploy switch remains off until CI is green. Repository SSH secrets
+  use a dedicated restricted key and the host key pinned over trusted SSH.
+- The workflow creates its environment on first deployment. Administrator-enforced
+  environment/branch protection is additional hardening; current account is WRITE.
+- Only loopback port 18173 is reserved. Existing Caddy routes, mail and containers
+  remain outside this Compose project. Available disk at inspection: about 12 GiB.
+- First release loads the invoice-payment use case and users, with rules as drafts.
+  Managers explicitly validate/publish rules. No production invoice is auto-decided.
 
-No failing check uses `xfail`, `continue-on-error` or retries to permit deployment.
+## Limits and operations
 
-## VPS and GitHub state
-
-- SSH as `kripta` works. Existing `github-kripta` identity authenticates as
-  `Kripta-Studios`; neither its private key nor other services' credentials were copied.
-- `kripta` cannot access the Docker socket; `sudo -n` requires a password.
-- Caddy owns HTTPS. The Hub at `/nexia/` and its applications already exist.
-  Port 18173 was free. Host had 7.6 GiB RAM and about 12 GiB free disk at inspection.
-- Source `.env` copied by SCP to
-  `/home/kripta/trace-it-staging/secrets/runtime.env`, mode 600, matching SHA256.
-  Secret values were not printed or added to the repository.
-- Root bootstrap bundle is in `/home/kripta/trace-it-staging/bootstrap`, with
-  `SHA256SUMS`. It prepares trace-it only and leaves both activation switches off.
-- Caddy candidate adapts successfully. Comparison finds exactly two added trace-it
-  routes and preserves existing handler content after normalizing generated group
-  IDs, configuration hide paths and route ordering. This is configuration inspection,
-  not a live routing test; the original Caddyfile was not changed or reloaded.
-- GitHub repository secrets `TRACE_SSH_KEY` and `TRACE_SSH_KNOWN_HOSTS` are set.
-  The former is a new dedicated identity for the forced deployment command; the
-  latter is pinned from the host key read over the existing trusted SSH connection.
-- Repository variable `TRACE_DEPLOY_ENABLED=false`.
-- Creating environment `trace-it-production` returned HTTP 403: repository admin
-  rights are required. Current account has `WRITE`, not `ADMIN`. A VPS root shell
-  alone cannot grant GitHub permissions. Exact admin commands are in `README.md`.
-
-The deployment script's privileged execution and public HTTPS activation remain
-untested until a root operator installs the bundle and the application gates pass.
-Local OCR weights, live ERP connectivity, real provider evaluations and offsite
-backup storage remain explicit deployment prerequisites/operational work.
+The challenge ERP is not provisioned in this stack; configure a reachable
+`TRACE_ERP_URL` before live ERP synchronization. Provider availability can change.
+Backups are local until an operator provisions offsite retention. See README.md
+for disable/rollback commands. GitHub run and deployment evidence should be checked
+on the actual release commit rather than inferred from these local results.

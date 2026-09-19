@@ -66,6 +66,11 @@ trap rollback ERR
 "${compose[@]}" run --rm --no-deps -T backend python -c \
   'import sys, tarfile; t=tarfile.open(fileobj=sys.stdout.buffer, mode="w|gz"); t.add("/srv/.data", arcname="data"); t.close()' > "$backup/ingestion.tar.gz"
 "${compose[@]}" run --rm --no-deps -T backend alembic upgrade head
+if [[ ! -f INITIALIZED ]]; then
+  # Seed the bundled use case and users once. Rule publication remains a manager action.
+  "${compose[@]}" run --rm --no-deps -T backend python -m app.cli load /processes/invoice-payment.json
+  touch INITIALIZED
+fi
 "${compose[@]}" up -d --wait --wait-timeout 180 backend frontend
 curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18173/internal-health >/dev/null
 python3 /opt/trace-it/activate-route.py

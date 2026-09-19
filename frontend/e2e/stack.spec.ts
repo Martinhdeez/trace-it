@@ -1,7 +1,25 @@
 import { randomUUID } from 'node:crypto'
-import { readdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { test, expect, request as requests, type APIRequestContext } from '@playwright/test'
+import { test, expect, request as requests, type APIRequestContext, type Page } from '@playwright/test'
+
+async function managerFixture(request: APIRequestContext, page?: Page) {
+  const email = `${randomUUID()}@ci.invalid`
+  const created = await request.post('api/users', { data: { name: 'CI manager', email, role: 'manager' } })
+  expect(created.status()).toBe(201)
+  const login = await request.post('api/login', { data: { email } })
+  expect(login.status()).toBe(200)
+  const headers = { 'X-User-Id': String((await login.json()).id) }
+  if (page) {
+    await page.goto('settings')
+    const user = page.getByRole('button', { name: new RegExp(email.replaceAll('.', '\\.')) })
+    await expect(user).toContainText('CI manager')
+    await expect(user).toContainText('responsable')
+    await user.click()
+    await expect(page.getByRole('button', { name: 'Salir', exact: true })).toBeVisible()
+  }
+  return headers
+}
 
 async function processFixture(request: APIRequestContext) {
   const name = `Browser CI ${randomUUID()}`
@@ -11,7 +29,7 @@ async function processFixture(request: APIRequestContext) {
       { name: 'ACCEPT', priority: 0, is_default: true },
       { name: 'REVIEW', priority: 10, requires_human: true },
     ],
-    symbols: [],
+    symbols: [{ name: 'holder', type: 'text', required: true }],
   } })
   expect(response.ok(), await response.text()).toBeTruthy()
   return { name, id: (await response.json()).process.id as number }
@@ -39,7 +57,7 @@ test('production assets and navigation stay inside the deployment prefix', async
     }
   })
   await page.goto('')
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(page.getByRole('main')).toContainText('La consola escribe la norma')
   await page.getByRole('link', { name: 'Abrir la consola' }).first().click()
   await expect(page).toHaveURL(/\/nexia\/trace-it\/processes$/)
   await page.reload()
@@ -48,13 +66,14 @@ test('production assets and navigation stay inside the deployment prefix', async
 })
 
 test('console displays a process created in the real PostgreSQL database', async ({ page, request }) => {
+  await managerFixture(request, page)
   const process = await processFixture(request)
   await page.goto('processes')
   // A mock cannot know this randomly generated process name.
   await expect(page.getByRole('link', { name: process.name }).first()).toBeVisible()
   await page.getByRole('link', { name: process.name }).first().click()
   await expect(page).toHaveURL(new RegExp(`/processes/${process.id}$`))
-  for (const route of ['instances', 'queue', 'rules', 'audit', 'sources']) {
+  for (const route of ['instances', 'review', 'definition', 'definition/sources', 'settings']) {
     const failures: string[] = []
     const listener = (response: import('@playwright/test').Response) => {
       if (response.url().includes('/api/') && response.status() >= 400) {
@@ -80,30 +99,34 @@ test('production never substitutes mock data for an unavailable API', async ({ p
 
 test('HTTP flow persists PDF evidence, decisions, human resolution and export', async ({ request }) => {
   const process = await processFixture(request)
-  const email = `${randomUUID()}@ci.invalid`
-  const created = await request.post('api/users', { data: { name: 'CI manager', email, role: 'manager' } })
-  expect(created.status()).toBe(201)
-  const login = await request.post('api/login', { data: { email } })
-  expect(login.status()).toBe(200)
-  const headers = { 'X-User-Id': String((await login.json()).id) }
-  const directory = resolve('../.context/500-sombras-de-alberto/facturas')
-  const filename = readdirSync(directory).filter(name => name.endsWith('.pdf')).sort()[0]
+  const headers = await managerFixture(request)
+  const validated = await request.post(`api/processes/${process.id}/draft/validate`, { headers })
+  expect(validated.status(), await validated.text()).toBe(200)
+  const draft = await validated.json()
+  expect(draft.validation.valid, JSON.stringify(draft.validation)).toBe(true)
+  const published = await request.post(`api/processes/${process.id}/draft/publish`, {
+    headers, data: { revision: draft.revision, validation_hash: draft.validation.hash, reason: 'Approve CI certificate contract' },
+  })
+  expect(published.status(), await published.text()).toBe(201)
+  const filename = 'certificate.pdf'
   const upload = await request.post(`api/processes/${process.id}/files`, {
     headers,
     multipart: {
-      file: { name: filename, mimeType: 'application/pdf', buffer: readFileSync(resolve(directory, filename)) },
+      file: { name: filename, mimeType: 'application/pdf', buffer: readFileSync(resolve('e2e/fixtures', filename)) },
       ocr: 'false', vlm: 'false', jev: 'false',
     },
   })
   expect(upload.status(), await upload.text()).toBe(201)
-  const instanceId = (await upload.json()).instance_id
+  const document = await upload.json()
+  const instanceId = document.instance_id
+  expect(document.symbols.holder.value).toBe('Ana')
   const evidence = await request.get(`api/instances/${instanceId}/document`, { headers })
   expect(evidence.status()).toBe(200)
   const run = await request.post(`api/processes/${process.id}/run`)
   expect(run.status(), await run.text()).toBe(200)
-  // Continue verifying the human path even if the extraction -> engine handoff is broken.
-  expect.soft((await run.json()).decided, 'Uploaded PDF must reach the decision engine').toBe(1)
+  expect((await run.json()).decided, 'Uploaded PDF must reach the decision engine').toBe(1)
   const before = await (await request.get(`api/instances/${instanceId}`)).json()
+  expect(before.decisions.at(-1).decision).toBe('ACCEPT')
   const resolved = await request.post(`api/instances/${instanceId}/resolve`, {
     headers, data: { decision: 'ACCEPT', reason: 'CI verified evidence' },
   })
