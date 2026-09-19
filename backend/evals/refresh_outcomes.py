@@ -24,7 +24,9 @@ load_dotenv(ROOT / ".env")
 
 
 def dump(path, value):
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
 def digest(path):
@@ -129,8 +131,10 @@ async def run(args):
                 output / "workbook-extraction.json", service.store.result(workbook["extraction_id"])
             )
             with (
-                (output / "extractions.jsonl").open("w", encoding="utf-8") as extractions,
-                (output / "uploads.jsonl").open("w", encoding="utf-8") as uploads,
+                (output / "extractions.jsonl").open(
+                    "w", encoding="utf-8", newline="\n"
+                ) as extractions,
+                (output / "uploads.jsonl").open("w", encoding="utf-8", newline="\n") as uploads,
             ):
                 for i, path in enumerate(files, 1):
                     data = await post(
@@ -184,6 +188,7 @@ async def run(args):
                     for row in sorted(outcomes, key=lambda r: r["file_id"])
                 ),
                 encoding="utf-8",
+                newline="\n",
             )
             summary = {
                 "started_at": started,

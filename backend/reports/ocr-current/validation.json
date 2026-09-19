@@ -1,5 +1,5 @@
 {
-  "outcomes_sha256": "4c52bce179676cb2e91743bb8a5c5ac2fbbd6259f5f76419c8515f685aed6e1b",
+  "outcomes_sha256": "2f897e0f824feca9c738fa75f41ecd13ac4f816884177ac6a6843576529b0653",
   "api_matches_independent_evaluator": 500,
   "scan_policy": "ADR 0025: unconfirmed required scan fields and rejected scans escalate",
   "scan_policy_changes": [

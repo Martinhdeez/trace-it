@@ -2,7 +2,7 @@
   "started_at": "2026-09-19T10:03:22.757714+00:00",
   "finished_at": "2026-09-19T10:06:25.353172+00:00",
   "git_commit": "c739eacfb282d3f3d2a101831894649abc3d0049",
-  "code_manifest_sha256": "863c6c1382dc58f0e1b63e1fdb9dedd65cbe22ba4822bf8a6535487064d6a6c9",
+  "code_manifest_sha256": "61b15b87a142359899933b4f89493ba9ef1385975645fce3f648140579df20e2",
   "pipeline_version": "invoice-v2.2.0+xlsx-v1.3",
   "profile": {
     "profile": "verified",
@@ -62,8 +62,8 @@
   "erp": "Frozen real HTTP ERP snapshot",
   "erp_sha256": "e38096627b3a967a850926df5ee5ec960573c9e01596df111365cc2fe1d372d1",
   "workbook_sha256": "d7729db76ec7501f35e5cf4ef3383344c5b2bea4c6ea9ece36723663ca2a87ae",
-  "inputs_sha256": "9996e5352623fc404131d1947f5f93dd57836ef82a0cfa76e8f8aaf0047c20ce",
-  "outcomes_sha256": "4c52bce179676cb2e91743bb8a5c5ac2fbbd6259f5f76419c8515f685aed6e1b",
+  "inputs_sha256": "6728c29e28b57cee92ff2ef1b8d45d8c1ae90093e907fdc084379c16f297a067",
+  "outcomes_sha256": "2f897e0f824feca9c738fa75f41ecd13ac4f816884177ac6a6843576529b0653",
   "fresh_process": true,
   "fresh_extraction_store": true,
   "fresh_provider_journal": false,
@@ -76,5 +76,6 @@
       "ESCALAR": 21,
       "NO_PAGAR": 36
     }
-  }
+  },
+  "artifact_encoding": "UTF-8 with LF line endings; JSON values match the recorded API export"
 }
