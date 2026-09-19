@@ -117,7 +117,7 @@ export function Sidebar() {
               return (
                 <li key={item.id}>
                   <NavItem to={paths.process(item.id)} active={open}>
-                    <span className="min-w-0 truncate">{item.nombre}</span>
+                    <span className="min-w-0 truncate">{item.name}</span>
                   </NavItem>
                 </li>
               )

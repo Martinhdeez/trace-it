@@ -5,7 +5,7 @@ import { api } from '../../api/client'
 import type { ExtractionResult } from '../../api/contracts'
 import { keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
-import { symbolLabel, symbolOfField } from '../../lib/symbols'
+import { symbolLabel } from '../../lib/symbols'
 import { ErrorNotice } from '../shell/Notice'
 
 /**
@@ -188,7 +188,7 @@ function EvidencePaper({
         {Object.entries(evidence.fields ?? {}).map(([name, field]) => (
           <div key={name} className="border-b border-hairline py-2">
             <dt className="font-mono text-[10.5px] text-faint">
-              {symbolLabel(symbolOfField(name))}
+              {symbolLabel(field.symbol ?? name)}
             </dt>
             <dd className="mt-0.5 break-words font-mono text-[12.5px]">
               {highlight(field.value ?? '—', query)}

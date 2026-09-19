@@ -72,7 +72,7 @@ export function ProcessSettings() {
       processId={processId}
       crumbs={[
         { label: 'Procesos', to: paths.processes },
-        { label: process.data?.nombre ?? '…', to: paths.process(processId) },
+        { label: process.data?.name ?? '…', to: paths.process(processId) },
         { label: 'Ajustes' },
       ]}
     >
