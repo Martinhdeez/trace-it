@@ -63,6 +63,30 @@ def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
 
 safe = {k: v for k, v in vars(builtins).items() if k not in FORBIDDEN_NAMES}
 safe["__import__"] = safe_import
+class MissingValidationSymbol(Exception):
+    def __init__(self, name):
+        self.name = name
+
+class ValidationInstance(dict):
+    def __init__(self, values, missing):
+        super().__init__(values)
+        self._missing = set(missing)
+
+    def __getitem__(self, key):
+        if key in self._missing:
+            raise MissingValidationSymbol(key)
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        if key in self._missing:
+            raise MissingValidationSymbol(key)
+        return super().get(key, default)
+
+    def __contains__(self, key):
+        if key in self._missing:
+            raise MissingValidationSymbol(key)
+        return super().__contains__(key)
+
 out, sys.stdout = sys.stdout, io.StringIO()
 data = json.load(sys.stdin)
 code = compile(data["code"], "<rule>", "exec")
@@ -71,8 +95,14 @@ if "cases" in data:
 else:
     sources = data["sources"]
     population = data["population"]
+    missing = data.get("validation_missing", {})
     cases = (
-        (instance, sources, [symbols for other_key, symbols in population if other_key != key])
+        (ValidationInstance(instance, missing[str(key)]) if str(key) in missing else instance,
+         sources, [
+             ValidationInstance(symbols, missing[str(other_key)])
+             if str(other_key) in missing else symbols
+             for other_key, symbols in population if other_key != key
+         ])
         for key, instance in data["instances"]
     )
 results = []
@@ -82,6 +112,8 @@ for instance, sources, others in cases:
         ns = {"__builtins__": safe, "__name__": "rule"}
         exec(code, ns)
         results.append(json.dumps({"ok": ns["evaluate"](instance, sources, others)}))
+    except MissingValidationSymbol as e:
+        results.append(json.dumps({"missing_validation_symbol": e.name}))
     except BaseException as e:
         results.append(json.dumps({"error": (type(e).__name__ + ": " + str(e))[:%d]}))
 out.write("[" + ",".join(results) + "]")
@@ -91,6 +123,14 @@ out.write("[" + ",".join(results) + "]")
 class SandboxError(TraceError):
     status_code = 422
     code = "sandbox_error"
+
+
+class MissingValidationSymbol(SandboxError):
+    """Validation-only signal: code actually read a newly required absent symbol."""
+
+    def __init__(self, name: str):
+        self.name = name
+        super().__init__(name)
 
 
 def check(code: str) -> None:
@@ -129,6 +169,8 @@ def _limit(cpu_s: int) -> None:
 
 
 def _validate(r: dict[str, Any]) -> dict[str, Any] | SandboxError:
+    if "missing_validation_symbol" in r:
+        return MissingValidationSymbol(r["missing_validation_symbol"])
     if "error" in r:
         return SandboxError(f"The rule failed: {r['error']}")
     v = r.get("ok")
@@ -191,6 +233,8 @@ def run_dataset(
     sources: dict[str, list[dict[str, Any]]],
     population: list[tuple[int, dict[str, Any]]],
     timeout_s: float = 10.0,
+    *,
+    validation_missing: dict[int, list[str]] | None = None,
 ) -> list[dict[str, Any] | SandboxError]:
     """Run one rule over instances that share sources and a population.
 
@@ -204,6 +248,7 @@ def run_dataset(
             "instances": instances,
             "sources": sources,
             "population": population,
+            **({"validation_missing": validation_missing} if validation_missing else {}),
         }
     )
     return _run(stdin, len(instances), timeout_s)

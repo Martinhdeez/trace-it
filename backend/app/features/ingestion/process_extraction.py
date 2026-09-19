@@ -226,10 +226,28 @@ def schema_symbols(result, fields):
     symbols = {}
     readings = result.data.get("schema_fields", {})
     for field in fields:
-        value = readings.get(field.name, {}).get("value")
+        reading = readings.get(field.name, {})
+        value = reading.get("value")
         if value is not None and field.type.lower() == "boolean":
             value = {"true": True, "false": False}.get(value)
-        symbols[field.name] = {"value": value, "origin": f"document:{result.id}"}
+        origin = f"document:{result.id}"
+        if field.source == "document":
+            accepted = [
+                candidate
+                for candidate in reading.get("candidates", [])
+                if value is not None
+                and candidate.get("value") == reading.get("value")
+                and candidate.get("error") is None
+            ]
+            has_native_evidence = any(
+                candidate.get("evidence", {}).get("method") == "native" for candidate in accepted
+            )
+            if not has_native_evidence and (accepted or result.metrics.get("native_pages") == 0):
+                verification = reading.get("verification", "unverified")
+                origin = f"scan:{result.id}"
+                if verification != "verified":
+                    origin += f":{verification}"
+        symbols[field.name] = {"value": value, "origin": origin}
     return symbols
 
 

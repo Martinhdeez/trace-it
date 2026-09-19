@@ -6,6 +6,7 @@ import { Button, Field, Input, Select, Textarea } from '../shell/Controls'
 import { ErrorNotice } from '../shell/Notice'
 import { NestedCard } from '../shell/Well'
 import { ExecutionEditor } from './ExecutionEditor'
+import { HistoricalCoverage } from './HistoricalCoverage'
 
 export function ProcessExecutionSettings({ processId }: { processId: number }) {
   const { isManager } = useSession()
@@ -88,7 +89,12 @@ function SettingsForm({ processId, initial }: { processId: number; initial: Exec
     {draft && <div className="space-y-3 border-t border-hairline pt-3">
       <p className="text-sm">Publication includes all changes in this draft. Validation checks saved facts; it does not rerun OCR or measure model quality.</p>
       <details><summary>Review complete draft and validation</summary><pre className="max-h-96 overflow-auto text-xs">{JSON.stringify(draft, null, 2)}</pre></details>
-      {draft.validation && !draft.validation.valid && <p role="alert">Validation failed. Resolve the reported issues before publishing.</p>}
+      {draft.validation && <div role="status"><HistoricalCoverage validation={draft.validation} /></div>}
+      {draft.validation && !draft.validation.valid && <p role="alert" className="text-sm text-nopagar">
+        Validation failed. {draft.validation.error || 'Resolve the blocking issues before publishing.'}
+        {!!draft.validation.conflicts?.length && ` ${draft.validation.conflicts.length} historical conflict(s).`}
+        {!!draft.validation.errors?.length && ` ${draft.validation.errors.length} evaluation error(s).`}
+      </p>}
       <Field label="Publication reason"><Input value={reason} onChange={e => setReason(e.target.value)} /></Field>
       <Button tone="primary" disabled={busy || dirty || Object.values(invalid).some(Boolean) || !draft.validation?.valid || !reason.trim()} onClick={() => publish.mutate()}>Publish reviewed version</Button>
       {publish.isError && <ErrorNotice error={publish.error} />}

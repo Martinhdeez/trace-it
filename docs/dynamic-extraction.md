@@ -13,6 +13,69 @@ fields, rule dependencies, warnings and a content fingerprint. A change in a loc
 file takes effect after the definition is loaded and its new version is published
 through the existing process lifecycle; this is not a filesystem watcher.
 
+## From an agent proposal to a document value
+
+1. In a discovery session, use `revise` to propose the new symbol and rule together.
+   `discuss` answers questions without editing the draft. The symbol declares its name,
+   type, description, requirement and optional extraction hints; code alone cannot
+   introduce a usable field. The compiler receives the proposed schema and checks
+   literal references against it.
+2. Review the setup, rules and examples, then prepare the draft. Compilation and the
+   historical preview use saved evidence. They do not read PDFs again. Historical cases
+   missing a newly introduced required field are reported as not evaluable with available
+   historical evidence. That absence alone does not block publication or count as a
+   successful validation. Keep the field required when the policy requires it, and include
+   proposed-schema examples with the value present and absent.
+3. A manager publishes the prepared version. Its snapshot in PostgreSQL is the runtime
+   contract for both extraction and rule execution, including the selected models and
+   execution effort. Unpublished proposal changes have no effect on active extraction.
+4. The next upload, pending duplicate upload or explicit pending re-extraction reads
+   that published contract. Deterministic analysis and content fingerprints discover
+   the fields without a separate LLM request. Schema changes refresh stale readings;
+   unchanged readings and provider requests can be reused.
+5. Only accepted, typed readings enter `Instance.symbols`. Rules receive their plain
+   values; the engine also receives evidence verification and scan provenance. A missing
+   required value or unconfirmed required scan value leads to human review.
+
+The process execution editor is described in [Models and execution effort](process-execution.md).
+Changing `.env` remains a deployment change requiring restart; publishing a process
+configuration takes effect on the next request without one.
+
+## Historical coverage when the schema grows
+
+Publication compares proposed symbol names with the active published schema. Only newly
+introduced required symbols qualify for the historical-evidence exception; making an
+existing optional symbol required keeps the normal validation checks.
+
+All rules are still attempted in the validation sandbox. Actual reads of unavailable new
+fields are identified separately from ordinary exceptions, including reads from other
+instances. Results of rules that can run on the saved evidence remain in the report.
+Code errors, invalid outputs, unknown symbols, missing existing required data and conflicts
+on evaluable cases still block publication. There is no general exception for `MISSING_DATA`,
+`KeyError` or `TypeError`.
+
+A historical case that needs unavailable new data is excluded from unchanged, changed and
+conflicting decision counts. It is listed in `not_evaluable`, with its missing symbols and
+the rules that did and did not yield evaluable results. `coverage` reports total historical
+cases, evaluated cases, not-evaluable cases, and how many incomplete cases retained some
+rule results (`partial`) or none (`none`). Zero or partial historical coverage is visible
+in the publication panel; it is not a claim that the proposed policy passed on old evidence.
+
+When a published schema gains required symbols, the proposed schema must have acceptance
+examples covering every new required field both present and absent, even with no historical
+cases. Initial bootstrap publication keeps its existing validation flow. Discovery
+proposals carry those examples; manual process drafts can supply `acceptance_examples`.
+Present examples must include all required fields; an absent example isolates each new
+missing field while retaining the other required values. The examples execute the proposed
+rules and required-field policy, and stored rule tests still run. A new document missing
+the field must produce the configured human-review
+outcome. Tests and examples establish behavior on their inputs; they do not prove arbitrary
+untested rule branches correct.
+
+After publication, new uploads and pending re-extractions use the new required schema.
+No historical PDF is re-extracted automatically, and no historical decision or evidence
+is edited. See [ADR 0030](adr/detail/0030-report-partial-history-for-new-symbols.md).
+
 ## Configure a field
 
 Add a symbol to the process definition, for example:
@@ -81,7 +144,20 @@ unverified. A `text` source still requests transcription of each page that needs
 
 Each generic result records `data.extraction_plan`, `data.schema_fields`, and the plan
 fingerprint. Invoice ingestion events also record the plan while preserving the existing
-invoice result format. Origins continue to use `document:<extraction_id>`.
+invoice result format. Native field evidence uses `document:<extraction_id>`; fields read
+only through OCR or vision use `scan:<extraction_id>:<verification>` unless verified.
+This also applies to a scanned page inside a mixed PDF and to additional invoice fields.
+Filename and transcript metadata retain document origins. The scan policy in ADR 0025
+therefore reaches the engine for dynamic fields as well as invoice fields.
+Generic provenance also records the execution hash, cache key and effective schema mapper
+configuration without credentials; extraction spans include the same execution hash.
+
+The schema mapper uses the process's selected visual provider and endpoint. For Helmcode,
+an explicitly selected Helmcode text judge supplies its text model; otherwise mapping uses
+the selected visual model. A process's disabled readers or local-only routing cannot inherit
+cloud fallbacks from deployment keys. Mapping uses the visual timeout and at most
+`min(1500, vision_max_tokens)` output tokens. `secondary_ocr: false` skips the secondary
+recognizer and its evidence when interpreting generic fields; primary OCR remains available.
 
 ## Cost and cache behavior
 
@@ -91,13 +167,18 @@ invoice result format. Origins continue to use `document:<extraction_id>`.
    It checks actual code content, even if a stored rule hash was not updated. After a
    restart, deterministic analysis runs once again; it does not call a provider.
 2. Document results use the PDF, reader configuration and field schema as their cache
-   identity. A rule-only change reuses the reading and records the current plan in the
-   new result. Changing a field's description, labels, type or source invalidates it.
+   identity, including effective schema mapping settings. A rule-only change reuses the
+   reading and records the current plan in the new result. Changing a field's description,
+   labels, type or source invalidates it.
 3. Provider calls have a persistent journal keyed by requested fields, transcript,
    model and prompt. Rule hashes are excluded, so unchanged requests replay without
    another network call. Timeouts, dropped connections and rejected successful
    responses remain blocked as uncertain deliveries. Definite HTTP refusals
    (4xx or 503) can be attempted on a later extraction after provider cooldown.
+
+The deployment option `TRACEPAY_OCR_FORCE_RECOMPUTE=1` explicitly bypasses reading,
+provider-journal and pending-evidence reuse. Its default is off. It does not authorize
+rewriting historical decisions or turn publication previews into OCR runs.
 
 Keeping all declared symbols covers computed rule references conservatively. Optional
 fields can therefore also trigger reading or model assistance. Mark data that should not

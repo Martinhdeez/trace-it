@@ -117,10 +117,26 @@ an execution hash; cache keys include the reader identities and effective extrac
 options. Configured extraction readers share storage and worker capacity without mutating
 another process's settings.
 
+The same process settings govern dynamic field mapping after OCR: provider, endpoint,
+visual timeout and output budget (capped at 1,500 tokens for this stage). Changing those
+settings changes its cache identity. Secondary OCR can be disabled for generic processes
+and invoice extensions as well as the original invoice reader. Deployment API keys do not
+enable a disabled reader or add cloud fallbacks to a local-only process.
+
+See [Process-driven document extraction](dynamic-extraction.md) for the complete agent
+proposal, publication, extraction and decision flow, including historical evidence limits.
+
 Publication validation reruns deterministic rules against saved symbols. It does not
 re-extract original documents or prove that a new model improves quality. Use the existing
 compiler and OCR evaluation tools to measure changes before choosing deployment mappings.
 No automatic optimizer or hard monetary budget is implemented.
+
+When new required symbols are missing from historical evidence, validation reports those
+cases as not evaluable and shows historical coverage separately from blocking failures.
+The manager can publish with partial or zero historical coverage once the proposed-schema
+examples, stored rule tests and remaining validation gates pass. Newly uploaded cases
+still require every required symbol. The complete rules are in the
+[historical coverage guide](dynamic-extraction.md#historical-coverage-when-the-schema-grows).
 
 OCR mode (`local`, `api`, or `hybrid`) is pinned with the process settings. `local`
 mode uses installed OCR only; local server vision calls use `hybrid` or `api` mode.
