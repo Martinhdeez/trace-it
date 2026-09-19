@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down check down reset-db
+.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 DEMO_ARGS ?=
@@ -11,6 +11,10 @@ setup:
 	docker compose exec -T backend alembic upgrade head
 	$(LOAD)
 	@echo "Ready: API at http://localhost:$${BACKEND_PORT:-8000}/docs"
+
+openapi:  # the API contract for the frontend's typed client; no server or database needed
+	cd backend && uv run python -c "import json; from app.main import app; open('../frontend/openapi.json', 'w').write(json.dumps(app.openapi(), indent=2) + '\\n')"
+	cd frontend && npm run gen:api
 
 ocr-models:
 	uv run --project backend --locked python -m app.features.ingestion.tools.download_models --profile v5-latin --output .models

@@ -26,6 +26,7 @@ def manager(user: CurrentUser) -> str:
 @router.post(
     "/processes/{process_id}/learning",
     status_code=201,
+    operation_id="analyzeProcessCases",
     summary="Analyze past cases and propose norms; changes no decisions or rules",
 )
 async def analyze(
@@ -34,7 +35,7 @@ async def analyze(
     return await service.analyze(session, process_id, body.case_limit, manager(user))
 
 
-@router.get("/processes/{process_id}/learning")
+@router.get("/processes/{process_id}/learning", operation_id="listLearningAnalyses")
 async def list_analyses(
     process_id: int, session: Session, user: CurrentUser, limit: int = Query(20, ge=1, le=100)
 ) -> list[AnalysisOut]:
@@ -42,13 +43,13 @@ async def list_analyses(
     return await service.list_all(session, process_id, limit)
 
 
-@router.get("/learning/{analysis_id}")
+@router.get("/learning/{analysis_id}", operation_id="getLearningAnalysis")
 async def get_analysis(analysis_id: int, session: Session, user: CurrentUser) -> AnalysisOut:
     manager(user)
     return await service.get(session, analysis_id)
 
 
-@router.get("/norm-proposals/{proposal_id}")
+@router.get("/norm-proposals/{proposal_id}", operation_id="getNormProposal")
 async def get_proposal(proposal_id: int, session: Session, user: CurrentUser) -> ProposalOut:
     manager(user)
     return await service.get_proposal(session, proposal_id)
@@ -57,6 +58,7 @@ async def get_proposal(proposal_id: int, session: Session, user: CurrentUser) ->
 @router.post(
     "/norm-proposals/{proposal_id}/validate",
     status_code=201,
+    operation_id="validateNormProposal",
     summary="Prepare isolated code/tests or paired guidance previews; waits up to five minutes",
 )
 async def validate(proposal_id: int, session: Session, user: CurrentUser) -> ValidationOut:
@@ -66,6 +68,7 @@ async def validate(proposal_id: int, session: Session, user: CurrentUser) -> Val
 @router.post(
     "/norm-proposals/{proposal_id}/approve",
     status_code=201,
+    operation_id="approveNormProposal",
     summary="Publish the exact latest validated norm after checking for stale evidence",
 )
 async def approve(
@@ -76,7 +79,9 @@ async def approve(
     )
 
 
-@router.post("/norm-proposals/{proposal_id}/reject", status_code=201)
+@router.post(
+    "/norm-proposals/{proposal_id}/reject", status_code=201, operation_id="rejectNormProposal"
+)
 async def reject(
     proposal_id: int, body: RejectIn, session: Session, user: CurrentUser
 ) -> AdoptionOut:
