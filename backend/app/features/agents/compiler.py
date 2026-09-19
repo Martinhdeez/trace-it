@@ -427,7 +427,7 @@ async def read_process(session: AsyncSession, process_id: int) -> tuple[str, Sou
         .distinct(Source.name)
     )
     from app.features.versions.configuration import setups as pinned_setups
-    from app.features.versions.model import ProcessDraft
+    from app.features.versions.model import ProcessDraft, ProcessVersion
 
     draft = await session.get(ProcessDraft, process_id)
     if draft:
@@ -435,6 +435,13 @@ async def read_process(session: AsyncSession, process_id: int) -> tuple[str, Sou
             draft.snapshot["process"]["description"],
             {s.name: s.rows for s in loads},
             pinned_setups(draft.snapshot),
+        )
+    if process.active_version_id:
+        version = await session.get(ProcessVersion, process.active_version_id)
+        return (
+            version.snapshot["process"]["description"],
+            {s.name: s.rows for s in loads},
+            pinned_setups(version.snapshot),
         )
     setups = await use_cases.setups(session, use_case.id)
     return use_case.description, {s.name: s.rows for s in loads}, setups

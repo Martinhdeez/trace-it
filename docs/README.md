@@ -26,3 +26,5 @@ Superseded plans and analyses are archived under [`.artifacts/`](../.artifacts/)
 history, not guidance.
 
 [Process versions and replay](process-versions.md): draft, validate, approve, publish and reproduce a decision.
+
+- [Process chat](process-chat.md): discuss existing processes, propose edits and preview their impact.

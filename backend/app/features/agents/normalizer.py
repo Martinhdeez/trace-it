@@ -240,10 +240,11 @@ async def normalize_norm(session: AsyncSession, process_id: int, norm: str) -> N
     if await session.get(Process, process_id) is None:
         raise NotFoundError(f"Process {process_id} does not exist")
     description, sources, setups = await compiler.read_process(session, process_id)
-    types = list(
-        await session.scalars(select(DecisionType).where(DecisionType.process_id == process_id))
-    )
-    symbols = list(await session.scalars(select(Symbol).where(Symbol.process_id == process_id)))
+    from app.features.processes import service as processes
+
+    process = await processes.get(session, process_id)
+    types = [DecisionType(**t.model_dump()) for t in process.decision_types]
+    symbols = [Symbol(**s.model_dump()) for s in process.symbols]
     from app.features.versions.model import ProcessDraft
 
     draft = await session.get(ProcessDraft, process_id)

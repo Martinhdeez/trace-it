@@ -21,6 +21,7 @@ def proposals(plan: DraftPlan) -> list[str]:
         "setup",
         *[f"source:{s.name}" for s in plan.sources],
         *[f"rule:{r.name}" for r in plan.rules],
+        *[f"guidance:{g.name}" for g in plan.guidance],
         *[f"example:{e.name}" for e in plan.examples],
     ]
 
@@ -28,8 +29,8 @@ def proposals(plan: DraftPlan) -> list[str]:
 def ready(plan: DraftPlan, reviews: dict):
     if plan.questions:
         raise ConflictError("Answer the outstanding questions before compiling")
-    if not plan.name.strip() or not plan.rules or not plan.examples:
-        raise ConflictError("A name, rules and confirmed acceptance examples are required")
+    if not plan.name.strip() or not plan.examples:
+        raise ConflictError("A name and confirmed acceptance examples are required")
     if any(reviews.get(p) != "accepted" for p in proposals(plan)):
         raise ConflictError("Review and accept every proposal before compiling")
     try:
@@ -44,8 +45,9 @@ def ready(plan: DraftPlan, reviews: dict):
 def compiled_rules(compilations: list[dict]) -> list[Rule]:
     return [
         Rule(
-            id=-(i + 1),
+            id=r.get("existing_rule_id", -(i + 1)),
             process_id=0,
+            norm_rule_id=r.get("norm_rule_id"),
             text=r["text"],
             type=r["type"],
             decision=r["decision"],
@@ -65,16 +67,53 @@ def candidate(plan: DraftPlan, compilations: list[dict], base: dict) -> dict:
     snapshot = deepcopy(base)
     snapshot["rules"] = [config.artifact(r) for r in compiled_rules(compilations)]
     snapshot["process"].update(
-        plan.model_dump(include={"name", "description", "decision_types", "symbols"})
+        plan.model_dump(
+            include={"name", "description", "decision_types", "symbols", "decision_review"}
+        )
     )
+    snapshot["guidance"] = {g.name: g.text for g in plan.guidance}
+    snapshot["acceptance_examples"] = [e.model_dump() for e in plan.examples]
     return snapshot
 
 
-async def compile_plan(plan: DraftPlan, tables: dict, setups: dict) -> list[dict]:
+async def compile_plan(
+    plan: DraftPlan,
+    tables: dict,
+    setups: dict,
+    base: dict | None = None,
+    base_tables: dict | None = None,
+) -> list[dict]:
     symbols = [Symbol(process_id=0, **s.model_dump()) for s in plan.symbols]
     types = [DecisionType(process_id=0, **t.model_dump()) for t in plan.decision_types]
     compilations = []
+    context_unchanged = (
+        base is not None
+        and tables == base_tables
+        and all(
+            base["process"][key] == plan.model_dump()[key]
+            for key in ("description", "symbols", "decision_types")
+        )
+    )
     for proposal in plan.rules:
+        existing = next(
+            (
+                r
+                for r in (base or {}).get("rules", [])
+                if proposal.name == f"rule-{r['id']}"
+                and all(r[key] == getattr(proposal, key) for key in ("text", "type", "decision"))
+            ),
+            None,
+        )
+        if context_unchanged and existing and (existing["report"] or {}).get("valid"):
+            compilations.append(
+                {
+                    **existing,
+                    "proposal": proposal.name,
+                    "existing_rule_id": existing["id"],
+                    "interpretation": "Unchanged published rule",
+                }
+            )
+            continue
         # The manager's chosen outcome is explicit. Never inherit a use-case rejection
         # default over the outcome the user just approved.
         setup = setups.get("normalizer")
@@ -158,20 +197,40 @@ async def preview(
                 ),
             }
         )
+    inputs = await execution.capture(session, process_id) if process_id else None
+    if base is None:
+        base = (
+            (await versions.active(session, process_id)).snapshot
+            if process_id
+            else {
+                "process": {"id": 0, "use_case_id": 0},
+                "agents": {},
+                "guidance": {},
+            }
+        )
+    proposed = candidate(plan, compilations, base)
     impact = {"valid": True, "unchanged": 0, "changes": [], "conflicts": [], "errors": []}
     if process_id:
-        if base is None:
-            base = (await versions.active(session, process_id)).snapshot
-        impact = await versions.inspect(
-            session,
-            candidate(plan, compilations, base),
-            await execution.capture(session, process_id),
-            tables=tables,
-        )
+        impact = await versions.inspect(session, proposed, inputs, tables=tables)
+    else:
+        try:
+            await asyncio.to_thread(versions.check_configuration, proposed)
+        except (ValueError, sandbox.SandboxError) as error:
+            impact = {**impact, "valid": False, "error": str(error)}
+    review = None
+    from app.features.sources import service as sources
+
+    source_changed = process_id is not None and tables != {
+        source.name: source.rows for source in await sources.current_loads(session, process_id)
+    }
+    if process_id and impact["valid"] and review_changed(base, proposed, source_changed):
+        review = await review_preview(session, process_id, base, proposed, inputs, tables)
     return {
         "valid": all(r["report"].get("valid") for r in compilations)
         and all(e["passed"] for e in results)
-        and impact["valid"],
+        and impact["valid"]
+        and (review is None or review["valid"]),
+        "review": review,
         "compilations": compilations,
         "examples": results,
         "impact": impact,
@@ -181,3 +240,67 @@ async def preview(
             for r in (await decisions.active_rules(session, process_id) if process_id else [])
         ],
     }
+
+
+def review_changed(before: dict, after: dict, source_changed: bool = False) -> bool:
+    enabled = before["process"].get("decision_review") or after["process"].get("decision_review")
+    return bool(enabled) and (
+        source_changed
+        or any(before.get(key) != after.get(key) for key in ("process", "guidance", "rules"))
+    )
+
+
+async def review_preview(session, process_id, before, after, inputs, tables):
+    from copy import deepcopy
+    from dataclasses import asdict
+
+    from app.features.learning import evidence, validation
+
+    captured = await evidence.capture(session, process_id)
+    sampled = evidence.cases(captured, 10)
+    if not sampled:
+        return {"valid": True, "previews": [], "basis": "No historical cases available"}
+    snapshots = []
+    for configuration, source_tables in ((before, None), (after, tables)):
+        snapshot = deepcopy(captured)
+        for key in ("process", "rules", "guidance", "agents"):
+            snapshot[key] = deepcopy(configuration[key])
+        if source_tables is not None:
+            snapshot["sources"] = [
+                {"id": f"proposed:{name}", "name": name, "rows": rows, "origin": "draft"}
+                for name, rows in source_tables.items()
+            ]
+        verdicts = await execution.evaluate(
+            session,
+            configuration,
+            inputs,
+            [i["id"] for i in sampled],
+            tables=source_tables,
+        )
+        for decision in snapshot["decisions"]:
+            if decision["author"] == "engine" and decision["instance_id"] in verdicts:
+                result = verdicts[decision["instance_id"]]
+                decision.update(
+                    decision=result.decision,
+                    reason=result.reason,
+                    results=[asdict(r) for r in result.results],
+                    rules_hash=result.rules_hash,
+                )
+        snapshot["prompts"]["decision_reviewer"] = (
+            configuration.get("reviewer_prompt") or snapshot["prompts"]["decision_reviewer"]
+        )
+        snapshots.append(snapshot)
+    try:
+        result = await validation.compare_reviews(*snapshots)
+    except TimeoutError as error:
+        from app.features.agents.llm import AgentError
+
+        raise AgentError("Reviewer preview timed out; the draft was not changed") from error
+    originals = {case["id"]: case for case in sampled}
+    for preview in result["previews"]:
+        preview["final_decision"] = originals[preview["instance_id"]]["decisions"][-1]
+    result["basis"] = (
+        "Published and proposed configurations evaluated on captured current evidence; "
+        "paired reviewer recommendations can vary and do not change past decisions"
+    )
+    return result
