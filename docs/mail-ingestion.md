@@ -24,8 +24,11 @@ The worker discovers UIDs without filtering on unread flags or trusting the send
 It inspects BODYSTRUCTURE and RFC822.SIZE first, then bounded headers and candidate parts.
 PDF and octet-stream attachments with PDF filenames are supported. Message attachments,
 ZIPs, executables and links are not followed. Original filenames are preserved separately
-from safe, unique internal names. A PDF signature alone is insufficient: EOF, parser
-integrity, encryption and page count (maximum 500) are checked before ingestion.
+from safe, unique internal names. A PDF signature alone is insufficient: EOF, readability,
+encryption and page count (maximum 500) are checked before ingestion. Recoverable PDF
+structure damage is accepted when the reader can open its pages. The original bytes go
+through the same process extraction pipeline as uploaded documents, including its configured
+OCR and verification; the mail worker does not replace that pipeline or rewrite the PDF.
 
 All ready attachments from a message are imported before evaluation. The existing extraction
 configuration, published rules, source synchronization, captured inputs, sandbox, parallel

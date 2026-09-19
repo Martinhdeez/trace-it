@@ -19,7 +19,10 @@ def validate_pdf(content: bytes, maximum: int) -> None:
         raise RejectedDocument("invalid_pdf")
     try:
         with pymupdf.open(stream=content, filetype="pdf") as pdf:
-            if pdf.needs_pass or pdf.is_repaired or not 0 < len(pdf) <= 500:
+            # Recoverable cross-reference damage also occurs in readable invoices.
+            # Let the normal process extraction/OCR pipeline read their original bytes;
+            # opening with repair is not itself evidence that the document is unreadable.
+            if pdf.needs_pass or not 0 < len(pdf) <= 500:
                 raise RejectedDocument("invalid_pdf")
             for page in pdf:
                 page.get_contents()

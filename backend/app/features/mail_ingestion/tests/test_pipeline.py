@@ -23,6 +23,7 @@ from tests.support.mailbox import synthetic_mail
 from tests.support.users import manager
 
 from .test_protocol import local_mail as local_mail
+from .test_protocol import recoverable_pdf
 
 
 async def seed_process(session):
@@ -186,6 +187,27 @@ async def test_partial_invalid_pdf_and_content_duplicate(pipeline):
     assert duplicate["state"] == "duplicate"
     assert duplicate["instance_id"] == original["instance_id"]
     assert duplicate["decision_id"] == original["decision_id"]
+
+
+async def test_recoverable_pdf_uses_process_extraction_and_decision(pipeline):
+    server, worker, human = pipeline
+    content = recoverable_pdf("Holder: open")
+    await worker.initialize()
+    server.deliver(synthetic_mail([("recoverable.pdf", content, "pdf")]))
+    before = dict(server.messages), dict(server.flags)
+    await worker.cycle()
+    result = await overview(worker, human)
+    message = result["messages"][0]
+    assert message["state"] == "completed", result
+    part = message["attachments"][0]
+    assert part["decision"] == "PAGAR"
+    assert part["instance_id"] and part["execution_id"] and part["decision_id"]
+    original = await human.get(f"/instances/{part['instance_id']}/file")
+    assert original.status_code == 200 and original.content == content
+    evidence = await human.get(f"/instances/{part['instance_id']}/document")
+    assert evidence.status_code == 200
+    assert "Holder: open" in evidence.json()["text"]
+    assert before == (server.messages, server.flags)
 
 
 @pytest.mark.parametrize("lost_path", ["/manifest", "/attachments/", "/finish"])
