@@ -34,6 +34,21 @@ class InstanceOut(BaseModel):
     author: str | None = None  # "engine" or the person's name
     reason: str | None = None
     decided_at: datetime | None = None
+    review_pending: bool = False
+
+
+class DecisionReviewOut(BaseModel):
+    id: int
+    decision_id: int
+    status: str
+    recommendation: str | None
+    reasoning: str | None
+    evidence: list[str]
+    requires_human: bool
+    snapshot: dict[str, Any]
+    model: str | None
+    error: str | None
+    created_at: datetime
 
 
 class InstanceDetail(InstanceOut):
@@ -41,6 +56,7 @@ class InstanceDetail(InstanceOut):
     symbols: dict[str, Any] | None
     decisions: list[DecisionOut]  # append-only history, oldest first
     events: list[EventOut]
+    reviews: list[DecisionReviewOut] = []
 
 
 class ResolveIn(BaseModel):

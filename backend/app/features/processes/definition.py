@@ -110,6 +110,7 @@ async def load_definition(
         process = Process(name=data.name, use_case_id=use_case.id)
         session.add(process)
     process.use_case_id = use_case.id
+    process.decision_review = data.decision_review.model_dump() if data.decision_review else None
     await session.flush()
 
     for t in data.decision_types:
