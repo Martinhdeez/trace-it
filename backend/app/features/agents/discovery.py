@@ -53,7 +53,9 @@ def search_snapshot(ctx: RunContext[Deps], name: str, query: str) -> list[dict]:
 def validate(ctx: RunContext[Deps], plan: DraftPlan) -> DraftPlan:
     allowed = evidence.evidence_references(ctx.deps.data)
     unknown = {
-        e.reference for p in [*plan.sources, *plan.rules, *plan.guidance] for e in p.evidence
+        e.reference
+        for p in [*plan.connectors, *plan.sources, *plan.rules, *plan.guidance]
+        for e in p.evidence
     } - allowed
     if unknown:
         raise ModelRetry(f"Cite existing evidence references only: {sorted(unknown)}")

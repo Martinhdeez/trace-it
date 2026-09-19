@@ -18,6 +18,7 @@ services:
     environment:
       TRACE_DATABASE_URL: postgresql+psycopg://trace:trace@db:5432/trace
       TRACE_ERP_URL: http://host.docker.internal:${ERP_PORT:-8009}
+      TRACE_CRIMINAL_RECORDS_URL: http://host.docker.internal:${HIRING_ERP_PORT:-8010}
       TRACEPAY_DATA_DIR: /srv/.data
       TRACEPAY_MODEL_DIR: /srv/.models
     ports: ["${BACKEND_PORT:-8000}:8000"]

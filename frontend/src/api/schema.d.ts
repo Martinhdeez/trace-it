@@ -2337,6 +2337,50 @@ export interface components {
             /** Decision */
             decision?: string | null;
         };
+        /** AuthConfig */
+        AuthConfig: {
+            /**
+             * Type
+             * @default form_token
+             * @constant
+             */
+            type: "form_token";
+            /** Login Path */
+            login_path: string;
+            /** Credentials */
+            credentials: {
+                [key: string]: string;
+            };
+            /** Token Path */
+            token_path: string;
+            /** Token Header */
+            token_header: string;
+            /** Lifetime Seconds */
+            lifetime_seconds: number;
+            /** Max Uses */
+            max_uses: number;
+            /** Lifetime Path */
+            lifetime_path?: string | null;
+            /** Max Uses Path */
+            max_uses_path?: string | null;
+            /**
+             * Renew Margin Seconds
+             * @default 60
+             */
+            renew_margin_seconds: number;
+            /**
+             * Renew Margin Uses
+             * @default 10
+             */
+            renew_margin_uses: number;
+            /**
+             * Expired Codes
+             * @default [
+             *       "SES-401"
+             *     ]
+             */
+            expired_codes: string[];
+        };
         /** Body_extractDocument */
         Body_extractDocument: {
             /**
@@ -2565,6 +2609,28 @@ export interface components {
             attempts_per_compilation: number | null;
             /** Max Attempts */
             max_attempts: number;
+        };
+        /** ConnectorProposal */
+        ConnectorProposal: {
+            /** Name */
+            name: string;
+            /** Explanation */
+            explanation: string;
+            /** Evidence */
+            evidence: components["schemas"]["ProposalEvidence"][];
+            config: components["schemas"]["HttpSourceConfig"];
+            /** Required */
+            required: string[];
+            /**
+             * Optional
+             * @default []
+             */
+            optional: string[];
+            /**
+             * Sync Before Run
+             * @default true
+             */
+            sync_before_run: boolean;
         };
         /** CreatedCheck */
         CreatedCheck: {
@@ -3101,6 +3167,11 @@ export interface components {
              */
             symbols: components["schemas"]["SymbolIO"][];
             /**
+             * Connectors
+             * @default []
+             */
+            connectors: components["schemas"]["ConnectorProposal"][];
+            /**
              * Sources
              * @default []
              */
@@ -3144,6 +3215,16 @@ export interface components {
              * @default
              */
             name: string;
+        };
+        /**
+         * EnvValue
+         * @description A value read from an environment variable (or `.env`) at sync time.
+         */
+        EnvValue: {
+            /** Env */
+            env: string;
+            /** Default */
+            default?: string | null;
         };
         /** EventOut */
         EventOut: {
@@ -3505,6 +3586,17 @@ export interface components {
              */
             judge_max_tokens: number;
         };
+        /** FieldConfig */
+        FieldConfig: {
+            /** Source */
+            source: string;
+            /**
+             * Convert
+             * @default text
+             * @enum {string}
+             */
+            convert: "text" | "decimal_comma" | "date_dmy";
+        };
         /** FieldReading */
         FieldReading: {
             /** Value */
@@ -3565,6 +3657,25 @@ export interface components {
              */
             created_at: string;
         };
+        /** FormatConfig */
+        FormatConfig: {
+            /**
+             * Type
+             * @default xml
+             * @constant
+             */
+            type: "xml";
+            /**
+             * Encoding
+             * @default utf-8
+             */
+            encoding: string;
+            /**
+             * Error Code Path
+             * @default codigo
+             */
+            error_code_path: string;
+        };
         /** GatheringSettings */
         GatheringSettings: {
             /** Email */
@@ -3583,6 +3694,56 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HttpSourceConfig */
+        HttpSourceConfig: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "http";
+            base_url: components["schemas"]["EnvValue"];
+            format: components["schemas"]["FormatConfig"];
+            auth: components["schemas"]["AuthConfig"];
+            pagination: components["schemas"]["PaginationConfig"];
+            /** Key */
+            key: string;
+            /** Fields */
+            fields: {
+                [key: string]: components["schemas"]["FieldConfig"];
+            };
+            /**
+             * @default {
+             *       "max_attempts": 6,
+             *       "retry_statuses": [
+             *         500,
+             *         502,
+             *         503,
+             *         504
+             *       ],
+             *       "transient_codes": [
+             *         "ORA-00600"
+             *       ],
+             *       "backoff_seconds": 0.2,
+             *       "backoff_max_seconds": 5
+             *     }
+             */
+            retry: components["schemas"]["RetryConfig"];
+            /**
+             * @default {
+             *       "requests_per_second": 6,
+             *       "max_retry_after_seconds": 30
+             *     }
+             */
+            rate_limit: components["schemas"]["RateLimitConfig"];
+            /**
+             * @default {
+             *       "connect_seconds": 3,
+             *       "read_seconds": 15
+             *     }
+             */
+            timeouts: components["schemas"]["TimeoutConfig"];
+            status?: components["schemas"]["StatusConfig"] | null;
         };
         /**
          * ImpactOut
@@ -4088,6 +4249,26 @@ export interface components {
             /** Consequence */
             consequence: string;
         };
+        /** PaginationConfig */
+        PaginationConfig: {
+            /** Path */
+            path: string;
+            /** Page Param */
+            page_param: string;
+            /**
+             * First Page
+             * @default 1
+             */
+            first_page: number;
+            /** Page Size */
+            page_size: number;
+            /** Records Path */
+            records_path: string;
+            /** Total Path */
+            total_path: string;
+            /** Pages Path */
+            pages_path: string;
+        };
         /** PartIn */
         PartIn: {
             /** Part */
@@ -4395,6 +4576,19 @@ export interface components {
              */
             reason: string;
         };
+        /** RateLimitConfig */
+        RateLimitConfig: {
+            /**
+             * Requests Per Second
+             * @default 6
+             */
+            requests_per_second: number;
+            /**
+             * Max Retry After Seconds
+             * @default 30
+             */
+            max_retry_after_seconds: number;
+        };
         /** ReadingLocation */
         ReadingLocation: {
             /** Candidate */
@@ -4482,6 +4676,41 @@ export interface components {
             reason: string;
             /** Proposal Id */
             proposal_id?: number | null;
+        };
+        /** RetryConfig */
+        RetryConfig: {
+            /**
+             * Max Attempts
+             * @default 6
+             */
+            max_attempts: number;
+            /**
+             * Retry Statuses
+             * @default [
+             *       500,
+             *       502,
+             *       503,
+             *       504
+             *     ]
+             */
+            retry_statuses: number[];
+            /**
+             * Transient Codes
+             * @default [
+             *       "ORA-00600"
+             *     ]
+             */
+            transient_codes: string[];
+            /**
+             * Backoff Seconds
+             * @default 0.2
+             */
+            backoff_seconds: number;
+            /**
+             * Backoff Max Seconds
+             * @default 5
+             */
+            backoff_max_seconds: number;
         };
         /** ReviewIn */
         ReviewIn: {
@@ -5211,6 +5440,19 @@ export interface components {
             /** Norm Rule Id */
             norm_rule_id: number | null;
         };
+        /**
+         * StatusConfig
+         * @description An unauthenticated health resource whose fields are recorded with the snapshot, e.g.
+         *     whether the batch 2 update is loaded.
+         */
+        StatusConfig: {
+            /** Path */
+            path: string;
+            /** Fields */
+            fields: {
+                [key: string]: string;
+            };
+        };
         /** StepStats */
         StepStats: {
             /** Step */
@@ -5326,6 +5568,19 @@ export interface components {
                 [key: string]: unknown;
             };
             diff: components["schemas"]["Diff"];
+        };
+        /** TimeoutConfig */
+        TimeoutConfig: {
+            /**
+             * Connect Seconds
+             * @default 3
+             */
+            connect_seconds: number;
+            /**
+             * Read Seconds
+             * @default 15
+             */
+            read_seconds: number;
         };
         /** TokenBucket */
         TokenBucket: {

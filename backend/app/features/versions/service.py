@@ -180,6 +180,23 @@ def check_configuration(snapshot: dict) -> None:
         ):
             raise ValueError(f"Rule {rule['id']} fails its stored tests")
     config.setups(snapshot)
+    from app.features.sources.http_connector import HttpSourceConfig
+    from app.features.sources.service import SourceSchema
+
+    connectors = {
+        name: HttpSourceConfig.model_validate(row)
+        for name, row in snapshot.get("connectors", {}).items()
+    }
+    schemas = {
+        name: SourceSchema.model_validate(row)
+        for name, row in snapshot.get("source_schemas", {}).items()
+    }
+    if connectors.keys() != schemas.keys():
+        raise ValueError("Every published connector needs exactly one source schema")
+    for name, connector in connectors.items():
+        missing = set(schemas[name].required) - connector.fields.keys()
+        if missing:
+            raise ValueError(f"Connector {name!r} does not map required fields {sorted(missing)}")
     if "execution" in snapshot:
         execution_config.read(snapshot)
 
