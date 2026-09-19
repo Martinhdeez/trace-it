@@ -7,6 +7,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 from pydantic_ai import Agent, ModelRetry
+from pydantic_ai.messages import ModelResponse
+from pydantic_ai.models.function import FunctionModel
 
 from app.core import events
 from app.core.database import session_factory
@@ -78,6 +80,22 @@ async def test_a_provider_failure_moves_to_the_fallback(monkeypatch: pytest.Monk
     assert span["chain"] == ["primary", "backup"]
     assert [f["model"] for f in span["failed_attempts"]] == ["primary"]
     assert "status_code: 503" in span["failed_attempts"][0]["error"]
+
+
+async def test_an_answer_cut_by_the_token_limit_moves_to_the_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def cut(messages, info) -> ModelResponse:
+        return ModelResponse(parts=[], finish_reason="length")
+
+    primary = FunctionModel(cut, model_name="primary")
+    setup = chain(monkeypatch, primary, scripted([{"text": "ok"}], name="backup"))
+
+    (output, trace), span = await run_traced(agent, setup)
+
+    assert output == Answer(text="ok")
+    assert trace.model == "backup"
+    assert span["failed_attempts"] == [{"model": "primary", "error": "output token limit hit"}]
 
 
 picky = Agent(None, output_type=Answer)

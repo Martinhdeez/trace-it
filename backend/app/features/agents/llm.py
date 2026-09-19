@@ -18,7 +18,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic_ai import Agent, AgentRunError, capture_run_messages
 from pydantic_ai.exceptions import FallbackExceptionGroup, ModelAPIError
-from pydantic_ai.messages import ModelMessage, RetryPromptPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, RetryPromptPart
 from pydantic_ai.models import Model
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -102,9 +102,10 @@ def resolve(model: Model | str) -> Model | str:
 
 
 def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackModel:
-    """The role's model, then its `fallback_models` in order (ADR 0019). Only a provider
-    failure (`ModelAPIError`: 4xx/5xx, 429 after the SDK's retries, timeout, connection)
-    moves on to the next model; each one is appended to `failed` for the trace."""
+    """The role's model, then its `fallback_models` in order (ADR 0019). A provider failure
+    (`ModelAPIError`: 4xx/5xx, 429 after the SDK's retries, timeout, connection) or an
+    answer cut by the output-token limit (`finish_reason == "length"`) moves on to the next
+    model; each one is appended to `failed` for the trace."""
 
     def on_failure(error: Exception) -> bool:
         if not isinstance(error, ModelAPIError):
@@ -112,8 +113,14 @@ def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackMode
         failed.append({"model": error.model_name, "error": f"{type(error).__name__}: {error}"})
         return True
 
+    def truncated(response: ModelResponse) -> bool:
+        if response.finish_reason != "length":
+            return False
+        failed.append({"model": response.model_name or "", "error": "output token limit hit"})
+        return True
+
     models = [setup.settings.model or model_for(role), *setup.settings.fallback_models]
-    return FallbackModel(*map(resolve, models), fallback_on=on_failure)
+    return FallbackModel(*map(resolve, models), fallback_on=[on_failure, truncated])
 
 
 def _retry_prompts(messages: list[ModelMessage]) -> list[str]:

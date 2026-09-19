@@ -33,9 +33,10 @@ see a provider failure handled. The Helmcode key serves several flat-rate models
   strings, resolved by `llm.resolve`) and `timeout_seconds` (per request to the provider,
   passed as the model setting `timeout`).
 - `llm.run` always runs a `FallbackModel` of the role's model followed by its fallbacks.
-  Only a `ModelAPIError` (HTTP 4xx/5xx, connection, timeout) moves to the next model. An
-  answer a validator rejects (`ModelRetry`) is retried on the same chain from the first
-  model, never counted as a failure.
+  A `ModelAPIError` (HTTP 4xx/5xx, connection, timeout) or an answer cut by the
+  output-token limit (`finish_reason == "length"`, a response handler of `fallback_on`)
+  moves to the next model. An answer a validator rejects (`ModelRetry`) is retried on the
+  same chain from the first model, never counted as a failure.
 - The `llm_run` span records `chain`, `failed_attempts` (`[{model, error}]`, every
   provider failure of the run, including those before a model answered) and `model`, the
   one that answered.
@@ -44,7 +45,9 @@ see a provider failure handled. The Helmcode key serves several flat-rate models
 - Invoice use case: every role starts on `deepseek-v4-flash`; compiler and normalizer fall
   back to `glm5.3` then `qwen3.6`, the tester to `qwen3.6` then `glm5.3` (a different
   family from the compiler's first fallback, ADR 0004). Timeouts: 180 s compiler and
-  tester, 300 s normalizer (it writes the whole norm).
+  tester, 300 s normalizer (it writes the whole norm), 120 s assistant. The assistant runs
+  the compiler's chain. `max_tokens` per role, about twice the largest output measured
+  (docs/scale-and-cost.md): normalizer and tester 8000, compiler 6000, assistant 4000.
 
 ## Consequences
 - The OpenAI SDK retries twice before an error reaches the chain, so a hung provider costs
@@ -54,13 +57,19 @@ see a provider failure handled. The Helmcode key serves several flat-rate models
   returns.
 - A database loaded before this change gets the new invoice settings as an inactive
   version (ADR 0011): a manager activates it.
-- The assistant keeps no chain: its model is the platform default.
+- A cut answer used to raise `UnexpectedModelBehavior` after the model generated up to the
+  provider's own limit (85 s once, docs/scale-and-cost.md) and the chain never switched.
+  Now `max_tokens` stops it sooner and the next model answers; the cut attempt is in
+  `failed_attempts` as "output token limit hit". Every response ending `length` is
+  rejected, even a non-empty one: a structured answer cut short is not usable.
 
 ## Evidence
 - Tests (`agents/tests/test_llm.py`, scripted `FunctionModel`s): primary 503 -> the fallback
   answers and the span shows both; a `ModelRetry` stays on the primary; every model
-  failing is a 502 naming both; through the API, a rule whose chain all fails ends `draft`
-  with that error.
+  failing is a 502 naming both; a primary answer ending `length` -> the fallback answers;
+  through the API, a rule whose chain all fails ends `draft` with that error.
+- The assistant on the invoice use case's settings answered one real suggestion through
+  Helmcode: `deepseek-v4-flash`, 6.3 s, 2.2k / 0.8k tokens, 1 validator retry.
 - Each fallback model answered a structured output through Helmcode (one call each):
   `deepseek-v4-flash` 2.1 s, `gemma4` 2.6 s, `qwen3.6` 2.8 s, `glm5.3` 7.8 s,
   `glm5.3-flash` 7.9 s.
