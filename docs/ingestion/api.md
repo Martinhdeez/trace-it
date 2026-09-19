@@ -64,9 +64,10 @@ Pending duplicates check extraction, source and symbol-schema freshness before r
 evidence; stale pending instances refresh. Decided duplicates return their stored evidence.
 
 `GET /instances/{instance_id}/document` retrieves the latest attached extraction from
-PostgreSQL events independently of the local cache. Duplicate upload attempts remain
-in the audit, but their unused readings cannot replace the evidence behind stored
-symbols or decisions. The process upload calls the
+PostgreSQL events independently of the local cache. Duplicate uploads retain their
+request trace; unchanged evidence does not create another extraction event. Legacy
+duplicate events containing unused readings cannot replace applied evidence.
+The process upload calls the
 `extract_for_payment(service, item, options, sources)` adapter, which checks the
 invoice-payment `suppliers`, `orders` and `erp` snapshots and requests at most one
 additional extraction for discrepancies not already reread. It returns both result
@@ -118,7 +119,7 @@ No `tools/` module or evaluation script participates in this application flow.
 ## Tracing readers and provider usage
 
 The contract is recorded in [ADR 0022](../adr/0022-ocr-evidence-and-provider-tracing.md).
-Use `GET /instances/{id}/trace` for the document journey. An upload contains
+Use `GET /instances/{id}/trace` for the document journey. An upload requiring extraction contains
 `extraction` and its `native_text`, `ocr`, `vision`, `text_judge` and `focused_read`
 children as applicable. Remote readers add a `provider_call` child with provider,
 model, operation, request fingerprint, duration, outcome and reported tokens.
