@@ -1216,7 +1216,7 @@ export interface paths {
         };
         /**
          * Every new span, live (server-sent events)
-         * @description `text/event-stream`: one event per span as it is written, `event` is its plane, `id` its `events.id`, `data` a span as in `GET /traces`. `: ping` when nothing new came in the last second. Filter by `plane` and `process_id`; `after` replays from that id (default: only new spans).
+         * @description `text/event-stream`: one event per span as it is written, `event` is its plane, `id` its `events.id`, `data` a span as in `GET /traces`. `: ping` when nothing new came in the last second. Filter by `plane` and `process_id`; `after` replays from that id (default: only new spans). A reconnecting `EventSource` sends `Last-Event-ID`, used when `after` is not given.
          */
         get: operations["streamEvents"];
         put?: never;
@@ -6681,7 +6681,9 @@ export interface operations {
                 process_id?: number | null;
                 after?: number | null;
             };
-            header?: never;
+            header?: {
+                "Last-Event-ID"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
