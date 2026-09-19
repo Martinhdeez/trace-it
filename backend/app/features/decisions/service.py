@@ -12,7 +12,7 @@ from app.core import events
 from app.core.config import settings
 from app.core.events import Event
 from app.features.agents import compiler, decision_reviewer, sandbox
-from app.features.decisions import runs
+from app.features.decisions import outcomes_file, runs
 from app.features.decisions.engine import Outcomes, RunDataset, Verdict, decide
 from app.features.decisions.model import ENGINE, Decision, DecisionReview, Finding
 from app.features.decisions.schemas import (
@@ -737,7 +737,7 @@ async def resolve(
 
 
 async def export(
-    session: AsyncSession, process_id: int, names: set[str] | None = None
+    session: AsyncSession, process_id: int, names: set[str] | None = None, trace: bool = False
 ) -> tuple[str, list[str]]:
     """`outcomes.jsonl` for the challenge: one line per instance name, nothing else.
 
@@ -747,16 +747,17 @@ async def export(
     export a later human resolution when present (ADR 0021). A pending instance uses the
     process's escalation outcome, so an incomplete batch is still deliverable without
     creating a fake engine decision. `names` limits the export to one delivery batch;
-    other instances may still be pending.
+    other instances may still be pending. `trace` adds a `trace_url` per line, the console
+    screen that opens that case's trace.
     """
     with events.span("export_outcomes", process_id=process_id, batch=len(names or ())) as span:
-        body, duplicates = await _export(session, process_id, names)
+        body, duplicates = await _export(session, process_id, names, trace)
         span.set(lines=body.count("\n") + 1 if body else 0, duplicates=len(duplicates))
         return body, duplicates
 
 
 async def _export(
-    session: AsyncSession, process_id: int, names: set[str] | None
+    session: AsyncSession, process_id: int, names: set[str] | None, trace: bool
 ) -> tuple[str, list[str]]:
     await get_process(session, process_id)
     # Two files can share a name: only the most recent instance of each name is exported.
@@ -821,7 +822,8 @@ async def _export(
                 "file_id": i.name,
                 "result": exported[i.id][0],
                 "reason": exported[i.id][1] or "NO_FINDING",
-            },
+            }
+            | ({"trace_url": outcomes_file.trace_url(process_id, i.id)} if trace else {}),
             ensure_ascii=False,
         )
         for i in instances

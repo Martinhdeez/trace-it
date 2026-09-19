@@ -12,6 +12,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import update
 
+from app.core.config import settings
 from app.core.database import session_factory
 from app.features.agents import sandbox
 from app.features.ingestion.model import File, Instance
@@ -248,6 +249,35 @@ async def test_resolve_rejects_a_decision_not_in_the_process(fake_sandbox: None)
         )
         assert r.status_code == 409, r.text
         assert r.json()["code"] == "conflict"
+
+
+async def test_export_without_trace_keeps_its_fields(fake_sandbox: None) -> None:
+    async with client() as api:
+        process_id, _ = await create_process(api, "manager")
+        await api.post(f"/processes/{process_id}/run")
+
+        r = await api.get(f"/processes/{process_id}/export")
+        assert r.status_code == 200, r.text
+        lines = [json.loads(line) for line in r.text.splitlines()]
+        assert lines and all(sorted(line) == ["file_id", "reason", "result"] for line in lines)
+
+
+async def test_export_trace_adds_the_console_link(fake_sandbox: None) -> None:
+    async with client() as api:
+        process_id, _ = await create_process(api, "manager")
+        await api.post(f"/processes/{process_id}/run")
+
+        r = await api.get(f"/processes/{process_id}/export", params={"trace": "true"})
+        assert r.status_code == 200, r.text
+        lines = [json.loads(line) for line in r.text.splitlines()]
+        assert all(sorted(line) == ["file_id", "reason", "result", "trace_url"] for line in lines)
+        instances = {
+            i["name"]: i["id"] for i in (await api.get(f"/processes/{process_id}/instances")).json()
+        }
+        assert lines[0]["trace_url"] == (
+            f"{settings.console_base_url}/processes/{process_id}"
+            f"/review?i={instances[lines[0]['file_id']]}"
+        )
 
 
 async def test_export_a_duplicate_name_gives_a_single_line(fake_sandbox: None) -> None:

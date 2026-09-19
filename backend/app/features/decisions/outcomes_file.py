@@ -9,7 +9,14 @@ import unicodedata
 from collections import Counter
 from pathlib import Path
 
+from app.core.config import settings
+
 RESULTS = {"PAGAR", "NO_PAGAR", "ESCALAR"}
+
+
+def trace_url(process_id: int, instance_id: int) -> str:
+    """The console screen that opens this case's trace: Revisión on that instance."""
+    return f"{settings.console_base_url}/processes/{process_id}/review?i={instance_id}"
 
 
 def batch_files(folder: Path) -> set[str]:

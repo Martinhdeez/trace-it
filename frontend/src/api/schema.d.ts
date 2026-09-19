@@ -1254,7 +1254,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** outcomes.jsonl, one line per instance */
+        /**
+         * outcomes.jsonl, one line per instance
+         * @description `trace=true` adds a `trace_url` per line: the console screen with that case's trace.
+         */
         get: operations["exportOutcomes"];
         put?: never;
         post?: never;
@@ -8805,7 +8808,9 @@ export interface operations {
     };
     exportOutcomes: {
         parameters: {
-            query?: never;
+            query?: {
+                trace?: boolean;
+            };
             header?: never;
             path: {
                 process_id: number;

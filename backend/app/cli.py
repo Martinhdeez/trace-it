@@ -10,7 +10,8 @@ how its agents work (models, guidance, limits, examples).
 `sources sync <pack.json>` downloads an HTTP source (the ERP) into a new snapshot.
 
 `export <pack.json> --files <dir> --output <file>` writes the outcomes of the instances named
-like the PDFs of a folder (one delivery batch) and checks the file; `check-outcomes <file>
+like the PDFs of a folder (one delivery batch) and checks the file (`--trace` adds a
+`trace_url` per line, the console screen with that case's trace); `check-outcomes <file>
 --files <dir>` only checks it (`docs/runbook-batch2.md`).
 """
 
@@ -136,12 +137,12 @@ def check_outcomes(output: Path, files: Path) -> None:
     print(f"OK: one line per file, valid results {dict(sorted(results.items()))}")
 
 
-async def export(file: Path, files: Path, output: Path) -> None:
+async def export(file: Path, files: Path, output: Path, trace: bool = False) -> None:
     async with session_factory() as session:
         process = await process_of(session, file)
         try:
             body, duplicates = await decisions.export(
-                session, process.id, outcomes_file.batch_files(files)
+                session, process.id, outcomes_file.batch_files(files), trace=trace
             )
         except ConflictError as e:
             sys.exit(f"export refused: {e.message}")
@@ -175,6 +176,11 @@ def main() -> None:
     command.add_argument("file", type=Path, help="The process pack, e.g. processes/x.json")
     command.add_argument("--files", type=Path, required=True, help="Folder with the batch's PDFs")
     command.add_argument("--output", type=Path, required=True)
+    command.add_argument(
+        "--trace",
+        action="store_true",
+        help="Add a trace_url per line: the console screen with that case's trace",
+    )
     command = commands.add_parser("check-outcomes", help="Check an outcomes JSONL for a batch")
     command.add_argument("output", type=Path)
     command.add_argument("--files", type=Path, required=True, help="Folder with the batch's PDFs")
@@ -184,7 +190,7 @@ def main() -> None:
     elif args.command == "sources":
         asyncio.run(sync_source(args.file, args.source))
     elif args.command == "export":
-        asyncio.run(export(args.file, args.files, args.output))
+        asyncio.run(export(args.file, args.files, args.output, args.trace))
     else:
         check_outcomes(args.output, args.files)
 
