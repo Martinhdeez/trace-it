@@ -8,6 +8,7 @@ import { t } from '../../i18n'
 import { label, tone } from '../../lib/status'
 import { JsonHighlight } from '../../lib/jsonHighlight'
 import { symbolLabel } from '../../lib/symbols'
+import { EmptyState } from '../shell/Notice'
 import { StatusBadge } from '../shell/StatusBadge'
 import { DocumentPopup } from './DocumentPopup'
 
@@ -27,8 +28,10 @@ export function TracePane({
   const [document, setDocument] = useState<{ instanceId: number; symbol?: string } | null>(null)
   if (!instance) {
     return (
-      <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col px-5 py-4 text-[13px] text-muted">
-        Decisión
+      <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col items-center justify-center">
+        <EmptyState icon={FileSearch} title="Elige un documento">
+          Verás su decisión, las reglas que saltaron y la evidencia de cada dato.
+        </EmptyState>
       </aside>
     )
   }

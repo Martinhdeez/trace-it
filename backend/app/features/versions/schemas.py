@@ -25,7 +25,7 @@ class DraftIn(BaseModel):
 class PublishIn(BaseModel):
     revision: int
     validation_hash: str
-    reason: str = Field(min_length=1, max_length=8000, pattern=r"\S")
+    reason: str = Field(default="", max_length=8000)  # optional: the diff already says what changed
 
 
 class VersionOut(BaseModel):

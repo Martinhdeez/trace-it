@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { hashKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileText, Sparkles } from 'lucide-react'
+import { CheckCircle2, FileText, Sparkles } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import { families, keys } from '../api/queries'
 import type {
@@ -16,7 +16,7 @@ import type {
 } from '../api/contracts'
 import { ProcessScreen } from '../components/process/ProcessScreen'
 import { Button, Field, Segmented, Select, Textarea } from '../components/shell/Controls'
-import { Empty, ErrorNotice, Notice } from '../components/shell/Notice'
+import { Empty, EmptyState, ErrorNotice, Notice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
 import { PageIntro } from '../components/shell/Well'
 import { cn } from '../lib/cn'
@@ -74,6 +74,9 @@ export function Queue() {
   const current = items.find((item) => item.id === selectedId) ?? items[0]
   const showAlerts = tab === ALERTS_TAB
   const alert = openAlerts.find((item) => item.id === selectedId) ?? openAlerts[0]
+  const nothing = showAlerts
+    ? alerts.isSuccess && openAlerts.length === 0
+    : escalated.isSuccess && items.length === 0
 
   return (
     <ProcessScreen
@@ -99,6 +102,20 @@ export function Queue() {
         {escalated.isError ? <ErrorNotice error={escalated.error} /> : null}
         {alerts.isError ? <ErrorNotice error={alerts.error} /> : null}
 
+        {nothing ? (
+          <section className="rounded-[16px] bg-surface ring-1 ring-line">
+            {showAlerts ? (
+              <EmptyState icon={CheckCircle2} title="Sin alertas">
+                Ninguna decisión pasada cambiaría con los datos y las reglas de hoy.
+              </EmptyState>
+            ) : (
+              <EmptyState icon={CheckCircle2} title="Nada que revisar">
+                Cuando un documento necesite a una persona, aparecerá aquí con lo que propone el
+                asistente.
+              </EmptyState>
+            )}
+          </section>
+        ) : (
         <div className="grid gap-3 lg:grid-cols-[300px_minmax(0,1fr)]">
           <ul className="max-h-[560px] overflow-y-auto rounded-[16px] bg-surface p-1 ring-1 ring-line">
             {showAlerts ? (
@@ -171,6 +188,7 @@ export function Queue() {
             />
           ) : null}
         </div>
+        )}
       </div>
     </ProcessScreen>
   )
