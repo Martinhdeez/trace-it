@@ -70,3 +70,8 @@ new version is published. The per-request mode override still applies to `/v1` r
 The [operator guide](../../ingestion/providers-and-modes.md) documents model capability,
 configuration examples, quota caveats, and monitoring. This extends the ingestion
 evidence contract in ADR 0022 and retains the deterministic engine in ADR 0002.
+
+**API default update (2026-09-19).** The server and example environment now default
+to `TRACEPAY_OCR_MODE=api`, using the configured provider keys without loading local
+OCR weights. Local and hybrid modes require explicit selection. Existing published
+versions retain their pinned mode until a new version is validated and published.
