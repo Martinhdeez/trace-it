@@ -21,6 +21,19 @@ from tests.support.models import down, instructions, per_role, scripted
 from tests.support.users import manager
 
 
+def test_http_retries_reach_the_sdk(monkeypatch):
+    """`limits.http_retries`: the SDK repeats a stalled request that many times, each a whole
+    timeout, before the chain moves on; unset keeps the SDK's default of 2."""
+    monkeypatch.setenv("HELMCODE_API_KEY", "k")
+    setup = llm.Setup(AgentSettings(model="helmcode:a", limits={"http_retries": 0}))
+    fast = llm.chain(setup, "assistant", [])
+    default = llm.chain(llm.Setup(AgentSettings(model="helmcode:a")), "assistant", [])
+    assert [m.client.max_retries for m in fast.models] == [0]
+    assert [m.client.max_retries for m in default.models] == [2]
+    with pytest.raises(ValueError):
+        AgentSettings(limits={"http_retries": 9})
+
+
 class Answer(BaseModel):
     text: str
 

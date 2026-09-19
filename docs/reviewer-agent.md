@@ -240,6 +240,56 @@ No component changed in #165; `tsc -b` passes on the current `Queue.tsx`.
 - (#167) An `ESCALAR` option: render it like any other option, but label its button
   "Mantener escalado" rather than "Aceptar", and never style it as closing the case.
 
+## Latency
+
+Both agents run on the pack's `assistant` role. A call is one request to
+`helmcode:deepseek-v4-flash` with reasoning off, about 4k tokens in and 800 out. It takes
+about 3 s for the decision assistant and 1.7 s for the reviewer agent. The slow calls did
+not come from the context: building it takes 20-50 ms. They had three causes:
+
+- **Provider stalls.** About 1 request in 10 to Helmcode hangs for 90-100 s before it
+  answers. It is still one request, with no failed attempt. The 98 s demo call was one of
+  these, and we reproduced it twice. The old 120 s timeout never cut them. When it did fire,
+  the OpenAI SDK silently repeated the request up to twice (`max_retries=2`). That is 360 s
+  on one model before the chain moved on, and `failed_attempts` did not show it: glm5.3-flash
+  took 193 s this way.
+- **Validator retries.** Each `ModelRetry` is a whole extra call. The duplicate-order case
+  failed on its first answer every time (the decision was `ESCALAR`). Two of 5 runs used all
+  3 retries and returned a 502.
+- **Reasoning tokens** (before #170). With `max_tokens` 4000 and reasoning on,
+  deepseek-v4.1-flash used up to 9k output tokens and was cut. The chain then fell back to
+  glm5.3, and the call took 306-327 s.
+
+The role's settings (`processes/invoice-payment/use-case.json`):
+
+| Setting | Value | Why |
+|---|---|---|
+| `model` | `helmcode:deepseek-v4-flash` | The only fast model on our Helmcode plan. Gemini and Claude return 402, glm5.3-flash took 73 s, gemma4 29 s and qwen3.6 21 s |
+| `fallback_models` | deepseek-v4-flash, then qwen3.6 | A stall is per request, so a new request to the same model is the fastest fallback |
+| `timeout_seconds` | 12 | Four times the usual answer; a stall is cut there |
+| `limits.http_retries` | 0 | No hidden SDK repeats: a timeout goes straight to the next model and shows in `failed_attempts` |
+| `retries` | 1 | At most one extra call for a real error |
+
+The validators fix trivial problems in place, with no extra call. They cut a Spanish text
+to its sentence and character limits, remove backticks, write `R09` as «la regla 9», drop a
+made-up evidence reference, and keep "no rule" when a rule came with it. `ModelRetry` is
+left for real errors: the wrong decision set, a missing rule or reason, jargon that is still
+there, a case that "closes without a person", invented values, and a rule on fields that do
+not exist.
+
+Measured on 2026-09-19 against a copy of the demo database, on the 10 % VAT, duplicate
+order and MISSING_DATA cases. Each request carried a unique id, because Helmcode caches
+identical temperature-0 requests and answers them in 0.35 s.
+
+| | Calls | p50 | p95 / max | Retries | 502 |
+|---|---|---|---|---|---|
+| Decision assistant, before | 15 | 3.6 s | 96 s | 7 of 15 | 2 |
+| Decision assistant, after | 12 | 3.4 s | 15 s (one stall, cut at 12 s) | 0 | 0 |
+| Reviewer agent, after | 3 | 1.7 s | 1.8 s | 0 | 0 |
+
+The p50 is set by the provider's speed, at about 250 output tokens per second. Getting
+below 3 s needs a shorter answer (fewer tokens out) or a streamed one.
+
 ## Rejected vs ignored
 
 | | Status | `outcome` | Event | Who |

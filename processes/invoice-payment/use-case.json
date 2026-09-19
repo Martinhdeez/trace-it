@@ -61,8 +61,10 @@
     },
     "assistant": {
       "model": "helmcode:deepseek-v4-flash",
-      "fallback_models": ["helmcode:glm5.3", "helmcode:qwen3.6"],
-      "timeout_seconds": 120,
+      "fallback_models": ["helmcode:deepseek-v4-flash", "helmcode:qwen3.6"],
+      "timeout_seconds": 12,
+      "retries": 1,
+      "limits": { "http_retries": 0 },
       "model_settings": {
         "temperature": 0,
         "max_tokens": 1500,

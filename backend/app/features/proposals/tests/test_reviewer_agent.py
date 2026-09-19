@@ -209,14 +209,13 @@ async def test_no_rule_is_a_proposal_the_manager_dismisses(monkeypatch):
     assert "already rejected a no-rule answer" in retry
 
 
-async def test_a_long_summary_is_sent_back(monkeypatch):
+async def test_a_long_summary_is_trimmed_without_asking_again(monkeypatch):
     wordy = {**SUGGESTION, "summary": "Escala un IBAN distinto. Salvo pedido pendiente."}
     async with client() as api:
-        _, headers, iid, seen = await resolved(api, monkeypatch, [wordy, SUGGESTION])
+        _, headers, iid, seen = await resolved(api, monkeypatch, [wordy])
         proposal = await suggest(api, iid, headers)
-    assert proposal["summary"] == SUGGESTION["summary"]
-    [retry] = retry_prompts(seen["assistant"][-1])
-    assert "Be concise: summary must be one line and one sentence" in retry
+    assert proposal["summary"] == "Escala un IBAN distinto."
+    assert retry_prompts(seen["assistant"][-1]) == []
 
 
 async def test_the_agent_sees_the_related_cases_and_cannot_invent_their_values(monkeypatch):
@@ -543,12 +542,15 @@ async def test_a_rule_on_data_no_field_carries_is_sent_back(monkeypatch):
     sector = {**SUGGESTION, "text": "The `iban` differs, unless `supplier_sector` is catering."}
     admits = {**SUGGESTION, "rationale": "No hay datos del sector, así que uso el pedido."}
     async with client() as api:
-        _, headers, iid, seen = await resolved(api, monkeypatch, [sector, admits, SUGGESTION])
+        _, headers, iid, seen = await resolved(api, monkeypatch, [sector, SUGGESTION])
         proposal = await suggest(api, iid, headers)
+        [first] = retry_prompts(seen["assistant"][-1])
+        monkeypatch.setattr(llm, "model_for", per_role({"assistant": [admits, SUGGESTION]}, seen))
+        await suggest(api, iid, headers)
+        [second] = retry_prompts(seen["assistant"][-1])
     assert proposal["payload"]["text"] == SUGGESTION["text"]
     fields = user_json(seen["assistant"][0])["available_fields"]
     assert "nif" in fields["symbols"] and "erp" in fields["sources"]
-    first, second = retry_prompts(seen["assistant"][-1])
     assert "the rule reads ['supplier_sector'], which no rule can read" in first
     assert "nif" in first  # the fields it may use, listed
     assert "the data does not carry it" in second
@@ -561,4 +563,4 @@ async def test_the_managers_text_is_plain_spanish(monkeypatch):
         proposal = await suggest(api, iid, headers)
     assert proposal["summary"] == SUGGESTION["summary"]
     [retry] = retry_prompts(seen["assistant"][-1])
-    assert "summary uses ['R17', 'erp.status']" in retry
+    assert "summary uses ['erp.status']" in retry  # R17 was rewritten in place
