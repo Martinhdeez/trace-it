@@ -45,7 +45,7 @@ export function Settings() {
           >
             <div className="space-y-2 px-3.5 py-3">
               <p className="text-[12px] text-muted">
-                Tu id viaja en la cabecera <span className="font-mono">X-Usuario-Id</span>. Activar
+                Tu id viaja en la cabecera <span className="font-mono">X-User-Id</span>. Activar
                 y retirar reglas solo lo puede hacer un responsable.
               </p>
               {users.isError ? <ErrorNotice error={users.error} /> : null}
@@ -82,8 +82,8 @@ export function Settings() {
           <NestedCard label="modelo por papel">
             <div className="space-y-2 px-3.5 py-3">
               <p className="text-[12px] text-muted">
-                Formato de LiteLLM. Los papeles emparejados conviene que usen proveedores distintos,
-                para que no se equivoquen igual.
+                Configuración activa por caso de uso y papel. Cada cambio crea una versión nueva:
+                compilador, tester ciego, normalizador y asistente pueden usar modelos distintos.
               </p>
               {llm.isError ? <ErrorNotice error={llm.error} /> : null}
               {llm.data?.length === 0 ? <Empty>Sin papeles configurados.</Empty> : null}

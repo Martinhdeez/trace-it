@@ -7,8 +7,8 @@ import { Overlay } from '../shell/Overlay'
 import { Notice } from '../shell/Notice'
 
 /**
- * F10. The backend answers 409 while any instance is PENDIENTE or REVISION
- * (P21), so the blocked case is the one worth showing well.
+ * The backend answers 409 while any instance is still PENDING, so the blocked
+ * case is the one worth showing well.
  */
 export function ExportButton({ processId }: { processId: number }) {
   const [blocked, setBlocked] = useState<string | null>(null)

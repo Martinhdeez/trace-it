@@ -1,6 +1,10 @@
 import { Download, Minus, Plus, RotateCw, Search } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../../api/client'
+import type { DocumentEvidence } from '../../api/contracts'
 import type { InvoiceDocument } from '../../api/types'
+import { keys } from '../../api/queries'
 import { extractedDocuments } from '../../data/documents.generated'
 import { formatEuro } from '../../lib/format'
 
@@ -8,12 +12,23 @@ import { formatEuro } from '../../lib/format'
  * The facsimile of the document. A scan has no parsed version, which is exactly
  * the case that ends in REVISION.
  */
-export function DocumentPane({ name }: { name: string | undefined }) {
+export function DocumentPane({
+  instanceId,
+  name,
+}: {
+  instanceId: number | undefined
+  name: string | undefined
+}) {
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
   const doc = name ? (extractedDocuments[name] ?? null) : null
+  const evidence = useQuery({
+    queryKey: keys.document(instanceId ?? 0),
+    queryFn: () => api.getDocument(instanceId!),
+    enabled: Boolean(instanceId),
+  })
 
   const bumpZoom = (delta: number) => {
     setZoom((value) => Math.min(2, Math.max(0.5, Math.round((value + delta) * 10) / 10)))
@@ -61,7 +76,12 @@ export function DocumentPane({ name }: { name: string | undefined }) {
           </IconBtn>
           <IconBtn
             label="Descargar facsímil"
-            onClick={() => name && downloadFacsimile(name, doc)}
+            onClick={() =>
+              name &&
+              (evidence.data
+                ? downloadEvidence(name, evidence.data)
+                : downloadFacsimile(name, doc))
+            }
           >
             <Download size={15} strokeWidth={1.5} />
           </IconBtn>
@@ -91,6 +111,16 @@ export function DocumentPane({ name }: { name: string | undefined }) {
         <div className="flex min-h-full justify-center p-8">
           {!name ? (
             <p className="self-center text-[13px] text-muted">Selecciona un archivo de la cola.</p>
+          ) : evidence.data ? (
+            <div
+              style={{
+                width: 560,
+                transform: `rotate(${rotation}deg) scale(${zoom})`,
+                transformOrigin: 'top center',
+              }}
+            >
+              <EvidencePaper evidence={evidence.data} query={query} />
+            </div>
           ) : doc ? (
             <div
               style={{
@@ -113,7 +143,14 @@ export function DocumentPane({ name }: { name: string | undefined }) {
         </div>
       </div>
 
-      {doc ? (
+      {evidence.data ? (
+        <div className="flex items-center justify-between px-3 pt-2 text-[12px] text-muted">
+          <span className="font-mono">{evidence.data.sha256.slice(0, 12)}</span>
+          <span>
+            {evidence.data.pipeline_version} · {evidence.data.cache_hit ? 'caché' : 'extraído'}
+          </span>
+        </div>
+      ) : doc ? (
         <div className="flex items-center justify-between px-3 pt-2 text-[12px] text-muted">
           <span className="font-mono">{name?.replace('.pdf', '')}</span>
           <span>
@@ -122,6 +159,51 @@ export function DocumentPane({ name }: { name: string | undefined }) {
         </div>
       ) : null}
     </section>
+  )
+}
+
+function EvidencePaper({
+  evidence,
+  query,
+}: {
+  evidence: DocumentEvidence
+  query: string
+}) {
+  return (
+    <article className="rounded-[12px] bg-paper px-9 py-8 text-ink shadow-[0_8px_30px_rgba(19,19,19,0.06)] ring-1 ring-black/[0.06]">
+      <div className="flex items-start justify-between gap-5 border-b border-hairline pb-5">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.08em] text-muted">Documento leído</p>
+          <h1 className="mt-1 font-mono text-[16px]">{evidence.file_id}</h1>
+        </div>
+        <span className="rounded-full bg-ocr-soft px-2 py-0.5 font-mono text-[10px] text-ocr">
+          {evidence.kind}
+        </span>
+      </div>
+
+      <dl className="mt-5 grid grid-cols-2 gap-x-6">
+        {Object.entries(evidence.fields).map(([name, field]) => (
+          <div key={name} className="border-b border-hairline py-2">
+            <dt className="font-mono text-[10.5px] text-faint">{name}</dt>
+            <dd className="mt-0.5 break-words font-mono text-[12.5px]">
+              {highlight(field.value ?? '—', query)}
+            </dd>
+            {field.selected_by ? (
+              <p className="mt-0.5 text-[10px] text-faint">
+                {field.selected_by}
+                {field.confidence != null ? ` · ${Math.round(field.confidence * 100)} %` : ''}
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </dl>
+
+      {evidence.text ? (
+        <pre className="mt-6 max-h-[320px] overflow-auto whitespace-pre-wrap border-t border-hairline pt-5 font-mono text-[11px] leading-5 text-muted">
+          {highlight(evidence.text, query)}
+        </pre>
+      ) : null}
+    </article>
   )
 }
 
@@ -312,6 +394,17 @@ function downloadFacsimile(name: string, doc: InvoiceDocument | null) {
   const link = document.createElement('a')
   link.href = url
   link.download = name.replace(/\.pdf$/i, '') + '.html'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function downloadEvidence(name: string, evidence: DocumentEvidence) {
+  const body = evidence.text || JSON.stringify(evidence.fields, null, 2)
+  const blob = new Blob([body], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name.replace(/\.pdf$/i, '') + '.txt'
   link.click()
   URL.revokeObjectURL(url)
 }

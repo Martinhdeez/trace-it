@@ -102,7 +102,7 @@ export function Instances() {
             </div>
           }
         />
-        <DocumentPane name={detail.data?.nombre} />
+        <DocumentPane instanceId={detail.data?.id} name={detail.data?.nombre} />
         <TracePane instance={detail.data} rules={rules.data ?? []} />
       </div>
     </>

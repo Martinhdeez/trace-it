@@ -1,39 +1,8 @@
-@font-face {
-  font-family: Geist;
-  src: url("https://cdn.jsdelivr.net/npm/geist@1.4.2/dist/fonts/geist-sans/Geist-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: Geist;
-  src: url("https://cdn.jsdelivr.net/npm/geist@1.4.2/dist/fonts/geist-sans/Geist-Medium.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Geist Mono";
-  src: url("https://cdn.jsdelivr.net/npm/geist@1.4.2/dist/fonts/geist-mono/GeistMono-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Geist Mono";
-  src: url("https://cdn.jsdelivr.net/npm/geist@1.4.2/dist/fonts/geist-mono/GeistMono-Medium.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* interior.dev OTP docs, light. Geist is their face — chosen on purpose. */
+/* interior.dev OTP docs, light. Geist is their face — chosen on purpose.
+   The landing uses the same two faces as the console, nothing else. */
 @theme {
-  --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-sans: "Geist Variable", Geist, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
 
   --color-canvas: #f4f4f2;
   --color-shell: #ffffff;
@@ -70,6 +39,16 @@
   body,
   #root {
     min-height: 100%;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
   }
 
   body {
@@ -113,5 +92,30 @@
     background: #ece6c4;
     color: inherit;
     padding: 0 0.08em;
+  }
+}
+
+@layer components {
+  /* The landing sets headings bigger than the console, with the same face,
+     weight and tracking. Numbers stay in the mono the console uses for data. */
+  .u-display {
+    font-weight: 500;
+    letter-spacing: -0.045em;
+    line-height: 1.04;
+  }
+
+  .u-figure {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.05em;
+    line-height: 0.95;
+  }
+
+  .u-kicker {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-faint);
   }
 }

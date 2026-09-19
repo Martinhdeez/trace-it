@@ -30,7 +30,7 @@ export function setUserId(id: number | null) {
 
 function headers(extra?: HeadersInit): Headers {
   const result = new Headers(extra)
-  if (userId != null) result.set('X-Usuario-Id', String(userId))
+  if (userId != null) result.set('X-User-Id', String(userId))
   return result
 }
 

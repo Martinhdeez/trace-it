@@ -471,6 +471,59 @@ export const mockClient: ApiClient = {
   listRules: (processId, state?: RuleState) =>
     wait(rules.filter((rule) => rule.proceso_id === processId && (!state || rule.estado === state))),
 
+  listNormRules: (processId) =>
+    wait(
+      rules
+        .filter((rule) => rule.proceso_id === processId)
+        .map((rule, index) => ({
+          id: rule.id,
+          numero: index + 1,
+          texto: rule.texto,
+          politicas: [],
+          creada: rule.creada,
+          reglas: [
+            {
+              id: rule.id,
+              texto: rule.texto,
+              decision: rule.decision,
+              estado: rule.estado,
+            },
+          ],
+        })),
+    ),
+
+  normalizeNorm: async (processId, text) => {
+    const lines = text
+      .split(/\n+/)
+      .map((line) => line.replace(/^\s*\d+[.)]\s*/, '').trim())
+      .filter(Boolean)
+    const created = []
+    for (const [index, line] of lines.entries()) {
+      const rule = await mockClient.createRule(processId, {
+        texto: line,
+        tipo: 'requisito',
+        decision: processById(processId).tipos_decision.find((item) => !item.por_defecto)
+          ?.nombre ?? 'REVISAR',
+      })
+      created.push({
+        id: rule.id,
+        numero: index + 1,
+        texto: line,
+        politicas: [],
+        creada: rule.creada,
+        reglas: [
+          {
+            id: rule.id,
+            texto: rule.texto,
+            decision: rule.decision,
+            estado: rule.estado,
+          },
+        ],
+      })
+    }
+    return wait({ reglas_norma: created })
+  },
+
   getRule: async (id) => wait(ruleById(id)),
 
   createRule: async (processId, body: RuleInput) => {
@@ -613,6 +666,8 @@ export const mockClient: ApiClient = {
     }
     return wait(detail)
   },
+
+  getDocument: () => wait(null),
 
   queue: (processId, outcome?: string) => {
     const human = new Set(

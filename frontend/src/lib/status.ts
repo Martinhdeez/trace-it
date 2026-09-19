@@ -14,6 +14,8 @@ const TONES: Record<string, string> = {
   REVISION: 'bg-escalar-soft text-escalar',
   PENDIENTE: 'bg-ocr-soft text-ocr',
   activa: 'bg-pagar-soft text-pagar',
+  compilando: 'bg-ocr-soft text-ocr',
+  bloqueada: 'bg-escalar-soft text-escalar',
   borrador: 'bg-ocr-soft text-ocr',
   rechazada: 'bg-nopagar-soft text-nopagar',
   retirada: 'bg-ocr-soft text-muted',

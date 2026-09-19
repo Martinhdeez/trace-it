@@ -37,14 +37,13 @@ export function Sources() {
       void queryClient.invalidateQueries({ queryKey: ['instances'] })
     },
   })
-  const loadSheet = useMutation({
-    mutationFn: ({ name, file }: { name: string; file: File }) =>
-      api.uploadSource(processId, name, file),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sources'] }),
-  })
   const sync = useMutation({
     mutationFn: () => api.syncErp(processId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sources'] }),
+    onSuccess: (source) =>
+      queryClient.setQueryData(keys.sources(processId), (current: typeof sources.data) => [
+        ...(current ?? []).filter((item) => item.nombre !== source.nombre),
+        source,
+      ]),
   })
 
   return (
@@ -80,13 +79,13 @@ export function Sources() {
 
           <NestedCard label="fuentes de verdad">
             <div className="space-y-2 px-3.5 py-3">
-              <DropZone
-                accept=".xlsx,.xls,.csv"
-                disabled={loadSheet.isPending}
-                label={loadSheet.isPending ? 'Cargando…' : 'Excel de proveedores y pedidos'}
-                hint="FINAL_v7_DEFINITIVO_ahorasi.xlsx"
-                onFiles={([file]) => loadSheet.mutate({ name: 'proveedores', file })}
-              />
+              <div className="rounded-[12px] bg-well px-3 py-3 ring-1 ring-black/[0.04]">
+                <p className="text-[13px] text-ink">Excel de proveedores y pedidos</p>
+                <p className="mt-1 text-[11px] leading-5 text-muted">
+                  Lo declara el pack del proceso. Las hojas y columnas que entran quedan versionadas
+                  con la configuración, no se eligen de nuevo en cada ejecución.
+                </p>
+              </div>
               <div className="flex items-center justify-between gap-3 rounded-[12px] bg-well px-3 py-3 ring-1 ring-black/[0.04]">
                 <div className="min-w-0">
                   <p className="text-[13px] text-ink">Conector del ERP</p>
@@ -99,7 +98,6 @@ export function Sources() {
                   {sync.isPending ? 'Descargando…' : 'Sincronizar'}
                 </Button>
               </div>
-              {loadSheet.isError ? <ErrorNotice error={loadSheet.error} /> : null}
               {sync.isError ? <ErrorNotice error={sync.error} /> : null}
             </div>
           </NestedCard>
@@ -179,6 +177,7 @@ export function Sources() {
                     render: (row) => (
                       <span className="font-mono text-[11px] text-faint">
                         {row.hash.slice(0, 16)}
+                        {!row.hash ? '—' : null}
                       </span>
                     ),
                   },
