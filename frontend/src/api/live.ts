@@ -133,6 +133,7 @@ export const liveClient: ApiClient = {
     async function worker() {
       while (next < files.length) {
         const index = next++
+        onProgress?.({ index, phase: 'reading', done, total: files.length, name: files[index].name })
         const form = new FormData()
         form.append('file', files[index])
         let result = await upload<DocumentUpload>(`/processes/${processId}/files`, form)
@@ -142,7 +143,16 @@ export const liveClient: ApiClient = {
         }
         results[index] = result
         done += 1
-        onProgress?.({ done, total: files.length, name: result.name, status: result.status })
+        const values = Object.values(result.symbols ?? {})
+        onProgress?.({
+          index,
+          phase: 'read',
+          done,
+          total: files.length,
+          name: result.name,
+          read: values.filter((value) => value != null && value !== '').length,
+          expected: values.length,
+        })
       }
     }
     await Promise.all(

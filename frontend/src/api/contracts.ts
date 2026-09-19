@@ -79,7 +79,17 @@ export type SourceDetail = Schemas['SourceDetail']
 export type SyncResult = Schemas['SyncResult']
 
 /** Reported after each file of a batch has been uploaded (and re-extracted when it was stale). */
-export type UploadProgress = { done: number; total: number; name: string; status: string }
+/** One step of a batch upload: a file starts being read, or its reading comes back. */
+export type UploadProgress = {
+  index: number
+  phase: 'reading' | 'read'
+  done: number
+  total: number
+  name: string
+  /** Symbols the reader found, of those the process expects; once read. */
+  read?: number
+  expected?: number
+}
 
 export type Preset = Exclude<ExecutionSettings['preset'], 'custom'>
 

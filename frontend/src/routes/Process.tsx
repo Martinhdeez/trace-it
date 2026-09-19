@@ -45,7 +45,8 @@ export function Process() {
   const { isManager } = useSession()
   const [runPanelOpen, setRunPanelOpen] = useState(false)
   const [queue, setQueue] = useState<QueuedFile[]>([])
-  const [progress, setProgress] = useState<UploadProgress | null>(null)
+  // Every upload event of the batch, in order: the panel's live output.
+  const [progress, setProgress] = useState<UploadProgress[]>([])
   const [published, setPublished] = useState<number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const publishOpen = searchParams.get('publicar') === '1'
@@ -122,8 +123,10 @@ export function Process() {
 
   const upload = useMutation({
     mutationFn: (incoming: File[]) => {
-      setProgress(null)
-      return api.uploadFiles(processId, incoming, setProgress)
+      setProgress([])
+      return api.uploadFiles(processId, incoming, (event) =>
+        setProgress((current) => [...current, event]),
+      )
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: keys.instances(processId) })
