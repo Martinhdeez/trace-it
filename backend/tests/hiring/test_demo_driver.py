@@ -111,6 +111,8 @@ def test_totals_add_up_what_the_llm_run_spans_recorded():
         "input_tokens": 10,
         "output_tokens": 5,
         "cached_tokens": 3,
+        "usd": 0,  # this span carries no cost: no provider price and no listed rate
+        "unpriced_calls": 1,
         "seconds": 1.5,
         "failed_over": 1,
     }
@@ -155,6 +157,17 @@ def test_trace_tables_name_the_model_the_fallback_and_the_failed_steps(tmp_path)
     text = "\n".join(other.lines)
     assert "`llm_run` | 1 | 900 | 0" in text
     assert "`upload_document` | 1 | 10 | 1" in text
+
+
+def test_a_verdict_is_compared_by_name_not_by_spelling():
+    """The answer key writes INTERVIEW; the engine answers with the type's own key.
+
+    Comparing the two verbatim reported 0 of 44 on a run where every category was right.
+    """
+    same = DEMO["same"]
+    assert same("INTERVIEW", "interview") and same("REVIEW", "REVIEW")
+    assert not same("INTERVIEW", "review")
+    assert not same("INTERVIEW", None)
 
 
 def test_plain_symbols_accept_both_stored_and_flat_shapes():

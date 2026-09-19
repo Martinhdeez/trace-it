@@ -208,3 +208,25 @@ def test_the_default_model_brings_the_default_fallbacks(monkeypatch: pytest.Monk
 
     assert names(llm.Setup()) == [settings.compiler_model, *settings.fallback_models]
     assert names(llm.Setup(AgentSettings(model="own"))) == ["own"]
+
+
+class _Usage:
+    """A PydanticAI usage whose provider publishes no price."""
+
+    input_tokens = 1_000_000
+    output_tokens = 1_000_000
+    cache_read_tokens = 400_000
+
+    def cost(self):
+        raise LookupError("unknown model")
+
+
+def test_a_run_on_a_provider_without_a_price_is_costed_at_the_list_price() -> None:
+    """Helmcode bills a flat monthly fee and publishes no per-token rate, so PydanticAI
+    cannot price a run on it. The underlying model's public rate answers what the tokens
+    would cost, and cached input is charged at the cache rate."""
+    usage = _Usage()
+    expected = (600_000 * 0.30 + 400_000 * 0.006 + 1_000_000 * 1.20) / 1_000_000
+    assert llm._cost(usage, "deepseek/deepseek-v4.1-flash") == pytest.approx(expected)
+    assert llm._cost(usage, "deepseek-v4.1-flash") == pytest.approx(expected)
+    assert llm._cost(usage, "a-model-nobody-published") is None
