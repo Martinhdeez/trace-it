@@ -39,14 +39,22 @@ implementation only served as a test oracle, at the price of a second full compi
    output validator rejects malformed JSON, duplicated names, one-sided suites (every
    test fires, or none does) and instance keys that are not symbols.
 2. **Coder** (`TRACE_COMPILER_MODEL`): gets the same context plus the tests and writes
-   `evaluate`. Its output validator rejects code the sandbox refuses (`ModelRetry`,
-   2 repairs). The code then runs on the tests in the sandbox; failures go back to the
+   `evaluate`. Its output validator rejects code the sandbox refuses, and code that reads
+   an unknown key: a deterministic AST check allows `x["k"]` / `x.get("k")` on the first
+   parameter (whatever its name) only for process symbols, and on the second only for
+   source names; computed keys pass (`ModelRetry`, 2 repairs; the retry says to use the
+   listed names or answer NeedsData). The code then runs on the tests in the sandbox; failures go back to the
    coder with its previous code (up to 4 attempts).
 3. **Disputes**: the coder may object to a failing test, quoting the rule text. The
    tester re-reads the text (never the code) and keeps or corrects the expected result
    (up to 2 review rounds). Every review is kept in the report.
 4. **Missing data**: either agent may answer `NeedsData` (which symbol or source is
-   missing) instead of inventing a field. No code is stored; the manager sees why.
+   missing) instead of inventing a field. No code is stored and the rule becomes
+   `blocked`: it is enforced by escalating every instance of the process with
+   `RULE_NEEDS_DATA` (ADR 0016), without the impact gate (failing closed needs no
+   approval) and without audit findings (it has no verdict on the past). Once the data
+   exists, `POST /rules/{id}/compile` recompiles it like any draft. Before, the rule stayed
+   a draft and the process silently ran without it.
 5. **Missing values**: a `None` the rule text and description do not cover makes the
    code raise, and the engine escalates the instance with `RULE_ERROR` (ADR 0016). The
    code never guesses, and a failure never pays.
@@ -54,13 +62,26 @@ implementation only served as a test oracle, at the price of a second full compi
    (ADR 0008) finds no decision taken by a person that would change, and changes at most
    `TRACE_AUTO_ACTIVATE_MAX_CHANGE` (5%) of the decisions already taken. Otherwise it
    stays a draft with the reason in `report.activation`, for a person to decide.
-7. Models are `provider:model` strings; any PydanticAI provider works, and
+7. **Compilation on save**: `POST /processes/{id}/rules` stores the rule as `compiling`
+   and returns at once; a FastAPI background task compiles it with its own session and it
+   ends `active`, `blocked` or `draft`. An error (LLM down, still malformed after repairs)
+   leaves a draft with `report.error` and a `compile_rule` event; app startup re-queues
+   any rule a restart left in `compiling` (best effort: with the database down the API
+   still starts, and they wait for the next start or a recompile). The manager never presses "compile".
+8. Models are `provider:model` strings; any PydanticAI provider works, and
    `helmcode:<model>` uses Helmcode's OpenAI-compatible API. The tester should be a
    different model family from the coder, so a shared misreading is less likely.
 
 ## Consequences
 - Cost per rule: 1 tester run + 1 to 4 coder runs + 0 to 2 reviews; never per instance.
 - A person is involved only by exception: no agreement, needs data, or high impact.
+- A rule that needs data costs a queue of escalations until someone adds the symbol or
+  source: loud on purpose, since the alternative is paying invoices the rule would stop.
+- A `blocked` rule that recompiles goes through the impact gate, but the decisions it
+  escalated itself (`RULE_NEEDS_DATA <id>`) do not count towards the share: undoing them
+  is the point of the recompile. Contradicting a person still blocks it.
+- Background compilation lives in the API process: one server, no queue. Several API
+  workers would each re-queue the same `compiling` rules on startup.
 - The report (`rules.report`) holds the tests with their results, the attempts, the
   reviews and the activation decision: the audit trail of how the code was accepted.
 - A hand-written rule (`processes/rules-v3/`) keeps `origin: hand-written` and is
@@ -69,15 +90,21 @@ implementation only served as a test oracle, at the price of a second full compi
 ## Evidence
 - `agents/compiler.py`: `tester`, `coder` and `reviewer` Agents; `compile_text` (the
   loop, without the database); `run_tests`.
-- `rules/service.py`: `_auto_activation` (impact gate) in `compile_rule`.
+- `rules/service.py`: `_auto_activation` (impact gate) and the `blocked` branch in
+  `_compile`; `compile_in_background`, `resume_compilations` (called from `main.lifespan`).
 - 10 unit tests in `agents/tests/test_compiler.py` with scripted models: green on the
   first attempt (and the tester never sees code); the coder iterates on failing tests; a
   disputed test corrected by the tester; no agreement leaves the rule invalid; NeedsData
   from either agent; unknown symbols rejected; one-sided suites rejected; sandbox repair;
   still broken after the repairs returns 502.
-- 3 API tests in `decisions/tests/test_audit.py`: a rule that changes nothing activates
-  itself; one that changes 2 of 3 decisions waits for a person; NeedsData stays a draft
-  without code.
+- 2 more in `test_compiler.py`: the coder reading an unknown symbol and source is sent
+  back and then passes; computed keys and any parameter names are allowed.
+- API tests in `decisions/tests/test_audit.py`: a rule that changes nothing activates
+  itself; one that changes 2 of 3 decisions waits for a person; a saved rule compiles in
+  the background and activates; NeedsData blocks the rule, the next invoice escalates with
+  `RULE_NEEDS_DATA`, and a recompile activates it unless a person decided one of the
+  invoices it escalated; startup resumes a rule left
+  `compiling`. `processes/tests/test_api.py`: LLM down leaves a draft with `report.error`.
 - `make eval-compiler` runs the loop with real models on the 16 invoice rules and scores
   the code against the hand-written reference on the 471 golden instances, and the
   reference against the tester's tests.

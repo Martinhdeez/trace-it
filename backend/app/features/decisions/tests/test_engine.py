@@ -178,6 +178,17 @@ def test_a_rule_without_code_escalates() -> None:
     assert "without code" in verdict.reason
 
 
+def test_a_rule_that_needs_data_escalates_every_instance() -> None:
+    active = rules("iban_mismatch")
+    active[0].code = None
+    active[0].report = {"needs_data": {"missing": ["symbol: delivery_date"]}}
+
+    verdicts = decide(active, OUTCOMES, [(1, CLEAN), (2, NEW_IBAN)], SOURCES, [], RUN)
+
+    assert [v.decision for v in verdicts] == ["ESCALAR", "ESCALAR"]
+    assert {v.reason for v in verdicts} == {"RULE_NEEDS_DATA 1: missing symbol: delivery_date"}
+
+
 def test_each_instance_sees_the_others_but_not_itself() -> None:
     seen: list = []
     run = dataset_runner({"iban_mismatch": RULES_V3["iban_mismatch"][2]}, seen)

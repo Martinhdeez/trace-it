@@ -230,6 +230,38 @@ async def test_the_tester_may_only_use_known_symbols(
     assert "Unknown instance keys ['currency']" in complaint
 
 
+UNKNOWN_KEYS = CODE.replace(
+    "    if Decimal",
+    '    if instance.get("currency") == "USD" or sources["rates"]:\n'
+    '        return {"fires": True, "reason": "FOREIGN"}\n'
+    "    if Decimal",
+)
+
+
+async def test_the_coder_may_only_read_known_symbols_and_sources(
+    monkeypatch: pytest.MonkeyPatch, seen: dict
+) -> None:
+    script(monkeypatch, seen, [suite()], [proposal(UNKNOWN_KEYS), proposal(CODE)])
+
+    result = await compile_()
+
+    assert result.code == CODE and result.report["valid"] is True
+    [complaint] = retry_prompts(seen["compiler"][1])
+    assert "unknown keys ['currency', 'rates']" in complaint
+    assert "['amount']" in complaint and "['suppliers']" in complaint
+    assert "NeedsData" in complaint
+
+
+def test_computed_keys_and_any_parameter_names_are_allowed() -> None:
+    code = """
+def evaluate(inv, src, others):
+    key = "amo" + "unt"
+    rows = src.get("suppliers") or src[key]
+    return {"fires": inv[key] > 1 and bool(inv.get("amount")), "reason": ""}
+"""
+    assert compiler.read_keys(code) == ({"amount"}, {"suppliers"})
+
+
 async def test_tests_on_one_side_only_are_rejected() -> None:
     one_sided = compiler.TestSuite.model_validate(suite())
     for t in one_sided.tests:

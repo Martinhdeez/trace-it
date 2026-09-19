@@ -76,6 +76,11 @@ def _run_rule(
     run_dataset: RunDataset,
 ) -> list[RuleResult]:
     """One rule over every instance. A whole-batch failure is that error for every one."""
+    needs_data = (rule.report or {}).get("needs_data")
+    if not rule.code and needs_data:
+        missing = ", ".join(needs_data.get("missing") or []) or "data"
+        reason = f"RULE_NEEDS_DATA {rule.id}: missing {missing}"
+        return [RuleResult(rule.id, rule.hash, None, reason)] * len(instances)
     try:
         if not rule.code:
             raise ValueError("rule is active without code")

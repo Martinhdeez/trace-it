@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, BackgroundTasks, status
 
 from app.common.exceptions import PermissionDeniedError
 from app.core.database import Session
@@ -11,7 +11,7 @@ from app.features.users.dependencies import CurrentUser
 
 router = APIRouter(tags=["rules"])
 
-Status = Literal["draft", "active", "retired"]
+Status = Literal["compiling", "draft", "active", "blocked", "retired"]
 
 
 def _manager_only(user: CurrentUser) -> None:
@@ -30,10 +30,14 @@ async def list_rules(
     "/processes/{process_id}/rules",
     operation_id="createRule",
     status_code=status.HTTP_201_CREATED,
-    summary="Add a rule as text. It starts as a draft",
+    summary="Add a rule as text. It is compiled in the background (status `compiling`)",
 )
-async def create_rule(process_id: int, body: RuleIn, session: Session) -> RuleDetail:
-    return await service.create(session, process_id, body)
+async def create_rule(
+    process_id: int, body: RuleIn, session: Session, background: BackgroundTasks
+) -> RuleDetail:
+    rule = await service.create(session, process_id, body)
+    background.add_task(service.compile_in_background, rule.id)
+    return rule
 
 
 @router.get("/rules/{rule_id}", operation_id="getRule", summary="A rule with its code")
@@ -44,7 +48,7 @@ async def get_rule(rule_id: int, session: Session) -> RuleDetail:
 @router.post(
     "/rules/{rule_id}/compile",
     operation_id="compileRule",
-    summary="Generate code + tests with two agents and validate them",
+    summary="Recompile a draft or blocked rule: tests, code, validation; waits for it",
 )
 async def compile_rule(rule_id: int, session: Session) -> RuleDetail:
     return await service.compile_rule(session, rule_id)
