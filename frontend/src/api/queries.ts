@@ -29,6 +29,6 @@ export const keys = {
 
 /** After a decision moves, everything that counts instances is stale. */
 export const families = {
-  decisions: ['instances', 'instance', 'queue', 'findings', 'summary'],
+  decisions: ['instances', 'instance', 'queue', 'findings', 'summary', 'alerts'],
   rules: ['rules', 'rule'],
 }

@@ -169,7 +169,7 @@ test('open the escalation detail', async () => {
   await realAndClean(['llm_error'])
 })
 
-test.fixme('pkg 5: the detail says why it escalated, as the API does', async ({ request }) => {
+test('pkg 5: the detail says why it escalated, as the API does', async ({ request }) => {
   const instance = await instanceByName(request, RESOLVED)
   await expect(page.getByText('Por qué se escaló')).toBeVisible()
   // Exact: the rule result below also quotes the reason.
