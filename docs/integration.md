@@ -75,6 +75,7 @@ Constraints from the plan:
 | 44 | Learning | None | `/processes/{id}/learning`, `/norm-proposals/*` ([learning.md](learning.md)) | No UI for the bonus feature | d | Q6 | – | – |
 | 45 | Discovery (new process by conversation) | Form or JSON import | `/process-drafts/*` ([process-discovery.md](process-discovery.md)) | Unused | d | The form and import are enough for one pack. Discovery takes minutes of LLM calls | – | – |
 | 46 | User administration | Picker only | `POST /users` (no auth) | – | d | Users come from the pack. The backend protects `POST /users` under #3 | – | – |
+| 47 | "Proponer": proposals to accept or reject | Regular expressions in `proposalsFrom()` | `GET /processes/{id}/proposals`, `POST /proposals/{id}/accept\|reject`, `POST /instances/{id}/proposal` ([api.md](api.md#proposals)) | Three channels (escalation, chat, learning), each with its own endpoints | c | One contract lists every proposal (decision, rule, context, input, source), and the manager settles each one | M | BE done, FE |
 
 **Already aligned** (only the mapper changes, under #38):
 - Assistant suggestion (`GET /instances/{id}/suggestion`).
