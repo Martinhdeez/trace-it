@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router'
 import App from './App.tsx'
 import { ApiError } from './api/client'
 import { AppStateProvider } from './state/app'
+import { LocaleProvider } from './state/locale'
 import { SessionProvider } from './state/session'
 import { ThemeProvider } from './state/theme'
 import './index.css'
@@ -27,7 +28,9 @@ createRoot(document.getElementById('root')!).render(
         <ThemeProvider>
           <SessionProvider>
             <AppStateProvider>
-              <App />
+              <LocaleProvider>
+                <App />
+              </LocaleProvider>
             </AppStateProvider>
           </SessionProvider>
         </ThemeProvider>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { AnimatePresence, motion } from 'motion/react'
 import { hashKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -14,6 +14,7 @@ import type {
 import { cn } from '../../lib/cn'
 import { formatRunDate, humanize } from '../../lib/format'
 import { paths } from '../../lib/paths'
+import { ruleLabel } from '../../lib/process'
 import { t } from '../../i18n'
 import {
   formatAmount,
@@ -72,7 +73,9 @@ export function CaseDetail({
       <div className="flex min-h-0 w-full flex-col md:w-[440px] md:shrink-0">
       <header className="flex shrink-0 items-start justify-between gap-4 border-b border-hairline px-5 py-4">
         <div className="min-w-0">
-          <p className="truncate font-mono text-[11px] text-faint">{item.name}</p>
+          {entry.party ? (
+            <p className="truncate font-mono text-[11px] text-faint">{item.name}</p>
+          ) : null}
           <h2 className="mt-0.5 truncate text-[20px] font-medium tracking-[-0.03em]">
             {entry.party ?? item.name}
           </h2>
@@ -96,20 +99,14 @@ export function CaseDetail({
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
         <section>
-          <p className="text-[11px] text-faint">{waiting ? 'Por qué te llega' : 'Decisión'}</p>
+          {waiting ? null : <p className="text-[11px] text-faint">Decisión</p>}
           {waiting ? (
             <>
-              <p className="mt-1 text-[15px] tracking-[-0.01em] text-ink">{reason.title}</p>
-              {reason.detail ? <p className="mt-0.5 text-[12.5px] text-muted">{reason.detail}</p> : null}
+              <p className="text-[15px] tracking-[-0.01em] text-ink">{reason.title}</p>
               {fired.length ? (
-                <ul className="mt-2 space-y-1 text-[12.5px] text-muted">
-                  {fired.map((result) => (
-                    <li key={result.rule_id} className="flex gap-2">
-                      <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-faint" />
-                      {result.rule_summary || result.rule_text || `Regla ${result.rule_id}`}
-                    </li>
-                  ))}
-                </ul>
+                <FiredRules processId={process.id} fired={fired} />
+              ) : reason.detail ? (
+                <p className="mt-0.5 text-[12.5px] text-muted">{reason.detail}</p>
               ) : null}
               {item.review_pending && review ? (
                 <p className="mt-2 text-[12.5px] text-muted">
@@ -182,6 +179,76 @@ export function CaseDetail({
 }
 
 /**
+ * The rules that sent the case here, folded: each line is why it fired; hovering it shows
+ * the rule itself. The instance's results carry only ids, so the rules come from the list.
+ */
+function FiredRules({ processId, fired }: { processId: number; fired: RuleResult[] }) {
+  const [open, setOpen] = useState(false)
+  const rules = useQuery({
+    queryKey: keys.rules(processId),
+    queryFn: () => api.listRules(processId),
+  })
+  const byId = new Map((rules.data ?? []).map((rule) => [rule.id, rule]))
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="flex items-center gap-1.5 text-[12.5px] text-muted hover:text-ink"
+      >
+        {fired.length === 1 ? '1 regla' : `${fired.length} reglas`}
+        <ChevronDown
+          size={14}
+          strokeWidth={1.6}
+          className={cn('transition-transform', open && 'rotate-180')}
+        />
+      </button>
+      {open ? (
+        <ul className="mt-1.5 space-y-1 text-[12.5px]">
+          {fired.map((result) => {
+            const rule = byId.get(result.rule_id)
+            return (
+              <li key={result.rule_id} className="group relative">
+                <Link
+                  to={paths.rule(processId, result.rule_id)}
+                  className="flex gap-2 rounded-[8px] px-1.5 py-1 text-muted hover:bg-canvas hover:text-ink"
+                >
+                  <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-faint" />
+                  <span className="min-w-0 break-words">
+                    {result.reason || (rule ? ruleLabel(rule) : `Regla ${result.rule_id}`)}
+                  </span>
+                </Link>
+                <div
+                  role="tooltip"
+                  className="pointer-events-none absolute left-0 right-0 top-full z-20 mt-1 hidden rounded-[12px] bg-surface p-3 text-[12px] shadow-pop ring-1 ring-line group-hover:block"
+                >
+                  <p className="flex items-center justify-between gap-2 font-mono text-[10.5px] text-faint">
+                    <span>Regla {result.rule_id}</span>
+                    {rule ? <span>{humanize(rule.decision)}</span> : null}
+                  </p>
+                  {rule ? (
+                    <>
+                      <p className="mt-1 text-ink">{ruleLabel(rule)}</p>
+                      {rule.summary ? (
+                        <p className="mt-1 leading-5 text-muted">{rule.text}</p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="mt-1 text-muted">{result.rule_summary || result.rule_text || '—'}</p>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
+/**
  * The manager's call. The options are the outcomes the process can close a case with;
  * the reason is required, because it is what the assistant learns from. A suggestion is
  * asked for, never fetched on its own: it is a model call.
@@ -227,13 +294,13 @@ function Decide({
   }
 
   const resolve = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (chosen: string) => {
       const text = reason.trim()
-      if (proposal?.status === 'open' && payload?.proposed === decision) {
+      if (proposal?.status === 'open' && payload?.proposed === chosen) {
         return api.acceptProposal(proposal.id, text)
       }
       return api.resolve(instanceId, {
-        decision: decision!,
+        decision: chosen,
         reason: text,
         proposal_id: proposal?.status === 'open' ? proposal.id : null,
       })
@@ -243,6 +310,31 @@ function Decide({
       window.setTimeout(onResolved, 900)
     },
   })
+
+  /**
+   * Two steps, no separate confirm button: the first click arms an option, the second
+   * decides. An armed option disarms itself after a few seconds or on Escape.
+   */
+  const [armed, setArmed] = useState<string | null>(null)
+  const ready = Boolean(reason.trim()) && !resolve.isPending
+  const choose = (name: string) => {
+    if (armed !== name) return setArmed(name)
+    setArmed(null)
+    setDecision(name)
+    resolve.mutate(name)
+  }
+  useEffect(() => {
+    if (!armed) return
+    const timer = window.setTimeout(() => setArmed(null), 4000)
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setArmed(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [armed])
 
   const [suggesting, setSuggesting] = useState(false)
   /** Accepting the proposal resolves the case with its decision, right from the popup. */
@@ -292,26 +384,6 @@ function Decide({
               </button>
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-2">
-              {options.map((option) => (
-                <button
-                  key={option.name}
-                  type="button"
-                  onClick={() => setDecision(option.name)}
-                  className={cn(
-                    'rounded-full px-4 py-2 text-[13px] font-medium ring-1',
-                    decision === option.name
-                      ? option.is_default
-                        ? 'bg-pagar text-white ring-pagar'
-                        : 'bg-nopagar text-white ring-nopagar'
-                      : 'bg-surface text-ink ring-line hover:bg-canvas',
-                  )}
-                >
-                  {humanize(option.name)}
-                </button>
-              ))}
-            </div>
-
             <label className="mt-3 block">
               <span className="text-[12px] text-muted">Por qué</span>
               <Textarea
@@ -329,15 +401,52 @@ function Decide({
               </div>
             ) : null}
 
-            <div className="mt-4 flex justify-end">
-              <Button
-                tone="primary"
-                disabled={!decision || !reason.trim() || resolve.isPending}
-                title={!decision ? 'Elige una opción' : !reason.trim() ? 'Escribe el motivo' : undefined}
-                onClick={() => resolve.mutate()}
-              >
-                {resolve.isPending ? 'Guardando…' : 'Confirmar decisión'}
-              </Button>
+            <div
+              className="mt-3 grid gap-2"
+              style={{ gridTemplateColumns: `repeat(${Math.max(options.length, 1)}, minmax(0, 1fr))` }}
+            >
+              {options.map((option) => {
+                const isArmed = armed === option.name
+                const saving = resolve.isPending && decision === option.name
+                return (
+                  <motion.button
+                    key={option.name}
+                    type="button"
+                    whileTap={ready ? { scale: 0.97 } : undefined}
+                    disabled={!ready}
+                    onClick={() => choose(option.name)}
+                    className={cn(
+                      'flex min-h-[64px] flex-col items-center justify-center rounded-[14px] px-3 py-2.5 ring-1 transition-[background-color,color,opacity,box-shadow] duration-200',
+                      'disabled:cursor-not-allowed disabled:opacity-45',
+                      option.is_default
+                        ? isArmed || saving
+                          ? 'bg-pagar text-white ring-pagar'
+                          : 'bg-pagar-soft text-pagar ring-pagar/25 hover:ring-pagar'
+                        : isArmed || saving
+                          ? 'bg-nopagar text-white ring-nopagar'
+                          : 'bg-nopagar-soft text-nopagar ring-nopagar/25 hover:ring-nopagar',
+                      armed && !isArmed && 'opacity-50',
+                    )}
+                  >
+                    <span className="text-[16px] font-medium tracking-[-0.01em]">
+                      {saving ? 'Guardando…' : humanize(option.name)}
+                    </span>
+                    <AnimatePresence initial={false}>
+                      {isArmed && !saving ? (
+                        <motion.span
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 0.9, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.18, ease }}
+                          className="text-[11.5px]"
+                        >
+                          Pulsa otra vez para confirmar
+                        </motion.span>
+                      ) : null}
+                    </AnimatePresence>
+                  </motion.button>
+                )
+              })}
             </div>
           </motion.div>
         )}

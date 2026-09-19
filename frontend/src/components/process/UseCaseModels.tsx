@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { AgentConfigOut } from '../../api/contracts'
 import { keys } from '../../api/queries'
+import { t } from '../../i18n'
 import { Input } from '../shell/Controls'
 import { Empty, ErrorNotice } from '../shell/Notice'
 
@@ -22,7 +23,7 @@ export function UseCaseModels({ useCaseId }: { useCaseId: number }) {
   return (
     <>
       {useCase.isError ? <ErrorNotice error={useCase.error} /> : null}
-      {useCase.data && agents.length === 0 ? <Empty>Sin papeles configurados.</Empty> : null}
+      {useCase.data && agents.length === 0 ? <Empty>{t('settings.noAgents')}</Empty> : null}
       {agents.map((agent) => (
         <div key={agent.role} className="flex items-center gap-2">
           <span className="w-32 shrink-0 font-mono text-[12px] text-muted">{agent.role}</span>

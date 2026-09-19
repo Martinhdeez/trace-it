@@ -19,7 +19,6 @@ import { Button, Field, Segmented, Select, Textarea } from '../components/shell/
 import { Empty, EmptyState, ErrorNotice, Notice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
 import { TerminalLoader } from '../components/shell/TerminalLoader'
-import { PageIntro } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { t } from '../i18n'
 import { ALERTS_TAB, paths } from '../lib/paths'
@@ -99,12 +98,6 @@ export function Queue() {
       }
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
-        <PageIntro
-          kicker="Revisión"
-          title={tabs.find((item) => item.value === tab)?.label ?? (tab.replaceAll('_', ' ') || 'Cola')}
-          description="Excepciones que el proceso no cierra. Tu decisión queda en el histórico; después, el revisor puede sugerir la regla que decida sola los casos parecidos."
-        />
-
         {escalated.isError ? <ErrorNotice error={escalated.error} /> : null}
         {alerts.isError ? <ErrorNotice error={alerts.error} /> : null}
 

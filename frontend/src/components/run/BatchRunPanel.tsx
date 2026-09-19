@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { ArrowRight, Check, Circle, LoaderCircle, Play, Upload, X } from 'lucide-react'
@@ -25,6 +25,7 @@ export function BatchRunPanel({
   finished,
   rulesCount,
   startBlocked,
+  blockedNotice,
   error,
   progress,
   result,
@@ -44,6 +45,8 @@ export function BatchRunPanel({
   finished: boolean
   rulesCount: number
   startBlocked?: string
+  /** Replaces the one-line reason with a way out, such as publishing a waiting draft. */
+  blockedNotice?: ReactNode
   error?: unknown
   /** Files uploaded so far, reported by the client after each one. */
   progress: UploadProgress[]
@@ -101,6 +104,7 @@ export function BatchRunPanel({
         <Collect
           queue={queue}
           startBlocked={startBlocked}
+          blockedNotice={blockedNotice}
           error={error}
           onFiles={onFiles}
           onRemove={onRemove}
@@ -125,6 +129,7 @@ export function BatchRunPanel({
 function Collect({
   queue,
   startBlocked,
+  blockedNotice,
   error,
   onFiles,
   onRemove,
@@ -133,6 +138,7 @@ function Collect({
 }: {
   queue: FilePreview[]
   startBlocked?: string
+  blockedNotice?: ReactNode
   error?: unknown
   onFiles: (files: File[]) => void
   onRemove: (id: string) => void
@@ -223,10 +229,14 @@ function Collect({
         </div>
       ) : null}
 
+      {startBlocked && blockedNotice ? <div className="mt-3">{blockedNotice}</div> : null}
+
       <div className="mt-4 flex items-center justify-between gap-3">
         <p className="text-[11px] text-faint">
           {startBlocked
-            ? startBlocked
+            ? blockedNotice
+              ? ''
+              : startBlocked
             : queue.length
               ? 'Se leen y se deciden con la versión publicada'
               : 'Hace falta al menos un documento'}

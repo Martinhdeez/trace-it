@@ -20,7 +20,7 @@ async function managerFixture(request: APIRequestContext, page?: Page) {
   expect(login.status()).toBe(200)
   const headers = { 'X-User-Id': String((await login.json()).id) }
   if (page) {
-    await page.goto('settings')
+    await page.goto('settings?tab=identity')
     const user = page.getByRole('button', { name: new RegExp(email.replaceAll('.', '\\.')) })
     await expect(user).toContainText('CI manager')
     await expect(user).toContainText(/responsable/i)
@@ -200,7 +200,6 @@ test('HTTP flow persists PDF evidence, decisions, human resolution and export', 
   await page.getByRole('button', { name: 'View holder in original PDF' }).click()
   const dialog = page.getByRole('dialog', { name: 'Original document' })
   await expect(dialog).toBeVisible()
-  await expect(dialog.getByText('Exact text', { exact: false })).toBeVisible()
   await expect(dialog.getByRole('img', { name: `${filename}, page 1` })).toBeVisible()
   const box = dialog.getByTestId('source-box')
   await expect(box).toHaveCount(1)

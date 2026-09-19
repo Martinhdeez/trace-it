@@ -2,29 +2,33 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type RefObject } 
 import { Link, useParams, useSearchParams } from 'react-router'
 import { AnimatePresence, motion } from 'motion/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Search, Settings2, Upload, X } from 'lucide-react'
+import { CheckCircle2, Rocket, Search, Settings2, Upload, X } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import { keys } from '../api/queries'
 import type { InstanceOut, ProcessDetail, RunSummary, UploadProgress } from '../api/contracts'
 import { revokePreview, toPreview, type FilePreview } from '../components/process/FileChip'
+import { PublishDraft } from '../components/process/PublishDraft'
 import { BatchRunPanel } from '../components/run/BatchRunPanel'
 import { CaseDetail } from '../components/inbox/CaseDetail'
 import { CaseList } from '../components/inbox/CaseList'
 import { MiniCalendar } from '../components/inbox/MiniCalendar'
 import { Button, Input, Segmented } from '../components/shell/Controls'
-import { EmptyState, ErrorNotice } from '../components/shell/Notice'
+import { EmptyState, ErrorNotice, Notice } from '../components/shell/Notice'
 import { Overlay } from '../components/shell/Overlay'
 import { StatusBadge } from '../components/shell/StatusBadge'
 import { Topbar } from '../components/shell/Topbar'
+import { NestedCard } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { formatRunDate, humanize } from '../lib/format'
 import { paths } from '../lib/paths'
+import { useSession } from '../state/session'
 import {
   dayKey,
   formatAmount,
   formatDay,
   parseDay,
   plainReason,
+  severity,
   triage,
   type Triage,
 } from '../lib/urgency'
@@ -124,17 +128,7 @@ export function Inbox() {
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
-        <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-[28px] font-medium leading-[1.1] tracking-[-0.045em]">
-              {view === 'pendientes' ? greeting(cases.length) : 'Historial'}
-            </h1>
-            <p className="mt-1 text-[13px] text-muted">
-              {view === 'pendientes'
-                ? `${process.data?.name ?? 'Proceso'} · ordenadas por urgencia a ${formatDay(today.date)}${today.cutOff ? ' (fecha de corte)' : ''}`
-                : 'Todo lo que el proceso o una persona ya decidió, con su motivo.'}
-            </p>
-          </div>
+        <header className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <Segmented
             value={view}
             onChange={(next) => update({ vista: next === 'historial' ? next : null, i: null, dia: null })}
@@ -143,6 +137,11 @@ export function Inbox() {
               { value: 'historial', label: 'Historial' },
             ]}
           />
+          {view === 'pendientes' && today.cutOff ? (
+            <span className="text-[12px] text-muted" title="Fecha de corte del proceso">
+              Corte · {formatDay(today.date)}
+            </span>
+          ) : null}
         </header>
 
 
@@ -225,25 +224,48 @@ export function Inbox() {
 
       {drop.open ? (
         <Overlay onClose={drop.close} size="lg">
-          <BatchRunPanel
-            processId={processId}
-            process={process.data}
-            runId={undefined}
-            queue={drop.files}
-            running={drop.busy && drop.progress.length >= drop.files.length * 2}
-            uploading={drop.busy && drop.progress.length < drop.files.length * 2}
-            finished={drop.batch.isSuccess}
-            rulesCount={drop.active}
-            startBlocked={drop.startBlocked}
-            error={drop.batch.error ? runFailure(drop.batch.error) : undefined}
-            progress={drop.progress}
-            result={drop.batch.data?.run}
-            onFiles={drop.add}
-            onRemove={drop.remove}
-            onClear={drop.clear}
-            onStart={drop.run}
-            onClose={drop.close}
-          />
+          {drop.publishing && drop.draft ? (
+            <NestedCard
+              label={`Publicar v${drop.nextVersion}`}
+              action={
+                <Button tone="ghost" onClick={() => drop.setPublishing(false)}>
+                  Volver
+                </Button>
+              }
+            >
+              <div className="space-y-3 p-4">
+                <PublishDraft
+                  key={drop.draft.revision}
+                  processId={processId}
+                  draft={drop.draft}
+                  onPublished={drop.published}
+                />
+              </div>
+            </NestedCard>
+          ) : (
+            <BatchRunPanel
+              processId={processId}
+              process={process.data}
+              runId={undefined}
+              queue={drop.files}
+              running={drop.busy && drop.progress.length >= drop.files.length * 2}
+              uploading={drop.busy && drop.progress.length < drop.files.length * 2}
+              finished={drop.batch.isSuccess}
+              rulesCount={drop.active}
+              startBlocked={drop.startBlocked}
+              blockedNotice={
+                drop.startBlocked === NO_RULES ? <NoRules processId={processId} drop={drop} /> : undefined
+              }
+              error={drop.batch.error ? runFailure(drop.batch.error) : undefined}
+              progress={drop.progress}
+              result={drop.batch.data?.run}
+              onFiles={drop.add}
+              onRemove={drop.remove}
+              onClear={drop.clear}
+              onStart={drop.run}
+              onClose={drop.close}
+            />
+          )}
         </Overlay>
       ) : null}
 
@@ -266,10 +288,6 @@ export function Inbox() {
   )
 }
 
-function greeting(count: number): string {
-  if (count === 0) return 'Nada te espera'
-  return `${count} factura${count === 1 ? '' : 's'} te espera${count === 1 ? '' : 'n'}`
-}
 
 /**
  * The day urgency is measured against. With a cut-off date loaded in the process's
@@ -295,6 +313,8 @@ function useReferenceDay(processId: number): { date: Date; cutOff: boolean } {
 
 type QueuedFile = FilePreview & { file: File }
 type Summary = { total: number; waiting: number; run: RunSummary }
+
+const NO_RULES = 'Hace falta al menos una regla activa'
 
 /** How long the panel stays on "Lote completado" before the list takes over. */
 const CLOSE_AFTER_MS = 1_200
@@ -325,8 +345,28 @@ function useDrop(processId: number, today: Date) {
   const startBlocked = compiling
     ? 'El motor no arranca mientras hay reglas compilando'
     : rules.isSuccess && active === 0
-      ? 'Hace falta al menos una regla activa'
+      ? NO_RULES
       : undefined
+
+  // Without active rules, a waiting draft is the way out: publish it here and go on.
+  const { isManager } = useSession()
+  const [publishing, setPublishing] = useState(false)
+  const execution = useQuery({
+    queryKey: keys.execution(processId),
+    queryFn: () => api.getExecution(processId),
+    enabled: isManager && Boolean(startBlocked),
+  })
+  const draft = useQuery({
+    queryKey: keys.draft(processId),
+    queryFn: () => api.getDraft(processId),
+    enabled: execution.data?.revision != null,
+  })
+  const versions = useQuery({
+    queryKey: keys.versions(processId),
+    queryFn: () => api.listVersions(processId),
+    enabled: draft.isSuccess,
+  })
+  const nextVersion = Math.max(0, ...(versions.data ?? []).map((version) => version.number)) + 1
 
   const batch = useMutation({
     mutationFn: async (queued: QueuedFile[]) => {
@@ -377,6 +417,17 @@ function useDrop(processId: number, today: Date) {
     active,
     batch,
     busy: batch.isPending,
+    isManager,
+    draft: execution.data?.revision != null ? draft.data : undefined,
+    nextVersion,
+    publishing,
+    setPublishing,
+    /** The draft is live: the dropped files go through with it at once. */
+    published: async () => {
+      setPublishing(false)
+      await queryClient.invalidateQueries()
+      if (files.length) batch.mutate(files)
+    },
     /** A drop queues the files and starts at once: dropping them is the intent. */
     start: (incoming: File[]) => {
       if (batch.isPending) return
@@ -400,10 +451,56 @@ function useDrop(processId: number, today: Date) {
     close: () => {
       if (batch.isPending) return
       clear()
+      setPublishing(false)
       setOpen(false)
     },
     dismiss: () => setSummary(null),
   }
+}
+
+/** No active rules: publish the waiting draft from here, or go write some. */
+function NoRules({ processId, drop }: { processId: number; drop: ReturnType<typeof useDrop> }) {
+  const see = (label: string) => (
+    <Link
+      to={paths.definition(processId)}
+      className="inline-flex items-center rounded-full bg-canvas px-3 py-1.5 text-[12px] font-medium text-ink ring-1 ring-line hover:bg-well"
+    >
+      {label}
+    </Link>
+  )
+
+  if (!drop.draft) {
+    return (
+      <Notice tone="warning" title="No hay reglas activas" action={see('Ir a Definición')}>
+        Escribe las reglas del proceso y publícalas para decidir estos documentos.
+      </Notice>
+    )
+  }
+  return (
+    <Notice
+      tone="warning"
+      title="No hay reglas activas"
+      action={
+        <div className="flex items-center gap-1.5">
+          {see('Ver')}
+          {drop.isManager ? (
+            <Button tone="primary" onClick={() => drop.setPublishing(true)} className="group">
+              <Rocket
+                size={12}
+                strokeWidth={2}
+                className="transition-transform duration-200 group-hover:-translate-y-px group-hover:translate-x-px motion-reduce:transition-none"
+              />
+              Publicar v{drop.nextVersion}
+            </Button>
+          ) : null}
+        </div>
+      }
+    >
+      {drop.isManager
+        ? 'Hay un borrador listo. Publícalo y estos documentos se procesan a continuación.'
+        : 'Hay un borrador listo. Pide a un responsable que lo publique.'}
+    </Notice>
+  )
 }
 
 /** The backend refuses a run with nothing published; say what to do about it. */
@@ -462,11 +559,11 @@ function Toast({
 
 function Totals({ cases }: { cases: Triage[] }) {
   const overdue = cases.filter((entry) => entry.flags.includes('overdue'))
-  const soon = cases.filter((entry) => entry.flags.includes('soon'))
+  const urgent = cases.filter((entry) => severity(entry.flags) === 'medium')
   const amount = cases.reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
   const cells = [
     { label: 'Vencidas', value: String(overdue.length), tone: overdue.length ? 'text-nopagar' : 'text-ink' },
-    { label: 'Vencen pronto', value: String(soon.length), tone: soon.length ? 'text-escalar' : 'text-ink' },
+    { label: 'Urgentes', value: String(urgent.length), tone: urgent.length ? 'text-urgent' : 'text-ink' },
     { label: 'Importe en espera', value: formatAmount(amount), tone: 'text-ink' },
   ]
   return (
