@@ -15,7 +15,6 @@ COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./
 COPY backend/tests/golden/batch1_expected.jsonl /reference/invoice-expected.jsonl
 COPY processes /processes
-COPY tools/hiring_demo.py /srv/hiring_demo.py
 COPY deploy/backend-start.sh /srv/backend-start.sh
 COPY docs/production-api.md /docs/production-api.md
 RUN useradd --uid 10001 --create-home trace \

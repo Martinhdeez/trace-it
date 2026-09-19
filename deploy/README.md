@@ -206,8 +206,9 @@ The version-4 private `/opt/trace-it/demo-seed.json` contains all 500 PDFs from
 `facturas/`, all 40 from `facturas_primin/`, their original bytes and SHA256 values,
 accepted application symbols, extraction evidence and the cached extraction trace trees.
 It is built from the pinned original `ikurotime/500-sombras-de-alberto` checkout and
-saved application readings, never from hand-reviewed delivery outcomes. The six hiring
-examples are retained separately.
+saved application readings, never from hand-reviewed delivery outcomes. It also contains
+41 of the 44 hiring CVs. `cv-002.pdf`, `cv-021.pdf` and `cv-024.pdf` stay out of the seed as
+one live `INTERVIEW`, `REJECT` and `REVIEW` upload.
 
 The initial invoice process uses its original 516-entry ERP. A separate
 `Invoice payment - batch 2` process uses the 556-entry updated ERP, plus the new supplier
@@ -215,6 +216,10 @@ and order CSVs. Each deployment appends fresh, pinned source snapshots. Automati
 ERP synchronization is disabled in these two demo versions so a later decision cannot
 silently replace the initial scenario with the updated one. Manual source changes remain
 possible for a demo, and the next deployment restores the pinned scenarios.
+Hiring follows the same pattern: deployment restores the 23-row criminal-records snapshot
+without contacting the service. Normal runs still use the published connector. An exact,
+case-insensitive full-name match rejects the candidate; `cv-001.pdf` (Ana Molina) is the
+fixture's checked match for `CR-00001`.
 
 Deployment stops application and mail writers, validates a database dump and ingestion
 archive, checks the extraction-cache identity, and transactionally restores the complete
@@ -251,6 +256,12 @@ python deploy/build-challenge-seed.py \
   --readings /private/application-readings.json \
   --cache /private/ocr-cache-identity.json \
   --output /private/new-demo-seed.json
+
+python deploy/build-hiring-seed.py \
+  --pack processes/hiring-screening \
+  --base-seed /private/new-demo-seed.json \
+  --readings /private/application-readings.json \
+  --output /private/complete-demo-seed.json
 ```
 
 The builder checks every PDF hash against its saved reading and requires the exact 500/40

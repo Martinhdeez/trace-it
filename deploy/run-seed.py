@@ -78,6 +78,23 @@ async def run(seed):
                     cases = []
                     for item in instances:
                         verdict = verdicts[item.id]
+                        reference = expected[item.name]
+                        if reference.get("expected") and verdict.decision != reference["expected"]:
+                            raise ValueError(
+                                f"{item.name}: got {verdict.decision}, expected "
+                                f"{reference['expected']}"
+                            )
+                        actual_reasons = {
+                            part.split()[0].rstrip(":")
+                            for part in (verdict.reason or "").split(" | ")
+                            if part.strip()
+                        }
+                        expected_reasons = set(reference.get("expected_reasons", []))
+                        if expected_reasons and actual_reasons != expected_reasons:
+                            raise ValueError(
+                                f"{item.name}: got reasons {sorted(actual_reasons)}, expected "
+                                f"{sorted(expected_reasons)}"
+                            )
                         service._append(
                             session,
                             process.id,

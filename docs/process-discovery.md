@@ -23,12 +23,12 @@ and answers with their authors. Draft state survives restarting the backend.
 All mutation requests after creation carry the last returned `revision`. A concurrent
 edit or published draft returns 409. Use the returned revision for the next request.
 
-In the console, **New process** opens chat by default and resumes the latest unpublished
-new-process conversation. A manager can start another conversation or switch among saved
-ones. For an existing process, **Definition** opens the same workflow with the published
-version as its baseline. Review, connector sync, preparation, impact and publication stay
-inside that screen. Form entry, JSON import and the manual definition editor remain secondary
-paths.
+In the console, **New process** opens a blank chat by default. Saved unpublished new-process
+conversations appear below it and are resumed through an explicit draft link; the draft ID stays
+in the URL so refresh and browser navigation keep the same conversation. For an existing process,
+**Definition** opens the same workflow with the published version as its baseline and resumes its
+latest open conversation. Review, connector sync, preparation, impact and publication stay inside
+that screen. Form entry, JSON import and the manual definition editor remain secondary paths.
 
 Every response carries `trace_id`, the audit trail of the last agent run on this draft
 (discovery, discussion or compilation). `GET /traces/{trace_id}` returns that tree: each
