@@ -293,6 +293,60 @@ async def test_pending_reextraction_uses_new_snapshots_and_keeps_both_events(pay
     assert "extract_document" in {event["step"] for event in process_events}
 
 
+async def test_same_source_rows_reuse_evidence_but_changed_schema_refreshes(payment_api):
+    client, process_id, service, _ = payment_api
+    assert (await load_sources(client, process_id)).status_code == 201
+    content = pdf_bytes(VALID + "\n" + uuid.uuid4().hex)
+    endpoint = f"/processes/{process_id}/files"
+    first = (await client.post(endpoint, files={"file": ("stable.pdf", content)})).json()
+    assert (await load_sources(client, process_id)).status_code == 201
+    original_extract = service.extract
+    service.extract = lambda *_: pytest.fail("Equal source rows must reuse evidence")
+    try:
+        unchanged = await client.post(endpoint, files={"file": ("stable.pdf", content)})
+    finally:
+        service.extract = original_extract
+    assert unchanged.status_code == 201, unchanged.text
+    reused = unchanged.json()["extraction"]
+    assert reused["id"] == first["extraction"]["id"]
+    assert reused["data"] == first["extraction"]["data"]
+    assert reused["cache_hit"] is True
+    for reader in ("ocr", "vlm", "jev"):
+        assert reused["metrics"][f"{reader}_calls_this_request"] == 0
+        assert reused["metrics"][f"{reader}_cache_hits_this_request"] == 0
+    document = await client.get(f"/instances/{first['instance_id']}/document")
+    assert document.json() == first["extraction"]
+
+    async with session_factory() as session:
+        symbol = await session.get(Symbol, (process_id, "total"))
+        symbol.description = "Changed extraction contract"
+        await session.commit()
+    refreshed = await client.post(endpoint, files={"file": ("stable.pdf", content)})
+    assert refreshed.status_code == 201, refreshed.text
+    assert refreshed.json()["extraction"]["id"] != first["extraction"]["id"]
+    async with session_factory() as session:
+        events = list(
+            await session.scalars(
+                select(Event)
+                .where(
+                    Event.instance_id == first["instance_id"],
+                    Event.step.in_(("ingest_document", "extract_document")),
+                )
+                .order_by(Event.id)
+            )
+        )
+    assert [event.step for event in events] == ["ingest_document", "extract_document"]
+    async with session_factory() as session:
+        await session.delete(await session.get(Symbol, (process_id, "iban")))
+        await session.commit()
+    generic = await client.post(f"/instances/{first['instance_id']}/extract", json={})
+    assert generic.status_code == 200, generic.text
+    assert generic.json()["symbols"] is None
+    async with session_factory() as session:
+        instance = await session.get(Instance, first["instance_id"])
+        assert instance.symbols is None
+
+
 async def test_concurrent_runs_do_not_duplicate_decisions(payment_api):
     client, process_id, _, _ = payment_api
     await load_sources(client, process_id)

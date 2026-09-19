@@ -60,11 +60,14 @@ in the current dev format: `{name: {value, origin}}`. Other processes keep `symb
 their business vocabulary is not guessed. Missing readings never create a REVIEW state.
 Re-uploading the same process,
 filename and content preserves the instance and any existing downstream decisions.
+Pending duplicates check extraction, source and symbol-schema freshness before reusing
+evidence; stale pending instances refresh. Decided duplicates return their stored evidence.
 
 `GET /instances/{instance_id}/document` retrieves the latest attached extraction from
-PostgreSQL events independently of the local cache. Duplicate upload attempts remain
-in the audit, but their unused readings cannot replace the evidence behind stored
-symbols or decisions. The process upload calls the
+PostgreSQL events independently of the local cache. Duplicate uploads retain their
+request trace; unchanged evidence does not create another extraction event. Legacy
+duplicate events containing unused readings cannot replace applied evidence.
+The process upload calls the
 `extract_for_payment(service, item, options, sources)` adapter, which checks the
 invoice-payment `suppliers`, `orders` and `erp` snapshots and requests at most one
 additional extraction for discrepancies not already reread. It returns both result
@@ -76,9 +79,12 @@ Impossible printed dates retain their components (31/02/2026 -> 2026-02-31) so t
 existing invalid-date rule can reject them. Amounts remain exact decimal strings.
 
 `POST /instances/{instance_id}/extract` accepts a JSON `ExtractOptions` body (`{}`
-uses defaults). It reads the original PDF again with the latest snapshots and fills
-symbols for a supported pending instance, including uploads predating this integration.
-It appends an `extract_document` event. It returns 409 once the instance is decided.
+uses defaults). It checks the original PDF's extraction against the latest snapshots and
+fills symbols for a stale supported pending instance, including uploads predating this
+integration. A refresh appends an `extract_document` event. An unchanged request reuses
+the existing extraction ID with `cache_hit=true` and zero current-request reader calls;
+its stored event and the historical `GET /document` response remain unchanged.
+It returns 409 once the instance is decided.
 Extraction and `/run` lock pending instances so re-extraction cannot overwrite the
 evidence of a concurrently completed engine decision.
 
@@ -113,7 +119,7 @@ No `tools/` module or evaluation script participates in this application flow.
 ## Tracing readers and provider usage
 
 The contract is recorded in [ADR 0022](../adr/0022-ocr-evidence-and-provider-tracing.md).
-Use `GET /instances/{id}/trace` for the document journey. An upload contains
+Use `GET /instances/{id}/trace` for the document journey. An upload requiring extraction contains
 `extraction` and its `native_text`, `ocr`, `vision`, `text_judge` and `focused_read`
 children as applicable. Remote readers add a `provider_call` child with provider,
 model, operation, request fingerprint, duration, outcome and reported tokens.

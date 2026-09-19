@@ -97,6 +97,32 @@ def test_stable_local_iban_can_be_corroborated_by_final_visual_crop(settings):
     )
 
 
+def test_final_visual_check_reuses_high_resolution_crop(settings, monkeypatch):
+    from app.features.ingestion.pdf import focused
+
+    original_render = focused.render_region
+    dpi_calls = []
+
+    def counted_render(*args, **kwargs):
+        dpi_calls.append(kwargs.get("dpi", 600))
+        return original_render(*args, **kwargs)
+
+    monkeypatch.setattr(focused, "render_region", counted_render)
+    correct = "IBAN: ES9368884400123588900142"
+    wrong = correct.replace("1235", "1236")
+    reading, report, _ = verify(
+        settings,
+        {"primary": lines(correct, "ocr", 0.99), "visual": lines(wrong, "vlm")},
+        iter([correct, correct]),
+        "",
+        iter([wrong, correct]),
+        "payment_iban",
+    )
+    assert reading.value == "ES9368884400123588900142"
+    assert report["reason"] == "scale_stable_local_and_visual_agreement"
+    assert dpi_calls == [150, 600]
+
+
 def test_repeated_local_readings_and_text_proposals_are_not_independent_support(settings):
     text = "Pedido: PO-2031-9876"
     reading, report, _ = verify(

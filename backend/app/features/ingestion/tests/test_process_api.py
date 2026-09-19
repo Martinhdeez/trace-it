@@ -9,6 +9,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 
+from app.core import events
 from app.core.database import engine, session_factory
 from app.core.events import Event
 from app.features.ingestion.model import File, Instance
@@ -27,6 +28,17 @@ pytestmark = [
         os.getenv("TRACEPAY_TEST_POSTGRES") != "1", reason="Requires test PostgreSQL"
     ),
 ]
+
+
+def assert_reused_evidence(reused, original):
+    assert reused["id"] == original["id"]
+    assert reused["fields"] == original["fields"]
+    assert reused["data"] == original["data"]
+    assert reused["cache_hit"] is True
+    assert reused["metrics"]["request_ms"] >= 0
+    for reader in ("ocr", "vlm", "jev"):
+        assert reused["metrics"][f"{reader}_calls_this_request"] == 0
+        assert reused["metrics"][f"{reader}_cache_hits_this_request"] == 0
 
 
 @pytest.fixture
@@ -79,7 +91,7 @@ async def test_upload_persists_original_and_evidence_without_approving_symbols(p
 
 
 async def test_reupload_preserves_instance_state_and_distinguishes_file_names(process_api):
-    client, process_id, _ = process_api
+    client, process_id, service = process_api
     content = pdf_bytes(VALID + "\n" + uuid.uuid4().hex)
     endpoint = f"/processes/{process_id}/files"
     first = (await client.post(endpoint, files={"file": ("original.pdf", content)})).json()
@@ -88,10 +100,15 @@ async def test_reupload_preserves_instance_state_and_distinguishes_file_names(pr
         instance.status = "DECIDED"
         instance.symbols = {"approved_by_another_stage": {"value": True, "origin": "test"}}
         await session.commit()
+    original_extract = service.extract
+    service.extract = lambda *_: pytest.fail("Decided duplicate must reuse its stored evidence")
     again = (await client.post(endpoint, files={"file": ("original.pdf", content)})).json()
+    service.extract = original_extract
     other = (await client.post(endpoint, files={"file": ("copy.pdf", content)})).json()
     assert again["instance_id"] == first["instance_id"]
     assert again["status"] == "DECIDED" and not again["created"]
+    assert_reused_evidence(again["extraction"], first["extraction"])
+    assert again["symbols"] == {"approved_by_another_stage": {"value": True, "origin": "test"}}
     assert other["instance_id"] != first["instance_id"] and other["created"]
     assert other["file_hash"] == first["file_hash"]
     async with session_factory() as session:
@@ -103,6 +120,113 @@ async def test_reupload_preserves_instance_state_and_distinguishes_file_names(pr
             )
             == 1
         )
+        events = list(
+            await session.scalars(
+                select(Event).where(
+                    Event.instance_id == first["instance_id"], Event.step == "ingest_document"
+                )
+            )
+        )
+        assert len(events) == 1
+    stored = await client.get(f"/instances/{first['instance_id']}/document")
+    assert stored.json() == first["extraction"]
+
+
+async def test_pending_duplicate_and_reextract_reuse_matching_evidence(process_api):
+    client, process_id, service = process_api
+    content = pdf_bytes(VALID + "\n" + uuid.uuid4().hex)
+    endpoint = f"/processes/{process_id}/files"
+    first = (await client.post(endpoint, files={"file": ("repeat.pdf", content)})).json()
+    original_extract = service.extract
+    service.extract = lambda *_: pytest.fail("Matching evidence must not run extraction")
+    try:
+        duplicate = await client.post(endpoint, files={"file": ("repeat.pdf", content)})
+        repeated = await client.post(f"/instances/{first['instance_id']}/extract", json={})
+    finally:
+        service.extract = original_extract
+    assert duplicate.status_code == 201, duplicate.text
+    assert repeated.status_code == 200, repeated.text
+    assert_reused_evidence(duplicate.json()["extraction"], first["extraction"])
+    assert_reused_evidence(repeated.json()["extraction"], first["extraction"])
+    async with session_factory() as session:
+        events = list(
+            await session.scalars(
+                select(Event).where(
+                    Event.instance_id == first["instance_id"],
+                    Event.step.in_(("ingest_document", "extract_document")),
+                )
+            )
+        )
+    assert len(events) == 1
+    stored = await client.get(f"/instances/{first['instance_id']}/document")
+    assert stored.json() == first["extraction"]
+
+
+async def test_legacy_ignored_ingest_event_is_not_reused_as_applied_evidence(process_api):
+    client, process_id, service = process_api
+    content = pdf_bytes(VALID + "\n" + uuid.uuid4().hex)
+    endpoint = f"/processes/{process_id}/files"
+    first = (await client.post(endpoint, files={"file": ("legacy.pdf", content)})).json()
+    ignored = {**first["extraction"], "id": "ignored-upload"}
+    async with session_factory() as session:
+        events.record(
+            session,
+            "ingest_document",
+            process_id=process_id,
+            instance_id=first["instance_id"],
+            data={"created": False, "extraction": ignored},
+        )
+        await session.commit()
+    original_extract = service.extract
+    service.extract = lambda *_: pytest.fail("Matching applied evidence must be reused")
+    try:
+        duplicate = await client.post(endpoint, files={"file": ("legacy.pdf", content)})
+    finally:
+        service.extract = original_extract
+    assert duplicate.status_code == 201, duplicate.text
+    assert_reused_evidence(duplicate.json()["extraction"], first["extraction"])
+    stored = await client.get(f"/instances/{first['instance_id']}/document")
+    assert stored.json() == first["extraction"]
+
+
+async def test_changed_options_and_legacy_provenance_refresh_pending(process_api):
+    client, process_id, _ = process_api
+    content = pdf_bytes(VALID + "\n" + uuid.uuid4().hex)
+    first = (
+        await client.post(
+            f"/processes/{process_id}/files", files={"file": ("changed.pdf", content)}
+        )
+    ).json()
+    endpoint = f"/instances/{first['instance_id']}/extract"
+    changed = await client.post(endpoint, json={"ocr": False, "vlm": False, "jev": False})
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["extraction"]["id"] != first["extraction"]["id"]
+    async with session_factory() as session:
+        event = await session.scalar(
+            select(Event)
+            .where(Event.instance_id == first["instance_id"], Event.step == "extract_document")
+            .order_by(Event.id.desc())
+        )
+        data = dict(event.data)
+        extraction = dict(data["extraction"])
+        extraction["data"] = dict(extraction["data"])
+        extraction["data"]["provenance"] = {}
+        data["extraction"] = extraction
+        event.data = data
+        await session.commit()
+    legacy = await client.post(endpoint, json={"ocr": False, "vlm": False, "jev": False})
+    assert legacy.status_code == 200, legacy.text
+    assert legacy.json()["extraction"]["data"]["provenance"]["cache_key"]
+    async with session_factory() as session:
+        events = list(
+            await session.scalars(
+                select(Event).where(
+                    Event.instance_id == first["instance_id"],
+                    Event.step.in_(("ingest_document", "extract_document")),
+                )
+            )
+        )
+    assert len(events) == 3
 
 
 async def test_unreadable_scan_does_not_decide_the_process_review_state(process_api):
@@ -122,7 +246,7 @@ async def test_unreadable_scan_does_not_decide_the_process_review_state(process_
 
 
 @pytest.mark.parametrize("decided", [False, True])
-async def test_reupload_does_not_replace_the_attached_reading(process_api, decided):
+async def test_reupload_only_refreshes_pending_evidence_when_options_change(process_api, decided):
     client, process_id, _ = process_api
     content = pdf_bytes(VALID)
     endpoint = f"/processes/{process_id}/files"
@@ -142,9 +266,13 @@ async def test_reupload_does_not_replace_the_attached_reading(process_api, decid
     duplicate = await client.post(endpoint, files={"file": ("invoice.pdf", content)})
     assert duplicate.status_code == 201, duplicate.text
     assert duplicate.json()["created"] is False
-    assert duplicate.json()["extraction"]["id"] != attached["id"]
     stored = await client.get(f"/instances/{instance_id}/document")
-    assert stored.json() == attached
+    if decided:
+        assert_reused_evidence(duplicate.json()["extraction"], attached)
+        assert stored.json() == attached
+    else:
+        assert duplicate.json()["extraction"]["id"] != attached["id"]
+        assert stored.json() == duplicate.json()["extraction"]
     async with session_factory() as session:
         audit = list(
             await session.scalars(
@@ -153,8 +281,16 @@ async def test_reupload_does_not_replace_the_attached_reading(process_api, decid
                 .order_by(Event.id)
             )
         )
-        assert [event.data["created"] for event in audit] == [True, False]
-        assert audit[-1].data["extraction"] == duplicate.json()["extraction"]
+        assert [event.data["created"] for event in audit] == [True]
+        applied = list(
+            await session.scalars(
+                select(Event)
+                .where(Event.instance_id == instance_id, Event.step == "extract_document")
+                .order_by(Event.id)
+            )
+        )
+        assert len(applied) == (1 if decided else 2)
+        assert applied[-1].data["extraction"] == stored.json()
 
 
 async def test_generic_document_is_not_forced_into_invoice_symbols(process_api):

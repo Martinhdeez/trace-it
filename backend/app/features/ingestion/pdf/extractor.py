@@ -120,15 +120,6 @@ def extract_pdf(
     judge_enabled = options.jev is True or (
         options.jev is None and getattr(judge, "configured", False)
     )
-    judgment = {}
-    if judge_enabled and ("primary" in readers or "visual" in readers) and unresolved(fields):
-        try:
-            metrics["jev_calls"] += 1
-            with events.span("text_judge"):
-                judgment = judge.select(readers, fields)
-        except Exception as exc:
-            failure("JEV_ERROR", "text_judge", exc)
-    # Jev recommendations never overwrite image evidence or become another vote.
     fields, decisions, final_warnings = reconcile(readers, settings.ocr_min_confidence)
     focused = verify_identifiers(
         content, fields, readers, pages, settings, ocr, vlm, options, vision_enabled, metrics
@@ -138,6 +129,23 @@ def extract_pdf(
             warnings.append({"code": "FOCUSED_READER_ERROR", "field": name})
         if report["value"] is None:
             warnings.append({"code": "FOCUSED_UNRESOLVED", "field": name})
+    # Ask the text-only judge after image verification, only about readings that
+    # are still unresolved. Confirmed image evidence never needs another vote.
+    judgment = {}
+    pending = {
+        name: field
+        for name, field in fields.items()
+        if field.status != "OBSERVED"
+        and not focused.get(name, {}).get("value")
+        and any(c.value is not None and not c.error for c in field.candidates)
+    }
+    if judge_enabled and ("primary" in readers or "visual" in readers) and pending:
+        try:
+            metrics["jev_calls"] += 1
+            with events.span("text_judge"):
+                judgment = judge.select(readers, pending)
+        except Exception as exc:
+            failure("JEV_ERROR", "text_judge", exc)
     warnings.extend(final_warnings)
     for lines in readers.values():
         warnings.extend(parse_invoice(lines, settings.ocr_min_confidence)[1])

@@ -137,6 +137,7 @@ def verify_identifiers(
             "reason": "insufficient_independent_support",
             "deskew_degrees": angle,
         }
+        high_png = None
         for family, method, enabled, reader in (
             ("primary", "recognize", options.ocr, ocr),
             ("secondary", "verify", options.ocr, ocr),
@@ -149,11 +150,9 @@ def verify_identifiers(
                 metric = "vlm_calls" if family == "visual" else "ocr_calls"
                 metrics[metric] += 1
                 metrics["focused_calls"] = metrics.get("focused_calls", 0) + 1
-                input_png = (
-                    render_region(content, page, box, settings, dpi=600)
-                    if family == "primary_scale"
-                    else png
-                )
+                if family == "primary_scale":
+                    high_png = render_region(content, page, box, settings, dpi=600)
+                input_png = high_png if family == "primary_scale" else png
                 with events.span("focused_read", field=name, reader=family, page=page) as span:
                     generated = getattr(reader, method)(input_png, page, size)
                     span.set(lines=len(generated))
@@ -219,9 +218,8 @@ def verify_identifiers(
                 metrics["focused_calls"] += 1
                 high = {"field": name, "reader": "visual_high", "page": page}
                 with events.span("focused_read", **high) as span:
-                    generated = vlm.transcribe(
-                        render_region(content, page, box, settings), page, size
-                    )
+                    # The primary scale check has already rendered these pixels.
+                    generated = vlm.transcribe(high_png, page, size)
                     span.set(lines=len(generated))
                 generated = [
                     line.model_copy(

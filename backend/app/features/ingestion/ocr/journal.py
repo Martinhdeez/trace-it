@@ -8,6 +8,7 @@ import time
 from filelock import FileLock
 
 from app.core import events
+from app.features.ingestion.cache import count_reader
 
 from .errors import ProviderUnavailable
 
@@ -45,12 +46,17 @@ def record_response(provider, status_code, payload=None):
         trace.set(**_token_usage(provider, payload))
 
 
-def recorded_call(directory, identity, call, *, provider=None, model=None, operation=None):
+def recorded_call(
+    directory, identity, call, *, provider=None, model=None, operation=None, reader=None
+):
+    reader = reader or {"gemini": "vlm", "vision": "vlm", "jev": "jev"}.get(provider)
+    if reader:
+        count_reader(reader + "_journal_calls")
     directory.mkdir(parents=True, exist_ok=True)
     fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     path = directory / f"{fingerprint}.json"
     if provider is None:
-        return _recorded_call(path, identity, call)
+        return _recorded_call(path, identity, call, reader=reader)
 
     failure = None
     result = None
@@ -65,7 +71,7 @@ def recorded_call(directory, identity, call, *, provider=None, model=None, opera
         network_succeeded=False,
     ) as trace:
         try:
-            result = _recorded_call(path, identity, call, trace)
+            result = _recorded_call(path, identity, call, trace, reader)
         except Exception as exc:
             failure = exc
             trace.status = "error"
@@ -79,7 +85,7 @@ def recorded_call(directory, identity, call, *, provider=None, model=None, opera
     return result
 
 
-def _recorded_call(path, identity, call, trace=None):
+def _recorded_call(path, identity, call, trace=None, reader=None):
     with FileLock(str(path) + ".lock", timeout=60):
         if path.exists():
             record = json.loads(path.read_text(encoding="utf-8"))
@@ -89,16 +95,25 @@ def _recorded_call(path, identity, call, trace=None):
                 if trace is not None:
                     trace.set(outcome="blocked_uncertain")
                 raise RuntimeError("Provider delivery uncertain; inspect the request journal")
+            if reader:
+                count_reader(reader + "_cache_hits")
             if trace is not None:
                 trace.set(outcome="replay")
             return record["response"]
         record = {"identity": identity, "state": "started", "started_at": time.time()}
         path.write_text(json.dumps(record), encoding="utf-8")
         started = time.perf_counter()
+
+        def mark_network_attempt():
+            if reader and (trace is None or not trace.data["network_attempted"]):
+                count_reader(reader + "_requests")
+            if trace is not None:
+                trace.set(network_attempted=True)
+
         try:
-            record["response"] = (
-                call(lambda: trace.set(network_attempted=True)) if trace else call()
-            )
+            if trace is None:
+                mark_network_attempt()
+            record["response"] = call(mark_network_attempt) if trace else call()
             record["state"] = "complete"
             if trace is not None:
                 trace.set(outcome="success", network_succeeded=trace.data["network_attempted"])

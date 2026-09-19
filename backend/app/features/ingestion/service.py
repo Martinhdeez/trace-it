@@ -1,5 +1,4 @@
 import hashlib
-import json
 import logging
 import os
 import threading
@@ -8,8 +7,11 @@ import uuid
 from contextlib import suppress
 from pathlib import Path
 
+from filelock import FileLock
+
 from app.common.exceptions import NotFoundError
 from app.core import events
+from app.features.ingestion.cache import file_identity, fingerprint, package_version, reader_usage
 from app.features.ingestion.config import Settings
 from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.ocr.local import LocalOCR
@@ -20,7 +22,7 @@ from app.features.ingestion.schemas import ExtractionResult, ExtractOptions
 from app.features.ingestion.store import Store
 from app.features.sources.excel import extract_workbook
 
-PIPELINE_VERSION = "invoice-v2.1.5+xlsx-v1.3"
+PIPELINE_VERSION = "invoice-v2.2.0+xlsx-v1.3"
 logger = logging.getLogger(__name__)
 
 
@@ -89,23 +91,109 @@ class ExtractionService:
             temp.unlink(missing_ok=True)
 
     def cache_key(self, item, options):
+        root = Path(__file__).resolve().parents[2]
+        vision = options.vlm is True or (
+            options.vlm is None and getattr(self.vlm, "configured", False)
+        )
+        judge = options.jev is True or (
+            options.jev is None and getattr(self.judge, "configured", False)
+        )
+        shared = [
+            "common/extraction.py",
+            "common/normalization.py",
+            "features/ingestion/readings.py",
+            "features/ingestion/schemas.py",
+        ]
+        invoice = [
+            "pdf/extractor.py",
+            "pdf/native.py",
+            "pdf/invoice.py",
+            "pdf/committee.py",
+            "pdf/uncertainty.py",
+            "pdf/focused.py",
+        ]
+        if options.ocr:
+            invoice += ["ocr/bands.py", "ocr/preprocessing.py", "ocr/local.py"]
+        if vision:
+            invoice += ["ocr/transcript.py", "ocr/vision.py", "ocr/gemini.py"]
+        if judge:
+            invoice += ["ocr/judge.py"]
+        paths = shared + (
+            ["features/ingestion/" + path for path in invoice]
+            if item["kind"] == "invoice"
+            else ["features/sources/excel.py"]
+        )
         config = {
             "sha": item["sha256"],
             "kind": item["kind"],
-            "options": options.model_dump(),
-            "pipeline": PIPELINE_VERSION,
-            "ocr": self.ocr.signature() if options.ocr else None,
-            "dpi": self.settings.ocr_dpi,
-            "confidence": self.settings.ocr_min_confidence,
-            "cuda": self.settings.ocr_use_cuda,
-            "vlm_model": self.settings.vlm_model if options.vlm is not False else None,
-            "vlm_endpoint": self.settings.vlm_url if options.vlm is not False else None,
-            "gemini_model": self.settings.gemini_model if options.vlm is not False else None,
-            "vision_configured": getattr(self.vlm, "configured", False),
-            "jev_model": self.settings.jev_model if options.jev is not False else None,
-            "jev_configured": getattr(self.judge, "configured", False),
+            "pipeline": PIPELINE_VERSION.split("+")[0 if item["kind"] == "invoice" else 1],
+            "cache_schema": 2,
+            "implementation": {path: file_identity(root / path) for path in paths},
+            "pydantic": package_version("pydantic"),
         }
-        return hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
+        if item["kind"] == "workbook":
+            config.update(
+                openpyxl=package_version("openpyxl"),
+                limits={
+                    name: getattr(self.settings, name)
+                    for name in (
+                        "max_excel_cells",
+                        "max_excel_rows",
+                        "max_excel_cols",
+                    )
+                },
+            )
+        else:
+            config.update(
+                options={
+                    "ocr": options.ocr,
+                    "vlm": vision,
+                    "jev": judge,
+                    "verify_fields": sorted(set(options.verify_fields)),
+                },
+                ocr=self.ocr.signature() if options.ocr else None,
+                dpi=self.settings.ocr_dpi,
+                confidence=self.settings.ocr_min_confidence,
+                cuda=self.settings.ocr_use_cuda if options.ocr else None,
+                limits={"pages": self.settings.max_pages, "pixels": self.settings.max_image_pixels},
+                pymupdf=package_version("pymupdf"),
+                reader_runtime={
+                    name: package_version(name)
+                    for name in (
+                        "rapidocr",
+                        "onnxruntime",
+                        "onnxruntime-gpu",
+                        "opencv-python",
+                        "numpy",
+                        "pillow",
+                    )
+                }
+                if options.ocr
+                else None,
+                vision=(
+                    self.vlm.signature()
+                    if hasattr(self.vlm, "signature")
+                    else {
+                        "model": self.settings.vlm_model,
+                        "endpoint": self.settings.vlm_url,
+                        "gemini_model": self.settings.gemini_model,
+                        "configured": getattr(self.vlm, "configured", False),
+                    }
+                )
+                if vision
+                else None,
+                judge=(
+                    self.judge.signature()
+                    if hasattr(self.judge, "signature")
+                    else {
+                        "model": self.settings.jev_model,
+                        "configured": getattr(self.judge, "configured", False),
+                    }
+                )
+                if judge
+                else None,
+            )
+        return fingerprint(config)
 
     def extract(self, item, options: ExtractOptions):
         with events.span(
@@ -131,7 +219,9 @@ class ExtractionService:
     def _extract(self, item, options: ExtractOptions):
         started = time.perf_counter()
         key = self.cache_key(item, options)
-        with self.locks[int(key[:8], 16) % len(self.locks)]:
+        lock_path = self.settings.data_dir / "extraction-locks" / (key + ".lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.locks[int(key[:8], 16) % len(self.locks)], FileLock(str(lock_path), timeout=600):
             cached = self.store.cached(key)
             if cached:
                 result = ExtractionResult.model_validate(cached)
@@ -147,10 +237,13 @@ class ExtractionService:
                     "ocr_calls_this_request": 0,
                     "vlm_calls_this_request": 0,
                     "jev_calls_this_request": 0,
+                    "ocr_cache_hits_this_request": 0,
+                    "vlm_cache_hits_this_request": 0,
+                    "jev_cache_hits_this_request": 0,
                 }
                 self.store.save(result)
                 return result
-            with self.slots:
+            with self.slots, reader_usage() as usage:
                 content = (self.objects / item["sha256"]).read_bytes()
                 if item["kind"] == "invoice":
                     fields, data, warnings, pages, metrics = extract_pdf(
@@ -162,6 +255,7 @@ class ExtractionService:
                     metrics = {"native_pages": 0, "ocr_calls": 0, "vlm_calls": 0}
                 elapsed = round((time.perf_counter() - started) * 1000, 2)
                 data["provenance"] = {
+                    "cache_key": key,
                     "pipeline_version": PIPELINE_VERSION,
                     "options": options.model_dump(),
                     "ocr_models": self.ocr.signature() if metrics["ocr_calls"] else None,
@@ -181,9 +275,18 @@ class ExtractionService:
                     {
                         "extraction_ms": elapsed,
                         "request_ms": elapsed,
-                        "ocr_calls_this_request": metrics["ocr_calls"],
-                        "vlm_calls_this_request": metrics["vlm_calls"],
-                        "jev_calls_this_request": metrics.get("jev_calls", 0),
+                        "ocr_calls_this_request": metrics["ocr_calls"]
+                        - usage.get("ocr_cache_hits", 0),
+                        "vlm_calls_this_request": usage.get("vlm_requests", 0)
+                        if isinstance(self.vlm, VisionFallback)
+                        else metrics["vlm_calls"],
+                        "jev_calls_this_request": usage.get("jev_requests", 0)
+                        if isinstance(self.judge, TextJudge)
+                        else metrics.get("jev_calls", 0),
+                        **{
+                            name + "_cache_hits_this_request": usage.get(name + "_cache_hits", 0)
+                            for name in ("ocr", "vlm", "jev")
+                        },
                         "bytes": len(content),
                     }
                 )

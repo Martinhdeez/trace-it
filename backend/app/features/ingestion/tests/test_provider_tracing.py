@@ -9,7 +9,7 @@ from app.features.ingestion.ocr.errors import ProviderUnavailable
 from app.features.ingestion.ocr.journal import recorded_call
 from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.ocr.vision import VisionFallback
-from app.features.ingestion.pdf.invoice import parse_invoice
+from app.features.ingestion.pdf.committee import reconcile
 
 from .conftest import lines
 
@@ -132,7 +132,8 @@ def test_generic_vision_and_text_judge_calls_are_traced(settings, monkeypatch):
     source = lines("TOTAL: 100,00 EUR", "ocr", 0.99)
     with events.span("extraction"):
         assert vision.transcribe(b"private-image", 1, (595, 842))
-        assert judge.select({"primary": source}, parse_invoice(source)[0])["answers"]
+        readers = {"primary": source}
+        assert judge.select(readers, reconcile(readers, settings.ocr_min_confidence)[0])["answers"]
 
     calls = [row["data"] for row in rows if row["step"] == "provider_call"]
     assert [(call["provider"], call["operation"]) for call in calls] == [
