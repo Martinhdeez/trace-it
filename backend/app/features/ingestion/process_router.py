@@ -92,6 +92,7 @@ async def upload_document(
     mode: Annotated[Literal["local", "api", "hybrid"] | None, Form()] = None,
 ):
     try:
+        await process_service.require_process(session, process_id)
         with events.span("upload_document", process_id=process_id, file=file.filename) as span:
             try:
                 with events.span("store_file"):
