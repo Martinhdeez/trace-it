@@ -14,7 +14,6 @@ import { api, ApiError } from '../api/client'
 import { keys } from '../api/queries'
 import { MetricCells, PlaneDashboards } from '../components/process/PlaneDashboards'
 import { PublishDraft } from '../components/process/PublishDraft'
-import { ProcessExecutionSettings } from '../components/process/ExecutionSettings'
 import { ExportButton } from '../components/process/ExportButton'
 import {
   revokePreview,
@@ -313,7 +312,6 @@ export function Process() {
 
         <Split summary={summary.data} process={process.data} />
         <PlaneDashboards processId={processId} decisionTypes={process.data?.decision_types} />
-        <ProcessExecutionSettings processId={processId} />
       </div>
     </ProcessScreen>
   )
