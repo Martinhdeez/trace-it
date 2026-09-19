@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
@@ -11,7 +11,7 @@ import { ExportButton } from '../components/process/ExportButton'
 import { Input } from '../components/shell/Controls'
 import { ErrorNotice } from '../components/shell/Notice'
 import { cn } from '../lib/cn'
-import { label } from '../lib/status'
+import { t } from '../i18n'
 import { paths } from '../lib/paths'
 
 export function Instances() {
@@ -24,9 +24,20 @@ export function Instances() {
     queryKey: keys.process(processId),
     queryFn: () => api.getProcess(processId),
   })
+  // The server filters; the summary gives the counts for the menu, which the filter must not change.
+  const text = useDeferredValue(search.trim())
+  const filters = {
+    q: text || undefined,
+    status: filter === 'PENDING' ? 'PENDING' : undefined,
+    decision: filter !== 'TODAS' && filter !== 'PENDING' ? filter : undefined,
+  }
   const instances = useQuery({
-    queryKey: keys.instances(processId),
-    queryFn: () => api.listInstances(processId),
+    queryKey: keys.instances(processId, filters),
+    queryFn: () => api.listInstances(processId, filters),
+  })
+  const summary = useQuery({
+    queryKey: keys.summary(processId),
+    queryFn: () => api.summary(processId),
   })
   // The engine stores rule ids, not their text: the list puts the words back.
   const rules = useQuery({
@@ -34,15 +45,8 @@ export function Instances() {
     queryFn: () => api.listRules(processId),
   })
 
-  const all = useMemo(() => instances.data ?? [], [instances.data])
-
-  const rows = useMemo(() => {
-    const text = search.trim().toLowerCase()
-    return all.filter((item) => {
-      if (filter !== 'TODAS' && label(item) !== filter) return false
-      return !text || item.nombre.toLowerCase().includes(text)
-    })
-  }, [all, search, filter])
+  const rows = useMemo(() => instances.data ?? [], [instances.data])
+  const total = summary.data?.instances ?? rows.length
 
   const selectedId = params.get('i') ? Number(params.get('i')) : rows[0]?.id
   const selectedVisible = rows.some((item) => item.id === selectedId)
@@ -58,14 +62,10 @@ export function Instances() {
     enabled: Boolean(selectedId),
   })
 
-  const outcomes = useMemo(() => {
-    const count = new Map<string, number>()
-    for (const item of all) {
-      const key = label(item)
-      count.set(key, (count.get(key) ?? 0) + 1)
-    }
-    return [...count.entries()].sort(([a], [b]) => a.localeCompare(b))
-  }, [all])
+  const outcomes = Object.entries(summary.data?.by_decision ?? {}).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )
+  const pending = summary.data?.by_status.PENDING ?? 0
 
   return (
     <ProcessScreen
@@ -87,7 +87,8 @@ export function Instances() {
       <div className="flex min-h-0 flex-1">
         <QueueList
           items={rows}
-          total={all.length}
+          decisionTypes={process.data?.tipos_decision}
+          total={total}
           selectedId={selectedId}
           onSelect={(item) => setParams({ i: String(item.id) })}
           header={
@@ -102,11 +103,14 @@ export function Instances() {
                 value={filter}
                 onChange={setFilter}
                 options={[
-                  { value: 'TODAS', label: `Todas ${all.length}` },
+                  { value: 'TODAS', label: `Todas ${total}` },
                   ...outcomes.map(([key, count]) => ({
                     value: key,
                     label: `${key.replaceAll('_', ' ')} ${count}`,
                   })),
+                  ...(pending > 0
+                    ? [{ value: 'PENDING', label: `${t('instanceStatus.PENDING')} ${pending}` }]
+                    : []),
                 ]}
               />
             </div>

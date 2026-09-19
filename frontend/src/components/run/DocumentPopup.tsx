@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import type { InstanceDetail, TraceEvent } from '../../api/contracts'
 import { extractedDocuments } from '../../data/documents.generated'
 import { formatMs } from '../../lib/format'
-import { label } from '../../lib/status'
+import { detailLabel } from '../../lib/status'
 import { Overlay } from '../shell/Overlay'
 import { StatusBadge } from '../shell/StatusBadge'
 import { DocumentPane } from './DocumentPane'
@@ -16,7 +16,7 @@ export function DocumentPopup({
 }) {
   const doc = extractedDocuments[instance.nombre]
   const cost = processingCost(instance.eventos)
-  const current = label(instance)
+  const current = detailLabel(instance)
 
   return (
     <Overlay onClose={onClose} size="xl">

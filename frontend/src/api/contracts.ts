@@ -26,6 +26,10 @@ export type AgentSettings = Schemas['AgentSettings']
 export type ExtractionSettings = Schemas['ExtractionSettings']
 export type DecisionReview = Schemas['DecisionReviewConfig']
 export type RunSummary = Schemas['RunSummary']
+export type InstanceOut = Schemas['InstanceOut']
+
+/** Server-side filters of the instance list. */
+export type InstanceFilters = { status?: string; decision?: string; q?: string }
 export type DocumentUpload = Schemas['DocumentUpload']
 export type WorkbookUpload = Schemas['WorkbookUpload']
 export type SourceOut = Schemas['SourceOut']
@@ -369,11 +373,11 @@ export interface ApiClient {
   saveDraft(processId: number, body: DraftIn): Promise<VersionDraft>
 
   run(processId: number): Promise<RunSummary>
-  listInstances(processId: number, state?: InstanceState): Promise<Instance[]>
+  listInstances(processId: number, filters?: InstanceFilters): Promise<InstanceOut[]>
   getInstance(id: number): Promise<InstanceDetail>
   getDocument(instanceId: number): Promise<DocumentEvidence | null>
-  /** Everything waiting for a person. Without `outcome`, every one with `requiere_persona`. */
-  queue(processId: number, outcome?: string): Promise<Instance[]>
+  /** Everything waiting for a person, including cases the reviewer disagreed with. */
+  queue(processId: number): Promise<InstanceOut[]>
   suggestion(instanceId: number): Promise<Suggestion>
   resolve(instanceId: number, body: Resolution): Promise<InstanceDetail>
 
