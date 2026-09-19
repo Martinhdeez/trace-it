@@ -29,6 +29,10 @@
   --color-ocr-soft: #f0efea;
   --color-nopagar: #b42318;
   --color-nopagar-soft: #f7eceb;
+  /* Due soon or a big amount: amber, far enough from overdue red to tell apart. */
+  --color-urgent: #a16207;
+  --color-urgent-dot: #eab308;
+  --color-urgent-soft: #fbf5dd;
 
   --shadow-lift: 0 1px 2px #1313130f;
   --shadow-float: 0 8px 24px #13131314;
@@ -69,6 +73,9 @@ html[data-theme="dark"] {
   --color-ocr-soft: #ffffff0f;
   --color-nopagar: #f5897f;
   --color-nopagar-soft: #f5897f1f;
+  --color-urgent: #f2cc5b;
+  --color-urgent-dot: #eab308;
+  --color-urgent-soft: #f2cc5b1f;
 
   --shadow-lift: 0 1px 2px #0006, inset 0 1px 0 #ffffff0d;
   --shadow-float: 0 16px 40px #00000080;

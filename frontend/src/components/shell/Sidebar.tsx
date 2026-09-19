@@ -7,6 +7,7 @@ import { api } from '../../api/client'
 import { keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
 import { ErrorNotice } from './Notice'
+import { SystemStatus } from './SystemStatus'
 import { t } from '../../i18n'
 import { paths, processFromPath } from '../../lib/paths'
 import { useAppState } from '../../state/app'
@@ -41,24 +42,6 @@ function NavItem({
   )
 }
 
-const HEALTH_ORDER = ['ok', 'degraded', 'down']
-const HEALTH_COLOR: Record<string, string> = {
-  ok: 'bg-emerald-500',
-  degraded: 'bg-amber-500',
-  down: 'bg-red-500',
-}
-const COMMIT = (import.meta.env.VITE_COMMIT_SHA || 'local').slice(0, 7)
-
-/** The most severe status among the planes, or nothing until they are loaded. */
-function worstHealth(planes: { status: string }[] | undefined): string | undefined {
-  if (!planes?.length) return undefined
-  return planes
-    .map((plane) => plane.status)
-    .reduce((worst, status) =>
-      HEALTH_ORDER.indexOf(status) > HEALTH_ORDER.indexOf(worst) ? status : worst,
-    )
-}
-
 export function Sidebar() {
   const { setPaletteOpen } = useAppState()
   const { user } = useSession()
@@ -66,8 +49,6 @@ export function Sidebar() {
   const activeId = processFromPath(location.pathname)
 
   const processes = useQuery({ queryKey: keys.processes, queryFn: () => api.listProcesses() })
-  const planes = useQuery({ queryKey: keys.planesHealth, queryFn: () => api.planesHealth() })
-  const health = worstHealth(planes.data)
 
   return (
     <aside className="flex w-[232px] shrink-0 flex-col">
@@ -81,16 +62,6 @@ export function Sidebar() {
         <p className="text-[13px] font-medium tracking-[-0.03em] text-ink">
           trace<span className="text-faint">[.]</span>it
         </p>
-        {health ? (
-          <span
-            className={cn('h-2 w-2 rounded-full', HEALTH_COLOR[health] ?? 'bg-faint')}
-            title={t(`health.${health}`)}
-            aria-label={t(`health.${health}`)}
-          />
-        ) : null}
-        <span className="font-mono text-[9px] text-faint" title={`Commit ${COMMIT}`}>
-          {COMMIT}
-        </span>
       </Link>
 
       <div className="px-3 pb-5">
@@ -107,8 +78,8 @@ export function Sidebar() {
         </button>
       </div>
 
-      <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3">
-        <div className="flex items-center justify-between px-2.5 pb-2">
+      <nav className="flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center justify-between px-5.5 pb-2">
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted">
             {t('nav.processes')}
           </p>
@@ -121,32 +92,35 @@ export function Sidebar() {
           </NavLink>
         </div>
 
-        {processes.isError ? (
-          <ErrorNotice error={processes.error} />
-        ) : (
-          <ul className="flex flex-col gap-0.5">
-            {(processes.data ?? []).map((item) => {
-              const open = item.id === activeId
-              return (
-                <li key={item.id}>
-                  <NavItem to={paths.process(item.id)} active={open}>
-                    <span className="min-w-0 truncate">{item.name}</span>
-                  </NavItem>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-
-        <div className="mt-auto pb-4 pt-6">
-          <NavItem to={paths.settings} end>
-            <span className="min-w-0 truncate">{user?.name ?? t('nav.signIn')}</span>
-            <span className="shrink-0 font-mono text-[10px] text-faint">
-              {user ? t(`roles.${user.role}`) : t('nav.anonymous')}
-            </span>
-          </NavItem>
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-0.5">
+          {processes.isError ? (
+            <ErrorNotice error={processes.error} />
+          ) : (
+            <ul className="flex flex-col gap-0.5">
+              {(processes.data ?? []).map((item) => {
+                const open = item.id === activeId
+                return (
+                  <li key={item.id}>
+                    <NavItem to={paths.process(item.id)} active={open}>
+                      <span className="min-w-0 truncate">{item.name}</span>
+                    </NavItem>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
       </nav>
+
+      <div className="space-y-0.5 px-3 pb-4 pt-4">
+        <NavItem to={paths.settings} end>
+          <span className="min-w-0 truncate">{user?.name ?? t('nav.signIn')}</span>
+          <span className="shrink-0 font-mono text-[10px] text-faint">
+            {user ? t(`roles.${user.role}`) : t('nav.anonymous')}
+          </span>
+        </NavItem>
+        <SystemStatus />
+      </div>
     </aside>
   )
 }

@@ -1,108 +1,124 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { Check } from 'lucide-react'
+import { useSearchParams } from 'react-router'
 import { api } from '../api/client'
 import { keys } from '../api/queries'
 import { Segmented, Select } from '../components/shell/Controls'
 import { UseCaseModels } from '../components/process/UseCaseModels'
+import { LanguageSelect } from '../components/shell/LanguageSelect'
 import { ErrorNotice } from '../components/shell/Notice'
-import { StatusBadge } from '../components/shell/StatusBadge'
 import { Topbar } from '../components/shell/Topbar'
-import { NestedCard, PageIntro } from '../components/shell/Well'
 import { t } from '../i18n'
+import { cn } from '../lib/cn'
+import { useLocale } from '../state/locale'
 import { useSession } from '../state/session'
 import { useTheme, type Theme } from '../state/theme'
 
+const TABS = ['general', 'identity', 'models'] as const
+type Tab = (typeof TABS)[number]
+
 export function Settings() {
-  const { user, signIn } = useSession()
-
-  const users = useQuery({ queryKey: keys.users, queryFn: () => api.listUsers() })
-  const useCases = useQuery({ queryKey: keys.useCases, queryFn: () => api.listUseCases() })
-  const [picked, setPicked] = useState<number | null>(null)
-  const useCaseId = picked ?? useCases.data?.[0]?.id
-
-  const switchUser = useMutation({ mutationFn: (email: string) => signIn(email) })
-
+  const [params, setParams] = useSearchParams()
+  const requested = params.get('tab') as Tab | null
+  const tab: Tab = requested && TABS.includes(requested) ? requested : 'general'
 
   return (
     <>
-      <Topbar crumbs={[{ label: 'Ajustes' }]} />
+      <Topbar crumbs={[{ label: t('settings.title') }]} />
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
-        <PageIntro
-          kicker="Espacio"
-          title="Ajustes"
-          description="Quién eres para el backend y el estado de la API. OCR y modelos de un proceso concreto están en Ajustes de ese proceso."
-        />
-
-        <div className="max-w-2xl space-y-3">
-          <Appearance />
-
-          <NestedCard
-            label="usuario"
-          >
-            <div className="space-y-2 px-3.5 py-3">
-              <p className="text-[12px] text-muted">
-                Tu id viaja en la cabecera <span className="font-mono">X-User-Id</span>. Activar
-                y retirar reglas solo lo puede hacer un responsable.
-              </p>
-              {users.isError ? <ErrorNotice error={users.error} /> : null}
-              {switchUser.isError ? <ErrorNotice error={switchUser.error} /> : null}
-              <ul className="space-y-1">
-                {(users.data ?? []).map((candidate) => (
-                  <li key={candidate.id}>
-                    <button
-                      type="button"
-                      onClick={() => switchUser.mutate(candidate.email)}
-                      className={
-                        candidate.id === user?.id
-                          ? 'flex w-full items-center justify-between rounded-[10px] bg-well px-3 py-2 text-left ring-1 ring-line'
-                          : 'flex w-full items-center justify-between rounded-[10px] px-3 py-2 text-left hover:bg-canvas'
-                      }
-                    >
-                      <span className="text-[13px]">
-                        {candidate.name}
-                        <span className="ml-2 font-mono text-[11px] text-faint">
-                          {candidate.email}
-                        </span>
-                      </span>
-                      <StatusBadge
-                        value={candidate.role === 'manager' ? 'activa' : 'borrador'}
-                      >
-                        {t(`roles.${candidate.role}`)}
-                      </StatusBadge>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </NestedCard>
-
-          <NestedCard label="modelos del caso de uso (compartidos)">
-            <div className="space-y-2 px-3.5 py-3">
-              <p className="text-[12px] text-muted">
-                Configuración activa por caso de uso y papel. Cada cambio crea una versión nueva:
-                compilador, tester ciego, normalizador y asistente pueden usar modelos distintos.
-              </p>
-              {useCases.isError ? <ErrorNotice error={useCases.error} /> : null}
-              {(useCases.data?.length ?? 0) > 1 ? (
-                <Select
-                  value={useCaseId}
-                  onChange={(event) => setPicked(Number(event.target.value))}
-                >
-                  {useCases.data?.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </Select>
-              ) : null}
-              {useCaseId != null ? <UseCaseModels useCaseId={useCaseId} /> : null}
-            </div>
-          </NestedCard>
-
-          <ApiStatus />
+        <div className="max-w-3xl">
+          <Segmented<Tab>
+            value={tab}
+            onChange={(next) => setParams(next === 'general' ? {} : { tab: next }, { replace: true })}
+            options={TABS.map((value) => ({ value, label: t(`settings.tabs.${value}`) }))}
+          />
+          <div className="mt-2 divide-y divide-rule">
+            {tab === 'general' ? (
+              <>
+                <Appearance />
+                <Language />
+              </>
+            ) : null}
+            {tab === 'identity' ? <Identity /> : null}
+            {tab === 'models' ? <Models /> : null}
+          </div>
         </div>
       </div>
     </>
+  )
+}
+
+/** One row of the page: what it is on the left, the control on the right. */
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description: string
+  children: ReactNode
+}) {
+  return (
+    <section className="grid gap-4 py-6 md:grid-cols-[220px_1fr] md:gap-8">
+      <div>
+        <h2 className="text-[14px] font-medium tracking-[-0.02em] text-ink">{title}</h2>
+        <p className="mt-1 text-[12.5px] leading-5 text-muted">{description}</p>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
+  )
+}
+
+function Identity() {
+  const { user, signIn } = useSession()
+  const users = useQuery({ queryKey: keys.users, queryFn: () => api.listUsers() })
+  const switchUser = useMutation({ mutationFn: (email: string) => signIn(email) })
+
+  return (
+    <Section
+      title={t('settings.identity')}
+      description={t('settings.identityHint')}
+    >
+      {users.isError ? <ErrorNotice error={users.error} /> : null}
+      {switchUser.isError ? <ErrorNotice error={switchUser.error} /> : null}
+      <ul className="overflow-hidden rounded-[14px] bg-surface ring-1 ring-line">
+        {(users.data ?? []).map((candidate) => {
+          const current = candidate.id === user?.id
+          return (
+            <li key={candidate.id} className="border-b border-rule last:border-b-0">
+              <button
+                type="button"
+                aria-pressed={current}
+                onClick={() => switchUser.mutate(candidate.email)}
+                className={cn(
+                  'flex w-full items-center gap-3 px-3.5 py-2.5 text-left',
+                  current ? 'bg-well/60' : 'hover:bg-canvas',
+                )}
+              >
+                <span
+                  className={cn(
+                    'grid h-4 w-4 shrink-0 place-items-center rounded-full ring-1',
+                    current ? 'bg-ink text-on-ink ring-ink' : 'ring-line',
+                  )}
+                >
+                  {current ? <Check size={10} strokeWidth={2.5} /> : null}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] text-ink">{candidate.name}</span>
+                  <span className="block truncate font-mono text-[11px] text-faint">
+                    {candidate.email}
+                  </span>
+                </span>
+                <span className="shrink-0 text-[12px] text-muted">
+                  {t(`roles.${candidate.role}`)}
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </Section>
   )
 }
 
@@ -110,37 +126,52 @@ function Appearance() {
   const { theme, setTheme } = useTheme()
 
   return (
-    <NestedCard label="apariencia">
-      <div className="space-y-3 px-3.5 py-3">
-        <p className="text-[12px] text-muted">
-          Claro por defecto. Oscuro se guarda en este navegador.
-        </p>
-        <Segmented<Theme>
-          value={theme}
-          onChange={setTheme}
-          options={[
-            { value: 'light', label: 'Claro' },
-            { value: 'dark', label: 'Oscuro' },
-          ]}
-        />
-      </div>
-    </NestedCard>
+    <Section title={t('settings.appearance')} description={t('settings.appearanceHint')}>
+      <Segmented<Theme>
+        value={theme}
+        onChange={setTheme}
+        options={[
+          { value: 'light', label: t('settings.light') },
+          { value: 'dark', label: t('settings.dark') },
+        ]}
+      />
+    </Section>
   )
 }
 
-/** Where the console gets its data: only the backend. */
-function ApiStatus() {
+function Language() {
+  const { locale, setLocale } = useLocale()
+
   return (
-    <NestedCard label="api">
-      <div className="space-y-2 px-3.5 py-3">
-        <div className="flex items-baseline justify-between text-[13px]">
-          <span className="text-muted">Base</span>
-          <span className="font-mono">{import.meta.env.VITE_API_URL ?? '/api'}</span>
-        </div>
-        <p className="text-[12px] text-muted">
-          Todo sale del backend real y sus errores se muestran tal cual.
-        </p>
+    <Section title={t('settings.language')} description={t('settings.languageHint')}>
+      <LanguageSelect value={locale} onChange={setLocale} />
+    </Section>
+  )
+}
+
+function Models() {
+  const useCases = useQuery({ queryKey: keys.useCases, queryFn: () => api.listUseCases() })
+  const [picked, setPicked] = useState<number | null>(null)
+  const useCaseId = picked ?? useCases.data?.[0]?.id
+
+  return (
+    <Section
+      title={t('settings.models')}
+      description={t('settings.modelsHint')}
+    >
+      <div className="space-y-2">
+        {useCases.isError ? <ErrorNotice error={useCases.error} /> : null}
+        {(useCases.data?.length ?? 0) > 1 ? (
+          <Select value={useCaseId} onChange={(event) => setPicked(Number(event.target.value))}>
+            {useCases.data?.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </Select>
+        ) : null}
+        {useCaseId != null ? <UseCaseModels useCaseId={useCaseId} /> : null}
       </div>
-    </NestedCard>
+    </Section>
   )
 }

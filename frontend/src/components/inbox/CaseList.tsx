@@ -14,7 +14,7 @@ const ease = [0.23, 1, 0.32, 1] as const
 
 const TILE = {
   high: 'bg-nopagar-soft text-nopagar',
-  medium: 'bg-escalar-soft text-escalar',
+  medium: 'bg-urgent-soft text-urgent',
   low: 'bg-canvas text-muted',
 } as const
 
