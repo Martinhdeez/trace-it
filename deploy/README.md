@@ -2,15 +2,15 @@
 
 Target: **https://gex-dashboard.hopto.org/nexia/trace-it/**.
 
-For the challenge ERP frontend at `/nexia/erp/`, missing reference sources and
-interactive reader retry latency, see [ERP installation and repair](erp/README.md).
+For the challenge ERP frontend at `/nexia/erp/`, versioned scenarios and automatic
+delivery, see [ERP releases and CI/CD](erp/README.md).
 
 ## Release policy
 
 `main` is the deployment source. PRs to `dev`/`main`, pushes to both branches and
 manual runs execute the CI workflow. Only a successful run on `main` may deploy.
-There are two independent gates: the backend suite (including golden outcomes and
-client contract checks) and the production container stack with Chromium.
+Deployment requires backend, mail, end-to-end integration, the production stack
+with Chromium, and all versioned ERP scenarios to pass.
 
 The release includes the frontend/API adapters and versioned extraction contract
 from the September 19 application release. Contract tests audit the actual wire
@@ -66,8 +66,8 @@ the deployment refuses to proceed below 6 GiB free. No global Docker prune is us
   Production keeps the verified OCR profile and can call paid providers. CI uses
   the explicit experimental profile with native PDFs and no provider keys.
   `smoke-providers.py` makes real paid calls on one synthetic scan; never run it
-  automatically on every commit. A challenge ERP service is not provisioned. Configure
-  a reachable `TRACE_ERP_URL` before claiming live ERP sync coverage.
+  automatically on every commit. The challenge ERP is managed by its own versioned
+  release image and CD script; its connector uses `http://erp:8009`.
 - Real provider evaluations remain explicit opt-in; deterministic CI uses scripted
   models and never incurs provider charges. CI passing does not certify external
   provider availability or the accuracy of every scanned document.

@@ -56,13 +56,9 @@ def evaluate(instance, sources, others):
     order = key(instance.get("purchase_order"))
     if not order:
         return passes()
-    entry = None
     for row in rows(sources, "erp"):
         if key(row.get("purchase_order")) == order:
-            entry = row
-    if entry is None or empty(entry.get("status")):
-        return passes()
-    status = text(entry.get("status")).upper()
-    if status != "PENDIENTE":
-        return fires("The ERP says " + status)
+            status = text(row.get("status")).upper()
+            if status and status != "PENDIENTE":
+                return fires("The ERP says " + status)
     return passes()

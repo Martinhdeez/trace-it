@@ -3994,6 +3994,10 @@ export interface components {
              * @default false
              */
             review_pending: boolean;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
             /** File Hash */
             file_hash: string;
             /** Symbols */
@@ -4034,6 +4038,10 @@ export interface components {
              * @default false
              */
             review_pending: boolean;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * InstanceTrace
@@ -4460,6 +4468,8 @@ export interface components {
             decision: string;
             /** Consequence */
             consequence: string;
+            /** Rule */
+            rule?: string | null;
         };
         /** PaginationConfig */
         PaginationConfig: {
@@ -5525,6 +5535,14 @@ export interface components {
             rows: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Operation
+             * @default replace
+             * @enum {string}
+             */
+            operation: "replace" | "append" | "upsert" | "delete";
+            /** Key */
+            key?: string[];
         };
         /**
          * SourceRead
@@ -5736,12 +5754,11 @@ export interface components {
             /** Evidence */
             evidence: string[];
             /** Proposed Rule */
-            proposed_rule: string;
-            /**
-             * Proposed Type
-             * @enum {string}
-             */
-            proposed_type: "requirement" | "prohibition";
+            proposed_rule?: string | null;
+            /** Proposed Type */
+            proposed_type?: ("requirement" | "prohibition") | null;
+            /** No Rule Reason */
+            no_rule_reason?: string | null;
         };
         /**
          * SymbolExtraction

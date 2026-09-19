@@ -20,8 +20,16 @@ PROPOSAL = {
     "reasoning": "The purchase order was already paid.",
     "why": ["Two rules disagree about this invoice, so a person must look at it."],
     "options": [
-        {"decision": "PAGAR", "consequence": "The supplier is paid now."},
-        {"decision": "NO_PAGAR", "consequence": "The invoice is held and not paid."},
+        {
+            "decision": "PAGAR",
+            "consequence": "Se paga si se añade la regla: un pedido pendiente en el ERP no escala.",
+            "rule": "Amend the conflict: an erp order still PENDIENTE does not escalate.",
+        },
+        {
+            "decision": "NO_PAGAR",
+            "consequence": "No se paga por la regla nueva: el pedido ya está pagado en el ERP.",
+            "rule": "If the purchase order is paid in the ERP, do not pay.",
+        },
     ],
     "evidence": ["symbol:purchase_order", "escalation"],
     "proposed_rule": "If the purchase order is paid in the ERP, do not pay.",
@@ -67,6 +75,9 @@ async def test_escalation_proposal_is_structured_and_accepting_resolves(monkeypa
     payload = proposal["payload"]
     assert payload["proposed"] == "NO_PAGAR" and payload["escalated_as"] == "ESCALAR"
     assert payload["why"] and [o["decision"] for o in payload["options"]] == ["PAGAR", "NO_PAGAR"]
+    assert payload["options"][1]["rule"] == PROPOSAL["proposed_rule"]
+    assert payload["proposed_rule"] == {"text": PROPOSAL["proposed_rule"], "type": "prohibition"}
+    assert payload["no_rule_reason"] is None
     assert proposal["evidence"] == ["symbol:purchase_order", "escalation"]
     assert [p["id"] for p in listed] == [proposal["id"]]
     assert accepted["status"] == "accepted" and accepted["resolved_by"] == "Ana"
@@ -134,6 +145,22 @@ async def test_resolving_without_the_proposal_closes_it_as_superseded_with_a_cau
     assert (closed["status"], closed["outcome"]) == ("superseded", {"cause": "case_changed"})
     [expired] = [e for e in detail["events"] if e["step"] == "expire_proposal"]
     assert expired["data"] == {"proposal_ids": [proposal["id"]], "cause": "case_changed"}
+
+
+async def test_a_no_rule_answer_is_stored_without_a_rule(monkeypatch):
+    no_rule = {
+        **PROPOSAL,
+        "proposed_rule": None,
+        "proposed_type": None,
+        "no_rule_reason": "Dos reglas chocan y solo una persona sabe cuál manda aquí.",
+    }
+    async with client() as api:
+        _, headers, iid, _ = await escalated(api, monkeypatch, [no_rule])
+        proposal = await propose(api, iid, headers)
+    payload = proposal["payload"]
+    assert payload["proposed_rule"] is None
+    assert payload["no_rule_reason"] == no_rule["no_rule_reason"]
+    assert payload["proposed"] == "NO_PAGAR"  # the decision is still proposed
 
 
 async def test_an_answer_that_arrives_after_a_resolution_is_not_stored(monkeypatch):

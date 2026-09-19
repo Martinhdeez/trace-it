@@ -434,6 +434,7 @@ async def prepare(session, draft_id, revision, user):
         data["preview"] = await compilation.preview(
             session, draft.process_id, plan, tables, compiled, preview_base
         )
+        data["preview"]["source_mutations"] = evidence_assets.mutation_summary(plan, data, tables)
     if draft.process_id:
         await versions.lock(session, draft.process_id)
     await check_base(session, draft, data, plan)

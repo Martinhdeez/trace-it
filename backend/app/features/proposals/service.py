@@ -135,7 +135,10 @@ async def propose_decision(session: AsyncSession, instance_id: int) -> ManagerPr
                 "proposed_rule": {
                     "text": suggestion.proposed_rule,
                     "type": suggestion.proposed_type,
-                },
+                }
+                if suggestion.proposed_rule
+                else None,
+                "no_rule_reason": suggestion.no_rule_reason,
             },
             status="open",
             author="assistant",
@@ -253,14 +256,16 @@ async def propose_rule(session: AsyncSession, instance_id: int) -> ManagerPropos
             ManagerProposal.instance_id == instance_id,
             ManagerProposal.kind == "rule",
         )
-        decision = next(r.decision for r in config.rules(snapshot) if r.id == replaces)
+        old = next(r for r in config.rules(snapshot) if r.id == replaces)
+        # A "no rule" answer is a proposal too, with an empty `text`: the manager rejects it
+        # (dismiss), or writes a rule in its place and accepts that.
         row = ManagerProposal(
             process_id=instance.process_id,
             instance_id=instance_id,
             channel="escalation",
             kind="rule",
             summary=suggestion.summary[:500],
-            rationale=suggestion.rationale,
+            rationale=suggestion.no_rule_reason or suggestion.rationale,
             evidence=suggestion.evidence,
             payload={
                 "decision_id": resolution.id,  # the resolution it generalises
@@ -268,17 +273,18 @@ async def propose_rule(session: AsyncSession, instance_id: int) -> ManagerPropos
                 "replaces": replaces,
                 "text": suggestion.text,
                 "summary": suggestion.summary,
-                "type": suggestion.type,
-                "decision": decision,
+                "type": suggestion.type or old.type,
+                "decision": old.decision,
                 "resolved_as": resolution.decision,
                 "version_id": engine.version_id,
+                "no_rule_reason": suggestion.no_rule_reason,
             },
             status="open",
             author="assistant",
         )
         session.add(row)
         await session.commit()
-        span.set(proposal_id=row.id)
+        span.set(proposal_id=row.id, no_rule=bool(suggestion.no_rule_reason))
     return out(row)
 
 
@@ -490,6 +496,11 @@ async def accept(
         if row.channel == "escalation" and row.kind == "rule":
             original = row.payload["text"]
             edit = (text or "").strip()
+            if not (edit or original):
+                raise ConflictError(
+                    "Esta sugerencia no trae regla: el caso lo sigue decidiendo una persona. "
+                    "Recházala, o escribe tú la regla antes de aceptar."
+                )
             changed = bool(edit) and edit != original
             edited = {"edited": True, "original_text": original} if changed else {}
             span.set(edited=changed, **({"original_text": original} if changed else {}))

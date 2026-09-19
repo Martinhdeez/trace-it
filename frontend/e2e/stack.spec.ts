@@ -125,7 +125,7 @@ test('console displays a process created in the real PostgreSQL database', async
   await expect(page.getByRole('link', { name: process.name }).first()).toBeVisible()
   await page.getByRole('link', { name: process.name }).first().click()
   await expect(page).toHaveURL(new RegExp(`/processes/${process.id}$`))
-  for (const route of ['instances', 'review', 'definition', 'definition/sources', 'settings']) {
+  for (const route of ['panel', 'instances', 'review', 'definition', 'definition/sources', 'settings']) {
     const failures: string[] = []
     const listener = (response: import('@playwright/test').Response) => {
       if (response.url().includes('/api/') && response.status() >= 400) {

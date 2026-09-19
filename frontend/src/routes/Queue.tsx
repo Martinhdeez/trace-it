@@ -98,7 +98,7 @@ export function Queue() {
         ) : null
       }
     >
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
         <PageIntro
           kicker="Revisión"
           title={tabs.find((item) => item.value === tab)?.label ?? (tab.replaceAll('_', ' ') || 'Cola')}
@@ -839,7 +839,7 @@ function SuggestRule({ process, instance }: { process: ProcessDetail; instance: 
                   <Link to={paths.rule(process.id, outcome.rule_id)} className="underline">
                     Ver la regla
                   </Link>
-                  <Link to={`${paths.process(process.id)}?publicar=1`} className="underline">
+                  <Link to={`${paths.panel(process.id)}?publicar=1`} className="underline">
                     Panel → Publicar
                   </Link>
                 </p>

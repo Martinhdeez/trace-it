@@ -13392,6 +13392,18 @@
             "title": "Review Pending",
             "default": false
           },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
+          },
           "file_hash": {
             "type": "string",
             "title": "File Hash"
@@ -13510,6 +13522,18 @@
             "type": "boolean",
             "title": "Review Pending",
             "default": false
+          },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
           }
         },
         "type": "object",
@@ -14622,7 +14646,20 @@
           },
           "consequence": {
             "type": "string",
+            "maxLength": 180,
             "title": "Consequence"
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 600
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule"
           }
         },
         "type": "object",
@@ -17279,6 +17316,24 @@
             "type": "array",
             "title": "Rows",
             "default": []
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "replace",
+              "append",
+              "upsert",
+              "delete"
+            ],
+            "title": "Operation",
+            "default": "replace"
+          },
+          "key": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Key"
           }
         },
         "type": "object",
@@ -17829,13 +17884,16 @@
           },
           "reasoning": {
             "type": "string",
+            "maxLength": 320,
             "title": "Reasoning"
           },
           "why": {
             "items": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 180
             },
             "type": "array",
+            "maxItems": 2,
             "minItems": 1,
             "title": "Why"
           },
@@ -17852,20 +17910,48 @@
               "type": "string"
             },
             "type": "array",
+            "maxItems": 6,
             "minItems": 1,
             "title": "Evidence"
           },
           "proposed_rule": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 600
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Proposed Rule"
           },
           "proposed_type": {
-            "type": "string",
-            "enum": [
-              "requirement",
-              "prohibition"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "requirement",
+                  "prohibition"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Proposed Type"
+          },
+          "no_rule_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 320
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "No Rule Reason"
           }
         },
         "type": "object",
@@ -17874,9 +17960,7 @@
           "reasoning",
           "why",
           "options",
-          "evidence",
-          "proposed_rule",
-          "proposed_type"
+          "evidence"
         ],
         "title": "Suggestion"
       },

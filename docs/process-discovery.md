@@ -54,6 +54,10 @@ For a new draft with unresolved policy or authority questions, discovery propose
 and asks the manager first. Rules and examples can remain empty until those answers arrive.
 Answering a question revises the proposal; it does not approve it or publish live rules.
 
+Every source mapping declares `replace`, `append`, `upsert` or `delete`. Upsert and delete
+require canonical key fields; append may name keys to reject collisions. Preparation rejects
+duplicate or missing keys and shows the operation, key and before/after row counts.
+
 ## Review and test
 
 `POST /process-drafts/{id}/reviews` accepts:

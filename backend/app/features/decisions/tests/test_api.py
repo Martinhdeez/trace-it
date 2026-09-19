@@ -167,6 +167,8 @@ async def test_run_resolve_and_export(fake_sandbox: None) -> None:
         r = await api.get(f"/processes/{process_id}/queue")
         assert [i["name"] for i in r.json()] == ["FA-5044_mensajería2.pdf"]
         escalated = r.json()[0]["id"]
+        # A list row carries the plain values, so the inbox can sort by amount and date.
+        assert r.json()[0]["values"]["purchase_order"] == "PO-2026-0813"
 
         detail = (await api.get(f"/instances/{escalated}")).json()
         assert detail["decision"] == "ESCALAR"

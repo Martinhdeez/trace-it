@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes, useParams } from 'react-router'
 import { AppShell } from './components/shell/AppShell'
 import { ErrorNotice } from './components/shell/Notice'
+import { Inbox } from './routes/Inbox'
 import { Instances } from './routes/Instances'
 import { Landing } from './routes/Landing'
 import { NewProcess } from './routes/NewProcess'
@@ -24,7 +25,8 @@ export default function App() {
       <Route element={<Console />}>
         <Route path="/processes" element={<Processes />} />
         <Route path="/processes/new" element={<NewProcess />} />
-        <Route path="/processes/:processId" element={<Process />} />
+        <Route path="/processes/:processId" element={<Inbox />} />
+        <Route path="/processes/:processId/panel" element={<Process />} />
         <Route path="/processes/:processId/definition/*" element={<Definition />} />
         <Route path="/processes/:processId/review" element={<Queue />} />
         <Route path="/processes/:processId/reception" element={<Reception />} />

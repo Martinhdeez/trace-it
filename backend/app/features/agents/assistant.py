@@ -8,7 +8,7 @@ compiled and validated like any other rule)."""
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, ModelRetry, RunContext
@@ -31,19 +31,51 @@ MAX_TEXT = 12_000  # chars of the file's text sent to the model
 MAX_RESOLUTIONS = 10
 
 
+# Hard limits: the manager reads this on a queue, so no essays. Characters are capped in
+# the schema; sentences and single lines are checked by the output validators.
+LINE = 180  # one line
+SHORT = 320  # at most two short sentences
+RULE = 600  # one rule, in English (the longest rule of the invoice pack is 423)
+
+
 class Option(BaseModel):
     decision: str
-    consequence: str  # what happens to the case if the person takes this decision
+    # one line in Spanish: what happens and under which rule ("Se paga si se añade la regla:
+    # ...; casos como este pasarían a PAGAR", "No se paga por la regla 7: ...")
+    consequence: str = Field(max_length=LINE)
+    # English: the rule that justifies this decision, new or an amendment of the escalating
+    # one; or "Rule <id>" for an active rule that already gives it. None only on no_rule_reason
+    rule: str | None = Field(default=None, max_length=RULE)
 
 
 class Suggestion(BaseModel):
     decision: str  # the proposed one of `options`
-    reasoning: str
-    why: list[str] = Field(min_length=1)  # why the case escalated, in plain language
+    reasoning: str = Field(max_length=SHORT)
+    why: list[Annotated[str, Field(max_length=LINE)]] = Field(min_length=1, max_length=2)
     options: list[Option] = Field(min_length=1)  # every final decision type, one each
-    evidence: list[str] = Field(min_length=1)  # references from `evidence_refs`
-    proposed_rule: str  # rule text, to be compiled like any other rule if accepted
-    proposed_type: Literal["requirement", "prohibition"]
+    evidence: list[str] = Field(min_length=1, max_length=6)  # references from `evidence_refs`
+    # rule text, to be compiled like any other rule if accepted; None with `no_rule_reason`
+    proposed_rule: str | None = Field(default=None, max_length=RULE)
+    proposed_type: Literal["requirement", "prohibition"] | None = None
+    # in Spanish: why no rule should decide cases like this one (a person must always look)
+    no_rule_reason: str | None = Field(default=None, max_length=SHORT)
+
+
+def sentences(text: str) -> int:
+    return len(re.findall(r"[.!?](?=\s|$)", text.strip())) or 1
+
+
+def too_long(**texts: tuple[str | None, int]) -> None:
+    """ModelRetry naming every text over its sentence limit, or on more than one line."""
+    wrong = [
+        f"{name} has {sentences(text)} sentences (max {most})"
+        if most > 1
+        else f"{name} must be one line and one sentence"
+        for name, (text, most) in texts.items()
+        if text and (sentences(text) > most or (most == 1 and "\n" in text.strip()))
+    ]
+    if wrong:
+        raise ModelRetry("Be concise: " + "; ".join(wrong))
 
 
 @dataclass(frozen=True)
@@ -54,7 +86,7 @@ class Deps:
 
 
 # Its platform prompt is `prompts/assistant.md`; the use case adds guidance and model.
-assistant = Agent(None, output_type=Suggestion, deps_type=Deps, name="assistant", retries=1)
+assistant = Agent(None, output_type=Suggestion, deps_type=Deps, name="assistant", retries=2)
 
 
 @assistant.output_validator
@@ -67,10 +99,26 @@ def _known_decision(ctx: RunContext[Deps], suggestion: Suggestion) -> Suggestion
     if sorted(options) != sorted(ctx.deps.final_types):
         raise ModelRetry(f"options must be exactly one per type of {ctx.deps.final_types}")
     if suggestion.decision not in options:
-        raise ModelRetry("decision must be one of the options")
+        raise ModelRetry(
+            f"decision must be one of the options {options}, also with no_rule_reason: "
+            "that a person must always decide goes in no_rule_reason, not in decision"
+        )
     unknown = set(suggestion.evidence) - ctx.deps.references
     if unknown:
         raise ModelRetry(f"cite only references in evidence_refs: {sorted(unknown)}")
+    if suggestion.no_rule_reason:
+        if suggestion.proposed_rule:
+            raise ModelRetry("with no_rule_reason, proposed_rule must be null")
+    elif not (suggestion.proposed_rule and suggestion.proposed_type):
+        raise ModelRetry("give proposed_rule and proposed_type, or no_rule_reason")
+    elif missing := [o.decision for o in suggestion.options if not o.rule]:
+        raise ModelRetry(f"every option needs the rule that justifies it: {missing}")
+    too_long(
+        reasoning=(suggestion.reasoning, 2),
+        no_rule_reason=(suggestion.no_rule_reason, 2),
+        **{f"why[{i}]": (w, 1) for i, w in enumerate(suggestion.why)},
+        **{f"{o.decision}.consequence": (o.consequence, 1) for o in suggestion.options},
+    )
     return suggestion
 
 
@@ -215,11 +263,13 @@ async def suggest(session: AsyncSession, instance_id: int) -> Suggestion:
 
 # After a resolution: the escalating rule, amended to generalise the person's decision.
 class RuleSuggestion(BaseModel):
-    text: str  # the amended rule, in English; compiled like any other rule
-    type: Literal["requirement", "prohibition"]
-    summary: str  # one line in Spanish for the console
-    rationale: str  # in Spanish: what of the person's reason it generalises
-    evidence: list[str] = Field(min_length=1)  # references from `evidence_refs`
+    text: str = Field(default="", max_length=RULE)  # the amended rule, in English; "" if none
+    type: Literal["requirement", "prohibition"] | None = None  # None: the old rule's
+    summary: str = Field(max_length=LINE)  # one line in Spanish for the console
+    rationale: str = Field(default="", max_length=SHORT)  # in Spanish: what it generalises
+    evidence: list[str] = Field(min_length=1, max_length=6)  # references from `evidence_refs`
+    # in Spanish: why no rule should learn this case, and a person must always decide it
+    no_rule_reason: str | None = Field(default=None, max_length=SHORT)
 
 
 @dataclass(frozen=True)
@@ -227,16 +277,32 @@ class RuleDeps:
     identifiers: list[str]  # this case's own names: a general rule never mentions them
     references: set[str]
     values: dict[str, set[str]] = field(default_factory=dict)  # from `known_values`
-    rejected: list[str] = field(default_factory=list)  # rule texts the manager rejected
+    rejected: list[str] = field(default_factory=list)  # rule texts the manager rejected ("":
+    # a "no rule" answer)
 
 
 reviewer_agent = Agent(
-    None, output_type=RuleSuggestion, deps_type=RuleDeps, name="reviewer_agent", retries=1
+    None, output_type=RuleSuggestion, deps_type=RuleDeps, name="reviewer_agent", retries=2
 )
 
 
 @reviewer_agent.output_validator
 def _general(ctx: RunContext[RuleDeps], suggestion: RuleSuggestion) -> RuleSuggestion:
+    too_long(
+        summary=(suggestion.summary, 1),
+        rationale=(suggestion.rationale, 2),
+        no_rule_reason=(suggestion.no_rule_reason, 2),
+    )
+    if suggestion.no_rule_reason:
+        if suggestion.text.strip():
+            raise ModelRetry("with no_rule_reason, text must be empty")
+        if "" in ctx.deps.rejected:
+            raise ModelRetry(
+                "the manager already rejected a no-rule answer (rejected_suggestions): "
+                "propose the narrowest general rule instead"
+            )
+    elif not (suggestion.text.strip() and suggestion.rationale.strip()):
+        raise ModelRetry("give text and rationale, or no_rule_reason")
     text = suggestion.text.casefold()
     named = [i for i in ctx.deps.identifiers if i.casefold() in text]
     if named:
@@ -252,7 +318,10 @@ def _general(ctx: RunContext[RuleDeps], suggestion: RuleSuggestion) -> RuleSugge
             "the manager already rejected this rule (rejected_suggestions): propose a "
             "different one that answers the reject reason"
         )
-    invented = made_up_values(f"{suggestion.text} {suggestion.rationale}", ctx.deps.values)
+    invented = made_up_values(
+        f"{suggestion.text} {suggestion.rationale} {suggestion.no_rule_reason or ''}",
+        ctx.deps.values,
+    )
     if invented:
         raise ModelRetry(
             "these values are not in case.symbols or related_cases: "
@@ -424,7 +493,7 @@ async def suggest_rule(
             identifiers(instance) + [r["name"] for r in related],
             set(context["evidence_refs"]),
             known_values(case, *(r["symbols"] for r in related + similar)),
-            [r["text"] for r in rejected if r["text"]],
+            [r["text"] or "" for r in rejected],
         ),
         instance_id=instance.id,
     )

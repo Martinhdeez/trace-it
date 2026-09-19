@@ -1,0 +1,619 @@
+import { useEffect, useMemo, useRef, useState, type DragEvent, type RefObject } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router'
+import { AnimatePresence, motion } from 'motion/react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CheckCircle2, Search, Settings2, Upload, X } from 'lucide-react'
+import { api, ApiError } from '../api/client'
+import { keys } from '../api/queries'
+import type { InstanceOut, ProcessDetail, RunSummary, UploadProgress } from '../api/contracts'
+import { revokePreview, toPreview, type FilePreview } from '../components/process/FileChip'
+import { BatchRunPanel } from '../components/run/BatchRunPanel'
+import { CaseDetail } from '../components/inbox/CaseDetail'
+import { CaseList } from '../components/inbox/CaseList'
+import { MiniCalendar } from '../components/inbox/MiniCalendar'
+import { Button, Input, Segmented } from '../components/shell/Controls'
+import { EmptyState, ErrorNotice } from '../components/shell/Notice'
+import { Overlay } from '../components/shell/Overlay'
+import { StatusBadge } from '../components/shell/StatusBadge'
+import { Topbar } from '../components/shell/Topbar'
+import { cn } from '../lib/cn'
+import { formatRunDate, humanize } from '../lib/format'
+import { paths } from '../lib/paths'
+import {
+  dayKey,
+  formatAmount,
+  formatDay,
+  parseDay,
+  plainReason,
+  triage,
+  type Triage,
+} from '../lib/urgency'
+
+type View = 'pendientes' | 'historial'
+
+/** How long a dropped invoice stays highlighted in the list. */
+const FRESH_MS = 9_000
+
+/**
+ * The process as its manager sees it: the invoices that wait for them, most urgent first,
+ * a calendar of due dates, and the history of what was decided. Dropping invoices on the
+ * page reads and decides them; those that need a person land in the list, in their place.
+ * Everything else (definition, runs, the review console, settings) is one click away.
+ */
+export function Inbox() {
+  const processId = Number(useParams().processId)
+  const [params, setParams] = useSearchParams()
+  const view: View = params.get('vista') === 'historial' ? 'historial' : 'pendientes'
+  const day = params.get('dia')
+  const selectedId = params.get('i') ? Number(params.get('i')) : undefined
+
+  const update = (next: Record<string, string | null>) => {
+    const merged = new URLSearchParams(params)
+    for (const [key, value] of Object.entries(next)) {
+      if (value == null) merged.delete(key)
+      else merged.set(key, value)
+    }
+    setParams(merged, { replace: true })
+  }
+
+  const process = useQuery({
+    queryKey: keys.process(processId),
+    queryFn: () => api.getProcess(processId),
+  })
+  const queue = useQuery({
+    queryKey: keys.queue(processId, 'all'),
+    queryFn: () => api.queue(processId),
+  })
+  const history = useQuery({
+    queryKey: keys.instances(processId),
+    queryFn: () => api.listInstances(processId),
+    enabled: view === 'historial',
+  })
+  const today = useReferenceDay(processId)
+
+  const cases = useMemo(() => triage(queue.data ?? [], today.date), [queue.data, today.date])
+  const drop = useDrop(processId, today.date)
+
+  const visible = day ? cases.filter((entry) => entry.due && dayKey(entry.due) === day) : cases
+  const selected =
+    cases.find((entry) => entry.item.id === selectedId) ??
+    (history.data ? triage(history.data.filter((item) => item.id === selectedId), today.date)[0] : undefined)
+
+  const [dragging, setDragging] = useState(false)
+  const depth = useRef(0)
+  const onDrag = {
+    onDragEnter: (event: DragEvent) => {
+      if (!event.dataTransfer.types.includes('Files')) return
+      depth.current += 1
+      setDragging(true)
+    },
+    onDragLeave: () => {
+      depth.current = Math.max(0, depth.current - 1)
+      if (depth.current === 0) setDragging(false)
+    },
+    onDragOver: (event: DragEvent) => event.preventDefault(),
+    onDrop: (event: DragEvent) => {
+      event.preventDefault()
+      depth.current = 0
+      setDragging(false)
+      const files = [...event.dataTransfer.files].filter((file) => /\.pdf$/i.test(file.name))
+      if (files.length) {
+        update({ vista: null, dia: null })
+        drop.start(files)
+      }
+    },
+  }
+
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col" {...onDrag}>
+      <Topbar
+        crumbs={[{ label: 'Procesos', to: paths.processes }, { label: process.data?.name ?? '…' }]}
+        actions={
+          <>
+            <UploadButton disabled={drop.busy} onFiles={drop.start} />
+            <Link
+              to={paths.panel(processId)}
+              title="Panel, definición, ejecuciones, revisión y ajustes"
+              className="inline-flex items-center gap-1.5 rounded-full bg-canvas px-3.5 py-1.5 text-[12px] font-medium text-ink ring-1 ring-line hover:bg-well"
+            >
+              <Settings2 size={12} strokeWidth={1.75} />
+              Consola
+            </Link>
+          </>
+        }
+      />
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
+        <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-[28px] font-medium leading-[1.1] tracking-[-0.045em]">
+              {view === 'pendientes' ? greeting(cases.length) : 'Historial'}
+            </h1>
+            <p className="mt-1 text-[13px] text-muted">
+              {view === 'pendientes'
+                ? `${process.data?.name ?? 'Proceso'} · ordenadas por urgencia a ${formatDay(today.date)}${today.cutOff ? ' (fecha de corte)' : ''}`
+                : 'Todo lo que el proceso o una persona ya decidió, con su motivo.'}
+            </p>
+          </div>
+          <Segmented
+            value={view}
+            onChange={(next) => update({ vista: next === 'historial' ? next : null, i: null, dia: null })}
+            options={[
+              { value: 'pendientes', label: 'Te esperan', count: cases.length },
+              { value: 'historial', label: 'Historial' },
+            ]}
+          />
+        </header>
+
+
+        {process.isError ? <ErrorNotice error={process.error} /> : null}
+        {queue.isError ? <ErrorNotice error={queue.error} /> : null}
+
+        {view === 'pendientes' ? (
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="min-w-0">
+              {day ? (
+                <p className="mb-2 flex items-center gap-2 text-[12.5px] text-muted">
+                  Vencen el {formatDay(parseDay(day))}
+                  <button
+                    type="button"
+                    onClick={() => update({ dia: null })}
+                    className="inline-flex items-center gap-1 rounded-full bg-canvas px-2 py-0.5 text-ink ring-1 ring-line"
+                  >
+                    <X size={11} /> quitar
+                  </button>
+                </p>
+              ) : null}
+              {queue.isSuccess && visible.length === 0 ? (
+                <section className="rounded-[16px] bg-surface ring-1 ring-line">
+                  <EmptyState icon={CheckCircle2} title={day ? 'Nada vence ese día' : 'Todo al día'}>
+                    {day
+                      ? 'Elige otro día en el calendario o quita el filtro.'
+                      : 'Ninguna factura te espera. Arrastra facturas a esta página para procesarlas.'}
+                  </EmptyState>
+                </section>
+              ) : (
+                <CaseList
+                  cases={visible}
+                  selectedId={selectedId}
+                  fresh={drop.fresh}
+                  onSelect={(id) => update({ i: String(id) })}
+                />
+              )}
+            </div>
+
+            <aside className="space-y-4 lg:sticky lg:top-0 lg:self-start">
+              <MiniCalendar
+                key={dayKey(today.date)}
+                cases={cases}
+                today={today.date}
+                selected={day}
+                onSelect={(next) => update({ dia: next })}
+              />
+              <Totals cases={cases} />
+            </aside>
+          </div>
+        ) : (
+          <History
+            items={history.data}
+            error={history.error}
+            process={process.data}
+            today={today.date}
+            onSelect={(id) => update({ i: String(id) })}
+          />
+        )}
+      </div>
+
+      <AnimatePresence>
+        {dragging ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="pointer-events-none absolute inset-3 z-40 grid place-items-center rounded-[24px] border-2 border-dashed border-focus/60 bg-surface/85 backdrop-blur-sm"
+          >
+            <div className="text-center">
+              <Upload size={26} strokeWidth={1.4} className="mx-auto text-focus" />
+              <p className="mt-3 text-[18px] font-medium tracking-[-0.03em]">Suelta las facturas</p>
+              <p className="mt-1 text-[13px] text-muted">
+                Se leen y se deciden ahora. Las que te necesiten entran en tu lista.
+              </p>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      {drop.open ? (
+        <Overlay onClose={drop.close} size="lg">
+          <BatchRunPanel
+            processId={processId}
+            process={process.data}
+            runId={undefined}
+            queue={drop.files}
+            running={drop.busy && drop.progress.length >= drop.files.length * 2}
+            uploading={drop.busy && drop.progress.length < drop.files.length * 2}
+            finished={drop.batch.isSuccess}
+            rulesCount={drop.active}
+            startBlocked={drop.startBlocked}
+            error={drop.batch.error ? runFailure(drop.batch.error) : undefined}
+            progress={drop.progress}
+            result={drop.batch.data?.run}
+            onFiles={drop.add}
+            onRemove={drop.remove}
+            onClear={drop.clear}
+            onStart={drop.run}
+            onClose={drop.close}
+          />
+        </Overlay>
+      ) : null}
+
+      <AnimatePresence>
+        {drop.summary ? <Toast summary={drop.summary} process={process.data} onClose={drop.dismiss} /> : null}
+      </AnimatePresence>
+
+      {selected && process.data ? (
+        <Overlay onClose={() => update({ i: null })} align="right" size="xl">
+          <CaseDetail
+            key={selected.item.id}
+            process={process.data}
+            entry={selected}
+            onClose={() => update({ i: null })}
+            onResolved={() => update({ i: null })}
+          />
+        </Overlay>
+      ) : null}
+    </div>
+  )
+}
+
+function greeting(count: number): string {
+  if (count === 0) return 'Nada te espera'
+  return `${count} factura${count === 1 ? '' : 's'} te espera${count === 1 ? '' : 'n'}`
+}
+
+/**
+ * The day urgency is measured against. With a cut-off date loaded in the process's
+ * parameters, that one, so a demo on past invoices reads the way it did on its day.
+ */
+function useReferenceDay(processId: number): { date: Date; cutOff: boolean } {
+  const sources = useQuery({
+    queryKey: keys.sources(processId),
+    queryFn: () => api.listSources(processId),
+  })
+  const loaded = sources.data?.some((source) => source.name === 'parameters') ?? false
+  const parameters = useQuery({
+    queryKey: keys.source(processId, 'parameters'),
+    queryFn: () => api.getSource(processId, 'parameters'),
+    enabled: loaded,
+    retry: false,
+  })
+  return useMemo(() => {
+    const cutOff = parseDay(parameters.data?.data[0]?.cut_off_date)
+    return cutOff ? { date: cutOff, cutOff: true } : { date: new Date(), cutOff: false }
+  }, [parameters.data])
+}
+
+type QueuedFile = FilePreview & { file: File }
+type Summary = { total: number; waiting: number; run: RunSummary }
+
+/** How long the panel stays on "Lote completado" before the list takes over. */
+const CLOSE_AFTER_MS = 1_200
+const TOAST_MS = 6_000
+
+/**
+ * The console's batch panel, started by a drop or the upload button. When it finishes,
+ * it closes on its own: the list shows the arrivals in their place and a toast sums up.
+ */
+function useDrop(processId: number, today: Date) {
+  const queryClient = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [files, setFiles] = useState<QueuedFile[]>([])
+  const [progress, setProgress] = useState<UploadProgress[]>([])
+  const [fresh, setFresh] = useState<Set<number>>(new Set())
+  const [summary, setSummary] = useState<Summary | null>(null)
+  const timers = useRef<number[]>([])
+
+  useEffect(() => () => timers.current.forEach(window.clearTimeout), [])
+  const later = (fn: () => void, ms: number) => timers.current.push(window.setTimeout(fn, ms))
+
+  const rules = useQuery({
+    queryKey: keys.rules(processId),
+    queryFn: () => api.listRules(processId),
+  })
+  const active = rules.data?.filter((rule) => rule.status === 'active').length ?? 0
+  const compiling = rules.data?.some((rule) => rule.status === 'compiling')
+  const startBlocked = compiling
+    ? 'El motor no arranca mientras hay reglas compilando'
+    : rules.isSuccess && active === 0
+      ? 'Hace falta al menos una regla activa'
+      : undefined
+
+  const batch = useMutation({
+    mutationFn: async (queued: QueuedFile[]) => {
+      setProgress([])
+      const uploads = await api.uploadFiles(
+        processId,
+        queued.map((item) => item.file),
+        (event) => setProgress((current) => [...current, event]),
+      )
+      const run = await api.run(processId)
+      await queryClient.invalidateQueries()
+      const queue = await queryClient.fetchQuery({
+        queryKey: keys.queue(processId, 'all'),
+        queryFn: () => api.queue(processId),
+      })
+      return { uploads, run, queue }
+    },
+    onSuccess: ({ uploads, run, queue }) => {
+      const ids = new Set(uploads.map((upload) => upload.instance_id))
+      const arrived = triage(queue, today).filter((entry) => ids.has(entry.item.id))
+      later(() => {
+        clear()
+        setOpen(false)
+        setFresh(new Set(arrived.map((entry) => entry.item.id)))
+        setSummary({ total: uploads.length, waiting: arrived.length, run })
+        later(() => setFresh(new Set()), FRESH_MS)
+        later(() => setSummary(null), TOAST_MS)
+      }, CLOSE_AFTER_MS)
+    },
+  })
+
+  const clear = () => {
+    setFiles((current) => {
+      current.forEach(revokePreview)
+      return []
+    })
+  }
+  const add = (incoming: File[]) =>
+    setFiles((current) => [...current, ...incoming.map((file) => ({ ...toPreview(file), file }))])
+
+  return {
+    open,
+    files,
+    progress,
+    fresh,
+    summary,
+    startBlocked,
+    active,
+    batch,
+    busy: batch.isPending,
+    /** A drop queues the files and starts at once: dropping them is the intent. */
+    start: (incoming: File[]) => {
+      if (batch.isPending) return
+      batch.reset()
+      const queued = incoming.map((file) => ({ ...toPreview(file), file }))
+      setFiles(queued)
+      setOpen(true)
+      if (!startBlocked) batch.mutate(queued)
+    },
+    add,
+    remove: (id: string) =>
+      setFiles((current) => {
+        const gone = current.find((item) => item.id === id)
+        if (gone) revokePreview(gone)
+        return current.filter((item) => item.id !== id)
+      }),
+    clear,
+    run: () => {
+      if (files.length && !startBlocked) batch.mutate(files)
+    },
+    close: () => {
+      if (batch.isPending) return
+      clear()
+      setOpen(false)
+    },
+    dismiss: () => setSummary(null),
+  }
+}
+
+/** The backend refuses a run with nothing published; say what to do about it. */
+function runFailure(error: unknown): unknown {
+  if (error instanceof ApiError && error.status === 409 && /publish an approved/i.test(error.message)) {
+    return new ApiError(error.status, error.code, 'Publica una versión desde la Consola antes de procesar facturas')
+  }
+  return error
+}
+
+/** One line after a batch: how many went through and how many wait on the manager. */
+function Toast({
+  summary,
+  process,
+  onClose,
+}: {
+  summary: Summary
+  process: ProcessDetail | undefined
+  onClose: () => void
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 8 }}
+      transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+      className="fixed bottom-6 right-6 z-40 flex max-w-sm items-center gap-3 rounded-[14px] bg-surface py-3 pl-4 pr-2 shadow-pop ring-1 ring-line"
+    >
+      <CheckCircle2 size={16} strokeWidth={1.6} className="shrink-0 text-pagar" />
+      <div className="min-w-0 text-[13px]">
+        <p className="text-ink">
+          {summary.total} procesada{summary.total === 1 ? '' : 's'} ·{' '}
+          {summary.waiting
+            ? `${summary.waiting} te necesita${summary.waiting === 1 ? '' : 'n'}`
+            : 'ninguna te necesita'}
+        </p>
+        <p className="mt-1 flex flex-wrap gap-1">
+          {Object.entries(summary.run.by_decision).map(([name, count]) => (
+            <StatusBadge key={name} value={name} decisionTypes={process?.decision_types}>
+              {`${name.replaceAll('_', ' ')} ${count}`}
+            </StatusBadge>
+          ))}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Cerrar"
+        className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-canvas hover:text-ink"
+      >
+        <X size={13} strokeWidth={1.75} />
+      </button>
+    </motion.div>
+  )
+}
+
+function Totals({ cases }: { cases: Triage[] }) {
+  const overdue = cases.filter((entry) => entry.flags.includes('overdue'))
+  const soon = cases.filter((entry) => entry.flags.includes('soon'))
+  const amount = cases.reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
+  const cells = [
+    { label: 'Vencidas', value: String(overdue.length), tone: overdue.length ? 'text-nopagar' : 'text-ink' },
+    { label: 'Vencen pronto', value: String(soon.length), tone: soon.length ? 'text-escalar' : 'text-ink' },
+    { label: 'Importe en espera', value: formatAmount(amount), tone: 'text-ink' },
+  ]
+  return (
+    <section className="divide-y divide-hairline rounded-[16px] bg-surface ring-1 ring-line">
+      {cells.map((cell) => (
+        <div key={cell.label} className="flex items-baseline justify-between px-4 py-2.5">
+          <span className="text-[12.5px] text-muted">{cell.label}</span>
+          <span className={cn('font-mono text-[14px] tabular-nums', cell.tone)}>{cell.value}</span>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+function UploadButton({ disabled, onFiles }: { disabled: boolean; onFiles: (files: File[]) => void }) {
+  const input = useRef<HTMLInputElement>(null)
+  return (
+    <>
+      <Button tone="soft" disabled={disabled} onClick={() => input.current?.click()}>
+        <Upload size={12} strokeWidth={1.75} />
+        {disabled ? 'Procesando…' : 'Subir facturas'}
+      </Button>
+      <FileInput ref={input} onFiles={onFiles} />
+    </>
+  )
+}
+
+function FileInput({
+  ref,
+  onFiles,
+}: {
+  ref: RefObject<HTMLInputElement | null>
+  onFiles: (files: File[]) => void
+}) {
+  return (
+    <input
+      ref={ref}
+      type="file"
+      accept="application/pdf,.pdf"
+      multiple
+      hidden
+      onChange={(event) => {
+        const files = [...(event.target.files ?? [])]
+        event.target.value = ''
+        if (files.length) onFiles(files)
+      }}
+    />
+  )
+}
+
+/** Every decided invoice, newest decision first, searchable and filtered by outcome. */
+function History({
+  items,
+  error,
+  process,
+  today,
+  onSelect,
+}: {
+  items: InstanceOut[] | undefined
+  error: unknown
+  process: ProcessDetail | undefined
+  today: Date
+  onSelect: (id: number) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [outcome, setOutcome] = useState('all')
+
+  const rows = useMemo(() => {
+    const decided = (items ?? []).filter((item) => item.decision && item.decided_at)
+    return triage(decided, today)
+      .filter((entry) => outcome === 'all' || entry.item.decision === outcome)
+      .filter((entry) => {
+        const q = query.trim().toLowerCase()
+        if (!q) return true
+        return [entry.item.name, entry.party, entry.number].some((value) => value?.toLowerCase().includes(q))
+      })
+      .sort((a, b) => (b.item.decided_at ?? '').localeCompare(a.item.decided_at ?? ''))
+  }, [items, today, outcome, query])
+
+  if (error) return <ErrorNotice error={error} />
+
+  return (
+    <section>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <label className="relative min-w-[220px] flex-1">
+          <Search size={13} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Proveedor, número o archivo"
+            className="pl-8"
+          />
+        </label>
+        <Segmented
+          value={outcome}
+          onChange={setOutcome}
+          options={[
+            { value: 'all', label: 'Todas' },
+            ...(process?.decision_types ?? []).map((type) => ({ value: type.name, label: humanize(type.name) })),
+          ]}
+        />
+      </div>
+
+      <div className="overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
+        {!items ? (
+          <p className="px-4 py-5 text-[13px] text-muted">Cargando…</p>
+        ) : rows.length === 0 ? (
+          <p className="px-4 py-5 text-[13px] text-muted">Nada con esos filtros.</p>
+        ) : (
+          <table className="w-full text-left text-[13px]">
+            <thead className="border-b border-hairline text-[11px] text-faint">
+              <tr>
+                <th className="px-4 py-2 font-normal">Factura</th>
+                <th className="px-4 py-2 text-right font-normal">Importe</th>
+                <th className="px-4 py-2 font-normal">Decisión</th>
+                <th className="hidden px-4 py-2 font-normal md:table-cell">Motivo</th>
+                <th className="px-4 py-2 font-normal">Quién · cuándo</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-hairline">
+              {rows.map((entry) => (
+                <tr
+                  key={entry.item.id}
+                  onClick={() => onSelect(entry.item.id)}
+                  className="cursor-pointer hover:bg-canvas"
+                >
+                  <td className="max-w-[220px] px-4 py-2.5">
+                    <p className="truncate text-ink">{entry.party ?? entry.item.name}</p>
+                    <p className="truncate font-mono text-[11px] text-faint">{entry.number ?? entry.item.name}</p>
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">{formatAmount(entry.amount)}</td>
+                  <td className="px-4 py-2.5">
+                    <StatusBadge value={entry.item.decision!} decisionTypes={process?.decision_types} />
+                  </td>
+                  <td className="hidden max-w-[320px] truncate px-4 py-2.5 text-muted md:table-cell">
+                    {plainReason(entry.item.reason).title}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-2.5 text-[12px] text-muted">
+                    {entry.item.author === 'engine' ? 'Proceso' : entry.item.author}
+                    <span className="text-faint"> · {formatRunDate(entry.item.decided_at!)}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </section>
+  )
+}

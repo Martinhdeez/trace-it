@@ -130,6 +130,7 @@ def _combine(
     rules_hash: str,
     missing: list[str],
     scan: Collection[str] | None = None,
+    unverified: Collection[str] = (),
 ) -> Verdict:
     """A required symbol missing -> escalate, whatever the rules answered. No rule fires ->
     the default. Several fire -> the highest priority. A rule that could not be evaluated,
@@ -147,6 +148,9 @@ def _combine(
     def verdict(decision: str, reason: str) -> Verdict:
         return Verdict(decision, reason, results, rules_hash)
 
+    doubtful = [s for s in outcomes.required if s in unverified]
+    if doubtful:
+        return verdict(outcomes.escalate, f"UNVERIFIED_DATA: {', '.join(doubtful)}")
     if missing:
         return verdict(outcomes.escalate, f"MISSING_DATA: {', '.join(missing)}")
 
@@ -204,6 +208,7 @@ def decide(
     scans: Mapping[int, Collection[str]] | None = None,
     down: Mapping[int, Sequence[str]] | None = None,
     rule_workers: int = 1,
+    unverified: Mapping[int, Collection[str]] | None = None,
 ) -> list[Verdict]:
     """Apply every rule to every instance. Each rule's code runs once, over all the instances
     together; the shared sources and population cross to the sandbox once per rule.
@@ -234,6 +239,7 @@ def decide(
             rules_hash,
             _missing(outcomes, values),
             (scans or {}).get(key),
+            (unverified or {}).get(key, ()),
         )
         for k, (key, values) in enumerate(instances)
     ]

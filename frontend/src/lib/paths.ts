@@ -5,7 +5,11 @@ export const paths = {
   landing: '/',
   processes: '/processes',
   newProcess: '/processes/new',
+  /** The manager's inbox: what waits for them, and what was already decided. */
   process: (id: number | string) => `/processes/${id}`,
+  history: (id: number | string) => `/processes/${id}?vista=historial`,
+  /** The console: panel, definition, runs, review and settings, one tab each. */
+  panel: (id: number | string) => `/processes/${id}/panel`,
   definition: (id: number | string) => `/processes/${id}/definition`,
   definitionContext: (id: number | string) => `/processes/${id}/definition/contexto`,
   definitionInputs: (id: number | string) => `/processes/${id}/definition/inputs`,

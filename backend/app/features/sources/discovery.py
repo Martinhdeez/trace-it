@@ -155,15 +155,48 @@ def evidence_references(data: dict) -> set[str]:
     return references
 
 
+def _row_key(row: dict, fields: list[str], source: str) -> tuple:
+    values = tuple(row.get(field) for field in fields)
+    if any(value is None or value == "" for value in values):
+        raise ConflictError(f"{source}: mutation key {fields} is missing in a row")
+    return values
+
+
+def _indexed(rows: list[dict], fields: list[str], source: str) -> dict[tuple, dict]:
+    indexed = {}
+    for row in rows:
+        key = _row_key(row, fields, source)
+        if key in indexed:
+            raise ConflictError(f"{source}: duplicate mutation key {key}")
+        indexed[key] = row
+    return indexed
+
+
+def _mutate(proposal, incoming: list[dict], base: list[dict]) -> list[dict]:
+    if proposal.operation == "replace":
+        return incoming
+    if proposal.operation == "append":
+        combined = [*base, *incoming]
+        if proposal.key:
+            _indexed(combined, proposal.key, proposal.name)
+        return combined
+    existing = _indexed(base, proposal.key, proposal.name)
+    changes = _indexed(incoming, proposal.key, proposal.name)
+    if proposal.operation == "delete":
+        return [row for row in base if _row_key(row, proposal.key, proposal.name) not in changes]
+    result = [changes.pop(key, row) for key, row in existing.items()]
+    return [*result, *changes.values()]
+
+
 def materialize(plan: DraftPlan, data: dict) -> dict[str, list[dict]]:
     tables = {}
     for proposal in plan.sources:
         if proposal.kind == "constant":
-            tables[proposal.name] = proposal.rows
+            incoming = proposal.rows
         elif proposal.kind == "snapshot":
             if proposal.snapshot not in data["snapshots"]:
                 raise ConflictError(f"Missing complete snapshot {proposal.snapshot}")
-            tables[proposal.name] = data["snapshots"][proposal.snapshot]["rows"]
+            incoming = data["snapshots"][proposal.snapshot]["rows"]
         else:
             if not proposal.columns or proposal.first_row > proposal.last_row:
                 raise ConflictError(f"Invalid mapping for {proposal.name}")
@@ -203,5 +236,20 @@ def materialize(plan: DraftPlan, data: dict) -> dict[str, list[dict]]:
                     extracted.append(values)
             if not extracted:
                 raise ConflictError(f"{proposal.name}: mapping contains no data")
-            tables[proposal.name] = extracted
+            incoming = extracted
+        base = data.get("base_sources", {}).get(proposal.name, [])
+        tables[proposal.name] = _mutate(proposal, incoming, base)
     return tables
+
+
+def mutation_summary(plan: DraftPlan, data: dict, tables: dict[str, list[dict]]) -> list[dict]:
+    return [
+        {
+            "source": proposal.name,
+            "operation": proposal.operation,
+            "key": proposal.key,
+            "before": len(data.get("base_sources", {}).get(proposal.name, [])),
+            "after": len(tables[proposal.name]),
+        }
+        for proposal in plan.sources
+    ]
