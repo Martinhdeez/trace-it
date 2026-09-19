@@ -3,9 +3,18 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { test, expect, request as requests, type APIRequestContext, type Page } from '@playwright/test'
 
+// Writes are manager-only; ci-stack.sh loads the pack, which seeds this manager.
+async function seededManager(request: APIRequestContext) {
+  const login = await request.post('api/login', { data: { email: 'martin@trace-it.local' } })
+  expect(login.status(), await login.text()).toBe(200)
+  return { 'X-User-Id': String((await login.json()).id) }
+}
+
 async function managerFixture(request: APIRequestContext, page?: Page) {
   const email = `${randomUUID()}@ci.invalid`
-  const created = await request.post('api/users', { data: { name: 'CI manager', email, role: 'manager' } })
+  const created = await request.post('api/users', {
+    headers: await seededManager(request), data: { name: 'CI manager', email, role: 'manager' },
+  })
   expect(created.status()).toBe(201)
   const login = await request.post('api/login', { data: { email } })
   expect(login.status()).toBe(200)
@@ -14,16 +23,17 @@ async function managerFixture(request: APIRequestContext, page?: Page) {
     await page.goto('settings')
     const user = page.getByRole('button', { name: new RegExp(email.replaceAll('.', '\\.')) })
     await expect(user).toContainText('CI manager')
-    await expect(user).toContainText('responsable')
+    await expect(user).toContainText(/responsable/i)
     await user.click()
-    await expect(page.getByRole('button', { name: 'Salir', exact: true })).toBeVisible()
+    // The sidebar now names the chosen identity.
+    await expect(page.getByRole('link', { name: /CI manager\s*Responsable/ })).toBeVisible()
   }
   return headers
 }
 
 async function processFixture(request: APIRequestContext) {
   const name = `Browser CI ${randomUUID()}`
-  const response = await request.post('api/processes/definition', { data: {
+  const response = await request.post('api/processes/definition', { headers: await seededManager(request), data: {
     name, description: 'Isolated end-to-end test',
     decision_types: [
       { name: 'ACCEPT', priority: 0, is_default: true },
@@ -92,14 +102,14 @@ test('production never substitutes mock data for an unavailable API', async ({ p
   const process = await processFixture(request)
   await page.route('**/api/**', route => route.fulfill({ status: 503, body: 'Unavailable' }))
   await page.goto('processes')
-  await expect(page.getByText('503 Service Unavailable', { exact: false })).toBeVisible()
+  await expect(page.getByText('El backend no responde').first()).toBeVisible()
   await expect(page.getByRole('link', { name: process.name })).toHaveCount(0)
   await expect(page.getByRole('link', { name: /Pago de facturas/i })).toHaveCount(0)
 })
 
-test('HTTP flow persists PDF evidence, decisions, human resolution and export', async ({ request }) => {
+test('HTTP flow persists PDF evidence, decisions, human resolution and export', async ({ request, page }, testInfo) => {
+  const headers = await managerFixture(request, page)
   const process = await processFixture(request)
-  const headers = await managerFixture(request)
   const validated = await request.post(`api/processes/${process.id}/draft/validate`, { headers })
   expect(validated.status(), await validated.text()).toBe(200)
   const draft = await validated.json()
@@ -122,7 +132,7 @@ test('HTTP flow persists PDF evidence, decisions, human resolution and export', 
   expect(document.symbols.holder.value).toBe('Ana')
   const evidence = await request.get(`api/instances/${instanceId}/document`, { headers })
   expect(evidence.status()).toBe(200)
-  const run = await request.post(`api/processes/${process.id}/run`)
+  const run = await request.post(`api/processes/${process.id}/run`, { headers })
   expect(run.status(), await run.text()).toBe(200)
   expect((await run.json()).decided, 'Uploaded PDF must reach the decision engine').toBe(1)
   const before = await (await request.get(`api/instances/${instanceId}`)).json()
@@ -138,4 +148,44 @@ test('HTTP flow persists PDF evidence, decisions, human resolution and export', 
   const exported = await request.get(`api/processes/${process.id}/export`)
   expect(exported.status()).toBe(200)
   expect(JSON.parse((await exported.text()).trim()).file_id).toBe(filename)
+
+  // The generic process field must open its own source, without invoice-specific UI code.
+  const failures: string[] = []
+  page.on('pageerror', error => failures.push(error.message))
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.goto(`processes/${process.id}/instances?i=${instanceId}`)
+  await page.getByRole('button', { name: 'símbolos · 1', exact: true }).click()
+  await page.getByRole('button', { name: 'View holder in original PDF' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Original document' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByText('Exact text', { exact: false })).toBeVisible()
+  await expect(dialog.getByRole('img', { name: `${filename}, page 1` })).toBeVisible()
+  const box = dialog.getByTestId('source-box')
+  await expect(box).toHaveCount(1)
+  const source = (await (await request.get(`api/instances/${instanceId}/document/locations`, { headers })).json()).fields.holder[0]
+  const original = await box.boundingBox()
+  expect(original!.width).toBeGreaterThan(5)
+  expect(original!.width).toBeLessThan(100)
+  expect(source.raw).toBe('Ana')
+  await page.screenshot({ path: testInfo.outputPath('pdf-desktop.png') })
+  await dialog.getByRole('button', { name: 'Zoom in', exact: true }).click()
+  await expect.poll(async () => (await box.boundingBox())!.width).toBeCloseTo(original!.width * 1.25, 0)
+  await dialog.getByRole('button', { name: 'Rotate page', exact: true }).click()
+  await expect.poll(async () => (await box.boundingBox())!.height).toBeCloseTo(original!.width * 1.25, 0)
+  await dialog.getByRole('button', { name: 'Reset view' }).click()
+  await dialog.getByRole('button', { name: 'Info', exact: true }).click()
+  await expect(dialog.getByRole('complementary', { name: 'Document information' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Info', exact: true }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect.poll(async () => (await dialog.boundingBox())!.width).toBeLessThanOrEqual(358)
+  await expect(box).toBeInViewport()
+  await page.screenshot({ path: testInfo.outputPath('pdf-mobile.png') })
+  const downloadEvent = page.waitForEvent('download')
+  await dialog.getByRole('button', { name: 'Download original PDF' }).click()
+  const downloaded = await downloadEvent
+  expect(downloaded.suggestedFilename()).toBe(filename)
+  expect(readFileSync((await downloaded.path())!)).toEqual(readFileSync(resolve('e2e/fixtures', filename)))
+  await dialog.getByRole('button', { name: 'Cerrar', exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(failures).toEqual([])
 })

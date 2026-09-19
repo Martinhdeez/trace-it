@@ -94,6 +94,35 @@ async def test_upload_persists_original_and_evidence_without_approving_symbols(p
     assert stored.json() == result["extraction"]
 
 
+async def test_document_locations_and_page_preserve_saved_reading(process_api):
+    client, process_id, _ = process_api
+    uploaded = await client.post(
+        f"/processes/{process_id}/files", files={"file": ("invoice.pdf", pdf_bytes(VALID))}
+    )
+    assert uploaded.status_code == 201
+    instance_id = uploaded.json()["instance_id"]
+    endpoint = f"/instances/{instance_id}/document"
+    before = (await client.get(endpoint)).json()
+    response = await client.get(endpoint + "/locations")
+    assert response.status_code == 200
+    locations = response.json()
+    assert locations["extraction_id"] == before["id"]
+    assert locations["sha256"] == before["sha256"]
+    assert locations["symbol_fields"]["invoice_number"] == "invoice_number"
+    assert "total" not in locations["symbol_fields"]  # No payment adapter on this process.
+    assert locations["fields"]["invoice_number"][0]["precision"] == "text"
+    assert locations["fields"]["invoice_number"][0]["boxes"]
+    page = await client.get(endpoint + "/pages/1")
+    assert page.status_code == 200
+    assert page.headers["content-type"] == "image/png"
+    assert page.content.startswith(b"\x89PNG")
+    assert (await client.get(endpoint + "/pages/2")).status_code == 404
+    assert (await client.get(endpoint)).json() == before
+    client.headers.pop("X-User-Id")
+    assert (await client.get(endpoint + "/locations")).status_code == 401
+    assert (await client.get(endpoint + "/pages/1")).status_code == 401
+
+
 async def test_reupload_preserves_instance_state_and_distinguishes_file_names(process_api):
     client, process_id, service = process_api
     content = pdf_bytes(VALID + "\n" + uuid.uuid4().hex)

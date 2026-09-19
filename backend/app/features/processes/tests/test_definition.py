@@ -4,13 +4,13 @@ import json
 import uuid
 from pathlib import Path
 
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
 from app.core.database import session_factory
 from app.features.processes.definition import Definition, load_definition
 from app.features.rules import service as rules
 from app.features.use_cases import service as use_cases
-from app.main import app
+from tests.support.users import manager_client
 
 PROCESSES = Path(__file__).parents[5] / "processes"
 
@@ -47,7 +47,7 @@ async def _load(api: AsyncClient, data: dict) -> dict:
 
 async def test_loading_twice_is_idempotent() -> None:
     data = _definition("invoice-payment.json")
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+    async with manager_client() as api:
         first = await _load(api, data)
         second = await _load(api, data)
     assert first["new_rules"] == first["rules"] == len(data["rules"])
@@ -64,7 +64,7 @@ async def test_loading_twice_is_idempotent() -> None:
 
 async def test_a_process_that_is_not_about_invoices() -> None:
     data = _definition("travel-expenses.json")
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+    async with manager_client() as api:
         result = await _load(api, data)
     assert result["rules"] == 2
     assert {t["name"] for t in result["process"]["decision_types"]} == {
@@ -77,7 +77,7 @@ async def test_a_process_that_is_not_about_invoices() -> None:
 async def test_two_defaults_are_rejected() -> None:
     data = _definition("travel-expenses.json")
     data["decision_types"][1]["is_default"] = True
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+    async with manager_client() as api:
         r = await api.post("/processes/definition", json=data)
         assert r.status_code == 422, r.text
         assert "exactly one default" in r.text
@@ -88,7 +88,7 @@ async def test_two_defaults_are_rejected() -> None:
 async def test_rules_with_code_in_a_file_are_not_loaded_over_http() -> None:
     """A path would be resolved on the server, against whatever the backend can read."""
     data = _definition("invoice-payment.json", with_code=True)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+    async with manager_client() as api:
         r = await api.post("/processes/definition", json=data)
 
     assert r.status_code == 409, r.text
@@ -123,7 +123,7 @@ async def test_from_disk_rules_arrive_with_their_code_and_activate() -> None:
 
 async def test_a_use_case_and_a_description_are_rejected() -> None:
     data = _definition("travel-expenses.json") | {"use_case": "Anything", "description": "x"}
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+    async with manager_client() as api:
         r = await api.post("/processes/definition", json=data)
     assert r.status_code == 422, r.text
     assert "belongs to the use case" in r.text
@@ -132,7 +132,21 @@ async def test_a_use_case_and_a_description_are_rejected() -> None:
 async def test_a_missing_use_case_is_a_conflict() -> None:
     data = _definition("travel-expenses.json") | {"use_case": f"missing {uuid.uuid4().hex}"}
     data.pop("description", None)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+    async with manager_client() as api:
         r = await api.post("/processes/definition", json=data)
     assert r.status_code == 409, r.text
     assert "does not exist" in r.json()["message"]
+
+
+async def test_a_symbol_type_outside_the_list_is_rejected() -> None:
+    """Both packs load (above); `booleano` gets a 422 on the pack and on the draft."""
+    data = _definition("travel-expenses.json")
+    data["symbols"][-1]["type"] = "booleano"
+    async with manager_client() as api:
+        r = await api.post("/processes/definition", json=data)
+        assert r.status_code == 422, r.text
+        data["symbols"][-1]["type"] = "boolean"
+        pid = (await _load(api, data))["process"]["id"]
+        symbols = [s | {"type": "booleano"} for s in data["symbols"]]
+        r = await api.put(f"/processes/{pid}/draft", json={"symbols": symbols})
+        assert r.status_code == 422, r.text

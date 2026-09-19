@@ -1,0 +1,1 @@
+[{"id":1,"name":"scan_010.pdf","status":"DECIDED","decision":"ESCALAR","author":"engine","reason":"MISSING_DATA: issuer_nif, iban, purchase_order","decided_at":"2026-09-19T12:23:45.620008Z","review_pending":false}]

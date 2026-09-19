@@ -19,6 +19,103 @@ export const es = {
     signIn: 'Entrar',
     anonymous: 'sin identificar',
   },
+  planes: {
+    ingestion: 'Lectura',
+    agents: 'Agentes',
+    execution: 'Ejecución',
+  },
+  health: {
+    ok: 'Bien',
+    degraded: 'Degradado',
+    down: 'Caído',
+  },
+  instanceStatus: {
+    PENDING: 'Pendiente',
+    DECIDED: 'Decidida',
+  },
+  sourceStatus: {
+    ok: 'Al día',
+    down: 'Caída',
+    none: 'Sin sincronizar',
+  },
+  queue: {
+    review: 'Revisión del revisor',
+  },
+  escalation: {
+    RULE_ERROR: 'Error en la regla',
+    RULE_CONFLICT: 'Reglas en conflicto',
+    SOURCE_UNAVAILABLE: 'Fuente no disponible',
+  },
+  ruleType: {
+    requirement: 'Requisito',
+    prohibition: 'Prohibición',
+  },
+  reviewStatus: {
+    completed: 'Completada',
+    failed: 'Fallida',
+  },
+  symbols: {
+    file_id: 'Fichero',
+    issuer_nif: 'NIF del emisor',
+    issuer_name: 'Emisor',
+    iban: 'IBAN',
+    invoice_number: 'Número de factura',
+    date: 'Fecha de emisión',
+    purchase_order: 'Pedido',
+    base: 'Base imponible',
+    vat_rate: 'Tipo de IVA',
+    vat_amount: 'Cuota de IVA',
+    total: 'Total',
+    free_text: 'Texto libre',
+  },
+  alertStatus: {
+    open: 'Abierta',
+    acknowledged: 'Vista',
+    resolved: 'Resuelta',
+  },
+  proposalKind: {
+    decision: 'Decisión',
+    rule: 'Regla',
+    context: 'Contexto',
+    input: 'Input',
+    source: 'Fuente',
+  },
+  proposalChannel: {
+    escalation: 'Asistente',
+    chat: 'Chat',
+    learning: 'Aprendizaje',
+  },
+  proposalStatus: {
+    open: 'Abierta',
+    accepted: 'Aceptada',
+    rejected: 'Rechazada',
+    superseded: 'Sustituida',
+  },
+  alertTrigger: {
+    source_sync: 'Cambio en la fuente',
+    rule_change: 'Cambio de reglas',
+  },
+  extractionMode: {
+    local: 'Local',
+    api: 'API',
+    hybrid: 'Híbrido',
+  },
+  ruleStatus: {
+    compiling: 'Compilando',
+    draft: 'Borrador',
+    active: 'Activa',
+    blocked: 'Bloqueada',
+    retired: 'Retirada',
+  },
+  symbolType: {
+    text: 'Texto',
+    number: 'Número',
+    date: 'Fecha',
+  },
+  roles: {
+    manager: 'Responsable',
+    operator: 'Operador',
+  },
   common: {
     loading: 'Cargando…',
     empty: 'Nada por aquí todavía.',

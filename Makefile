@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down hiring-data hiring-demo check down reset-db
+.PHONY: openapi setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync backup export-batch check-outcomes test test-db test-e2e e2e-integration eval-compiler eval-norm demo-llm-down hiring-data hiring-demo check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 DEMO_ARGS ?=
@@ -12,6 +12,10 @@ setup:
 	docker compose exec -T backend alembic upgrade head
 	$(LOAD)
 	@echo "Ready: API at http://localhost:$${BACKEND_PORT:-8000}/docs"
+
+openapi:  # the API contract for the frontend's typed client; no server or database needed
+	cd backend && uv run python -c "import json; from app.main import app; open('../frontend/openapi.json', 'w').write(json.dumps(app.openapi(), indent=2) + '\\n')"
+	cd frontend && npm run gen:api
 
 ocr-models:
 	uv run --project backend --locked python -m app.features.ingestion.tools.download_models --profile v5-latin --output .models
@@ -29,11 +33,14 @@ activate:  # MANAGER_ID=<id>: explicitly approve the validated pack draft
 # MANAGER_ID=<id>: the rule set compiled from Norma_Pagos_v3 and frozen for delivery, as its
 # own process (`Invoice payment - frozen 2026-09-19`), loaded and published with no LLM. The
 # first load only makes sure the use case exists; its hand-written rules stay unpublished.
+# `.env` matters: a published version pins the OCR readers this environment configures
+# (Gemini/Jev keys, `.models`); without it, scans would be read by local OCR only.
 FROZEN = ../processes/invoice-payment/frozen/2026-09-19/invoice-payment.json
 load-frozen:
 	test -n "$(MANAGER_ID)"
-	cd backend && uv run python -m app.cli load ../processes/invoice-payment.json
-	cd backend && uv run python -m app.cli load $(FROZEN) --activate --manager-id $(MANAGER_ID)
+	test -f .env || cp .env.example .env
+	cd backend && uv run --env-file ../.env python -m app.cli load ../processes/invoice-payment.json
+	cd backend && uv run --env-file ../.env python -m app.cli load $(FROZEN) --activate --manager-id $(MANAGER_ID)
 
 # The whole process over the challenge corpus -> output/outcomes.jsonl. Needs `make erp`
 # running in another terminal, `make setup` and downloaded OCR weights.
@@ -88,6 +95,22 @@ test: test-db  # fast unit tests
 test-e2e: test-db  # golden outcomes of batch 1 + API flow (needs the challenge submodule)
 	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
 	$(PYTEST) -m "e2e and not llm"
+
+# The demo path through the real console and API in Chromium (tests/integration/README.md).
+# A fresh database with the frozen pack published; Playwright starts the ERP, API and console.
+E2E_DB_URL ?= postgresql+psycopg://trace:trace@localhost:$${DB_PORT:-5432}/trace_e2e_test
+E2E_DB = cd backend && TRACE_DATABASE_URL=$(E2E_DB_URL)
+e2e-integration:
+	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
+	$(E2E_DB) uv run python -m tests.support.prepare_db || (docker compose up db -d --wait && $(E2E_DB) uv run python -m tests.support.prepare_db)
+	$(E2E_DB) uv run alembic upgrade head
+	$(E2E_DB) uv run python -m app.cli load ../processes/invoice-payment.json
+	$(E2E_DB) uv run python -m app.cli load $(FROZEN) --activate --manager-id 1
+	test -f .models/manifest.json || $(MAKE) ocr-models
+	test -d frontend/node_modules || (cd frontend && npm ci)
+	rm -rf tests/integration/.data
+	cd tests/integration && npm ci && npx playwright install chromium
+	cd tests/integration && E2E_DATABASE_URL=$(E2E_DB_URL) npx playwright test
 
 eval-compiler:  # opt-in, calls real LLMs (keys in .env); writes backend/evals/reports/
 	cd backend && uv run python -m evals.eval_compiler

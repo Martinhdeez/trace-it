@@ -9,7 +9,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 from app.core.config import settings
@@ -20,8 +19,8 @@ from app.features.sources import service
 from app.features.sources.http_connector import HttpConnector
 from app.features.sources.model import Source
 from app.features.sources.tests.conftest import SOURCES_JSON, erp_config, start_erp
-from app.main import app
 from tests.support import challenge, rows
+from tests.support.users import manager_client
 
 SEED_ORIGIN = "erp:test-seed"
 
@@ -161,7 +160,7 @@ async def test_sync_endpoint_and_diff_after_an_erp_update(
 
     updated, updated_url = start_erp("--lote2", str(batch2_csv(tmp_path)))
     try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api:
+        async with manager_client("http://t") as api:
             monkeypatch.setenv("TRACE_ERP_URL", erp)
             r = await api.post(f"/processes/{process_id}/sources/erp/sync")
             assert r.status_code == 200, r.text
@@ -190,7 +189,7 @@ async def test_sync_endpoint_and_diff_after_an_erp_update(
 
 
 async def test_sync_endpoint_unknown_process() -> None:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api:
+    async with manager_client("http://t") as api:
         r = await api.post("/processes/999999999/sources/erp/sync")
     assert r.status_code == 404
 
@@ -215,7 +214,7 @@ async def test_any_process_of_the_use_case_syncs_with_its_connector(
     monkeypatch.setattr(settings, "processes_dir", tmp_path)
     monkeypatch.setenv("TRACE_ERP_URL", erp)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api:
+    async with manager_client("http://t") as api:
         r = await api.post(f"/processes/{other_id}/sources/erp/sync")
         assert r.status_code == 200, r.text
         assert r.json()["rows"] == 516
@@ -228,7 +227,7 @@ async def test_a_use_case_without_connectors_is_a_clear_404(
 ) -> None:
     process_id = await new_process()
     monkeypatch.setattr(settings, "processes_dir", tmp_path)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api:
+    async with manager_client("http://t") as api:
         r = await api.post(f"/processes/{process_id}/sources/erp/sync")
     assert r.status_code == 404
     assert "is for the use case 'erp-sync-" in r.json()["message"]

@@ -176,7 +176,12 @@ do not become additional independent evidence. Keep originals, proposal values
 and conflicts available for review, including after a provider fails.
 
 A definite HTTP refusal (4xx or 503) can be tried on a later extraction.
-Rate/quota/transient failures have a short provider/model cooldown (15 seconds
+At most `TRACEPAY_VISION_MAX_CONCURRENCY` (3) calls per provider are in flight
+at once. A 429 or 503 is retried within the same extraction after `Retry-After`,
+or exponential backoff with jitter, until `TRACEPAY_PROVIDER_RETRY_MAX_WAIT_S`
+(30) seconds of waiting; each attempt is its own `provider_call` span with
+`attempt`, `backoff_s` and `backoff_basis`. Then the provider gives up and
+rate/quota/transient failures have a short provider/model cooldown (15 seconds
 by default, or a bounded `Retry-After`); during it the chain can use the next
 provider. A timeout or rejected HTTP 200 response remains uncertain and does
 not acquire retry permission merely because the cooldown has ended.

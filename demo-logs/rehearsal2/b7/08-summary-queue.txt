@@ -1,0 +1,26 @@
+$ curl -s $API/processes/$P/summary | python3 -m json.tool | head -12; curl -s "$API/processes/$P/instances?status=PENDING"; echo; curl -s "$API/processes/$P/queue" | python3 -c 'import json,sys; from collections import Counter; print(Counter(i["reason"][:40] for i in json.load(sys.stdin)))'; curl -s "$API/processes/$P/queue" | python3 -c 'import json,sys; [print(i["name"], i["reason"][:80]) for i in json.load(sys.stdin) if i["name"].startswith("lote2_")]'
+{
+    "id": 2,
+    "name": "Invoice payment - frozen 2026-09-19",
+    "instances": 510,
+    "by_status": {
+        "DECIDED": 510
+    },
+    "by_decision": {
+        "PAGAR": 444,
+        "ESCALAR": 31,
+        "NO_PAGAR": 35
+    },
+[]
+Counter({'MISSING_DATA: issuer_nif, iban': 4, 'SCAN_REVIEW: IBAN_MISMATCH': 4, 'UNVERIFIED_DATA: base, vat_rate, vat_amo': 3, 'UNVERIFIED_DATA: total': 2, 'MISSING_DATA: issuer_nif': 2, 'Same order as: factura_41082.pdf': 1, 'Same order as: 2026-0233-A_catering.pdf': 1, 'MISSING_DATA: issuer_nif, iban, purchase': 1, 'MISSING_DATA: purchase_order': 1, 'MISSING_DATA: iban': 1, 'UNVERIFIED_DATA: base': 1, 'UNVERIFIED_DATA: base, vat_amount': 1, 'Same order as: 2026-01-15_P003.pdf': 1, 'Same order as: 2026-04-21_P004.pdf': 1, 'Same order as: 2026-07-09_P010.pdf': 1, 'Same order as: FA-1120_mensajería.pdf': 1, 'Same order as: FA-8046_mensajería.pdf': 1, 'Same order as: factura_2886.pdf': 1, 'Same order as: factura_6806.pdf': 1, 'Same order as: scan_005.pdf': 1, 'Same order as: scan_025.pdf': 1})
+lote2_2026-01-15_P003.pdf Same order as: 2026-01-15_P003.pdf
+lote2_2026-04-21_P004.pdf Same order as: 2026-04-21_P004.pdf
+lote2_2026-07-09_P010.pdf Same order as: 2026-07-09_P010.pdf
+lote2_FA-1120_mensajería.pdf Same order as: FA-1120_mensajería.pdf
+lote2_FA-8046_mensajería.pdf Same order as: FA-8046_mensajería.pdf
+lote2_factura_2886.pdf Same order as: factura_2886.pdf
+lote2_factura_6806.pdf Same order as: factura_6806.pdf
+lote2_scan_005.pdf Same order as: scan_005.pdf
+lote2_scan_021.pdf MISSING_DATA: issuer_nif
+lote2_scan_025.pdf Same order as: scan_025.pdf
+[exit 0] [0.31 s] [14:53:52]

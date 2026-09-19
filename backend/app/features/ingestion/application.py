@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from filelock import FileLock, Timeout
 
 from app.common.exceptions import TraceError
+from app.core.events import unhandled_error
 from app.features.ingestion.config import Settings
 from app.features.ingestion.quality import validate_quality_profile
 from app.features.ingestion.router import create_router
@@ -54,6 +55,8 @@ def create_app(
         return JSONResponse(
             status_code=exc.status_code, content={"code": exc.code, "message": exc.message}
         )
+
+    app.add_exception_handler(Exception, unhandled_error)
 
     @app.get("/health")
     def health():

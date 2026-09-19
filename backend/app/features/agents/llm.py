@@ -15,9 +15,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from openai import OpenAIError
 from pydantic import BaseModel
 from pydantic_ai import Agent, AgentRunError, capture_run_messages
-from pydantic_ai.exceptions import FallbackExceptionGroup, ModelAPIError
+from pydantic_ai.exceptions import FallbackExceptionGroup, ModelAPIError, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, RetryPromptPart
 from pydantic_ai.models import Model
 from pydantic_ai.models.fallback import FallbackModel
@@ -25,9 +26,11 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.usage import UsageLimits
 
+from app.common import prompts
 from app.common.exceptions import TraceError
 from app.core import events
 from app.core.config import settings
+from app.features.ingestion.ocr.pricing import cost_snapshot
 from app.features.use_cases.schemas import AgentSettings
 
 PROMPTS = Path(__file__).parent / "prompts"
@@ -51,7 +54,7 @@ class Trace:
     retries: int  # answers the validators rejected and the model was asked to fix
     input_tokens: int
     output_tokens: int
-    cost: float | None  # USD when the provider's price is known; only the evals report it
+    cost: float | None  # USD: the provider's price, else the model's public list price
     latency_ms: int
     config_id: int | None = None  # the AgentConfig version it ran with (None: defaults)
     prompt_hash: str = ""  # sha256[:12] of the effective instructions
@@ -90,7 +93,7 @@ class Setup:
 
 def prompt(*names: str) -> str:
     """The platform prompts `prompts/<name>.md`, joined."""
-    return "\n\n".join((PROMPTS / f"{n}.md").read_text(encoding="utf-8").strip() for n in names)
+    return prompts.read(PROMPTS, *names)
 
 
 def model_for(role: str) -> Model | str:
@@ -117,6 +120,28 @@ def resolve(model: Model | str, local_endpoint: str | None = None) -> Model | st
     return model
 
 
+def _models(setup: Setup, role: str) -> list[Model | str]:
+    own = setup.settings
+    fallbacks = own.fallback_models or ([] if own.model else settings.fallback_models)
+    return [own.model or model_for(role), *fallbacks]
+
+
+def _price(setup: Setup, role: str, failed: list, usage: Any) -> dict[str, Any]:
+    """The cost of a run, priced like the ingestion providers (`ocr/pricing.py`) for the
+    model of the chain that answered (each entry of `failed` moved one model on): its
+    `cost_status` is `known`/`included` with `cost_usd`, or `unknown`. Helmcode stays
+    unpriced until `TRACEPAY_HELMCODE_BILLING_MODE` says how it bills."""
+    models = _models(setup, role)
+    spec = models[len(failed)] if len(failed) < len(models) else None
+    provider, model = spec.split(":", 1) if isinstance(spec, str) and ":" in spec else (None, None)
+    tokens = {
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cached_tokens": usage.cache_read_tokens,
+    }
+    return {"provider": provider, **cost_snapshot(provider, model, tokens)}
+
+
 def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackModel:
     """The role's model, then its `fallback_models` in order (ADR 0019). A provider failure
     (`ModelAPIError`: 4xx/5xx, 429 after the SDK's retries, timeout, connection) or an
@@ -135,9 +160,7 @@ def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackMode
         failed.append({"model": response.model_name or "", "error": TRUNCATED})
         return True
 
-    own = setup.settings
-    fallbacks = own.fallback_models or ([] if own.model else settings.fallback_models)
-    models = [own.model or model_for(role), *fallbacks]
+    models = _models(setup, role)
     if setup.local_only and any(
         not isinstance(model, str) or not model.startswith("local:") for model in models
     ):
@@ -169,12 +192,35 @@ def _spent(messages: list[ModelMessage]) -> dict[str, int]:
     }
 
 
-def _cost(usage: Any) -> float | None:
+# Standard list prices of the models Helmcode serves, USD per million tokens as
+# (input, output, cached input), read 19 September 2026 from benchlm.ai/deepseek/api-pricing.
+# Helmcode bills a flat monthly fee per API key and publishes no per-token rate
+# (helmcode.com/pricing), so PydanticAI cannot price a run on it. Pricing its tokens at the
+# underlying model's public rate answers the question a cost column is asked: what this work
+# costs per token. It is not our invoice, which is the subscription (docs/scale-and-cost.md).
+_RATES = {
+    "deepseek-v4.1-flash": (0.30, 1.20, 0.006),
+    "deepseek-v4-flash": (0.14, 0.28, 0.0028),
+}
+
+
+def _cost(usage: Any, model: str) -> float | None:
+    """USD for one run: the provider's own price, else the model's public list price."""
     try:
         cost = usage.cost()
         return float(getattr(cost, "total_price", cost))
-    except Exception:  # noqa: BLE001 - unknown price: the run still succeeded
+    except Exception:  # noqa: BLE001 - the provider has no price; fall back to the list
+        pass
+    rates = _RATES.get(model.rsplit("/", 1)[-1])
+    if rates is None:
         return None
+    per_input, per_output, per_cached = rates
+    cached = min(usage.cache_read_tokens, usage.input_tokens)
+    return (
+        (usage.input_tokens - cached) * per_input
+        + cached * per_cached
+        + usage.output_tokens * per_output
+    ) / 1_000_000
 
 
 async def run(
@@ -192,7 +238,10 @@ async def run(
     if setup.settings.instructions:
         instructions += "\n\n## Guidance for this use case\n" + setup.settings.instructions
     failed: list[dict[str, str]] = []
-    model = chain(setup, role, failed)
+    try:
+        model = chain(setup, role, failed)
+    except (OpenAIError, UserError) as error:  # building a provider: no key, unknown model
+        raise AgentError(f"{role}: model not configured: {error}") from error
     model_settings = dict(setup.settings.model_settings)
     if setup.settings.timeout_seconds:
         model_settings["timeout"] = setup.settings.timeout_seconds
@@ -246,19 +295,25 @@ async def run(
             failed_attempts=failed,  # provider failures before the model that answered
         )
         retries = len(retry_prompts)
+        answered = result.response.model_name or model.models[0].model_name
         trace = Trace(
             role=role,
-            model=result.response.model_name or model.models[0].model_name,
+            model=answered,
             requests=usage.requests,
             retries=retries,
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
-            cost=_cost(usage),
+            cost=_cost(usage, answered),
             latency_ms=int((time.perf_counter() - start) * 1000),
             config_id=setup.config_id,
             prompt_hash=prompt_hash,
             agent=agent.name or "",
             cached_tokens=usage.cache_read_tokens,
         )
-        span.set(**trace.as_data(), cost=trace.cost, latency_ms=trace.latency_ms)
+        span.set(
+            **trace.as_data(),
+            **_price(setup, role, failed, usage),
+            cost=trace.cost,
+            latency_ms=trace.latency_ms,
+        )
     return result.output, trace

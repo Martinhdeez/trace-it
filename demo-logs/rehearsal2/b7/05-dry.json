@@ -1,0 +1,14 @@
+{
+    "unchanged": 499,
+    "changes": [
+        {
+            "instance_id": 64,
+            "name": "2026-03-28_P002.pdf",
+            "before": "NO_PAGAR",
+            "after": "PAGAR",
+            "previous_author": "engine",
+            "reason": ""
+        }
+    ],
+    "conflicts": []
+}

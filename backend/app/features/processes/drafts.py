@@ -17,11 +17,11 @@ from app.features.processes import execution as execution_choices
 from app.features.processes import service
 from app.features.processes.draft_schemas import (
     AcceptanceExample,
-    DraftOut,
+    DiscoveryDraftOut,
     DraftPlan,
     DraftStart,
-    Evidence,
     GuidanceProposal,
+    ProposalEvidence,
     RuleProposal,
     SourceProposal,
 )
@@ -80,7 +80,7 @@ async def connectors(session, draft):
 
 async def output(session, draft_id):
     draft, data = await read(session, draft_id)
-    return DraftOut(
+    return DiscoveryDraftOut(
         id=draft.id,
         revision=draft.revision,
         process_id=draft.process_id,
@@ -154,7 +154,9 @@ async def start(session, body: DraftStart, user):
             GuidanceProposal(
                 name=key,
                 text=text,
-                evidence=[Evidence(reference=ref, explanation="Published reviewer guidance")],
+                evidence=[
+                    ProposalEvidence(reference=ref, explanation="Published reviewer guidance")
+                ],
             )
             for key, text in base["guidance"].items()
         ]
@@ -170,7 +172,7 @@ async def start(session, body: DraftStart, user):
                     text=rule.text,
                     type=rule.type,
                     decision=rule.decision,
-                    evidence=[Evidence(reference=ref, explanation="Existing active rule")],
+                    evidence=[ProposalEvidence(reference=ref, explanation="Existing active rule")],
                 )
             )
         for source in await sources.current_loads(session, body.process_id):
@@ -182,7 +184,7 @@ async def start(session, body: DraftStart, user):
                     snapshot=source.name,
                     explanation="Existing source snapshot",
                     evidence=[
-                        Evidence(
+                        ProposalEvidence(
                             reference=f"snapshot:{source.name}",
                             explanation="Current process source",
                         )
@@ -273,6 +275,10 @@ async def message(session, draft_id, body, user):
     data["plan"] = plan.model_dump()
     data["messages"].append({"role": "assistant", "text": plan.summary})
     invalidate(data)
+    if draft.process_id:  # each change of an existing process, as a proposal to settle
+        from app.features.proposals import service as proposals
+
+        await proposals.from_chat(session, draft, data, body.revision + 1)
     return await save(session, draft_id, body.revision, data, user, "revise_process_draft")
 
 

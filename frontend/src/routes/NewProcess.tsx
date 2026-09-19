@@ -3,17 +3,22 @@ import { useNavigate } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { api } from '../api/client'
-import type { Outcome, ProcessDefinition, ProcessInput, ProcessSymbol } from '../api/contracts'
+import type { DecisionType, Definition } from '../api/contracts'
 import { Button, Field, Input, Segmented, Select, Textarea } from '../components/shell/Controls'
 import { ErrorNotice, Notice } from '../components/shell/Notice'
 import { Topbar } from '../components/shell/Topbar'
 import { NestedCard, PageIntro } from '../components/shell/Well'
-import { invoiceOutcomes, invoiceSymbols } from '../data/seed'
+import { invoiceDecisionTypes, invoiceSymbols } from '../data/seed'
+import { t } from '../i18n'
 import { paths } from '../lib/paths'
 
-const EMPTY_OUTCOMES: Outcome[] = [
-  { nombre: 'REVISAR', prioridad: 2, por_defecto: false, requiere_persona: true },
-  { nombre: 'ACEPTAR', prioridad: 1, por_defecto: true, requiere_persona: false },
+type SymbolIn = Definition['symbols'][number]
+
+const SYMBOL_TYPES = ['text', 'number', 'date'] as const
+
+const EMPTY_OUTCOMES: DecisionType[] = [
+  { name: 'REVISAR', priority: 2, is_default: false, requires_human: true },
+  { name: 'ACEPTAR', priority: 1, is_default: true, requires_human: false },
 ]
 
 export function NewProcess() {
@@ -40,9 +45,8 @@ export function NewProcess() {
 }
 
 /**
- * The whole process as one JSON file, the same one the backend loads from
- * `procesos/`. Loading it twice is safe: rules whose text already exists are
- * left alone, so a pack can be edited and loaded again.
+ * The whole process as one JSON file, the same shape as the packs under `processes/`,
+ * posted as it is. The backend's validation and its 409s are shown as they come.
  */
 function FromDefinition() {
   const navigate = useNavigate()
@@ -51,16 +55,16 @@ function FromDefinition() {
   const [parseError, setParseError] = useState<string | null>(null)
 
   const load = useMutation({
-    mutationFn: (definition: ProcessDefinition) => api.loadDefinition(definition),
+    mutationFn: (definition: Definition) => api.loadDefinition(definition),
     onSuccess: (result) => {
       void queryClient.invalidateQueries()
-      navigate(paths.process(result.proceso.id))
+      navigate(paths.process(result.process.id))
     },
   })
 
   const submit = () => {
     setParseError(null)
-    let definition: ProcessDefinition
+    let definition: Definition
     try {
       definition = JSON.parse(text)
     } catch (error) {
@@ -75,7 +79,7 @@ function FromDefinition() {
       <PageIntro
         kicker="Proceso · importar"
         title="Un proceso entero como datos"
-        description="Pega aquí un fichero de procesos/. Trae los tipos de decisión, los símbolos, las reglas en texto y los usuarios. Las reglas entran como borrador: se compilan y se activan una a una desde la aplicación."
+        description="Pega aquí un fichero de processes/. Trae los tipos de decisión, los símbolos, las reglas en texto y los usuarios. Las reglas entran como borrador: se compilan y se añaden a la versión desde la aplicación."
       />
 
       <div className="max-w-3xl space-y-3">
@@ -92,7 +96,7 @@ function FromDefinition() {
               rows={18}
               value={text}
               onChange={(event) => setText(event.target.value)}
-              placeholder='{ "nombre": "Gastos de viaje", "tipos_decision": [...] }'
+              placeholder='{ "name": "Travel expenses", "decision_types": [...] }'
               className="font-mono text-[12px] leading-5"
               spellCheck={false}
             />
@@ -126,14 +130,14 @@ function ByHand() {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [outcomes, setOutcomes] = useState<Outcome[]>(EMPTY_OUTCOMES)
-  const [symbols, setSymbols] = useState<ProcessSymbol[]>([])
+  const [outcomes, setOutcomes] = useState<DecisionType[]>(EMPTY_OUTCOMES)
+  const [symbols, setSymbols] = useState<SymbolIn[]>([])
 
   const create = useMutation({
-    mutationFn: (body: ProcessInput) => api.createProcess(body),
-    onSuccess: (process) => {
+    mutationFn: (body: Definition) => api.loadDefinition(body),
+    onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ['processes'] })
-      navigate(paths.definition(process.id))
+      navigate(paths.definition(result.process.id))
     },
   })
 
@@ -142,18 +146,18 @@ function ByHand() {
     setDescription(
       'Decide si se paga cada factura de proveedor según la Norma_Pagos_v3. Fuentes: proveedores, pedidos y erp. Convenciones de todas las reglas: NIF, IBAN y pedido se normalizan a mayúsculas sin espacios antes de comparar; los importes se comparan en céntimos con Decimal.',
     )
-    setOutcomes(invoiceOutcomes)
-    setSymbols(invoiceSymbols)
+    setOutcomes(invoiceDecisionTypes)
+    setSymbols(invoiceSymbols as SymbolIn[])
   }
 
-  const defaults = outcomes.filter((outcome) => outcome.por_defecto).length
+  const defaults = outcomes.filter((outcome) => outcome.is_default).length
   const defaultNeedsPerson = outcomes.some(
-    (outcome) => outcome.por_defecto && outcome.requiere_persona,
+    (outcome) => outcome.is_default && outcome.requires_human,
   )
-  const anyHuman = outcomes.some((outcome) => outcome.requiere_persona)
+  const anyHuman = outcomes.some((outcome) => outcome.requires_human)
   const valid = name.trim().length > 0 && defaults === 1 && !defaultNeedsPerson && anyHuman
 
-  const patch = (index: number, change: Partial<Outcome>) =>
+  const patch = (index: number, change: Partial<DecisionType>) =>
     setOutcomes((current) =>
       current.map((outcome, i) => (i === index ? { ...outcome, ...change } : outcome)),
     )
@@ -165,10 +169,12 @@ function ByHand() {
         event.preventDefault()
         if (!valid) return
         create.mutate({
-          nombre: name.trim(),
-          descripcion: description.trim(),
-          tipos_decision: outcomes,
-          simbolos: symbols,
+          name: name.trim(),
+          description: description.trim(),
+          decision_types: outcomes,
+          symbols,
+          rules: [],
+          users: [],
         })
       }}
     >
@@ -221,10 +227,10 @@ function ByHand() {
                 setOutcomes((current) => [
                   ...current,
                   {
-                    nombre: '',
-                    prioridad: current.length + 1,
-                    por_defecto: false,
-                    requiere_persona: false,
+                    name: '',
+                    priority: current.length + 1,
+                    is_default: false,
+                    requires_human: false,
                   },
                 ])
               }
@@ -243,16 +249,16 @@ function ByHand() {
             {outcomes.map((outcome, index) => (
               <div key={index} className="flex flex-wrap items-center gap-2">
                 <Input
-                  value={outcome.nombre}
-                  onChange={(event) => patch(index, { nombre: event.target.value.toUpperCase() })}
+                  value={outcome.name}
+                  onChange={(event) => patch(index, { name: event.target.value.toUpperCase() })}
                   placeholder="ESCALAR"
                   className="w-40 shrink-0 font-mono"
                 />
                 <Input
                   type="number"
                   min={1}
-                  value={outcome.prioridad}
-                  onChange={(event) => patch(index, { prioridad: Number(event.target.value) })}
+                  value={outcome.priority}
+                  onChange={(event) => patch(index, { priority: Number(event.target.value) })}
                   className="w-16 shrink-0 text-center"
                   title="Prioridad"
                 />
@@ -260,10 +266,10 @@ function ByHand() {
                   <input
                     type="radio"
                     name="por_defecto"
-                    checked={outcome.por_defecto}
+                    checked={outcome.is_default}
                     onChange={() =>
                       setOutcomes((current) =>
-                        current.map((item, i) => ({ ...item, por_defecto: i === index })),
+                        current.map((item, i) => ({ ...item, is_default: i === index })),
                       )
                     }
                   />
@@ -272,8 +278,8 @@ function ByHand() {
                 <label className="flex shrink-0 items-center gap-1.5 text-[12px] text-muted">
                   <input
                     type="checkbox"
-                    checked={outcome.requiere_persona}
-                    onChange={(event) => patch(index, { requiere_persona: event.target.checked })}
+                    checked={outcome.requires_human}
+                    onChange={(event) => patch(index, { requires_human: event.target.checked })}
                   />
                   persona
                 </label>
@@ -314,7 +320,7 @@ function ByHand() {
               onClick={() =>
                 setSymbols((current) => [
                   ...current,
-                  { nombre: '', tipo: 'texto', descripcion: '' },
+                  { name: '', type: 'text', description: '', required: false },
                 ])
               }
             >
@@ -334,11 +340,11 @@ function ByHand() {
             {symbols.map((symbol, index) => (
               <div key={index} className="flex items-center gap-2">
                 <Input
-                  value={symbol.nombre}
+                  value={symbol.name}
                   onChange={(event) =>
                     setSymbols((current) =>
                       current.map((item, i) =>
-                        i === index ? { ...item, nombre: event.target.value } : item,
+                        i === index ? { ...item, name: event.target.value } : item,
                       ),
                     )
                   }
@@ -346,26 +352,30 @@ function ByHand() {
                   className="w-40 shrink-0 font-mono"
                 />
                 <Select
-                  value={symbol.tipo}
+                  value={symbol.type}
                   onChange={(event) =>
                     setSymbols((current) =>
                       current.map((item, i) =>
-                        i === index ? { ...item, tipo: event.target.value } : item,
+                        i === index
+                          ? { ...item, type: event.target.value as SymbolIn['type'] }
+                          : item,
                       ),
                     )
                   }
                   className="w-28 shrink-0"
                 >
-                  <option value="texto">texto</option>
-                  <option value="numero">número</option>
-                  <option value="booleano">booleano</option>
+                  {SYMBOL_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {t(`symbolType.${type}`)}
+                    </option>
+                  ))}
                 </Select>
                 <Input
-                  value={symbol.descripcion}
+                  value={symbol.description}
                   onChange={(event) =>
                     setSymbols((current) =>
                       current.map((item, i) =>
-                        i === index ? { ...item, descripcion: event.target.value } : item,
+                        i === index ? { ...item, description: event.target.value } : item,
                       ),
                     )
                   }
@@ -402,24 +412,25 @@ function ByHand() {
   )
 }
 
+/** `processes/travel-expenses.json`, as it is in the repo. */
 const EXAMPLE = JSON.stringify(
   {
-    nombre: 'Gastos de viaje',
-    descripcion:
-      'Aprueba o rechaza cada nota de gastos de un viaje de empresa. Convenciones de todas las reglas: importe está en euros y se compara con Decimal(str(importe)); si falta un símbolo que la regla necesita (None), la regla no salta.',
-    tipos_decision: [
-      { nombre: 'REVISAR', prioridad: 3, requiere_persona: true },
-      { nombre: 'RECHAZAR', prioridad: 2 },
-      { nombre: 'APROBAR', prioridad: 1, por_defecto: true },
+    name: 'Travel expenses',
+    description:
+      'Approves or rejects each expense report of a business trip. Conventions for every rule: amount is in euros and is compared with Decimal(str(amount)); if a symbol the rule needs is missing (None), the rule does not fire.',
+    decision_types: [
+      { name: 'ESCALATE', priority: 3, requires_human: true },
+      { name: 'REJECT', priority: 2 },
+      { name: 'APPROVE', priority: 1, is_default: true },
     ],
-    simbolos: [
-      { nombre: 'empleado', tipo: 'texto', descripcion: 'Email del empleado que viaja.' },
-      { nombre: 'importe', tipo: 'numero', descripcion: 'Total de la nota en euros.' },
-      { nombre: 'tiene_ticket', tipo: 'booleano', descripcion: 'La nota adjunta justificante.' },
+    symbols: [
+      { name: 'employee', type: 'text', description: 'Email of the travelling employee.' },
+      { name: 'amount', type: 'number', description: 'Total of the report in euros.' },
+      { name: 'has_receipt', type: 'boolean', description: 'The report attaches a receipt.' },
     ],
-    reglas: [
-      { texto: '`tiene_ticket` es verdadero.', tipo: 'requisito', decision: 'RECHAZAR' },
-      { texto: '`importe` es mayor que 500.', tipo: 'prohibicion', decision: 'REVISAR' },
+    rules: [
+      { text: '`has_receipt` is true.', type: 'requirement', decision: 'REJECT' },
+      { text: '`amount` is greater than 500.', type: 'prohibition', decision: 'ESCALATE' },
     ],
   },
   null,

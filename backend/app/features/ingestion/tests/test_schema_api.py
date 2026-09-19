@@ -70,13 +70,13 @@ async def test_new_definition_fields_are_used_without_restarting_and_history_is_
         ],
         "symbols": [{"name": "holder", "type": "text", "required": True}],
     }
-    loaded = await client.post("/processes/definition", json=definition)
-    assert loaded.status_code == 200, loaded.text
-    process_id = loaded.json()["process"]["id"]
     async with session_factory() as session:
         user = await session.get(User, int(client.headers["X-User-Id"]))
         user.role = "manager"
         await session.commit()
+    loaded = await client.post("/processes/definition", json=definition)
+    assert loaded.status_code == 200, loaded.text
+    process_id = loaded.json()["process"]["id"]
     await publish_draft(client, process_id)
     endpoint = f"/processes/{process_id}/files"
     content = pdf_bytes("Holder: Ana\nExpiry: 21/04/2027\nRenewed: false")
@@ -135,6 +135,11 @@ async def test_new_definition_fields_are_used_without_restarting_and_history_is_
     assert fresh["extraction"]["cache_hit"] is True
     assert fresh["symbols"]["expires_on"]["value"] == "2027-04-21"
     assert fresh["symbols"]["renewed"]["value"] is False
+    locations = (await client.get(f"/instances/{instance_id}/document/locations")).json()
+    assert locations["extraction_id"] == fresh["extraction"]["id"]
+    assert locations["symbol_fields"]["expires_on"] == "expires_on"
+    assert locations["fields"]["expires_on"][0]["raw"] == "21/04/2027"
+    assert locations["fields"]["expires_on"][0]["boxes"]
     assert fresh["extraction"]["data"]["extraction_plan"]["fingerprint"] == after["fingerprint"]
     assert service.get_result(original["extraction"]["id"])["fields"].keys() == {"holder"}
     async with session_factory() as session:
@@ -175,6 +180,8 @@ async def test_invoice_extension_preserves_default_fields_and_adds_new_symbol(pa
         assert extended["symbols"][name]["value"] == symbol["value"]
     for name, field in initial["extraction"]["fields"].items():
         assert extended["extraction"]["fields"][name] == field
+    assert extended["extraction"]["fields"]["expires_on"]["symbol"] == "expires_on"
+    assert extended["extraction"]["fields"]["supplier_tax_id"]["symbol"] == "issuer_nif"
 
 
 async def test_agent_published_field_reaches_extraction_and_rules_without_restart(

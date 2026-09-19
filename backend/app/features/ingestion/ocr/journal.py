@@ -3,7 +3,11 @@
 import hashlib
 import json
 import os
+import random
+import threading
 import time
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 
 from filelock import FileLock
 
@@ -48,6 +52,44 @@ def _token_usage(provider, response):
         if provider == "gemini":
             tokens["total_tokens"] += tokens.get("reasoning_tokens", 0)
     return tokens
+
+
+# Refusals worth waiting for: rate limit (quota) and service unavailable. Other refusals
+# (bad key, bad request) fail at once; an uncertain delivery is never retried.
+RETRYABLE = {429, 503}
+_slots: dict[str, threading.BoundedSemaphore] = {}
+_slots_lock = threading.Lock()
+_sleep = time.sleep  # tests replace it
+
+
+def _slot(provider):
+    """One process-wide concurrency limit per remote provider."""
+    with _slots_lock:
+        if provider not in _slots:
+            limit = int(os.getenv("TRACEPAY_VISION_MAX_CONCURRENCY", "3"))
+            _slots[provider] = threading.BoundedSemaphore(max(1, limit))
+        return _slots[provider]
+
+
+def retry_after(response):
+    """Seconds from a `Retry-After` header (delta or HTTP date), else None."""
+    value = response.headers.get("retry-after")
+    if value is None:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        pass
+    try:
+        return max(0.0, (parsedate_to_datetime(value) - datetime.now(UTC)).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
+
+def _backoff(exc, attempt):
+    if exc.retry_after_s is not None:
+        return max(1.0, exc.retry_after_s), "retry_after"
+    return min(2 ** (attempt - 1), 16) * random.uniform(0.5, 1.5), "exponential"
 
 
 def record_response(provider, status_code, payload=None, *, retry_after_s=None):
@@ -96,6 +138,36 @@ def recorded_call(
     if provider is None:
         return _recorded_call(path, identity, call, reader=reader, force=force)
 
+    # A 429/503 was refused, not delivered, so the journal lets the same request go again:
+    # wait (Retry-After, else exponential with jitter) within a total budget, then give up
+    # and let the caller's fallback chain take over. Each attempt is its own provider_call.
+    budget = float(os.getenv("TRACEPAY_PROVIDER_RETRY_MAX_WAIT_S", "30"))
+    waited, retry = 0.0, {}
+    for attempt in range(1, 100):
+        try:
+            return _attempt(
+                path,
+                identity,
+                call,
+                (provider, model, operation, fallback, fingerprint),
+                reader,
+                force,
+                {"attempt": attempt, **retry},
+            )
+        except ProviderUnavailable as exc:
+            if exc.http_status_code not in RETRYABLE or exc.journal_blocked:
+                raise
+            wait, basis = _backoff(exc, attempt)
+            if waited + wait > budget:
+                raise
+            _sleep(wait)
+            waited += wait
+            retry = {"backoff_s": round(wait, 3), "backoff_basis": basis, "waited_s": waited}
+    raise ProviderUnavailable(f"{provider} call unavailable")
+
+
+def _attempt(path, identity, call, span, reader, force, retry):
+    provider, model, operation, fallback, fingerprint = span
     failure = None
     result = None
     with events.span(
@@ -108,9 +180,17 @@ def recorded_call(
         journal_hit=False,
         network_attempted=False,
         network_succeeded=False,
+        **retry,
     ) as trace:
+
+        def limited(mark_network_attempt):
+            queued = time.perf_counter()
+            with _slot(provider):
+                trace.set(slot_wait_ms=round((time.perf_counter() - queued) * 1000))
+                return call(mark_network_attempt)
+
         try:
-            result = _recorded_call(path, identity, call, trace, reader, force)
+            result = _recorded_call(path, identity, limited, trace, reader, force)
         except Exception as exc:
             failure = exc
             trace.status = "error"

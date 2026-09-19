@@ -157,23 +157,37 @@ def read_block() -> str:
 
 
 class Api:
-    def __init__(self, base_url: str, report: Report):
+    def __init__(self, base_url: str, report: Report, attempts: int = 3, pause: float = 5.0):
         self.http = httpx.AsyncClient(base_url=base_url, timeout=httpx.Timeout(60, read=None))
         self.report = report
+        self.attempts = attempts  # a 502 from an agent is resent: the backend wrote nothing
+        self.pause = pause  # seconds between attempts
         self.marker = 0  # highest span id already reported
 
     async def call(self, method: str, path: str, expected: tuple[int, ...] = (), **kwargs):
-        """One request; a failure is logged verbatim unless its status is `expected`."""
-        response = await self.http.request(method, path, **kwargs)
-        if response.status_code >= 400:
+        """One request, resent while the answer is a recoverable agent failure.
+
+        A 502 `llm_error` means the model's output failed its validators or every provider
+        in the chain refused; the backend wrote nothing, the draft keeps its revision and
+        the same request can simply be sent again. Every attempt is reported, so a run that
+        only finished because a model was asked twice says so.
+        """
+        for attempt in range(1, self.attempts + 1):
+            response = await self.http.request(method, path, **kwargs)
+            if response.status_code < 400:
+                if response.headers.get("content-type", "").startswith("application/json"):
+                    return response.json()
+                return response.text
+            retryable = response.status_code == 502 and attempt < self.attempts
             if response.status_code not in expected:
                 self.report.error(
                     f"{method} {path} -> {response.status_code}: {response.text[:800]}"
+                    + (f" (attempt {attempt} of {self.attempts}, resending)" if retryable else "")
                 )
-            raise ApiError(response.status_code, response.text)
-        if response.headers.get("content-type", "").startswith("application/json"):
-            return response.json()
-        return response.text
+            if not retryable:
+                raise ApiError(response.status_code, response.text)
+            await asyncio.sleep(self.pause)
+        raise ApiError(response.status_code, response.text)
 
     async def login(self, email: str, name: str) -> dict:
         try:
@@ -213,6 +227,8 @@ def totals(calls: list[dict]) -> dict:
         "input_tokens": sum(d.get("input_tokens") or 0 for d in data),
         "output_tokens": sum(d.get("output_tokens") or 0 for d in data),
         "cached_tokens": sum(d.get("cached_tokens") or 0 for d in data),
+        "usd": round(sum(d.get("cost") or 0 for d in data), 4),
+        "unpriced_calls": sum(1 for d in data if d.get("cost") is None),
         "seconds": round(sum(s.get("duration_ms") or 0 for s in calls) / 1000, 1),
         "failed_over": sum(len(d.get("failed_attempts") or []) for d in data),
     }
@@ -323,6 +339,16 @@ def proposal_summary(plan: dict, key: str) -> str:
 
 async def discover(api: Api, manager: Manager, report: Report, args) -> int | None:
     report.section("Discovery")
+    # Publishing a new process refuses a name that is taken, and rightly so: a second
+    # discovery for a process that exists is a version draft, not a new process. Say it
+    # here rather than after a quarter of an hour of questions and compilation.
+    taken = [p for p in await api.call("GET", "/processes") if p["name"] == args.name]
+    if taken:
+        report.error(
+            f"process {taken[0]['id']} is already called '{args.name}'. "
+            f"Rename it, or screen against it with --process {taken[0]['id']}."
+        )
+        return None
     draft = await api.call("POST", "/process-drafts", json={"name": args.name})
     draft_id = draft["id"]
     report.say(f"draft {draft_id} started for a new process '{args.name}'")
@@ -437,6 +463,17 @@ def expected_rows() -> list[dict]:
     return [json.loads(line) for line in lines if line.strip()]
 
 
+def same(expected: str, result) -> bool:
+    """The answer key names outcomes in capitals; a process names them as its manager did.
+
+    The engine returns the decision type's own key, so `INTERVIEW` and `interview` are the
+    same verdict reported in two spellings. Compare case-folded; anything beyond that would
+    be a mapping table, and a process whose outcomes are genuinely named otherwise should
+    say so in the answer key.
+    """
+    return result is not None and expected.casefold() == str(result).casefold()
+
+
 def plain(symbols: dict | None) -> dict:
     return {
         k: (v.get("value") if isinstance(v, dict) and "value" in v else v)
@@ -518,9 +555,9 @@ async def screen(api: Api, report: Report, process_id: int, args) -> dict[str, d
         counts: dict[str, int] = {}
         for _, _, result in items:
             counts[str(result)] = counts.get(str(result), 0) + 1
-        matched = sum(1 for _, exp, res in items if exp == res)
+        matched = sum(1 for _, exp, res in items if same(exp, res))
         report.say(f"| {category} | {items[0][1]} | {matched}/{len(items)} | {counts} |")
-        wrong += [(fid, exp, res) for fid, exp, res in items if exp != res]
+        wrong += [(fid, exp, res) for fid, exp, res in items if not same(exp, res)]
     if wrong:
         report.say("\nMismatches, with the rules that fired:\n")
         listed = {i["name"]: i for i in await api.call("GET", f"/processes/{process_id}/instances")}
@@ -533,7 +570,7 @@ async def screen(api: Api, report: Report, process_id: int, args) -> dict[str, d
             why = "; ".join(fired) or (engine or {}).get("reason") or "-"
             category = rows[file_id]["category"]
             report.say(f"- {file_id} [{category}] expected {expected}, got {result}: {why}")
-    total = sum(1 for fid, row in rows.items() if got.get(fid) == row["expected"])
+    total = sum(1 for fid, row in rows.items() if same(row["expected"], got.get(fid)))
     report.say(f"\n**{total}/{len(rows)} CVs decided as the policy implies.**")
     return {fid: {**rows[fid], "got": got.get(fid), "instance": instances[fid]} for fid in rows}
 
@@ -594,6 +631,9 @@ def parse_args(argv=None):
     parser.add_argument("--process", type=int, help="skip discovery; screen with this process")
     parser.add_argument("--auto", action="store_true", help="manager-notes.md answers, accept all")
     parser.add_argument("--max-rounds", type=int, default=4)
+    parser.add_argument(
+        "--attempts", type=int, default=3, help="tries per request before a 502 is fatal"
+    )
     parser.add_argument("--mode", choices=["local", "hybrid", "api"], help="per-upload OCR mode")
     parser.add_argument("--skip-learning", action="store_true")
     parser.add_argument(
@@ -608,7 +648,7 @@ async def main(argv=None) -> int:
     args = parse_args(argv)
     report = Report(args.report)
     manager = Manager(args.auto, (PACK / "manager-notes.md").read_text(encoding="utf-8"))
-    api = Api(args.base_url, report)
+    api = Api(args.base_url, report, attempts=args.attempts)
     header = [
         f"# Hiring screening: discovery run, {datetime.now(UTC):%d %B %Y}",
         "",

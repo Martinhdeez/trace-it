@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 from PIL import Image
 
-from app.common.extraction import TextLine
+from app.common.extraction import TextLine, TextSpan
 from app.common.normalization import clean_text
 from app.features.ingestion.cache import (
     cached_read,
@@ -137,11 +137,13 @@ class LocalOCR:
             if self.engine is None or self.engine_identity != signature:
                 self._load()
                 self.engine_identity = signature
-            result = self.engine(buffer.getvalue(), use_cls=False)
+            result = self.engine(buffer.getvalue(), use_cls=False, return_word_box=True)
         if not result.txts:
             return []
         entries = []
-        for box, text, confidence in zip(result.boxes, result.txts, result.scores, strict=True):
+        for index, (box, text, confidence) in enumerate(
+            zip(result.boxes, result.txts, result.scores, strict=True)
+        ):
             x0, y0 = box.min(axis=0)
             x1, y1 = box.max(axis=0)
             x0, x1, y0, y1 = x0 + left, x1 + left, y0 + top, y1 + top
@@ -152,6 +154,24 @@ class LocalOCR:
                     str(text),
                     float(confidence),
                     [float(x0) * sx, float(y0) * sy, float(x1) * sx, float(y1) * sy],
+                    [
+                        TextSpan(
+                            text=str(word),
+                            bbox=[
+                                (min(p[0] for p in bounds) + left) * sx,
+                                (min(p[1] for p in bounds) + top) * sy,
+                                (max(p[0] for p in bounds) + left) * sx,
+                                (max(p[1] for p in bounds) + top) * sy,
+                            ],
+                        )
+                        for word, _, bounds in (
+                            (result.word_results[index] or [])
+                            if getattr(result, "word_results", None)
+                            and index < len(result.word_results)
+                            else []
+                        )
+                        if bounds is not None
+                    ],
                 )
             )
         entries.sort(key=lambda e: (e[0], e[1]))
@@ -190,6 +210,7 @@ class LocalOCR:
                     method="ocr",
                     confidence=min(e[3] for e in group),
                     preprocessing=preprocessing,
+                    spans=[span for entry in group for span in entry[5]],
                 )
             )
         return lines
@@ -228,6 +249,7 @@ class LocalOCR:
         params.update(
             {
                 "Global.use_cls": False,
+                "Global.return_single_char_box": True,
                 "Global.log_level": "warning",
                 "Global.max_side_len": 3400,
                 "Det.ocr_version": version,

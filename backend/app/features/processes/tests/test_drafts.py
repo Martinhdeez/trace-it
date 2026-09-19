@@ -21,6 +21,7 @@ from app.features.processes.model import Process
 from app.features.rules.model import Rule
 from app.main import app
 from tests.support.models import per_role, user_json
+from tests.support.users import manager
 
 
 def scripted_pinned_models(monkeypatch):
@@ -134,15 +135,7 @@ def scripts(proposal, threshold=100, field="amount", broken=False):
 async def api(monkeypatch):
     scripted_pinned_models(monkeypatch)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        user = await client.post(
-            "/users",
-            json={
-                "name": "Draft manager",
-                "role": "manager",
-                "email": f"draft-{uuid.uuid4().hex}@test.com",
-            },
-        )
-        client.headers["X-User-Id"] = str(user.json()["id"])
+        await manager(client, "Draft manager")
         yield client
 
 
@@ -676,3 +669,36 @@ def test_an_example_inventing_a_table_is_refused():
     with pytest.raises(ConflictError) as error:
         ready(DraftPlan.model_validate(proposal), reviews)
     assert "applicants" in str(error.value)
+
+
+def symbol_plan(**extraction):
+    proposal = plan()
+    proposal["symbols"] = [
+        {"name": "amount", "type": "number", "required": True, "extraction": extraction}
+    ]
+    return proposal
+
+
+def test_a_symbol_that_can_only_read_the_whole_page_is_refused():
+    """Observed with the hiring pack: all seven symbols were published with
+    extraction.source "text", so each text field became the entire transcript, the typed
+    ones became null, and all 44 cases escalated on data the reader had in front of it."""
+    proposal = symbol_plan(source="text", labels=["Total"])
+    reviews = dict.fromkeys(proposals(DraftPlan.model_validate(proposal)), "accepted")
+    with pytest.raises(ConflictError) as error:
+        ready(DraftPlan.model_validate(proposal), reviews)
+    assert "whole transcript" in str(error.value) and "amount" in str(error.value)
+
+    proposal = symbol_plan(source="document", labels=["Total"])
+    ready(DraftPlan.model_validate(proposal), reviews)  # matching labels in the page is fine
+
+
+def test_one_free_text_symbol_may_still_hold_the_transcript():
+    """`text` exists for exactly that: a text symbol, with no labels to match."""
+    proposal = plan()
+    proposal["symbols"] = [
+        {"name": "free_text", "type": "text", "extraction": {"source": "text"}},
+        {"name": "amount", "type": "number", "required": True},
+    ]
+    reviews = dict.fromkeys(proposals(DraftPlan.model_validate(proposal)), "accepted")
+    ready(DraftPlan.model_validate(proposal), reviews)

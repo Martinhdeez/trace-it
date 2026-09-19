@@ -1,16 +1,20 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { executionApi, presetNames, type Draft, type ExecutionResponse, type Preset } from '../../api/execution'
+import { api } from '../../api/client'
+import type { DecisionReview, ExecutionOut, Preset, VersionDraft } from '../../api/contracts'
+import { keys } from '../../api/queries'
 import { useSession } from '../../state/session'
 import { Button, Field, Input, Select, Textarea } from '../shell/Controls'
 import { ErrorNotice } from '../shell/Notice'
 import { NestedCard } from '../shell/Well'
 import { ExecutionEditor } from './ExecutionEditor'
-import { HistoricalCoverage } from './HistoricalCoverage'
+import { PublishDraft } from './PublishDraft'
+
+const presetNames: readonly Preset[] = ['lowest_cost', 'fastest', 'balanced', 'highest_quality']
 
 export function ProcessExecutionSettings({ processId }: { processId: number }) {
   const { isManager } = useSession()
-  const query = useQuery({ queryKey: ['execution', processId], queryFn: () => executionApi.get(processId), enabled: isManager, refetchOnWindowFocus: false })
+  const query = useQuery({ queryKey: keys.execution(processId), queryFn: () => api.getExecution(processId), enabled: isManager, refetchOnWindowFocus: false })
   if (!isManager) return null
   return <section className="mt-6"><NestedCard label="Models and execution effort">
     <div className="space-y-3 p-4">
@@ -21,34 +25,34 @@ export function ProcessExecutionSettings({ processId }: { processId: number }) {
   </NestedCard></section>
 }
 
-function SettingsForm({ processId, initial }: { processId: number; initial: ExecutionResponse }) {
+function SettingsForm({ processId, initial }: { processId: number; initial: ExecutionOut }) {
   const queryClient = useQueryClient()
   const [value, setValue] = useState(initial.settings)
-  const [review, setReview] = useState(initial.decision_review)
+  const [review, setReview] = useState(initial.decision_review as DecisionReview | null)
   const [revision, setRevision] = useState(initial.revision)
-  const [draft, setDraft] = useState<Draft | null>(null)
+  const [draft, setDraft] = useState<VersionDraft | null>(null)
   const [dirty, setDirty] = useState(false)
   const [preset, setPreset] = useState<Preset | ''>('')
   const [editorKey, setEditorKey] = useState(0)
   const [invalid, setInvalid] = useState<Record<string, boolean>>({})
-  const [reason, setReason] = useState('')
   const [notice, setNotice] = useState('')
   const pendingPreset = preset ? initial.presets[preset] : null
   const save = useMutation({ mutationFn: async () => {
-    const saved = await executionApi.save(processId, revision, value, review)
+    const saved = await api.saveDraft(processId, {
+      expected_revision: revision,
+      execution: value,
+      decision_review: review,
+      refresh_agents: false,
+    })
     setRevision(saved.revision)
     setDirty(false)
     setDraft(saved)
-    const validated = await executionApi.validate(processId)
+    const validated = await api.validateDraft(processId)
     setDraft(validated)
+    void queryClient.invalidateQueries({ queryKey: keys.draft(processId) })
     setNotice('Draft saved. Review the complete candidate before publishing.')
   } })
-  const publish = useMutation({ mutationFn: async () => {
-    if (!draft) return
-    await executionApi.publish(processId, draft, reason)
-    await queryClient.invalidateQueries()
-  } })
-  const busy = save.isPending || publish.isPending
+  const busy = save.isPending
   return <div className="space-y-4">
     <p className="text-sm text-muted">Presets fill editable settings. Model choices are retained unless the deployment supplies a preset model mapping. Changes take effect after publication.</p>
     <p className="text-sm">Current configuration: <strong>{value.preset.replaceAll('_', ' ')}</strong></p>
@@ -86,18 +90,13 @@ function SettingsForm({ processId, initial }: { processId: number; initial: Exec
     </fieldset>
     {save.isError && <ErrorNotice error={save.error} />}
     {notice && <p role="status" className="text-sm">{notice}</p>}
-    {draft && <div className="space-y-3 border-t border-hairline pt-3">
-      <p className="text-sm">Publication includes all changes in this draft. Validation checks saved facts; it does not rerun OCR or measure model quality.</p>
-      <details><summary>Review complete draft and validation</summary><pre className="max-h-96 overflow-auto text-xs">{JSON.stringify(draft, null, 2)}</pre></details>
-      {draft.validation && <div role="status"><HistoricalCoverage validation={draft.validation} /></div>}
-      {draft.validation && !draft.validation.valid && <p role="alert" className="text-sm text-nopagar">
-        Validation failed. {draft.validation.error || 'Resolve the blocking issues before publishing.'}
-        {!!draft.validation.conflicts?.length && ` ${draft.validation.conflicts.length} historical conflict(s).`}
-        {!!draft.validation.errors?.length && ` ${draft.validation.errors.length} evaluation error(s).`}
-      </p>}
-      <Field label="Publication reason"><Input value={reason} onChange={e => setReason(e.target.value)} /></Field>
-      <Button tone="primary" disabled={busy || dirty || Object.values(invalid).some(Boolean) || !draft.validation?.valid || !reason.trim()} onClick={() => publish.mutate()}>Publish reviewed version</Button>
-      {publish.isError && <ErrorNotice error={publish.error} />}
+    {draft && <div className="border-t border-hairline pt-3">
+      <PublishDraft
+        key={`${draft.revision}:${draft.validation?.hash}`}
+        processId={processId}
+        draft={draft}
+        blocked={dirty || Object.values(invalid).some(Boolean)}
+      />
     </div>}
   </div>
 }

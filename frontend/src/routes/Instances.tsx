@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
 import { api } from '../api/client'
@@ -9,9 +9,10 @@ import { TracePane } from '../components/run/TracePane'
 import { ProcessScreen } from '../components/process/ProcessScreen'
 import { ExportButton } from '../components/process/ExportButton'
 import { Input } from '../components/shell/Controls'
-import { ErrorNotice } from '../components/shell/Notice'
+import { ErrorNotice, Notice } from '../components/shell/Notice'
 import { cn } from '../lib/cn'
-import { label } from '../lib/status'
+import { t } from '../i18n'
+import { formatRunDate } from '../lib/format'
 import { paths } from '../lib/paths'
 
 export function Instances() {
@@ -24,72 +25,113 @@ export function Instances() {
     queryKey: keys.process(processId),
     queryFn: () => api.getProcess(processId),
   })
+  // The server filters; the summary gives the counts for the menu, which the filter must not change.
+  const text = useDeferredValue(search.trim())
+  const filters = {
+    q: text || undefined,
+    status: filter === 'PENDING' ? 'PENDING' : undefined,
+    decision: filter !== 'TODAS' && filter !== 'PENDING' ? filter : undefined,
+  }
+  // With `?run=`, the list is the cases that run decided. The filter lives in the URL,
+  // so the browser's Back returns to the Panel.
+  const runId = params.get('run') ? Number(params.get('run')) : undefined
+  const run = useQuery({
+    queryKey: keys.run(runId ?? 0),
+    queryFn: () => api.getRun(runId!),
+    enabled: Boolean(runId),
+  })
   const instances = useQuery({
-    queryKey: keys.instances(processId),
-    queryFn: () => api.listInstances(processId),
+    queryKey: keys.instances(processId, filters),
+    queryFn: () => api.listInstances(processId, filters),
+    enabled: !runId,
   })
-  // The engine stores rule ids, not their text: the list puts the words back.
-  const rules = useQuery({
-    queryKey: keys.rules(processId),
-    queryFn: () => api.listRules(processId),
+  const summary = useQuery({
+    queryKey: keys.summary(processId),
+    queryFn: () => api.summary(processId),
   })
-
-  const all = useMemo(() => instances.data ?? [], [instances.data])
 
   const rows = useMemo(() => {
-    const text = search.trim().toLowerCase()
-    return all.filter((item) => {
-      if (filter !== 'TODAS' && label(item) !== filter) return false
-      return !text || item.nombre.toLowerCase().includes(text)
-    })
-  }, [all, search, filter])
+    if (!runId) return instances.data ?? []
+    const needle = text.toLowerCase()
+    return (run.data?.decisions ?? [])
+      .map((item) => ({
+        id: item.instance_id,
+        name: item.name,
+        status: 'DECIDED',
+        decision: item.decision,
+        review_pending: false,
+      }))
+      .filter((item) => !needle || item.name.toLowerCase().includes(needle))
+      .filter((item) => filter === 'TODAS' || item.decision === filter)
+  }, [runId, instances.data, run.data, text, filter])
+  const total = runId ? (run.data?.decisions.length ?? 0) : (summary.data?.instances ?? rows.length)
+  const select = (id: number) =>
+    setParams(runId ? { run: String(runId), i: String(id) } : { i: String(id) })
 
   const selectedId = params.get('i') ? Number(params.get('i')) : rows[0]?.id
   const selectedVisible = rows.some((item) => item.id === selectedId)
 
   useEffect(() => {
     if (!rows.length || selectedVisible) return
-    setParams({ i: String(rows[0].id) })
-  }, [rows, selectedVisible, setParams])
+    setParams(runId ? { run: String(runId), i: String(rows[0].id) } : { i: String(rows[0].id) }, {
+      replace: true,
+    })
+  }, [rows, selectedVisible, setParams, runId])
 
   const detail = useQuery({
     queryKey: keys.instance(selectedId ?? 0),
     queryFn: () => api.getInstance(selectedId!),
     enabled: Boolean(selectedId),
   })
+  const trace = useQuery({
+    queryKey: keys.trace(selectedId ?? 0),
+    queryFn: () => api.getTrace(selectedId!),
+    enabled: Boolean(selectedId),
+  })
 
-  const outcomes = useMemo(() => {
-    const count = new Map<string, number>()
-    for (const item of all) {
-      const key = label(item)
-      count.set(key, (count.get(key) ?? 0) + 1)
-    }
-    return [...count.entries()].sort(([a], [b]) => a.localeCompare(b))
-  }, [all])
+  const outcomes = Object.entries(
+    (runId ? run.data?.by_decision : summary.data?.by_decision) ?? {},
+  ).sort(([a], [b]) => a.localeCompare(b))
+  const pending = runId ? 0 : (summary.data?.by_status.PENDING ?? 0)
 
   return (
     <ProcessScreen
       processId={processId}
       crumbs={[
         { label: 'Procesos', to: paths.processes },
-        { label: process.data?.nombre ?? '…', to: paths.process(processId) },
+        { label: process.data?.name ?? '…', to: paths.process(processId) },
         { label: 'Ejecuciones' },
       ]}
       actions={<ExportButton processId={processId} />}
     >
 
-      {instances.isError ? (
+      {instances.isError || run.isError ? (
         <div className="px-8 py-4">
-          <ErrorNotice error={instances.error} />
+          <ErrorNotice error={instances.error ?? run.error} />
+        </div>
+      ) : null}
+      {run.data ? (
+        <div className="px-8 py-4">
+          <Notice
+            title={`Ejecución del ${formatRunDate(run.data.started_at)} · v${run.data.version_number}`}
+            action={
+              <Link to={paths.process(processId)} className="text-[12px] text-muted hover:text-ink">
+                Volver
+              </Link>
+            }
+          >
+            {run.data.decided} decisiones
+          </Notice>
         </div>
       ) : null}
 
       <div className="flex min-h-0 flex-1">
         <QueueList
           items={rows}
-          total={all.length}
+          decisionTypes={process.data?.decision_types}
+          total={total}
           selectedId={selectedId}
-          onSelect={(item) => setParams({ i: String(item.id) })}
+          onSelect={(item) => select(item.id)}
           header={
             <div className="space-y-1.5">
               <Input
@@ -102,17 +144,20 @@ export function Instances() {
                 value={filter}
                 onChange={setFilter}
                 options={[
-                  { value: 'TODAS', label: `Todas ${all.length}` },
+                  { value: 'TODAS', label: `Todas ${total}` },
                   ...outcomes.map(([key, count]) => ({
                     value: key,
                     label: `${key.replaceAll('_', ' ')} ${count}`,
                   })),
+                  ...(pending > 0
+                    ? [{ value: 'PENDING', label: `${t('instanceStatus.PENDING')} ${pending}` }]
+                    : []),
                 ]}
               />
             </div>
           }
         />
-        <TracePane instance={detail.data} rules={rules.data ?? []} />
+        <TracePane instance={detail.data} trace={trace.data} />
       </div>
     </ProcessScreen>
   )

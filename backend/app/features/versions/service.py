@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
 from app.features.agents import compiler, sandbox
-from app.features.decisions.model import Finding
+from app.features.decisions.model import Decision, Finding
 from app.features.processes import execution as execution_config
 from app.features.processes.model import Process
 from app.features.processes.schemas import ProcessDetail
@@ -318,7 +318,8 @@ async def inspect(session, snapshot: dict, inputs: dict, *, tables: dict | None 
         tables=tables,
         validation_missing=validation_missing,
     )
-    changes, conflicts, errors, not_evaluable = [], [], [], []
+    changes, conflicts, errors, not_evaluable, already_escalated = [], [], [], [], []
+    escalate = config.outcomes(snapshot).escalate
     unchanged = 0
     for instance in selected:
         previous = instance["decision"]
@@ -351,6 +352,19 @@ async def inspect(session, snapshot: dict, inputs: dict, *, tables: dict | None 
                     "unavailable_rules": unavailable,
                 }
             )
+        if old_required and previous["decision"] == escalate:
+            # A past escalation for these same fields already applied the policy.
+            reason = (await session.get(Decision, previous["id"])).reason
+            code, _, names = reason.partition(" | ")[0].partition(": ")
+            if code in ("MISSING_DATA", "UNVERIFIED_DATA") and old_required <= set(
+                names.split(", ")
+            ):
+                already_escalated.append(
+                    {"instance_id": instance["id"], "name": instance["name"], "reason": reason}
+                )
+                old_required = set()
+                if not real_failures:
+                    continue
         if real_failures or old_required:
             details = [
                 *real_failures,
@@ -395,6 +409,7 @@ async def inspect(session, snapshot: dict, inputs: dict, *, tables: dict | None 
         "errors": errors,
         "example_validation": examples,
         "not_evaluable": not_evaluable,
+        "already_escalated": already_escalated,
         "coverage": {
             "total": len(selected),
             "evaluated": len(selected) - len(not_evaluable),

@@ -1,0 +1,4 @@
+$ make check-outcomes OUT=output/rehearsal2/delivery/outcomes_lote2.jsonl FILES=$L2/facturas 2>&1 | tail -1; make check-outcomes OUT=output/rehearsal2/delivery/outcomes.jsonl FILES=$B1 2>&1 | tail -1
+OK: one line per file, valid results {'ESCALAR': 10}
+OK: one line per file, valid results {'ESCALAR': 21, 'NO_PAGAR': 35, 'PAGAR': 444}
+[exit 0] [2.02 s] [14:54:11]
