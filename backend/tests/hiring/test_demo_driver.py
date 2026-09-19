@@ -111,6 +111,8 @@ def test_totals_add_up_what_the_llm_run_spans_recorded():
         "input_tokens": 10,
         "output_tokens": 5,
         "cached_tokens": 3,
+        "usd": 0,  # this span carries no cost: no provider price and no listed rate
+        "unpriced_calls": 1,
         "seconds": 1.5,
         "failed_over": 1,
     }
