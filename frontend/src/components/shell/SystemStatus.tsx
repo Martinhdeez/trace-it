@@ -36,7 +36,7 @@ function Dot({ status }: { status: string | undefined }) {
 }
 
 /** One line under the user: overall health and build. Hover or focus shows each plane. */
-export function SystemStatus() {
+export function SystemStatus({ compact = false }: { compact?: boolean }) {
   const planes = useQuery({
     queryKey: keys.planesHealth,
     queryFn: () => api.planesHealth(),
@@ -54,16 +54,28 @@ export function SystemStatus() {
       <button
         type="button"
         aria-label={`${t('status.label')}: ${label}`}
-        className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-[12px] text-muted outline-none hover:bg-surface/60 hover:text-ink focus-visible:bg-surface/60"
+        title={compact ? label : undefined}
+        className={
+          compact
+            ? 'mx-auto grid h-9 w-9 place-items-center rounded-[10px] text-muted outline-none hover:bg-surface/60 hover:text-ink focus-visible:bg-surface/60'
+            : 'flex w-full items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-[12px] text-muted outline-none hover:bg-surface/60 hover:text-ink focus-visible:bg-surface/60'
+        }
       >
         <Dot status={health} />
-        <span className="flex-1 truncate text-left">{label}</span>
-        <span className="font-mono text-[10px] text-faint">{COMMIT}</span>
+        {compact ? null : (
+          <>
+            <span className="flex-1 truncate text-left">{label}</span>
+            <span className="font-mono text-[10px] text-faint">{COMMIT}</span>
+          </>
+        )}
       </button>
 
       <div
         role="tooltip"
-        className="invisible absolute bottom-full left-0 z-30 mb-1.5 w-[220px] translate-y-1 rounded-[12px] bg-surface py-1.5 opacity-0 shadow-float ring-1 ring-line transition-[opacity,transform,visibility] duration-150 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none"
+        className={cn(
+          'invisible absolute z-30 w-[220px] rounded-[12px] bg-surface py-1.5 opacity-0 shadow-float ring-1 ring-line transition-[opacity,transform,visibility] duration-150 group-focus-within:visible group-focus-within:translate-x-0 group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:visible group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none',
+          compact ? 'bottom-0 left-full ml-1.5 -translate-x-1' : 'bottom-full left-0 mb-1.5 translate-y-1',
+        )}
       >
         {planes.isError ? (
           <p className="px-3 py-1 text-[12px] text-nopagar">{t('status.apiDown')}</p>

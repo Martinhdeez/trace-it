@@ -12,7 +12,7 @@ export function Topbar({
 }) {
   return (
     // Actions sit as far from the top edge as from the right one: the page gutter.
-    <header className="flex min-h-[54px] shrink-0 items-center justify-between gap-4 px-6 pt-6">
+    <header className="flex min-h-[54px] shrink-0 items-center justify-between gap-4 px-4 pt-4 sm:px-6 sm:pt-6">
       <nav className="flex min-w-0 items-center gap-2 text-[13px] text-muted">
         {crumbs.map((crumb, index) => (
           <span key={`${crumb.label}-${index}`} className="flex min-w-0 items-center gap-2">

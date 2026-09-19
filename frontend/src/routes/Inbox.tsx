@@ -132,7 +132,7 @@ export function Inbox() {
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-10 pt-4 sm:px-6">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <Segmented
             value={view}
@@ -679,13 +679,13 @@ function History({
         />
       </div>
 
-      <div className="overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
+      <div className="overflow-x-auto rounded-[16px] bg-surface ring-1 ring-line">
         {!items ? (
           <p className="px-4 py-5 text-[13px] text-muted">Cargando…</p>
         ) : rows.length === 0 ? (
           <p className="px-4 py-5 text-[13px] text-muted">Nada con esos filtros.</p>
         ) : (
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full min-w-[560px] text-left text-[13px]">
             <thead className="border-b border-hairline text-[11px] text-faint">
               <tr>
                 <th className="px-4 py-2 font-normal">Factura</th>

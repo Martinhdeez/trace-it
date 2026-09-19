@@ -39,7 +39,7 @@ export function Processes() {
           </Link>
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-10 pt-4 sm:px-6">
         <PageIntro
           kicker="Espacio"
           title="Procesos"

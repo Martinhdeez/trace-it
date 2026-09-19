@@ -14,6 +14,7 @@ import { Rule } from './routes/Rule'
 import { Settings } from './routes/Settings'
 import { Definition } from './routes/Definition'
 import { MailNotifications } from './components/process/MailNotifications'
+import { Metrics } from './routes/Metrics'
 import { ProcessSettings } from './routes/ProcessSettings'
 import { paths } from './lib/paths'
 import { useSession } from './state/session'
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/processes/:processId/definition/*" element={<Definition />} />
         <Route path="/processes/:processId/review" element={<Queue />} />
         <Route path="/processes/:processId/reception" element={<Legacy to={paths.processSettings} />} />
+        <Route path="/processes/:processId/metrics" element={<Metrics />} />
         <Route path="/processes/:processId/settings" element={<ProcessSettings />} />
         <Route path="/processes/:processId/instances" element={<Instances />} />
         <Route path="/processes/:processId/rules/:ruleId" element={<Rule />} />

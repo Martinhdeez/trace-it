@@ -106,12 +106,12 @@ export function Instances() {
     >
 
       {instances.isError || run.isError ? (
-        <div className="px-6 py-4">
+        <div className="px-4 py-4 sm:px-6">
           <ErrorNotice error={instances.error ?? run.error} />
         </div>
       ) : null}
       {run.data ? (
-        <div className="px-6 py-4">
+        <div className="px-4 py-4 sm:px-6">
           <Notice
             title={`Ejecución del ${formatRunDate(run.data.started_at)} · v${run.data.version_number}`}
             action={
@@ -142,7 +142,7 @@ export function Instances() {
           Ejecuta un lote desde el Panel. Cada documento aparecerá aquí con su decisión y su traza.
         </EmptyState>
       ) : (
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
         <QueueList
           items={rows}
           decisionTypes={process.data?.decision_types}
