@@ -31,6 +31,7 @@ class Symbol(Base):
     type: Mapped[str]
     description: Mapped[str] = mapped_column(default="")
     required: Mapped[bool] = mapped_column(default=False, server_default=false())
+    extraction: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
 
 class DecisionType(Base):

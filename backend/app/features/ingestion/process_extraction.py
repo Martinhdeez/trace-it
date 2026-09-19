@@ -1,6 +1,7 @@
 """Connect PDF readers to stored process symbols and append-only source snapshots."""
 
 import io
+import uuid
 
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
@@ -10,8 +11,14 @@ from app.core import events
 from app.features.processes.model import Symbol
 from app.features.sources.service import current_loads
 
+from .extraction_plan import load_extraction_plan
 from .model import File, Instance
-from .payment_verification import REQUIRED_PAYMENT_SYMBOLS, extract_for_payment, payment_symbols
+from .payment_verification import (
+    PAYMENT_FIELDS,
+    REQUIRED_PAYMENT_SYMBOLS,
+    extract_for_payment,
+    payment_symbols,
+)
 
 
 async def payment_context(session, process_id):
@@ -24,10 +31,23 @@ async def payment_context(session, process_id):
 
 
 async def read_document(session, process_id, service, item, options):
-    names, sources = await payment_context(session, process_id)
-    if sources is None:
+    plan = await load_extraction_plan(session, process_id)
+    names = {field.name for field in plan.fields}
+    if not plan.fields:
         result = await run_in_threadpool(service.extract, item, options)
         return result, None, {}
+    snapshot = {**plan.model_dump(mode="json"), "fingerprint": plan.fingerprint}
+    if not names >= REQUIRED_PAYMENT_SYMBOLS:
+        result = await run_in_threadpool(service.extract_schema, item, options, plan)
+        return (
+            result,
+            schema_symbols(result, plan.fields),
+            {
+                "adapter": "schema",
+                "extraction_plan": snapshot,
+            },
+        )
+    sources = {row.name: row for row in await current_loads(session, process_id)}
     reading = await run_in_threadpool(
         extract_for_payment,
         service,
@@ -40,10 +60,40 @@ async def read_document(session, process_id, service, item, options):
         "source_ids": {name: source.id for name, source in sources.items()},
         "rechecked_fields": reading.triggers,
         "initial_extraction_id": reading.initial.id,
+        "extraction_plan": snapshot,
     }
     if reading.initial.id != reading.result.id:
         context["initial_extraction"] = reading.initial.model_dump(mode="json")
-    return reading.result, payment_symbols(reading.result, names), context
+    result = reading.result
+    # Keep every legacy invoice field (including the unused issuer_name) unchanged.
+    legacy = set(PAYMENT_FIELDS) | {"file_id", "free_text", "issuer_name"}
+    extra = [field for field in plan.fields if field.name not in legacy]
+    if extra:
+        result = await run_in_threadpool(
+            service.extract_schema,
+            {**item, "id": uuid.uuid4().hex},
+            options,
+            plan,
+            extra,
+            result,
+        )
+        context["adapter"] = "invoice-payment+schema"
+        context["base_extraction_id"] = reading.result.id
+    symbols = payment_symbols(result, names)
+    symbols.update(schema_symbols(result, extra))
+    return result, symbols, context
+
+
+def schema_symbols(result, fields):
+    """Only accepted readings reach the engine; proposals remain in document evidence."""
+    symbols = {}
+    readings = result.data.get("schema_fields", {})
+    for field in fields:
+        value = readings.get(field.name, {}).get("value")
+        if value is not None and field.type.lower() == "boolean":
+            value = {"true": True, "false": False}.get(value)
+        symbols[field.name] = {"value": value, "origin": f"document:{result.id}"}
+    return symbols
 
 
 async def reextract_document(session, instance_id, user_id, service, options):

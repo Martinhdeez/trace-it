@@ -65,6 +65,7 @@ PLANES: dict[str, Plane] = {
     "ocr": _INGESTION,
     "vision": _INGESTION,
     "text_judge": _INGESTION,
+    "schema_fields": _INGESTION,
     "provider_call": _INGESTION,
     "focused_read": _INGESTION,
     "ingest_document": _INGESTION,

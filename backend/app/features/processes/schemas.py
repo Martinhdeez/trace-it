@@ -1,4 +1,15 @@
+from typing import Annotated, Literal
+
 from pydantic import BaseModel, Field
+
+
+class SymbolExtraction(BaseModel):
+    """Optional hints for finding a process symbol in an input document."""
+
+    labels: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(
+        default_factory=list, max_length=12
+    )
+    source: Literal["document", "filename", "text", "none"] = "document"
 
 
 class SymbolIO(BaseModel):
@@ -6,6 +17,7 @@ class SymbolIO(BaseModel):
     type: str = Field(examples=["text", "number", "date"])
     description: str = ""
     required: bool = False  # missing, None or blank -> the instance escalates (ADR 0016)
+    extraction: SymbolExtraction | None = None
 
 
 class DecisionTypeIO(BaseModel):

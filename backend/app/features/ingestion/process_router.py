@@ -22,6 +22,7 @@ from app.features.users.dependencies import CurrentUser
 
 from . import process_service
 from .errors import InvalidDocumentError
+from .extraction_plan import ExtractionPlan, load_extraction_plan
 from .process_extraction import read_document, reextract_document
 from .runtime import current_service
 from .schemas import CriticalField, ExtractionResult, ExtractOptions
@@ -55,6 +56,17 @@ class DocumentUpload(BaseModel):
     created: bool
     extraction: ExtractionResult
     symbols: dict | None = None
+
+
+@router.get(
+    "/processes/{process_id}/extraction-plan",
+    operation_id="getProcessExtractionPlan",
+    summary="Inspect the current fields and rule dependencies used for document extraction",
+)
+async def extraction_plan(process_id: int, session: Session, user: CurrentUser) -> dict:
+    await process_service.require_process(session, process_id)
+    plan: ExtractionPlan = await load_extraction_plan(session, process_id)
+    return {**plan.model_dump(mode="json"), "fingerprint": plan.fingerprint}
 
 
 @router.post(
@@ -122,7 +134,7 @@ async def get_document(instance_id: int, session: Session, user: CurrentUser):
 @router.post(
     "/instances/{instance_id}/extract",
     operation_id="extractInstanceDocument",
-    summary="Re-extract a pending document using the latest source snapshots",
+    summary="Re-extract a pending document using current symbols, rules and source snapshots",
     response_model=DocumentUpload,
     responses={409: {"description": "The instance is already decided"}},
 )

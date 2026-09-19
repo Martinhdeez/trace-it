@@ -12,6 +12,7 @@ activating rules, document extraction and source uploads need it. CORS is open.
 | Processes | `GET /processes` | id, name, description |
 | Process page | `GET /processes/{id}/summary` | instances, `by_status`, `by_decision`, `queue`, `resolved`, rules with `fires`, current `sources`, `last_run_at` |
 | Process setup | `GET /processes/{id}` | decision types (priority, default, requires_human), symbols and optional `decision_review` guidance |
+| Extraction plan | `GET /processes/{id}/extraction-plan` | current fields, enforced rule references, warnings and content fingerprint; [configuration and caching](dynamic-extraction.md) |
 | Instances | `GET /processes/{id}/instances?status=&decision=&q=` | each row: latest `decision`, `author` (`engine` or a name), `reason`, `decided_at` |
 | Queue | `GET /processes/{id}/queue?type=` | human-requiring outcomes and pending reviewer disagreements; `type` filters the current outcome |
 | Instance | `GET /instances/{id}` | symbols `{name: {value, origin}}`, decision history, `review_pending`, append-only `reviews` with recommendations and reasoning, events |
@@ -36,9 +37,9 @@ activating rules, document extraction and source uploads need it. CORS is open.
 | Run | `POST /processes/{id}/run` | decides every PENDING instance with symbols; 409 while a rule is `compiling` or when no rule is `active`/`blocked` |
 | Reprocess | `POST /processes/{id}/reprocess?dry_run=` (optional `{"names": [...]}`) | decides the DECIDED instances again with the current rules and sources; appends a new engine decision only where it changes; an instance a person decided last is never touched and comes back in `conflicts`. Same 409 as Run |
 | Export | `GET /processes/{id}/export` | `outcomes.jsonl`; 409 while anything is undecided or awaiting reviewer-requested approval. One batch only: `make export-batch` (`docs/runbook-batch2.md`) |
-| Upload | `POST /processes/{id}/files` (multipart `file`) | stores the PDF and fills declared invoice-payment symbols from verified readings |
+| Upload | `POST /processes/{id}/files` (multipart `file`) | stores the PDF and fills symbols from the current extraction plan; existing invoice defaults are retained |
 | Workbook | `POST /processes/{id}/sources/workbook` (multipart `file`, optional `cut_off_date`) | appends supplier/order snapshots; never replaces ERP |
-| Re-extract | `POST /instances/{id}/extract` (JSON `{}` or reader options) | pending documents only; current snapshots, preserved evidence; 409 if already decided |
+| Re-extract | `POST /instances/{id}/extract` (JSON `{}` or reader options) | pending documents only; current symbol schema, rules and source snapshots, preserved evidence; 409 if already decided |
 | Users | `GET /users`, `POST /users`, `POST /login`, `GET /me` | roles `manager`, `operator` |
 | Metrics | `GET /processes/{id}/metrics?since=` | runs, step durations, LLM tokens by model and role, outcomes (unchanged) |
 | Monitoring: ingestion | `GET /processes/{id}/metrics/ingestion?since=`, `GET /metrics/ingestion` (all processes) | `files`, `files_per_second`, `pages`, `ocr_calls`, `vision_calls`, `judge_calls`, `focused_reads`, `cache_hits`, `abstentions`, `abstentions_by_field`, `steps[]` |
