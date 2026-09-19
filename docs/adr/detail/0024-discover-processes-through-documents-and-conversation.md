@@ -102,7 +102,7 @@ This implementation is backend-only, as requested; no frontend is included.
 
 ## Related
 
-ADR 0001, 0003, 0004, 0007, 0008, 0013, 0015, 0016, 0017; [domain glossary](../../CONTEXT.md).
+ADR 0001, 0003, 0004, 0007, 0008, 0013, 0015, 0016, 0017; [domain glossary](../../../CONTEXT.md).
 
 ## Integration with process versions
 

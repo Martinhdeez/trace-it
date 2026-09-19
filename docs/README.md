@@ -10,7 +10,7 @@ Start with the [root README](../README.md) for what the system does, then:
 | [api.md](api.md) | The API, screen by screen, for whoever builds the console |
 | [learning.md](learning.md) | On-demand norm proposals, validation and manager adoption |
 | [decision-review.md](decision-review.md) | Optional decision advice, human approval, fallback and export behavior |
-| [adr/README.md](adr/README.md) | Architecture decision records. ADR 0001 wins over everything else |
+| [key-decisions.md](key-decisions.md), [adr/](adr/README.md) | The five key decisions; the detailed ADRs behind them. ADR 0001 wins over everything else |
 | [invoice-payment-rules.md](invoice-payment-rules.md) | Where each of the 16 invoice rules comes from, and the team decisions behind them |
 | [scale-and-cost.md](scale-and-cost.md) | Measured throughput and capacity limits (engine to 50k invoices, OCR, storage), rate limits, the cost formula (tokens, infrastructure, people), four deployment scenarios and the scaling plan with triggers |
 | [runbook-batch2.md](runbook-batch2.md) | Saturday's batch 2, ERP update and norm v4, step by step, with rehearsal timings |

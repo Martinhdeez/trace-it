@@ -49,7 +49,7 @@ for this investigation, and no accuracy improvement is claimed.
 
 ## Evidence
 
-The dated [fal.ai API review](../ingestion/fal-fallback.md) records official endpoint
+The dated [fal.ai API review](../../ingestion/fal-fallback.md) records official endpoint
 schemas, source links, published prices, the historical five-scan comparison and
 the proposed evaluation procedure. API access, live model behavior and quality on
 held-out invoices remain unverified.

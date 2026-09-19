@@ -44,7 +44,7 @@ differ.
    every rule is `PAGAR`. A failed check on scanned data is `ESCALAR`, not `NO_PAGAR`: a
    mismatch on OCR data cannot be told apart from a misread (`SCAN_REVIEW: <rule>`). A null
    or illegible field is `ESCALAR` (`MISSING_DATA`), and so is a required value the readers
-   did not confirm (`UNVERIFIED_DATA`). Text PDFs are unaffected. [ADR 0025](adr/0025-scan-decision-policy.md);
+   did not confirm (`UNVERIFIED_DATA`). Text PDFs are unaffected. [ADR 0025](adr/detail/0025-scan-decision-policy.md);
    batch 1 scans: 10 `PAGAR` / 0 `NO_PAGAR` / 19 `ESCALAR`.
 2. **An illegible field always means `ESCALAR`.**
 3. **Duplicate PO and every other case are deterministic.** If the rules determine that a
@@ -74,4 +74,4 @@ differ.
 
 Where each decision of the hand-written process comes from:
 [invoice-payment-rules.md](invoice-payment-rules.md). How the norm-driven process chooses a
-decision: [ADR 0017](adr/0017-autonomous-norm-normalizer.md).
+decision: [ADR 0017](adr/detail/0017-autonomous-norm-normalizer.md).

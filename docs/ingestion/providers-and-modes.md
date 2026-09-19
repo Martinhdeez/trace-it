@@ -181,5 +181,5 @@ by default, or a bounded `Retry-After`); during it the chain can use the next
 provider. A timeout or rejected HTTP 200 response remains uncertain and does
 not acquire retry permission merely because the cooldown has ended.
 
-See [ADR 0027](../adr/0027-ocr-execution-modes-and-provider-fallback.md), the
+See [ADR 0027](../adr/detail/0027-ocr-execution-modes-and-provider-fallback.md), the
 [API contract](api.md), and the [measured 500-document run](benchmark-2026-09-19.md).

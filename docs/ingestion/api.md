@@ -129,7 +129,7 @@ No `tools/` module or evaluation script participates in this application flow.
 
 ## Tracing readers and provider usage
 
-The contract is recorded in [ADR 0022](../adr/0022-ocr-evidence-and-provider-tracing.md).
+The contract is recorded in [ADR 0022](../adr/detail/0022-ocr-evidence-and-provider-tracing.md).
 Use `GET /instances/{id}/trace` for the document journey. An upload requiring extraction contains
 `extraction` and its `native_text`, `ocr`, `vision`, `text_judge` and `focused_read`
 children as applicable. Remote readers add a `provider_call` child with provider,

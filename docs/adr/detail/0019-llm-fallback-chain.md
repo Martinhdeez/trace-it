@@ -45,7 +45,7 @@ see a provider failure handled. The Helmcode key serves several flat-rate models
   instance escalates with `RULE_COMPILE_FAILED`, ADR 0020; `draft` before 2026-09-19).
   Since ADR 0022 (manager publication) the rule ends `draft` with the error again: the
   draft cannot be published and the published version keeps deciding (verified live in
-  [resilience](../resilience.md)).
+  [resilience](../../resilience.md)).
 - Invoice use case: every role starts on `deepseek-v4-flash`; compiler and normalizer fall
   back to `glm5.3` then `qwen3.6`, the tester to `qwen3.6` then `glm5.3` (a different
   family from the compiler's first fallback, ADR 0004). Timeouts: 180 s compiler and
@@ -86,4 +86,4 @@ see a provider failure handled. The Helmcode key serves several flat-rate models
 
 ## Related
 ADR 0004, 0006 (fallback chains were listed as not used yet), 0011, 0013 (the ERP side of
-resilience), 0018. Every resilience mechanism with its live evidence: [resilience](../resilience.md).
+resilience), 0018. Every resilience mechanism with its live evidence: [resilience](../../resilience.md).
