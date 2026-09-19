@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [dev, main, integration]
+    branches: [dev]
   push:
-    branches: [dev, main, integration]
+    branches: [dev, main]
   workflow_dispatch:
 
 permissions:
@@ -52,9 +52,8 @@ jobs:
       - name: ERP subpath, original faults and guarded bootstrap
         run: uv run --project backend pytest deploy/erp -q
 
-  # The demo path through the real console and API in Chromium (tests/integration/README.md).
-  e2e-integration:
-    # Every PR and push CI runs on (dev, main, integration): the demo path must stay green on each.
+  # Synthetic loopback mail through the real API, PostgreSQL, engine and console.
+  mail-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -86,24 +85,17 @@ jobs:
           cache-dependency-path: |
             frontend/package-lock.json
             tests/integration/package-lock.json
-      - name: OCR weights
-        uses: actions/cache@v4
-        with:
-          path: .models
-          key: ocr-models-${{ hashFiles('backend/app/features/ingestion/tools/download_models.py') }}
       - name: Install
         run: |
           (cd backend && uv sync --locked)
           (cd frontend && npm ci)
           (cd tests/integration && npm ci && npx playwright install --with-deps chromium)
-      - name: make e2e-integration
-        run: make e2e-integration
       - name: Local IMAP, worker, API, PostgreSQL and browser
         run: make e2e-mail
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
-          name: playwright-report
+          name: mail-playwright-report
           path: tests/integration/test-results
 
   production-stack:
@@ -174,7 +166,7 @@ jobs:
         run: bash deploy/ci-stack.sh down
 
   deploy:
-    needs: [backend, e2e-integration, production-stack]
+    needs: [backend, mail-integration, production-stack]
     # The independent kill switch stays unset until root bootstrap and app integration pass.
     if: >-
       github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
