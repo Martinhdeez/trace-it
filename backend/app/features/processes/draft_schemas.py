@@ -32,6 +32,19 @@ class SourceProposal(BaseModel):
     )
     snapshot: str = ""
     rows: list[dict[str, Any]] = []  # constants only, approved as part of this proposal
+    operation: Literal["replace", "append", "upsert", "delete"] = "replace"
+    key: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def valid_mutation(self) -> Self:
+        if self.operation in {"upsert", "delete"} and not self.key:
+            raise ValueError(f"Source operation {self.operation} requires a key")
+        available = set(self.columns)
+        if self.kind == "constant":
+            available.update(field for row in self.rows for field in row)
+        if self.kind != "snapshot" and (unknown := set(self.key) - available):
+            raise ValueError(f"Source key fields are not mapped: {sorted(unknown)}")
+        return self
 
 
 class ConnectorProposal(BaseModel):

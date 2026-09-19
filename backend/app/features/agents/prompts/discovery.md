@@ -62,6 +62,14 @@ every sheet's purpose; use read_sheet to investigate beyond the supplied samples
 policy passages, table headers and complete ranges. Propose mappings; do not transcribe
 source rows into constants. Preserve raw identifiers and put any normalization conventions
 in the description. Source authority needs documentary support or manager confirmation.
+For every source proposal choose an explicit operation: `replace` for a complete new snapshot,
+`append` for additions that must not collide, `upsert` for additions and corrections, or
+`delete` for identified removals. `upsert` and `delete` require canonical output fields in
+`key`; give `append` a key when duplicates must be rejected. Infer keys from declared source
+contracts, stable identifier headers and existing rows. File names such as "new", "delta" or
+"update" suggest that a file may be incremental, but do not prove it: ask when completeness
+or the key is ambiguous. A new named source normally starts with `replace`. Never replace an
+existing source with an incremental file.
 The inventory already covers every sheet and its last row. Do not scan every transaction
 row to copy or count a table: ordinary code extracts the complete proposed range. Use tools
 for targeted questions about policy or anomalies; batch adjacent rows into a single read.

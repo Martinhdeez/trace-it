@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     decision_reviewer_model: str = "helmcode:deepseek-v4-flash"
     learner_model: str = "helmcode:deepseek-v4-flash"
     normalizer_model: str = "helmcode:deepseek-v4-flash"
-    discovery_model: str = "helmcode:deepseek-v4-flash"
+    discovery_model: str = "helmcode:glm5.3"
     fallback_models: list[str] = ["helmcode:glm5.3", "helmcode:qwen3.6"]
     # Helmcode, an OpenAI-compatible API: select it with `helmcode:<model>` (e.g.
     # `helmcode:deepseek-v4-flash`). Its key is read like every provider's: HELMCODE_API_KEY.
@@ -34,6 +34,7 @@ class Settings(BaseSettings):
         "https://api.helmcode.com/v1",
         validation_alias=AliasChoices("TRACE_HELMCODE_BASE_URL", "HELMCODE_URL"),
     )
+    ai_gateway_base_url: str = "https://ai-gateway.vercel.sh/v1"
     # The deployment's trusted local OpenAI-compatible server. Key: LOCAL_LLM_API_KEY.
     local_base_url: str = "http://localhost:11434/v1"
     # Optional per-preset model/effort overrides. No credentials in this JSON.
