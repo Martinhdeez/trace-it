@@ -11,6 +11,7 @@ import type {
 } from '../../api/contracts'
 import { keys } from '../../api/queries'
 import { t } from '../../i18n'
+import { cn } from '../../lib/cn'
 import { formatEuro, formatMs } from '../../lib/format'
 import { paths } from '../../lib/paths'
 import { Segmented } from '../shell/Controls'
@@ -21,7 +22,9 @@ import { NestedCard } from '../shell/Well'
 
 export type Cell = { label: string; value: string; note: string }
 
-/** The Panel's row of figures. Five per row, as the Panel draws them. */
+const COLUMNS = ['', 'sm:grid-cols-1', 'sm:grid-cols-2', 'sm:grid-cols-3', 'sm:grid-cols-4', 'sm:grid-cols-5']
+
+/** The Panel's row of figures. Up to five per row, as the Panel draws them. */
 export function MetricCells({ cells }: { cells: Cell[] }) {
   const rows: Cell[][] = []
   for (let index = 0; index < cells.length; index += 5) rows.push(cells.slice(index, index + 5))
@@ -30,7 +33,10 @@ export function MetricCells({ cells }: { cells: Cell[] }) {
       {rows.map((row) => (
         <section
           key={row[0].label}
-          className="mb-6 grid overflow-hidden rounded-[16px] bg-surface ring-1 ring-line sm:grid-cols-5"
+          className={cn(
+            'mb-6 grid overflow-hidden rounded-[16px] bg-surface ring-1 ring-line',
+            COLUMNS[rows.length > 1 ? 5 : row.length],
+          )}
         >
           {row.map((cell) => (
             <div

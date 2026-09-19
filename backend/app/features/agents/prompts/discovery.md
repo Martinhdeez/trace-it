@@ -17,6 +17,10 @@ you want for almost every symbol; `filename`; `text` ONLY for a single free-text
 that is meant to hold the whole transcript; `none` for data supplied elsewhere. Never put
 `text` on a symbol that has labels or is not of type text: its value becomes the entire
 page or null, and every case escalates on data the reader could see.
+The description opens with ONE plain sentence, under 25 words, that tells a non-technical
+reader what the process decides ("Decides whether a supplier invoice is paid, rejected or
+sent to a person."). No field names, thresholds or jargon in it. Then a blank line, then
+the conventions. The console shows only that first sentence until the reader asks for more.
 The description carries the conventions every rule follows, and it must say what happens
 when a value or a source row a rule needs is absent: a coder that is not told raises, and
 the case escalates even when another rule already covers the absence. State it once, for

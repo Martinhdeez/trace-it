@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSession } from '../state/session'
 import {
   AlertTriangle,
   BookOpenText,
+  ChevronDown,
+  ChevronRight,
   Cpu,
   Download,
   FileText,
@@ -273,14 +275,12 @@ export function Process() {
         ) : null}
         <header className="mb-6">
           <p className="text-[13px] text-muted">
-            {currentVersion ? `Panel · v${currentVersion} publicada` : 'Panel · sin versión publicada'}
+            {currentVersion ? `v${currentVersion} publicada` : 'Sin versión publicada'}
           </p>
           <h1 className="mt-1 text-[32px] font-medium leading-[1.1] tracking-[-0.045em]">
             {process.data?.name ?? '…'}
           </h1>
-          <p className="mt-2 max-w-2xl text-[14.5px] leading-6 text-muted">
-            {process.data?.description}
-          </p>
+          <ProcessDescription key={processId} text={process.data?.description ?? ''} />
         </header>
 
         <Alerts
@@ -293,15 +293,9 @@ export function Process() {
           proposals={proposals.data?.length ?? 0}
         />
 
-        <Metrics summary={summary.data} plane={plane.data} providers={providers.data} />
+        <Metrics summary={summary.data} />
 
-        <Pipeline
-          total={summary.data?.instances ?? 0}
-          norm={norm.data ?? []}
-          rules={rules.data ?? []}
-          decided={summary.data?.by_status.DECIDED ?? 0}
-          pending={summary.data?.by_status.PENDING ?? 0}
-        />
+        <Split summary={summary.data} process={process.data} />
 
         <Runs
           processId={processId}
@@ -310,8 +304,17 @@ export function Process() {
           documentCount={summary.data?.instances ?? 0}
         />
 
-        <Split summary={summary.data} process={process.data} />
-        <PlaneDashboards processId={processId} decisionTypes={process.data?.decision_types} />
+        <TechnicalDetails>
+          <Pipeline
+            total={summary.data?.instances ?? 0}
+            norm={norm.data ?? []}
+            rules={rules.data ?? []}
+            decided={summary.data?.by_status.DECIDED ?? 0}
+            pending={summary.data?.by_status.PENDING ?? 0}
+          />
+          <Performance plane={plane.data} providers={providers.data} />
+          <PlaneDashboards processId={processId} decisionTypes={process.data?.decision_types} />
+        </TechnicalDetails>
       </div>
     </ProcessScreen>
   )
@@ -387,13 +390,17 @@ function Alerts({
     <section className="mb-6 overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
       <div className="flex items-center gap-2 px-4 py-2.5">
         <AlertTriangle size={14} strokeWidth={1.6} className="text-escalar" />
-        <p className="font-mono text-[11px] tracking-[0.12em] text-faint">ATENCIÓN</p>
+        <p className="text-[13px] font-medium text-ink">Necesita tu atención</p>
       </div>
       <ul className="divide-y divide-hairline border-t border-hairline">
         {items.map((item) => (
           <li key={item.to}>
-            <Link to={item.to} className="block px-4 py-2.5 text-[13px] text-ink hover:bg-canvas">
+            <Link
+              to={item.to}
+              className="flex items-center justify-between gap-4 px-4 py-2.5 text-[13px] text-ink hover:bg-canvas"
+            >
               {item.text}
+              <ChevronRight size={13} strokeWidth={1.6} className="shrink-0 text-faint" />
             </Link>
           </li>
         ))}
@@ -402,21 +409,64 @@ function Alerts({
   )
 }
 
-function Metrics({
-  summary,
+/** The first paragraph says what the process decides; the conventions stay one click away. */
+function ProcessDescription({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const full = text.trim()
+  if (!full) return null
+  const lead = full.split(/\n\s*\n/)[0]
+  const more = lead !== full || lead.length > 160
+
+  return (
+    <div className="mt-2 max-w-2xl">
+      <p
+        className={cn(
+          'whitespace-pre-line text-[14.5px] leading-6 text-muted',
+          !open && 'line-clamp-2',
+        )}
+      >
+        {open ? full : lead}
+      </p>
+      {more ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((next) => !next)}
+          className="mt-1 inline-flex items-center gap-1 text-[12.5px] text-faint hover:text-ink"
+        >
+          {open ? 'Ver menos' : 'Leer más'}
+          <ChevronDown
+            size={12}
+            strokeWidth={1.75}
+            className={cn('transition-transform', open && 'rotate-180')}
+          />
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+function Metrics({ summary }: { summary: ProcessSummary | undefined }) {
+  const cells = [
+    { label: 'Documentos', value: String(summary?.instances ?? '—'), note: 'recibidos' },
+    { label: 'Decididos', value: String(summary?.by_status.DECIDED ?? '—'), note: 'con decisión' },
+    { label: 'Esperan revisión', value: String(summary?.queue ?? '—'), note: 'necesitan a una persona' },
+  ]
+
+  return <MetricCells cells={cells} />
+}
+
+/** How long a run takes and what the providers cost: for whoever runs the platform. */
+function Performance({
   plane,
   providers,
 }: {
-  summary: ProcessSummary | undefined
   plane: ExecutionMetrics | undefined
   providers: ProcessMetrics | undefined
 }) {
   const latency = plane?.steps.find((step) => step.step === 'run_process')?.p50_ms
   const cost = providers?.providers.reduce((sum, item) => sum + item.known_cost_usd, 0)
   const cells = [
-    { label: 'Documentos', value: String(summary?.instances ?? '—'), note: 'en el proceso' },
-    { label: 'Decididos', value: String(summary?.by_status.DECIDED ?? '—'), note: 'cierre del motor' },
-    { label: 'En revisión', value: String(summary?.queue ?? '—'), note: 'cola humana' },
     {
       label: 'Latencia',
       value: latency != null ? formatMs(latency) : '—',
@@ -432,6 +482,35 @@ function Metrics({
   return <MetricCells cells={cells} />
 }
 
+/** Engine stages, latency, cost and the per-plane dashboards: closed until asked for. */
+function TechnicalDetails({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <section className="mt-10 border-t border-hairline pt-5">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((next) => !next)}
+        className="group flex w-full items-center justify-between gap-4 text-left"
+      >
+        <div>
+          <h2 className="text-[15px] font-medium tracking-[-0.02em]">Detalles técnicos</h2>
+          <p className="mt-0.5 text-[12.5px] text-muted">
+            Etapas del motor, latencia, coste y trazabilidad.
+          </p>
+        </div>
+        <ChevronDown
+          size={15}
+          strokeWidth={1.6}
+          className={cn('shrink-0 text-faint transition-transform group-hover:text-ink', open && 'rotate-180')}
+        />
+      </button>
+      {open ? <div className="mt-5">{children}</div> : null}
+    </section>
+  )
+}
+
 /** ESCALAR first: it is what a rerun after learning should shrink. */
 function runSplit(run: RunOut): string {
   return Object.entries(run.by_decision)
@@ -439,6 +518,8 @@ function runSplit(run: RunOut): string {
     .map(([name, value]) => `${value} ${name.replaceAll('_', ' ')}`)
     .join(', ')
 }
+
+const RECENT_RUNS = 5
 
 function Runs({
   processId,
@@ -457,11 +538,11 @@ function Runs({
         <div>
           <h2 className="text-[18px] font-medium tracking-[-0.03em]">Ejecuciones</h2>
           <p className="mt-1 text-[12.5px] text-muted">
-            Cada ejecución, con la versión que decidió. Abre una para ver sus casos.
+            Los últimos lotes procesados. Abre uno para ver sus documentos.
           </p>
         </div>
         <Link to={paths.instances(processId)} className="text-[12px] text-muted hover:text-ink">
-          Historial
+          {runs.length > RECENT_RUNS ? `Ver las ${runs.length}` : 'Historial'}
         </Link>
       </div>
       <div className="overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
@@ -475,7 +556,7 @@ function Runs({
           </p>
         ) : (
           <ul className="divide-y divide-hairline">
-            {runs.map((item) => (
+            {runs.slice(0, RECENT_RUNS).map((item) => (
               <li key={item.id}>
                 <Link
                   to={paths.instances(processId, item.id)}
@@ -534,7 +615,7 @@ function Pipeline({
   ]
 
   return (
-    <section className="mb-3">
+    <section className="mb-6">
       <p className="mb-3 font-mono text-[11px] tracking-[0.12em] text-faint">
         ESTADO DEL PROCESO
       </p>
@@ -587,19 +668,19 @@ function Split({
   }, [summary, process])
 
   return (
-    <section className="mt-8 overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
+    <section className="overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
       <div className="flex items-start justify-between gap-4 px-5 py-4">
         <div>
-          <h2 className="text-[18px] font-medium tracking-[-0.03em]">Salida de decisiones</h2>
+          <h2 className="text-[18px] font-medium tracking-[-0.03em]">Cómo se han decidido</h2>
           <p className="mt-1 text-[12.5px] text-muted">
-            Distribución actual del lote. Cada marca representa un documento.
+            Cada cuadrado es un documento, coloreado por su decisión.
           </p>
         </div>
         <span className="font-mono text-[12px] text-muted">{summary?.instances ?? 0} total</span>
       </div>
       {cells.length === 0 ? (
         <p className="px-5 pb-5 text-[13px] text-muted">
-          Aún no hay documentos. Ejecutar y suelta el lote.
+          Aún no hay documentos. Pulsa Ejecutar y suelta el lote.
         </p>
       ) : (
         <div className="grid gap-px bg-rule md:grid-cols-[minmax(0,1fr)_1.4fr]">
