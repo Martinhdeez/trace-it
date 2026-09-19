@@ -50,6 +50,25 @@ def test_nonexistent_sheet_and_empty_table_are_rejected():
         discovery.materialize(plan, data)
 
 
+def test_excel_dates_keep_iso_values_instead_of_serial_numbers():
+    import io
+    from datetime import datetime
+
+    from openpyxl import Workbook
+
+    book = Workbook()
+    book.active.title = "Reference"
+    book.active.append(["Date", "Maximum"])
+    book.active.append([datetime(2026, 9, 18), 100.01])
+    stream = io.BytesIO()
+    book.save(stream)
+    plan, data = mapping_data()
+    digest = plan.sources[0].document
+    data["documents"][digest]["workbook"] = discovery.read_workbook(stream.getvalue())
+    rows = discovery.materialize(plan, data)["reference"]
+    assert rows == [{"id": "2026-09-18T00:00:00", "maximum": "100.01"}]
+
+
 def test_real_invoice_workbook_inventory_and_mapping():
     from pathlib import Path
 

@@ -99,9 +99,15 @@ def materialize(plan: DraftPlan, data: dict) -> dict[str, list[dict]]:
                         raise ConflictError(
                             f"Unverified formula or error at {proposal.sheet}!{cell['cell']}"
                         )
-                    values[name] = (
-                        (cell.get("xml_numeric_value") or cell["value"]) if cell else None
-                    )
+                    values[name] = None
+                    if cell:
+                        # Excel dates have numeric XML storage too; keep the reader's
+                        # ISO date, not the underlying serial day number.
+                        values[name] = (
+                            cell.get("xml_numeric_value") or cell["value"]
+                            if cell["excel_type"] == "n"
+                            else cell["value"]
+                        )
                 if any(v is not None for v in values.values()):
                     extracted.append(values)
             if not extracted:

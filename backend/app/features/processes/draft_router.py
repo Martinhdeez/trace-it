@@ -70,6 +70,9 @@ async def history(draft_id: int, session: Session, user: CurrentUser) -> list[di
             "plan": r.data["plan"],
             "reviews": r.data["reviews"],
             "messages": r.data["messages"],
+            "preview": r.data.get("preview"),
+            "published_rule_ids": r.data.get("published_rule_ids", []),
+            "retired_rule_ids": r.data.get("retired_rule_ids", []),
         }
         for r in rows
     ]

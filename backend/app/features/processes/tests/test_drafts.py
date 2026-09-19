@@ -425,3 +425,24 @@ async def test_existing_setup_cannot_be_changed_by_an_import(api, monkeypatch):
         f"/process-drafts/{draft['id']}/prepare", json={"revision": draft["revision"]}
     )
     assert r.status_code == 409 and "keep existing symbols" in r.text
+
+
+async def test_runtime_error_cannot_satisfy_an_escalation_example():
+    from app.features.processes import draft_compilation
+
+    proposed = DraftPlan.model_validate(plan())
+    code = "def evaluate(instance, sources, others):\n    raise ValueError('broken rule')"
+    compiled = [
+        {
+            "text": "test",
+            "type": "prohibition",
+            "decision": "REVIEW",
+            "code": code,
+            "hash": "test",
+            "report": {"valid": True},
+        }
+    ]
+    result = await draft_compilation.preview(None, None, proposed, {}, compiled)
+    large = next(e for e in result["examples"] if e["name"] == "large")
+    assert large["actual"] == "REVIEW"
+    assert not large["passed"] and not result["valid"]

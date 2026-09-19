@@ -62,7 +62,9 @@ compiles and tests them in the existing sandbox, evaluates the fixed examples, a
 the existing historical backtest against the proposed source rows. It requires all
 proposals accepted, no outstanding questions, valid outcomes, rules and examples.
 The returned preview includes interpretations, test reports, example results, source row
-counts, changed past outcomes and conflicts with manager decisions. A failed test or a
+counts, the active rules being replaced, changed past outcomes and conflicts with manager
+decisions. An unexpected rule execution error cannot pass an example merely because
+the expected outcome is escalation. A failed test or a
 manager conflict prevents publication. Provider failure returns an error and preserves
 the previous draft. Calls are synchronous and may take several minutes.
 

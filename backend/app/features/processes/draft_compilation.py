@@ -7,6 +7,7 @@ from app.common.exceptions import ConflictError
 from app.features.agents import compiler, normalizer, sandbox
 from app.features.agents.llm import Setup
 from app.features.decisions import audit
+from app.features.decisions import service as decisions
 from app.features.decisions.engine import Outcomes, decide
 from app.features.processes.draft_schemas import DraftPlan
 from app.features.processes.model import DecisionType, Symbol
@@ -132,7 +133,10 @@ async def preview(
                 "expected": example.decision,
                 "actual": verdict.decision,
                 "reason": verdict.reason,
-                "passed": verdict.decision == example.decision,
+                "passed": verdict.decision == example.decision
+                and not verdict.reason.startswith(
+                    ("RULE_ERROR", "RULE_NEEDS_DATA", "RULE_CONFLICT")
+                ),
             }
         )
     impact = (
@@ -148,4 +152,8 @@ async def preview(
         "examples": results,
         "impact": impact,
         "source_counts": {name: len(rows) for name, rows in tables.items()},
+        "replaced_rules": [
+            {"id": r.id, "text": r.text, "decision": r.decision}
+            for r in (await decisions.active_rules(session, process_id) if process_id else [])
+        ],
     }
