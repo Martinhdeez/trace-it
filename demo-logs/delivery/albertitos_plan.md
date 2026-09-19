@@ -94,7 +94,7 @@ escaladas por causa (`MISSING_DATA`, `RULE_ERROR`, `RULE_NEEDS_DATA`, `RULE_CONF
 | Falta un dato obligatorio | `ESCALAR` con `MISSING_DATA: <símbolos>` | — |
 | Escaneo con un dato sin confirmar, o que las reglas rechazarían | `ESCALAR` con `UNVERIFIED_DATA` o `SCAN_REVIEW: <regla>`: una mala lectura no se paga ni se rechaza (ADR 0025) | La lectura OCR |
 | El ERP cambia después de decidir | Repetición en seco; cada decisión que cambiaría es una alerta para el manager (ADR 0026) | La decisión original |
-| ERP: `ORA-00600`, 429, token caducado, XML inválido | Backoff, `Retry-After`, renovación y validación; si la sync falla, sigue vigente el snapshot anterior | Snapshot anterior |
+| ERP: `ORA-00600`, 429, token caducado, XML inválido | Backoff, `Retry-After`, renovación y validación; el ERP se sincroniza antes de cada run y, si está caído, su snapshot antiguo no se usa: las reglas que lo leen escalan con `SOURCE_UNAVAILABLE: erp` (ADR 0028) | La razón de la caída |
 | Se lanza un run con reglas compilando | 409: nunca se decide con la norma a medias | — |
 | Reinicio a mitad de compilación | Al arrancar se reencolan las reglas en `compiling` (best effort; si no, `POST /rules/{id}/compile`) | Reglas en BD |
 | Duplicados | Archivo = hash de su contenido; una línea por nombre; `reprocess` sólo añade donde cambia | — |
@@ -161,7 +161,7 @@ una norma entera cuesta ~1,59 $ y el mes del ejemplo ~30 $. El motor cuesta 0 $ 
 
 ## 2. ADRs: cinco decisiones clave
 
-Cinco decisiones explican el sistema; cada una responde a un criterio de la rúbrica. Los 27 ADR
+Cinco decisiones explican el sistema; cada una responde a un criterio de la rúbrica. Los 29 ADR
 detallados de `docs/adr/detail/` son su soporte, y cada decisión cita los suyos. Todas las cifras
 están medidas salvo las marcadas como estimadas.
 
@@ -174,7 +174,7 @@ flowchart LR
   end
   subgraph RUN["Cada factura: sin LLM, 0 tokens"]
     PDF["PDFs, escaneos"] --> ING["Ingesta<br/>texto, OCR"]
-    ERP["ERP"] --> SYNC["E · Sync del ERP<br/>reintentos, último snapshot"]
+    ERP["ERP"] --> SYNC["E · ERP sincronizado antes de cada run<br/>caído: no se usa"]
     ING --> ENG["A · Motor determinista<br/>sandbox"]
     SYNC --> ENG
     ENG --> DEC["B · Una decisión<br/>ESCALAR ante la duda"]
@@ -260,7 +260,8 @@ cuesta dinero.
 
 **Decisión.** El motor da una decisión a cada archivo. Incumplir la norma es `NO_PAGAR`. Lo que no
 puede determinar es `ESCALAR` con un código de motivo: un campo ausente, nulo o sin confirmar, un
-escaneo que las reglas rechazarían, un error de regla o un empate.
+escaneo que las reglas rechazarían, un error de regla, un empate, o una regla que necesita una
+fuente caída (`SOURCE_UNAVAILABLE: <fuente>`) cuando las reglas que sí corrieron no deciden ya el caso.
 
 | Opción | Por qué no / coste |
 |---|---|
@@ -277,27 +278,31 @@ escaneo que las reglas rechazarían, un error de regla o un empate.
   4 `SCAN_REVIEW`).
 - 50.000 facturas, todas las reglas agotan su tiempo: 47.100 `ESCALAR` con `RULE_ERROR`, ninguna
   pagada por error.
+- ERP parado antes de un run: la factura limpia y la ya pagada van a `ESCALAR`
+  `SOURCE_UNAVAILABLE: erp`; los rechazos por IBAN y fecha siguen en `NO_PAGAR`.
 
 **Coste.** Una persona revisa 21 de 500 archivos (4,2 %), algunos por fallos nuestros.
 
 ```mermaid
-flowchart TD
+flowchart LR
   F["Archivo"] --> M{"¿Falta un campo<br/>obligatorio o es nulo?"}
   M -- sí --> E1["ESCALAR<br/>MISSING_DATA"]
   M -- no --> U{"¿Escaneo con un valor<br/>sin confirmar?"}
   U -- sí --> E2["ESCALAR<br/>UNVERIFIED_DATA"]
   U -- no --> R{"¿Corrieron todas<br/>las reglas?"}
   R -- no --> E3["ESCALAR<br/>RULE_ERROR, RULE_NEEDS_DATA"]
-  R -- sí --> V{"¿Qué reglas disparan?"}
+  R -- sí --> SRC{"¿Una regla necesita<br/>una fuente caída?"}
+  SRC -- "sí, y las reglas que corrieron<br/>no deciden" --> E6["ESCALAR<br/>SOURCE_UNAVAILABLE"]
+  SRC -- "no, o ya decidido" --> V{"¿Qué reglas disparan?"}
   V -- ninguna --> P["PAGAR"]
   V -- "incumple, PDF con texto" --> NP["NO_PAGAR"]
   V -- "incumple, escaneo" --> E4["ESCALAR<br/>SCAN_REVIEW"]
   V -- "duda o empate" --> E5["ESCALAR<br/>duda, RULE_CONFLICT"]
   classDef kb fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#111
-  class E1,E2,E3,E4,E5 kb
+  class E1,E2,E3,E4,E5,E6 kb
 ```
 
-Detalle: ADR 0016, 0025, 0009, 0010, 0021. Una regla que no compiló nunca decide: no se puede publicar (ADR-E).
+Detalle: ADR 0016, 0025, 0009, 0010, 0021, 0028. Una regla que no compiló nunca decide: no se puede publicar (ADR-E).
 
 ### ADR-C · Trazabilidad completa en tres planos
 
@@ -404,8 +409,9 @@ se caen.
 
 **Decisión.** Un cambio de norma es configuración: texto nuevo, reglas recompiladas y una versión
 inmutable del proceso que el manager publica entera o no publica. La historia es *append-only*: un
-cambio se repite sobre las decisiones pasadas como alertas, nunca como ediciones. Ante un fallo, el
-siguiente modelo o el último snapshot bueno.
+cambio se repite sobre las decisiones pasadas como alertas, nunca como ediciones. Si falla un
+modelo, responde el siguiente. El ERP se sincroniza antes de cada run; si está caído, su snapshot
+antiguo no se usa, la fuente queda marcada como caída y las facturas que la necesitan escalan.
 
 | Opción | Por qué no / coste |
 |---|---|
@@ -422,10 +428,14 @@ siguiente modelo o el último snapshot bueno.
   cambios. Recompilada y publicada: 38 alertas de decisiones obsoletas en 1,1 s.
 - `kill -9` tras 68 de 500 subidas: la repetición acabó con 500 instancias, sin duplicados. Una
   copia restaurada coincide en el md5 de las 503 decisiones.
-- ERP caído: la sync se rindió a los 11 s y siguió vigente el snapshot anterior.
+- ERP caído antes de un run: la sync se rindió a los 15,4 s, no se usó ningún snapshot antiguo y
+  `/health/planes` marcó la ingesta `degraded` (`sources down: 2:erp`).
 
-**Coste.** Una norma nueva espera a que el manager la publique, y los datos del ERP pueden tener
-minutos.
+**En la práctica.** #77 añadió al pack en vivo, como configuración, un control de IBAN casi igual
+(R17: a 1-4 caracteres del maestro, escala); el conjunto congelado de la entrega no cambia.
+
+**Coste.** Una norma nueva espera a que el manager la publique, y una caída del ERP cuesta
+escaladas hasta que vuelve.
 
 ```mermaid
 flowchart LR
@@ -433,7 +443,7 @@ flowchart LR
   CMP -- "fallan todos" --> DR["La regla queda en draft<br/>no se puede publicar"]
   DR --> OLDV["La versión publicada<br/>sigue decidiendo"]
   CMP -- ok --> PV["El manager publica<br/>una versión inmutable"]
-  ERP["Sync del ERP<br/>reintentos, backoff"] -- falla --> OLD["Se queda el último snapshot"]
+  ERP["ERP sincronizado antes<br/>de cada run, reintentos"] -- "caído" --> OLD["Fuente marcada caída<br/>snapshot antiguo sin usar"]
   ERP -- "filas cambiadas" --> DRY["Repetición en seco<br/>sobre decisiones pasadas"]
   PV --> DRY
   DRY --> AL["Alertas al manager<br/>antes y después"]
@@ -442,4 +452,4 @@ flowchart LR
   class OLDV,PV,OLD,DRY,AL ke
 ```
 
-Detalle: ADR 0007, 0008, 0011, 0013, 0015, 0019, 0022 (versiones), 0023, 0024, 0026; `docs/resilience.md`.
+Detalle: ADR 0007, 0008, 0011, 0013, 0015, 0019, 0022 (versiones), 0023, 0024, 0026, 0027, 0028; `docs/resilience.md`.

@@ -13,7 +13,7 @@ flowchart LR
   end
   subgraph RUN["Every invoice: no LLM, 0 tokens"]
     PDF["PDFs, scans"] --> ING["Ingestion<br/>text, OCR"]
-    ERP["ERP"] --> SYNC["E · ERP sync<br/>retries, last snapshot"]
+    ERP["ERP"] --> SYNC["E · ERP synced before each run<br/>down: not used"]
     ING --> ENG["A · Deterministic engine<br/>sandbox"]
     SYNC --> ENG
     ENG --> DEC["B · One decision<br/>ESCALAR when in doubt"]
@@ -50,7 +50,7 @@ flowchart LR
 | ![E](https://img.shields.io/badge/-E-db2777?style=for-the-badge) | [Change without code, recover without loss](E-change-without-code-recover-without-loss.md) | Resilience (10) and bonus (10) | A norm is configuration published as an atomic version; history is append-only; failures fall back |
 
 <details>
-<summary>Supporting ADRs (27)</summary>
+<summary>Supporting ADRs (29)</summary>
 
 ADR 0001 is the founding decision and wins over any other document. Superseded plans live
 in `.artifacts/archive/`.
@@ -84,6 +84,8 @@ in `.artifacts/archive/`.
 | [0024](detail/0024-discover-processes-through-documents-and-conversation.md) | Build process drafts through documents and conversation | accepted | E |
 | [0025](detail/0025-scan-decision-policy.md) | Decide scans only on confirmed data | accepted | B |
 | [0026](detail/0026-stale-decision-alerts.md) | Flag stale decisions to the manager; never rewrite them | accepted | E |
+| [0027](detail/0027-ocr-execution-modes-and-provider-fallback.md) | Configure local/API/hybrid OCR and bounded provider fallback | accepted | E |
+| [0028](detail/0028-live-sources-sync-before-run.md) | Sync live sources before every run; fail closed when one is down | accepted | B, E |
 
 ### Glossary
 - **Rule finding:** the result of one rule on one instance (`fires`, `reason`).

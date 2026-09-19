@@ -9,8 +9,9 @@ go down.
 
 **Decision.** A norm change is configuration: new text, recompiled rules and a new immutable
 process version that the manager publishes whole or not at all. History is append-only: a
-change is replayed on past decisions as alerts, never as edits. A failure falls back to the
-next model or the last good snapshot.
+change is replayed on past decisions as alerts, never as edits. A failed model falls back
+to the next one. The ERP is synced before every run; if it is down, its old snapshot is
+not used, the source is flagged down and the invoices that need it escalate.
 
 | Option | Why not / trade-off |
 |---|---|
@@ -26,9 +27,14 @@ next model or the last good snapshot.
   unchanged. Recompiled and published: 38 stale-decision alerts in 1.1 s.
 - `kill -9` after 68 of 500 uploads: the rerun ended with 500 instances, no duplicates. A
   restored backup matches the md5 of all 503 decisions.
-- ERP down: the sync gave up after 11 s and the previous snapshot stayed current.
+- ERP down before a run: the sync gave up after 15.4 s, no old snapshot was used, and
+  `/health/planes` showed ingestion `degraded` (`sources down: 2:erp`).
 
-**Cost.** A new norm waits for a manager's publication, and ERP data can be minutes old.
+**In practice.** #77 added a near-miss IBAN check (R17: 1-4 characters from the master
+escalates) to the live pack as configuration; the frozen delivery rule set is unchanged.
+
+**Cost.** A new norm waits for a manager's publication, and an ERP outage costs
+escalations until it is back.
 
 ```mermaid
 flowchart LR
@@ -36,7 +42,7 @@ flowchart LR
   CMP -- "all models fail" --> DR["Rule stays draft<br/>cannot be published"]
   DR --> OLDV["Published version<br/>keeps deciding"]
   CMP -- ok --> PV["Manager publishes<br/>new immutable version"]
-  ERP["ERP sync<br/>retries, backoff"] -- fails --> OLD["Keep last snapshot"]
+  ERP["ERP synced before<br/>every run, retries"] -- "down" --> OLD["Source flagged down<br/>old snapshot not used"]
   ERP -- "rows changed" --> DRY["Dry-run replay<br/>on past decisions"]
   PV --> DRY
   DRY --> AL["Alerts to the manager<br/>before and after"]
@@ -54,5 +60,7 @@ Detail: [0007](detail/0007-declarative-process-packs.md),
 [0022 versions](detail/0022-publish-approved-process-versions.md),
 [0023](detail/0023-fal-visual-fallback-evaluation.md),
 [0024](detail/0024-discover-processes-through-documents-and-conversation.md),
-[0026](detail/0026-stale-decision-alerts.md);
+[0026](detail/0026-stale-decision-alerts.md),
+[0027](detail/0027-ocr-execution-modes-and-provider-fallback.md),
+[0028](detail/0028-live-sources-sync-before-run.md);
 [resilience.md](../resilience.md).

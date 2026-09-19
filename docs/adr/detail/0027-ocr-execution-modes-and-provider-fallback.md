@@ -15,7 +15,7 @@ A full 500-document production API run preserved all 471 native golden decisions
 It also observed a Gemini response rejected after HTTP 200 and a separate HTTP
 503. The measured, token-attributed API cost was USD 0.02768012; one failed request
 had unknown usage. Failures and latency, rather than an assumed high token price,
-motivate bounded failover. See the [benchmark](../ingestion/benchmark-2026-09-19.md).
+motivate bounded failover. See the [benchmark](../../ingestion/benchmark-2026-09-19.md).
 
 ## Decision
 
@@ -57,6 +57,6 @@ published process symbol/rule definitions take effect on the next request. These
 are separate configuration mechanisms; this ADR does not promise hot reload of
 environment variables or rewrite historical decisions.
 
-The [operator guide](../ingestion/providers-and-modes.md) documents model capability,
+The [operator guide](../../ingestion/providers-and-modes.md) documents model capability,
 configuration examples, quota caveats, and monitoring. This extends the ingestion
 evidence contract in ADR 0022 and retains the deterministic engine in ADR 0002.

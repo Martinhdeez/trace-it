@@ -1,7 +1,7 @@
 # Key decisions
 
 Five decisions explain trace-it; each answers one criterion of the jury's rubric. Numbers are
-measured unless marked estimated. The 27 detailed ADRs behind them, and which key decision
+measured unless marked estimated. The 29 detailed ADRs behind them, and which key decision
 each supports: [adr/README.md](adr/README.md).
 
 ```mermaid
@@ -13,7 +13,7 @@ flowchart LR
   end
   subgraph RUN["Every invoice: no LLM, 0 tokens"]
     PDF["PDFs, scans"] --> ING["Ingestion<br/>text, OCR"]
-    ERP["ERP"] --> SYNC["E · ERP sync<br/>retries, last snapshot"]
+    ERP["ERP"] --> SYNC["E · ERP synced before each run<br/>down: not used"]
     ING --> ENG["A · Deterministic engine<br/>sandbox"]
     SYNC --> ENG
     ENG --> DEC["B · One decision<br/>ESCALAR when in doubt"]
@@ -104,7 +104,9 @@ money.
 
 **Decision.** The engine gives every file one decision. Non-compliance is `NO_PAGAR`.
 Anything it cannot determine is `ESCALAR` with a reason code: a missing, null or unconfirmed
-field, a scan the rules would reject, a rule error or a tie.
+field, a scan the rules would reject, a rule error, a tie, or a rule that needs a source
+that is down (`SOURCE_UNAVAILABLE: <source>`) when the rules that did run do not already
+decide the case.
 
 | Option | Why not / trade-off |
 |---|---|
@@ -120,31 +122,36 @@ field, a scan the rules would reject, a rule error or a tie.
   `UNVERIFIED_DATA`, 4 `SCAN_REVIEW`).
 - 50,000 invoices, every rule timed out: 47,100 `ESCALAR` with `RULE_ERROR`, none paid by
   mistake.
+- ERP stopped before a run: the clean and the already-paid invoice `ESCALAR`
+  `SOURCE_UNAVAILABLE: erp`; the IBAN and date rejections stay `NO_PAGAR`.
 
 **Cost.** A person reviews 21 of 500 files (4.2 %), some of them for our own failures.
 
 ```mermaid
-flowchart TD
+flowchart LR
   F["File"] --> M{"Required field<br/>missing or null?"}
   M -- yes --> E1["ESCALAR<br/>MISSING_DATA"]
   M -- no --> U{"Scan value<br/>not confirmed?"}
   U -- yes --> E2["ESCALAR<br/>UNVERIFIED_DATA"]
   U -- no --> R{"Every rule<br/>ran?"}
   R -- no --> E3["ESCALAR<br/>RULE_ERROR, RULE_NEEDS_DATA"]
-  R -- yes --> V{"Which rules fire?"}
+  R -- yes --> SRC{"A rule needs a<br/>source that is down?"}
+  SRC -- "yes, and the rules that ran<br/>do not decide" --> E6["ESCALAR<br/>SOURCE_UNAVAILABLE"]
+  SRC -- "no, or already decided" --> V{"Which rules fire?"}
   V -- none --> P["PAGAR"]
   V -- "violation, text PDF" --> NP["NO_PAGAR"]
   V -- "violation, scan" --> E4["ESCALAR<br/>SCAN_REVIEW"]
   V -- "doubt or tie" --> E5["ESCALAR<br/>doubt, RULE_CONFLICT"]
   classDef kb fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#111
-  class E1,E2,E3,E4,E5 kb
+  class E1,E2,E3,E4,E5,E6 kb
 ```
 
 Detail: [0016](adr/detail/0016-every-instance-gets-a-decision.md),
 [0025](adr/detail/0025-scan-decision-policy.md),
 [0009](adr/detail/0009-review-state-and-export-semantics.md),
 [0010](adr/detail/0010-double-extraction-with-deterministic-validators.md),
-[0021](adr/detail/0021-optional-decision-review.md). A rule that failed to compile never
+[0021](adr/detail/0021-optional-decision-review.md),
+[0028](adr/detail/0028-live-sources-sync-before-run.md). A rule that failed to compile never
 decides: it cannot be published (key decision E).
 
 ## C. Full traceability in three planes
@@ -253,8 +260,9 @@ go down.
 
 **Decision.** A norm change is configuration: new text, recompiled rules and a new immutable
 process version that the manager publishes whole or not at all. History is append-only: a
-change is replayed on past decisions as alerts, never as edits. A failure falls back to the
-next model or the last good snapshot.
+change is replayed on past decisions as alerts, never as edits. A failed model falls back
+to the next one. The ERP is synced before every run; if it is down, its old snapshot is
+not used, the source is flagged down and the invoices that need it escalate.
 
 | Option | Why not / trade-off |
 |---|---|
@@ -270,9 +278,14 @@ next model or the last good snapshot.
   unchanged. Recompiled and published: 38 stale-decision alerts in 1.1 s.
 - `kill -9` after 68 of 500 uploads: the rerun ended with 500 instances, no duplicates. A
   restored backup matches the md5 of all 503 decisions.
-- ERP down: the sync gave up after 11 s and the previous snapshot stayed current.
+- ERP down before a run: the sync gave up after 15.4 s, no old snapshot was used, and
+  `/health/planes` showed ingestion `degraded` (`sources down: 2:erp`).
 
-**Cost.** A new norm waits for a manager's publication, and ERP data can be minutes old.
+**In practice.** #77 added a near-miss IBAN check (R17: 1-4 characters from the master
+escalates) to the live pack as configuration; the frozen delivery rule set is unchanged.
+
+**Cost.** A new norm waits for a manager's publication, and an ERP outage costs
+escalations until it is back.
 
 ```mermaid
 flowchart LR
@@ -280,7 +293,7 @@ flowchart LR
   CMP -- "all models fail" --> DR["Rule stays draft<br/>cannot be published"]
   DR --> OLDV["Published version<br/>keeps deciding"]
   CMP -- ok --> PV["Manager publishes<br/>new immutable version"]
-  ERP["ERP sync<br/>retries, backoff"] -- fails --> OLD["Keep last snapshot"]
+  ERP["ERP synced before<br/>every run, retries"] -- "down" --> OLD["Source flagged down<br/>old snapshot not used"]
   ERP -- "rows changed" --> DRY["Dry-run replay<br/>on past decisions"]
   PV --> DRY
   DRY --> AL["Alerts to the manager<br/>before and after"]
@@ -298,5 +311,7 @@ Detail: [0007](adr/detail/0007-declarative-process-packs.md),
 [0022 versions](adr/detail/0022-publish-approved-process-versions.md),
 [0023](adr/detail/0023-fal-visual-fallback-evaluation.md),
 [0024](adr/detail/0024-discover-processes-through-documents-and-conversation.md),
-[0026](adr/detail/0026-stale-decision-alerts.md);
+[0026](adr/detail/0026-stale-decision-alerts.md),
+[0027](adr/detail/0027-ocr-execution-modes-and-provider-fallback.md),
+[0028](adr/detail/0028-live-sources-sync-before-run.md);
 [resilience.md](resilience.md).
