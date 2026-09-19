@@ -33,7 +33,7 @@ async def propose_decision(instance_id: int, session: Session, user: Manager) ->
     "/instances/{instance_id}/rule-proposal",
     status_code=201,
     operation_id="proposeRule",
-    summary="After a person resolved an escalated case, the assistant amends the rule that "
+    summary="After a person resolved an escalated case, the reviewer agent amends the rule that "
     "escalated it so similar cases get that decision; a manager accepts or rejects it",
     description="Only when one escalation rule fired and, without it, the other rules give "
     "the person's decision; otherwise 409 with the reason in Spanish, and no model is "

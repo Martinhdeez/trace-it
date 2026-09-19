@@ -6420,9 +6420,14 @@
         "tags": [
           "proposals"
         ],
-        "summary": "After a person resolved an escalated case, the assistant amends the rule that escalated it so similar cases get that decision; a manager accepts or rejects it",
+        "summary": "After a person resolved an escalated case, the reviewer agent amends the rule that escalated it so similar cases get that decision; a manager accepts or rejects it",
         "description": "Only when one escalation rule fired and, without it, the other rules give the person's decision; otherwise 409 with the reason in Spanish, and no model is called. `kind: rule`, `channel: escalation`; `payload`: `{decision_id` (the resolution), `engine_decision_id, replaces` (the rule it amends), `text` (English, compiled on accept), `summary, type, decision, resolved_as, version_id}`. Accepting stages it in the process draft in place of `replaces` and compiles it in the background; publishing stays `/processes/{id}/draft/validate` and `/publish`. Left open, it ends `superseded` with `outcome.cause`: `ignored` (another case resolved), `version_published`, `case_changed` or `superseded` (a newer suggestion).",
         "operationId": "proposeRule",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
