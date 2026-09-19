@@ -20,10 +20,12 @@ export function TruthSources({ processId }: { processId: number }) {
     queryKey: keys.sources(processId),
     queryFn: () => api.listSources(processId),
   })
-  // 404 until a workbook is loaded: then there is no current cut-off date.
+  // Only once a workbook loaded `parameters` is there a current cut-off date to read.
+  const loaded = sources.data?.some((source) => source.name === 'parameters') ?? false
   const parameters = useQuery({
     queryKey: keys.source(processId, 'parameters'),
     queryFn: () => api.getSource(processId, 'parameters'),
+    enabled: loaded,
   })
   const currentCutOff = parameters.data?.data[0]?.cut_off_date
   const cutOffDate = typedCutOff ?? (typeof currentCutOff === 'string' ? currentCutOff : '')
