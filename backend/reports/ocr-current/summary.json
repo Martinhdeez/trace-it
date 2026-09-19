@@ -1,0 +1,81 @@
+{
+  "started_at": "2026-09-19T10:03:22.757714+00:00",
+  "finished_at": "2026-09-19T10:06:25.353172+00:00",
+  "git_commit": "c739eacfb282d3f3d2a101831894649abc3d0049",
+  "code_manifest_sha256": "61b15b87a142359899933b4f89493ba9ef1385975645fce3f648140579df20e2",
+  "pipeline_version": "invoice-v2.2.0+xlsx-v1.3",
+  "profile": {
+    "profile": "verified",
+    "verified": true,
+    "model_sha256": {
+      "det/inference.yml": "98069072e1b6b37d727fd9d9f11725faa46d6ea0de012f2ed26caea011c37699",
+      "det/inference.onnx": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
+      "rec/inference.onnx": "7888113072263cb471b93f66dd5e2ad70548dc526fa1ace760d0d973dd121498",
+      "rec/keys.txt": "5ddc5c6086d61db3e1485f1237e059b89df9a228cebdac40a54406c6005bca67",
+      "verify/det/inference.onnx": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
+      "verify/det/inference.yml": "98069072e1b6b37d727fd9d9f11725faa46d6ea0de012f2ed26caea011c37699",
+      "verify/rec/inference.onnx": "d9dc333c9c7b042c6dffb8e33d72b6f65c9c1d463d0a3c2f78174fea55e94752",
+      "verify/rec/keys.txt": "1ea29636956177e400af712d9782e7693f3fb25f98617bed10479d2965a836fd"
+    },
+    "visual_model": "gemini-3.1-flash-lite",
+    "text_judge_model": "jev-1.13.0"
+  },
+  "files": 500,
+  "by_decision": {
+    "PAGAR": 443,
+    "ESCALAR": 21,
+    "NO_PAGAR": 36
+  },
+  "extraction_versions": {
+    "invoice-v2.2.0+xlsx-v1.3": 500
+  },
+  "warnings": {
+    "FIELD_INVALID": 3,
+    "UNTRUSTED_INSTRUCTION": 12,
+    "TOTAL_MISMATCH": 5,
+    "FOCUSED_UNRESOLVED": 10,
+    "FIELD_AMBIGUOUS": 23,
+    "FIELD_UNVERIFIED": 41,
+    "VAT_MISMATCH": 10,
+    "FOCUSED_READER_ERROR": 2,
+    "OCR_SEPARATOR_PROPOSAL": 15,
+    "OCR_ARITHMETIC_UNVERIFIED": 15,
+    "VLM_ERROR": 1
+  },
+  "metrics": {
+    "native_pages": 493,
+    "ocr_calls": 147,
+    "ocr_verification_calls": 29,
+    "vlm_calls": 59,
+    "jev_calls": 16,
+    "ocr_calls_this_request": 0,
+    "vlm_calls_this_request": 0,
+    "jev_calls_this_request": 0,
+    "ocr_cache_hits_this_request": 147,
+    "vlm_cache_hits_this_request": 56,
+    "jev_cache_hits_this_request": 16,
+    "bytes": 6740865,
+    "focused_calls": 120
+  },
+  "process_version_hash": "6ce53e829d87acd0430c28eadbe2e990f439505dc9dadcd17ad259863ac95507",
+  "cut_off_date": "2026-09-19",
+  "erp": "Frozen real HTTP ERP snapshot",
+  "erp_sha256": "e38096627b3a967a850926df5ee5ec960573c9e01596df111365cc2fe1d372d1",
+  "workbook_sha256": "d7729db76ec7501f35e5cf4ef3383344c5b2bea4c6ea9ece36723663ca2a87ae",
+  "inputs_sha256": "6728c29e28b57cee92ff2ef1b8d45d8c1ae90093e907fdc084379c16f297a067",
+  "outcomes_sha256": "2f897e0f824feca9c738fa75f41ecd13ac4f816884177ac6a6843576529b0653",
+  "fresh_process": true,
+  "fresh_extraction_store": true,
+  "fresh_provider_journal": false,
+  "reader_cache_source": "reports\\ocr-current-run\\data",
+  "rerun_decided": 0,
+  "run": {
+    "decided": 500,
+    "by_decision": {
+      "PAGAR": 443,
+      "ESCALAR": 21,
+      "NO_PAGAR": 36
+    }
+  },
+  "artifact_encoding": "UTF-8 with LF line endings; JSON values match the recorded API export"
+}

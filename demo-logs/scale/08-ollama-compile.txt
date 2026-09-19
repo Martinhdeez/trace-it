@@ -1,0 +1,4 @@
+Real compile (tester + coder + tests) through compiler.compile_text, every role on the local model, no fallback, 900 s timeout; sources from trace_scale.
+R02 ollama:llama3.1:8b-instruct-q4_K_M: 49 s, FAILED CompilationError: tester: UnexpectedModelBehavior: Exceeded maximum output retries (2)
+R16 ollama:llama3.1:8b-instruct-q4_K_M: 93 s, FAILED CompilationError: tester: UnexpectedModelBehavior: Exceeded maximum output retries (2)
+ollama llama3.1:8b-instruct-q4_K_M on Apple M4 Pro (Metal), num_ctx 16384: prompt 6274 tok in 16.3 s (384 tok/s), output 421 tok in 10.9 s (38.5 tok/s), total 27.6 s (load 0.1 s)

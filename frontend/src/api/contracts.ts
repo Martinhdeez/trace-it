@@ -69,7 +69,7 @@ export type DefinitionLoad = {
   usuarios_nuevos: number
 }
 
-export type RuleState = 'borrador' | 'rechazada' | 'activa' | 'retirada'
+export type RuleState = 'compilando' | 'borrador' | 'bloqueada' | 'rechazada' | 'activa' | 'retirada'
 export type RuleKind = 'requisito' | 'prohibicion'
 
 export type RuleInput = {
@@ -92,6 +92,10 @@ export type Rule = {
 }
 
 export type RuleDetail = Rule & {
+  /** Current compiler: one autonomous coder, checked by a blind tester. */
+  codigo?: string | null
+  tests?: RuleTest[] | null
+  /** Kept for old mock fixtures created before the compiler architecture changed. */
   codigo_a: string | null
   codigo_b: string | null
   tests_a: RuleTest[] | null
@@ -109,7 +113,7 @@ export type RuleTest = {
 
 /** One case run through both codes. `a` and `b` read like `salta (MOTIVO)` or `no salta`. */
 export type CrossTest = {
-  autor: 'A' | 'B'
+  autor: string
   nombre: string
   esperado: boolean
   a: string
@@ -126,6 +130,33 @@ export type RuleReport = {
   tests?: CrossTest[]
   historico?: { instancias: number; coinciden: number }
   discrepancias?: string[]
+  intentos?: number
+  revisiones?: unknown[]
+  necesita_datos?: {
+    by?: string
+    missing?: string[]
+    explanation?: string
+  }
+}
+
+export type NormCheck = {
+  id: number
+  texto: string
+  decision: string
+  estado: RuleState
+}
+
+export type NormRule = {
+  id: number
+  numero: number
+  texto: string
+  politicas: string[]
+  creada: string
+  reglas: NormCheck[]
+}
+
+export type NormResult = {
+  reglas_norma: NormRule[]
 }
 
 export type AuditChange = {
@@ -239,6 +270,27 @@ export type IngestedFile = {
   ingerido: string
 }
 
+export type DocumentEvidence = {
+  id: string
+  file_id: string
+  sha256: string
+  kind: 'invoice' | 'workbook'
+  fields: Record<
+    string,
+    {
+      value: string | null
+      text: string | null
+      selected_by: string | null
+      confidence: number | null
+    }
+  >
+  text: string
+  warnings: Record<string, unknown>[]
+  metrics: Record<string, unknown>
+  cache_hit: boolean
+  pipeline_version: string
+}
+
 export type SourceLoad = {
   nombre: string
   origen: string
@@ -264,6 +316,8 @@ export interface ApiClient {
   replaceSymbols(id: number, symbols: ProcessSymbol[]): Promise<ProcessDetail>
 
   listRules(processId: number, state?: RuleState): Promise<Rule[]>
+  listNormRules(processId: number): Promise<NormRule[]>
+  normalizeNorm(processId: number, text: string): Promise<NormResult>
   getRule(id: number): Promise<RuleDetail>
   createRule(processId: number, body: RuleInput): Promise<RuleDetail>
   compileRule(id: number): Promise<RuleDetail>
@@ -275,6 +329,7 @@ export interface ApiClient {
   run(processId: number): Promise<RunSummary>
   listInstances(processId: number, state?: InstanceState): Promise<Instance[]>
   getInstance(id: number): Promise<InstanceDetail>
+  getDocument(instanceId: number): Promise<DocumentEvidence | null>
   /** Everything waiting for a person. Without `outcome`, every one with `requiere_persona`. */
   queue(processId: number, outcome?: string): Promise<Instance[]>
   suggestion(instanceId: number): Promise<Suggestion>
@@ -286,6 +341,8 @@ export interface ApiClient {
   listFiles(processId: number): Promise<IngestedFile[]>
   uploadFiles(processId: number, files: File[]): Promise<IngestedFile[]>
   listSources(processId: number): Promise<SourceLoad[]>
+  /** Excel of suppliers / orders / parameters. Same call as the live demo. */
+  uploadWorkbook(processId: number, file: File, cutOffDate?: string): Promise<SourceLoad[]>
   uploadSource(processId: number, name: string, file: File): Promise<SourceLoad>
   syncErp(processId: number): Promise<SourceLoad>
 

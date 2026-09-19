@@ -3,13 +3,14 @@ from typing import Literal
 from fastapi import APIRouter, BackgroundTasks, status
 
 from app.common.exceptions import PermissionDeniedError
+from app.core import events
 from app.core.database import Session
 from app.features.agents import normalizer
 from app.features.agents.normalizer import NormIn, NormOut
 from app.features.decisions.schemas import ImpactOut
 from app.features.rules import service
 from app.features.rules.schemas import NormRuleOut, RuleDetail, RuleIn, RuleOut
-from app.features.users.dependencies import CurrentUser
+from app.features.users.dependencies import CurrentUser, OptionalUser
 
 router = APIRouter(tags=["rules"])
 
@@ -35,10 +36,17 @@ async def list_rules(
     summary="Add a rule as text. It is compiled in the background (status `compiling`)",
 )
 async def create_rule(
-    process_id: int, body: RuleIn, session: Session, background: BackgroundTasks
+    process_id: int,
+    body: RuleIn,
+    session: Session,
+    background: BackgroundTasks,
+    user: OptionalUser,
 ) -> RuleDetail:
-    rule = await service.create(session, process_id, body)
-    background.add_task(service.compile_all_in_background, [rule.id])
+    author = user.name if user else None
+    with events.span("save_rule", process_id=process_id, author=author) as span:
+        rule = await service.create(session, process_id, body)
+        span.set(rule_id=rule.id)
+    background.add_task(service.compile_all_in_background, [rule.id], span)
     return rule
 
 
@@ -63,9 +71,11 @@ async def normalize_norm(
     background: BackgroundTasks,
 ) -> NormOut:
     _manager_only(user)
-    out = await normalizer.normalize_norm(session, process_id, body.text)
+    # One trace: the normalizer, then every check's compilation in the background.
+    with events.span("norm", process_id=process_id, author=user.name) as span:
+        out = await normalizer.normalize_norm(session, process_id, body.text)
     ids = [c.rule_id for n in out.norm_rules for c in n.checks]
-    background.add_task(service.compile_all_in_background, ids)
+    background.add_task(service.compile_all_in_background, ids, span)
     return out
 
 
@@ -88,8 +98,8 @@ async def get_rule(rule_id: int, session: Session) -> RuleDetail:
     operation_id="compileRule",
     summary="Recompile a draft or blocked rule: tests, code, validation; waits for it",
 )
-async def compile_rule(rule_id: int, session: Session) -> RuleDetail:
-    return await service.compile_rule(session, rule_id)
+async def compile_rule(rule_id: int, session: Session, user: OptionalUser) -> RuleDetail:
+    return await service.compile_rule(session, rule_id, user.name if user else service.AUTO)
 
 
 @router.get(
@@ -104,7 +114,7 @@ async def get_impact(rule_id: int, session: Session) -> ImpactOut:
 @router.post(
     "/rules/{rule_id}/activate",
     operation_id="activateRule",
-    summary="Activate a validated draft",
+    summary="Stage a validated rule in the process draft; publish the draft to activate",
     responses={
         409: {
             "description": "Not compiled, discrepancies unresolved, or it would "
@@ -114,15 +124,15 @@ async def get_impact(rule_id: int, session: Session) -> ImpactOut:
 )
 async def activate_rule(rule_id: int, session: Session, user: CurrentUser) -> RuleDetail:
     _manager_only(user)
-    return await service.activate(session, rule_id)
+    return await service.activate(session, rule_id, user.name)
 
 
 @router.post(
     "/rules/{rule_id}/retire",
     operation_id="retireRule",
-    summary="Retire a rule. Checked against past decisions exactly like activating one",
+    summary="Stage removal of a rule; validate and publish the process draft to retire it",
     responses={409: {"description": "It would contradict a decision a person took"}},
 )
 async def retire_rule(rule_id: int, session: Session, user: CurrentUser) -> RuleDetail:
     _manager_only(user)
-    return await service.retire(session, rule_id)
+    return await service.retire(session, rule_id, user.name)

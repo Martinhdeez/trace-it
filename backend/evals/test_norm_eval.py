@@ -36,7 +36,9 @@ async def test_the_harness_decides_batch_1_with_the_normalized_checks(monkeypatc
     sentence = {
         "number": 1,
         "text": "Pagar solo si el NIF esta en el maestro",
-        "checks": [{**check, "interpretation": "'Pay only if': not paid when it fails."}],
+        "checks": [
+            {**check, "decision_source": "policy", "interpretation": "'Pay only if': no outcome."}
+        ],
         "policies": ["When in doubt, escalate."],
     }
     scripts = {
@@ -53,7 +55,7 @@ async def test_the_harness_decides_batch_1_with_the_normalized_checks(monkeypatc
     assert len(result.verdicts) - len(result.mismatches()) == 436
     report = eval_norm.render(result, {}, datetime.now(UTC))
     assert "**436/471**" in report
-    assert "| 1.1 | requirement | NO_PAGAR | valid | 1 |" in report
+    assert "| 1.1 | requirement | violation | NO_PAGAR (policy) | valid | 1 |" in report
     assert "### Decided by no check fired (35)" in report
 
 

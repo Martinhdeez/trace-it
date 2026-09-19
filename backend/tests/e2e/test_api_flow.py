@@ -20,6 +20,7 @@ from app.core.database import session_factory
 from app.features.ingestion.model import File, Instance
 from app.features.processes.definition import Definition, load_definition
 from app.features.sources.model import Source
+from app.features.sources.tests.conftest import start_erp
 from app.features.use_cases import service as use_cases
 from app.main import app
 from tests.golden import golden
@@ -98,7 +99,20 @@ async def load(defn: dict[str, Any], files: dict[str, dict[str, Any]]) -> int:
     return process_id
 
 
-async def test_decide_resolve_and_export_through_the_api() -> None:
+async def test_decide_resolve_and_export_through_the_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The ERP is live: the run syncs it first (ADR 0028) and decides on what it served."""
+    erp, url = start_erp()
+    try:
+        monkeypatch.setenv("TRACE_ERP_URL", url)
+        monkeypatch.setenv("TRACE_ERP_USER", "alberto")
+        monkeypatch.setenv("TRACE_ERP_PASSWORD", "FACTURAS2009")
+        await decide_resolve_and_export()
+    finally:
+        erp.kill()
+        erp.wait()
+
+
+async def decide_resolve_and_export() -> None:
     files = sample()
     expected = {f: golden.expected()[f]["expected"] for f in files}
     symbols = {s["file_id"]: s for s in golden.symbols() if s["file_id"] in expected}
@@ -116,14 +130,24 @@ async def test_decide_resolve_and_export_through_the_api() -> None:
         )
         manager = {"X-User-Id": str(r.json()["id"])}
         rules = (await api.get(f"/processes/{process_id}/rules")).json()
-        assert len(rules) == 16
+        assert len(rules) == 17
         for rule in rules:
             r = await api.post(f"/rules/{rule['id']}/activate", headers=manager)
             assert r.status_code == 200, r.text
 
+        from app.features.versions.tests.test_api import publish
+
+        await publish(api, process_id, manager)
         r = await api.post(f"/processes/{process_id}/run")
         assert r.status_code == 200, r.text
+        assert "down_sources" not in r.json()
         assert r.json()["by_decision"] == dict(Counter(expected.values()))
+        erp = next(
+            s
+            for s in (await api.get(f"/processes/{process_id}/sources")).json()
+            if s["name"] == "erp"
+        )
+        assert (erp["status"], erp["rows"]) == ("ok", 516) and erp["origin"].startswith("erp:")
 
         instances = {
             i["name"]: i for i in (await api.get(f"/processes/{process_id}/instances")).json()
@@ -142,7 +166,7 @@ async def test_decide_resolve_and_export_through_the_api() -> None:
         assert (engine["author"], engine["decision"], len(engine["results"])) == (
             "engine",
             "ESCALAR",
-            16,
+            17,
         )
 
         # A person resolves it. The engine's decision stays; the person's is appended.

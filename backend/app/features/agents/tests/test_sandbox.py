@@ -2,7 +2,13 @@ import time
 
 import pytest
 
-from app.features.agents.sandbox import SandboxError, check, run_batch, run_dataset
+from app.features.agents.sandbox import (
+    MissingValidationSymbol,
+    SandboxError,
+    check,
+    run_batch,
+    run_dataset,
+)
 
 VALID = """
 from decimal import Decimal
@@ -30,6 +36,30 @@ def test_valid_rule_returns_its_result():
         "fires": True,
         "reason": "total 150.50",
     }
+
+
+def test_validation_marks_only_actual_missing_symbol_access():
+    missing = {1: ["new_field"], 2: ["new_field"]}
+    population = [(1, {"old": 0}), (2, {"old": 2})]
+    code = (
+        "def evaluate(instance, sources, others):\n"
+        "    if instance['old'] == 0:\n"
+        "        raise ZeroDivisionError('independent failure')\n"
+        "    return {'fires': instance.get('new_field') == 1, 'reason': 'OK'}\n"
+    )
+    results = run_dataset(code, population, {}, population, validation_missing=missing)
+    assert isinstance(results[0], SandboxError) and not isinstance(
+        results[0], MissingValidationSymbol
+    )
+    assert "ZeroDivisionError" in str(results[0])
+    assert isinstance(results[1], MissingValidationSymbol)
+    assert results[1].name == "new_field"
+    other_code = (
+        "def evaluate(instance, sources, others):\n"
+        "    return {'fires': 'new_field' in others[0], 'reason': 'OTHER'}\n"
+    )
+    [other] = run_dataset(other_code, [(3, {"old": 3})], {}, population, validation_missing=missing)
+    assert isinstance(other, MissingValidationSymbol) and other.name == "new_field"
 
 
 @pytest.mark.parametrize(

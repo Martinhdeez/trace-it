@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "body": {
+    "decided": 4,
+    "by_decision": {
+      "PAGAR": 1,
+      "NO_PAGAR": 3
+    }
+  }
+}

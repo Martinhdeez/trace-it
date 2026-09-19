@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ChevronDown } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, FileSearch, XCircle } from 'lucide-react'
 import type { InstanceDetail, Rule, RuleOutcome } from '../../api/contracts'
 import { formatMs } from '../../lib/format'
 import { cn } from '../../lib/cn'
 import { label, tone } from '../../lib/status'
 import { JsonHighlight } from '../../lib/jsonHighlight'
 import { StatusBadge } from '../shell/StatusBadge'
+import { DocumentPopup } from './DocumentPopup'
 
 const ease = [0.23, 1, 0.32, 1] as const
 
@@ -23,7 +24,7 @@ export function TracePane({
 }) {
   if (!instance) {
     return (
-      <aside className="flex h-full min-h-0 w-[340px] shrink-0 flex-col px-5 py-4 text-[13px] text-muted">
+      <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col px-5 py-4 text-[13px] text-muted">
         Decisión
       </aside>
     )
@@ -32,36 +33,66 @@ export function TracePane({
   const current = label(instance)
   const latest = instance.decisiones.at(-1)
   const symbols = Object.entries(instance.simbolos ?? {})
+  const fired = latest?.resultados.filter((result) => result.salta === true).length ?? 0
+  const errors = latest?.resultados.filter((result) => result.salta === null).length ?? 0
+  const DecisionIcon =
+    current === 'PAGAR' || current === 'APROBAR'
+      ? CheckCircle2
+      : current === 'NO_PAGAR' || current === 'RECHAZAR'
+        ? XCircle
+        : AlertTriangle
   const ruleText = (outcome: RuleOutcome) =>
     rules.find((rule) => rule.id === outcome.regla_id)?.texto ?? `Regla ${outcome.regla_id}`
 
   return (
-      <aside className="flex h-full min-h-0 w-[340px] shrink-0 flex-col overflow-y-auto px-2 pb-3">
-      <div className="px-3 py-3">
-        <h2 className="text-[13px] font-medium">Decisión</h2>
-      </div>
+    <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-6 pb-4">
+      <DocumentHeader instance={instance} />
 
-      <div className="rounded-[16px] bg-well px-4 py-4 ring-1 ring-black/[0.04]">
-        <p className="font-mono text-[12px] text-muted">{latest?.motivo || instance.estado}</p>
-        <p
-          className={cn(
-            'mt-2 text-[28px] font-medium leading-none tracking-[-0.045em]',
-            current === 'PAGAR' && 'text-pagar',
-            current === 'NO_PAGAR' && 'text-nopagar',
-            (current === 'ESCALAR' || current === 'REVISION') && 'text-escalar',
-          )}
-        >
-          {current.replaceAll('_', ' ')}
-        </p>
+      <div className="mx-auto w-full max-w-[820px] rounded-[16px] bg-surface px-6 py-6 ring-1 ring-line">
+        <div className="flex items-start gap-4">
+          <span
+            className={cn(
+              'grid h-10 w-10 shrink-0 place-items-center rounded-[12px]',
+              (current === 'PAGAR' || current === 'APROBAR') && 'bg-pagar-soft text-pagar',
+              (current === 'NO_PAGAR' || current === 'RECHAZAR') && 'bg-nopagar-soft text-nopagar',
+              (current === 'ESCALAR' || current === 'REVISION') && 'bg-escalar-soft text-escalar',
+            )}
+          >
+            <DecisionIcon size={19} strokeWidth={1.8} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-muted">Decisión final</p>
+            <p
+              className={cn(
+                'mt-1 text-[26px] font-medium leading-none tracking-[-0.045em]',
+                (current === 'PAGAR' || current === 'APROBAR') && 'text-pagar',
+                (current === 'NO_PAGAR' || current === 'RECHAZAR') && 'text-nopagar',
+                (current === 'ESCALAR' || current === 'REVISION') && 'text-escalar',
+              )}
+            >
+              {current.replaceAll('_', ' ')}
+            </p>
+            <p className="mt-2 text-[12.5px] leading-5 text-muted">
+              {latest?.motivo || 'El proceso todavía no ha emitido una decisión.'}
+            </p>
+          </div>
+        </div>
+
         {latest ? (
-          <p className="mt-2 truncate text-[12px] text-muted">
-            {latest.autor === 'motor' ? 'Motor' : latest.autor} ·{' '}
-            <span className="font-mono">{latest.reglas_hash.slice(0, 12) || '—'}</span>
-          </p>
+          <div className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-[10px] bg-rule ring-1 ring-line">
+            <DecisionStat label="Reglas evaluadas" value={latest.resultados.length} />
+            <DecisionStat label="Activadas" value={fired} />
+            <DecisionStat label="Errores" value={errors} />
+          </div>
         ) : null}
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
+          <span>{latest?.autor === 'motor' ? 'Decidido por el motor' : latest?.autor}</span>
+          {latest ? <span className="font-mono text-faint">{latest.reglas_hash.slice(0, 12)}</span> : null}
+        </div>
       </div>
 
-      {latest?.resultados.length ? (
+      <div className="mx-auto w-full max-w-[820px]">
+        {latest?.resultados.length ? (
         <Block title={`reglas · ${latest.resultados.length}`} openByDefault>
           <ul className="divide-y divide-hairline">
             {latest.resultados.map((outcome) => (
@@ -93,9 +124,9 @@ export function TracePane({
             ))}
           </ul>
         </Block>
-      ) : null}
+        ) : null}
 
-      <Block title={`símbolos · ${symbols.length}`}>
+        <Block title={`símbolos · ${symbols.length}`}>
         {symbols.length === 0 ? (
           <p className="px-3 py-3 text-[12px] text-muted">
             Nadie ha extraído los símbolos de esta instancia todavía.
@@ -117,9 +148,9 @@ export function TracePane({
             ))}
           </ul>
         )}
-      </Block>
+        </Block>
 
-      <Block title={`traza · ${instance.eventos.length} pasos`}>
+        <Block title={`traza · ${instance.eventos.length} pasos`}>
         <ol className="divide-y divide-hairline">
           {instance.eventos.map((event, index) => (
             <li key={`${event.paso}-${index}`} className="px-3 py-2">
@@ -139,9 +170,9 @@ export function TracePane({
             </li>
           ))}
         </ol>
-      </Block>
+        </Block>
 
-      {instance.decisiones.length > 1 ? (
+        {instance.decisiones.length > 1 ? (
         <Block title={`histórico · ${instance.decisiones.length}`}>
           <ul className="divide-y divide-hairline">
             {instance.decisiones.map((decision) => (
@@ -155,12 +186,43 @@ export function TracePane({
             ))}
           </ul>
         </Block>
-      ) : null}
+        ) : null}
 
-      <Block title="línea de la exportación">
-        <JsonHighlight value={{ file_id: instance.nombre, result: instance.decision }} />
-      </Block>
+        <Block title="línea de la exportación">
+          <JsonHighlight value={{ file_id: instance.nombre, result: instance.decision }} />
+        </Block>
+      </div>
     </aside>
+  )
+}
+
+function DocumentHeader({ instance }: { instance: InstanceDetail }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mx-auto flex w-full max-w-[820px] items-center justify-between gap-3 py-3">
+      <div className="min-w-0">
+        <p className="text-[11px] text-muted">Resultado del proceso</p>
+        <h2 className="mt-0.5 truncate font-mono text-[13px]">{instance.nombre}</h2>
+      </div>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-ink px-3 text-[12px] font-medium text-on-ink hover:bg-ink/90"
+      >
+        <FileSearch size={13} strokeWidth={1.7} />
+        Abrir documento
+      </button>
+      {open ? <DocumentPopup instance={instance} onClose={() => setOpen(false)} /> : null}
+    </div>
+  )
+}
+
+function DecisionStat({ label: text, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-surface px-3 py-2.5">
+      <p className="font-mono text-[17px] tracking-[-0.04em] tabular-nums">{value}</p>
+      <p className="mt-0.5 text-[10px] text-muted">{text}</p>
+    </div>
   )
 }
 
@@ -175,7 +237,7 @@ function Block({
 }) {
   const [open, setOpen] = useState(Boolean(openByDefault))
   return (
-    <div className="mt-2 overflow-hidden rounded-[16px] ring-1 ring-black/[0.06]">
+    <div className="mt-2 overflow-hidden rounded-[16px] ring-1 ring-line">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}

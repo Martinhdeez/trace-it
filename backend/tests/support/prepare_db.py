@@ -13,10 +13,17 @@ from sqlalchemy.engine import make_url
 from app.core.config import settings
 
 
+def is_test_db(name: str | None) -> bool:
+    return bool(name) and (name.endswith("_test") or name.startswith("trace_test"))
+
+
 def main() -> None:
     url = make_url(settings.database_url)
-    if url.database in ("trace", "postgres"):
-        sys.exit(f"Refusing to recreate {url.database!r}: point TRACE_DATABASE_URL at a test db")
+    if not is_test_db(url.database):
+        sys.exit(
+            f"Refusing to drop and recreate {url.database!r}: TRACE_DATABASE_URL must name a "
+            "test database (ending in '_test' or starting with 'trace_test')"
+        )
     server = url.set(drivername="postgresql", database="postgres").render_as_string(
         hide_password=False
     )

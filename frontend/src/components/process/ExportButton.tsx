@@ -7,8 +7,8 @@ import { Overlay } from '../shell/Overlay'
 import { Notice } from '../shell/Notice'
 
 /**
- * F10. The backend answers 409 while any instance is PENDIENTE or REVISION
- * (P21), so the blocked case is the one worth showing well.
+ * The backend answers 409 while any instance is still PENDING, so the blocked
+ * case is the one worth showing well.
  */
 export function ExportButton({ processId }: { processId: number }) {
   const [blocked, setBlocked] = useState<string | null>(null)
@@ -45,7 +45,7 @@ export function ExportButton({ processId }: { processId: number }) {
 
       {blocked ? (
         <Overlay onClose={() => setBlocked(null)}>
-          <div className="rounded-[16px] bg-white p-4 shadow-[0_16px_50px_rgba(19,19,19,0.12)] ring-1 ring-black/[0.06]">
+          <div className="rounded-[16px] bg-surface p-4 shadow-pop ring-1 ring-line">
             <Notice tone="warning" title="No se puede exportar todavía">
               {blocked}
             </Notice>

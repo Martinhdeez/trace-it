@@ -10,7 +10,7 @@ export function PreviewWell({
   action?: ReactNode
 }) {
   return (
-    <div className="overflow-hidden rounded-[16px] bg-well ring-1 ring-black/[0.05]">
+    <div className="overflow-hidden rounded-[16px] bg-well ring-1 ring-line">
       <div className="grid min-h-[240px] place-items-center px-8 py-12">{children}</div>
       <div className="flex items-center justify-between px-3.5 py-2">
         <span className="font-mono text-[12px] text-muted">{name}</span>
@@ -30,7 +30,7 @@ export function NestedCard({
   action?: ReactNode
 }) {
   return (
-    <div className="overflow-hidden rounded-[16px] bg-white ring-1 ring-black/[0.06]">
+    <div className="overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
       {label || action ? (
         <div className="flex items-center justify-between px-3.5 py-2">
           <span className="font-mono text-[11px] text-faint">{label}</span>

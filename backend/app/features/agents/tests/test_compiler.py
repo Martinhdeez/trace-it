@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.core import events
 from app.features.agents import compiler, llm, sandbox
 from app.features.use_cases.schemas import AgentSettings, Example
 from tests.support.models import instructions, per_role, retry_prompts, user_prompt
@@ -86,6 +87,9 @@ class FakeSession:
     def __init__(self) -> None:
         self.added: list = []
 
+    async def get(self, model, key):
+        return None
+
     def add(self, obj: object) -> None:
         self.added.append(obj)
 
@@ -137,17 +141,40 @@ async def test_green_on_the_first_attempt(monkeypatch: pytest.MonkeyPatch, seen:
     assert DESCRIPTION in tester_ctx and '"iban": "ES1"' in tester_ctx
     assert "def evaluate" not in tester_ctx
     assert coder_ctx.startswith(tester_ctx) and '"name": "amount 1000"' in coder_ctx
-    events = [e for e in session.added if e.step == "compile_rule"]
-    assert [e.data["role"] for e in events] == ["tester", "compiler"]
-    assert all(e.data["valid"] and e.data["model"] == "fake/model" for e in events)
+
+
+def tree(rows: list[dict], parent: str | None = None) -> list:
+    """The spans as nested (step, data, children), children in the order they ended."""
+    return [
+        (r["step"], r["data"], tree(rows, r["span_id"])) for r in rows if r["parent_id"] == parent
+    ]
 
 
 async def test_the_coder_iterates_on_failing_tests(
     monkeypatch: pytest.MonkeyPatch, seen: dict
 ) -> None:
     script(monkeypatch, seen, [suite()], [proposal(CODE_GREATER_EQUAL), proposal(CODE)])
+    written: list[dict] = []
+    monkeypatch.setattr(events, "_write", written.extend)
 
-    result = await compile_()
+    with events.span("compile_rule", rule_id=7):
+        result = await compile_()
+
+    # One trace, written once: the tester's run, then each attempt with its test run.
+    [(root, _, [tester, first, second])] = tree(written)
+    assert root == "compile_rule" and {r["rule_id"] for r in written} == {7}
+    assert tester[0] == "llm_run" and tester[1]["agent"] == "tester"
+    assert tester[1]["model"] == "fake/model" and tester[1]["input_tokens"] > 0
+    for (step, _, [run, tests]), passed in zip((first, second), (5, 6), strict=True):
+        assert step == "coder_attempt" and run[1]["agent"] == "compiler"
+        assert tests[:2] == ("run_tests", {"cases": 6, "passed": passed})
+    assert first[1]["attempt"] == 1 and first[1]["failures"] == 1
+    # Each run keeps what the model saw and answered.
+    assert "## Guidance" not in tester[1]["instructions"] and tester[1]["instructions"]
+    assert tester[1]["user_prompt"] == user_prompt(seen["tester"][0])
+    assert len(tester[1]["output"]["tests"]) == 6 and tester[1]["retry_prompts"] == []
+    retry = second[2][0][1]
+    assert CODE_GREATER_EQUAL in retry["user_prompt"] and retry["output"]["code"] == CODE
 
     assert result.code == CODE and result.report["valid"] is True
     assert result.report["attempts"] == 2

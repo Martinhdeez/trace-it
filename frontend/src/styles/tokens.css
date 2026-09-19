@@ -1,39 +1,8 @@
-@font-face {
-  font-family: Geist;
-  src: url("https://cdn.jsdelivr.net/npm/geist@1.4.2/dist/fonts/geist-sans/Geist-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: Geist;
-  src: url("https://cdn.jsdelivr.net/npm/geist@1.4.2/dist/fonts/geist-sans/Geist-Medium.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Geist Mono";
-  src: url("https://cdn.jsdelivr.net/npm/geist@1.4.2/dist/fonts/geist-mono/GeistMono-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Geist Mono";
-  src: url("https://cdn.jsdelivr.net/npm/geist@1.4.2/dist/fonts/geist-mono/GeistMono-Medium.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* interior.dev OTP docs, light. Geist is their face — chosen on purpose. */
+/* interior.dev OTP docs. Light is the default face; dark is the same
+   paper, inverted — #141312 canvas, #1d1d1a panels, #f8f8f4 ink. */
 @theme {
-  --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-sans: "Geist Variable", Geist, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
 
   --color-canvas: #f4f4f2;
   --color-shell: #ffffff;
@@ -42,10 +11,15 @@
   --color-paper: #fffcf6;
   --color-well: #ecece8;
   --color-hairline: #ebebe9;
+  --color-line: #0000000f;
+  --color-rule: #0000000d;
   --color-ink: #131313;
+  --color-on-ink: #ffffff;
   --color-muted: #73726c;
   --color-faint: #a3a29c;
   --color-focus: #4568ff;
+  --color-mark: #ece6c4;
+  --color-scrim: #13131333;
 
   --color-pagar: #1f7a45;
   --color-pagar-soft: #eef6f0;
@@ -56,11 +30,50 @@
   --color-nopagar: #b42318;
   --color-nopagar-soft: #f7eceb;
 
+  --shadow-lift: 0 1px 2px #1313130f;
+  --shadow-float: 0 8px 24px #13131314;
+  --shadow-pop: 0 16px 50px #1313131f;
+  --shadow-shell: 0 1px 2px #1313130a, 0 8px 24px #1313130a;
+
   --radius-shell: 20px;
   --radius-card: 16px;
   --radius-pill: 999px;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-canvas: #141312;
+  --color-shell: #1d1d1a;
+  --color-sidebar: #141312;
+  --color-surface: #1d1d1a;
+  --color-paper: #1a1a17;
+  --color-well: #252522;
+  --color-hairline: #ffffff29;
+  --color-line: #ffffff29;
+  --color-rule: #ffffff14;
+  --color-ink: #f8f8f4;
+  --color-on-ink: #141312;
+  --color-muted: #c2c2ba;
+  --color-faint: #93938b;
+  --color-focus: #93b0ff;
+  --color-mark: #3d3a28;
+  --color-scrim: #00000080;
+
+  --color-pagar: #5bd79c;
+  --color-pagar-soft: #5bd79c1f;
+  --color-escalar: #e8a06a;
+  --color-escalar-soft: #e8a06a1f;
+  --color-ocr: #93938b;
+  --color-ocr-soft: #ffffff0f;
+  --color-nopagar: #f5897f;
+  --color-nopagar-soft: #f5897f1f;
+
+  --shadow-lift: 0 1px 2px #0006, inset 0 1px 0 #ffffff0d;
+  --shadow-float: 0 16px 40px #00000080;
+  --shadow-pop: 0 28px 56px -22px #000000b3;
+  --shadow-shell: 0 1px 2px #0006, inset 0 1px 0 #ffffff0d;
 }
 
 @layer base {
@@ -70,6 +83,17 @@
   body,
   #root {
     min-height: 100%;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    color-scheme: light;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
   }
 
   body {
@@ -82,6 +106,13 @@
     line-height: 1.45;
     letter-spacing: -0.011em;
     -webkit-font-smoothing: antialiased;
+    transition: background-color 180ms var(--ease-out), color 180ms var(--ease-out);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    body {
+      transition: none;
+    }
   }
 
   button,
@@ -110,8 +141,55 @@
   }
 
   mark {
-    background: #ece6c4;
+    background: var(--color-mark);
     color: inherit;
     padding: 0 0.08em;
+  }
+}
+
+@layer components {
+  /* The landing sets headings bigger than the console, with the same face,
+     weight and tracking. Numbers stay in the mono the console uses for data. */
+  .u-display {
+    font-weight: 500;
+    letter-spacing: -0.045em;
+    line-height: 1.04;
+  }
+
+  .u-figure {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.05em;
+    line-height: 0.95;
+  }
+
+  .u-kicker {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-faint);
+  }
+
+  .caret {
+    display: inline-block;
+    width: 1.5px;
+    height: 0.9em;
+    margin-left: 1px;
+    vertical-align: -0.08em;
+    background: var(--color-ink);
+    animation: caret 1.05s steps(1) infinite;
+  }
+
+  @keyframes caret {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .caret {
+      animation: none;
+    }
   }
 }

@@ -57,4 +57,5 @@ def outcomes(defn: dict[str, Any] | None = None) -> Outcomes:
         escalate=max((t for t in types if t.get("requires_human")), key=lambda t: t["priority"])[
             "name"
         ],
+        required=tuple(s["name"] for s in (defn or definition())["symbols"] if s.get("required")),
     )

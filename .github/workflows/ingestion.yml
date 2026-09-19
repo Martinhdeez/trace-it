@@ -61,4 +61,7 @@ jobs:
           python-version: '3.12'
       - run: uv sync --locked --group dev
       - run: uv run alembic upgrade head
-      - run: uv run pytest -q app/features/ingestion/tests/test_process_api.py
+      - run: >-
+          uv run pytest -q app/features/ingestion/tests/test_process_api.py
+          app/features/ingestion/tests/test_payment_api.py
+          app/features/ingestion/tests/test_schema_api.py

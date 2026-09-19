@@ -1,5 +1,6 @@
 """Route incomplete document readings through local, visual and textual experts."""
 
+from app.core import events
 from app.features.ingestion.config import Settings
 from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.ocr.local import LocalOCR
@@ -7,6 +8,7 @@ from app.features.ingestion.ocr.vision import VisionFallback
 from app.features.ingestion.schemas import ExtractOptions
 
 from .committee import POLICY_VERSION, reconcile
+from .focused import verify_identifiers
 from .invoice import parse_invoice, unresolved
 from .native import native_pages, render
 
@@ -19,7 +21,9 @@ def extract_pdf(
     vlm: VisionFallback,
     judge=None,
 ):
-    pages = native_pages(content, settings)
+    with events.span("native_text") as span:
+        pages = native_pages(content, settings)
+        span.set(pages=len(pages))
     readers = {"native": [line for page in pages for line in page["lines"]]}
     fields, _ = parse_invoice(readers["native"], settings.ocr_min_confidence)
     warnings, page_reports, images = [], [], {}
@@ -66,12 +70,16 @@ def extract_pdf(
         metrics["native_pages"] += int(bool(chars))
         if needs_ocr and options.ocr:
             for reader, method in (("primary", "recognize"), ("secondary", "verify")):
-                if not hasattr(ocr, method):
+                if (reader == "secondary" and not options.secondary_ocr) or not hasattr(
+                    ocr, method
+                ):
                     continue
                 try:
                     metrics["ocr_calls"] += 1
                     metrics["ocr_verification_calls"] += int(reader == "secondary")
-                    recognized = getattr(ocr, method)(image(page), number, page["size"])
+                    with events.span("ocr", page=number, reader=reader) as span:
+                        recognized = getattr(ocr, method)(image(page), number, page["size"])
+                        span.set(lines=len(recognized))
                     # Reader-prefixed locators keep identical region IDs distinguishable.
                     recognized = [
                         line.model_copy(update={"id": reader + ":" + line.id})
@@ -84,7 +92,7 @@ def extract_pdf(
                         warnings.append({"code": "OCR_EMPTY", "page": number, "stage": reader})
                 except Exception as exc:
                     failure("OCR_ERROR", reader, exc, number)
-        elif needs_ocr:
+        elif needs_ocr and options.mode != "api":
             warnings.append({"code": "OCR_DISABLED", "page": number})
         page_reports.append(report)
 
@@ -101,9 +109,24 @@ def extract_pdf(
     if vision_enabled and needs_vision:
         for page in pages:
             try:
-                metrics["vlm_calls"] += 1
-                generated = vlm.transcribe(image(page), page["number"], page["size"])
-                readers.setdefault("visual", []).extend(generated)
+                if options.mode == "api":
+                    with events.span("vision", page=page["number"]) as span:
+                        generated_readers = vlm.transcribe_readers(
+                            image(page), page["number"], page["size"]
+                        )
+                        span.set(readers=len(generated_readers))
+                    metrics["vlm_calls"] += len(generated_readers)
+                    for reader, generated in generated_readers.items():
+                        readers.setdefault(reader, []).extend(
+                            line.model_copy(update={"id": reader + ":" + line.id})
+                            for line in generated
+                        )
+                else:
+                    metrics["vlm_calls"] += 1
+                    with events.span("vision", page=page["number"]) as span:
+                        generated = vlm.transcribe(image(page), page["number"], page["size"])
+                        span.set(lines=len(generated))
+                    readers.setdefault("visual", []).extend(generated)
             except Exception as exc:
                 failure("VLM_ERROR", "visual", exc, page["number"])
         fields, decisions, _ = reconcile(readers, settings.ocr_min_confidence)
@@ -112,15 +135,36 @@ def extract_pdf(
     judge_enabled = options.jev is True or (
         options.jev is None and getattr(judge, "configured", False)
     )
+    fields, decisions, final_warnings = reconcile(readers, settings.ocr_min_confidence)
+    focused = verify_identifiers(
+        content, fields, readers, pages, settings, ocr, vlm, options, vision_enabled, metrics
+    )
+    for name, report in focused.items():
+        if report["errors"]:
+            warnings.append({"code": "FOCUSED_READER_ERROR", "field": name})
+        if report["value"] is None:
+            warnings.append({"code": "FOCUSED_UNRESOLVED", "field": name})
+    # Ask the text-only judge after image verification, only about readings that
+    # are still unresolved. Confirmed image evidence never needs another vote.
     judgment = {}
-    if judge_enabled and ("primary" in readers or "visual" in readers) and unresolved(fields):
+    pending = {
+        name: field
+        for name, field in fields.items()
+        if field.status != "OBSERVED"
+        and not focused.get(name, {}).get("value")
+        and any(c.value is not None and not c.error for c in field.candidates)
+    }
+    if (
+        judge_enabled
+        and ("primary" in readers or any(k.startswith("visual") for k in readers))
+        and pending
+    ):
         try:
             metrics["jev_calls"] += 1
-            judgment = judge.select(readers, fields)
+            with events.span("text_judge"):
+                judgment = judge.select(readers, pending)
         except Exception as exc:
             failure("JEV_ERROR", "text_judge", exc)
-    # Jev recommendations never overwrite image evidence or become another vote.
-    fields, decisions, final_warnings = reconcile(readers, settings.ocr_min_confidence)
     warnings.extend(final_warnings)
     for lines in readers.values():
         warnings.extend(parse_invoice(lines, settings.ocr_min_confidence)[1])
@@ -155,6 +199,7 @@ def extract_pdf(
                 "fields": decisions,
                 "text_judge": judgment,
             },
+            "focused_verification": focused,
         },
         warnings,
         page_reports,

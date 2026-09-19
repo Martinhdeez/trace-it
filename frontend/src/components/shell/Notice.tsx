@@ -19,7 +19,7 @@ export function Notice({
         'flex items-start justify-between gap-4 rounded-[14px] px-3.5 py-3 ring-1',
         tone === 'error' && 'bg-nopagar-soft ring-nopagar/15',
         tone === 'warning' && 'bg-escalar-soft ring-escalar/15',
-        tone === 'neutral' && 'bg-well ring-black/[0.04]',
+        tone === 'neutral' && 'bg-well ring-line',
       )}
     >
       <div className="min-w-0">
@@ -51,8 +51,9 @@ export function ErrorNotice({ error, action }: { error: unknown; action?: ReactN
   if (error.unreachable) {
     return (
       <Notice tone="warning" title="El backend no responde" action={action}>
-        Arranca <span className="font-mono">make setup</span> o trabaja con{' '}
-        <span className="font-mono">VITE_API_MODE=mock</span>.
+        Arranca la API en <span className="font-mono">:8010</span> (demo) o{' '}
+        <span className="font-mono">:8000</span> (<span className="font-mono">TRACE_API_URL</span>
+        ), o trabaja con <span className="font-mono">VITE_API_MODE=mock</span>.
       </Notice>
     )
   }

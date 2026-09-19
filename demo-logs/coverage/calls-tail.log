@@ -1,0 +1,3 @@
+GET /processes/2/export -> 200 (16 ms)
+GET /processes/2/findings -> 200 (6 ms)
+POST /rules/16/retire -> 200 (11 ms)

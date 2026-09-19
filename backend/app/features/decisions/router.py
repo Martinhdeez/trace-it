@@ -1,14 +1,18 @@
 import json
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi.responses import PlainTextResponse
 
 from app.core.database import Session
 from app.features.decisions import service
 from app.features.decisions.schemas import (
+    EventOut,
     FindingOut,
     InstanceDetail,
     InstanceOut,
+    ProcessSummary,
+    ReprocessIn,
+    ReprocessSummary,
     ResolveIn,
     RunSummary,
 )
@@ -21,22 +25,82 @@ router = APIRouter(tags=["decisions"])
     "/processes/{process_id}/run",
     operation_id="runProcess",
     summary="Decide every pending instance with the active rules",
+    description="Syncs the process's live sources first; a source that fails is down for "
+    "this run and listed in `down_sources` (ADR 0028).",
+    response_model_exclude_defaults=True,
 )
 async def run_process(process_id: int, session: Session) -> RunSummary:
     return await service.run(session, process_id)
 
 
-@router.get("/processes/{process_id}/instances", operation_id="listInstances", summary="Instances")
+@router.post(
+    "/processes/{process_id}/reprocess",
+    operation_id="reprocessProcess",
+    summary="Decide the decided instances again with the current rules and sources",
+    description="After a source resync, a corrected datum or a rule adopted later. Only a "
+    "decision that changes is written, as a new engine row; the history stays. An instance "
+    "a person decided last or that awaits review is never replaced: a disagreement comes "
+    "back in `conflicts`. `names` limits it to those instances. `dry_run=true` compares only "
+    "engine outcomes, with no reviewer calls. New engine decisions receive optional reviews. "
+    "Like a run, it syncs the live sources first, except a dry run (ADR 0028).",
+    response_model_exclude_defaults=True,
+)
+async def reprocess_process(
+    process_id: int, session: Session, body: ReprocessIn | None = None, dry_run: bool = False
+) -> ReprocessSummary:
+    return await service.reprocess(session, process_id, body.names if body else None, dry_run)
+
+
+@router.get(
+    "/processes/{process_id}/summary",
+    operation_id="getProcessSummary",
+    summary="The numbers of a process page: instances, decisions, queue, rules, sources",
+)
+async def get_summary(process_id: int, session: Session) -> ProcessSummary:
+    return await service.summary(session, process_id)
+
+
+@router.get(
+    "/processes/{process_id}/instances",
+    operation_id="listInstances",
+    summary="Instances with their latest decision, oldest first",
+    description="`status` is PENDING or DECIDED; `decision` filters on the latest decision; "
+    "`q` is a case-insensitive match on the name.",
+)
 async def list_instances(
-    process_id: int, session: Session, status: str | None = None
+    process_id: int,
+    session: Session,
+    status: str | None = None,
+    decision: str | None = None,
+    q: str | None = None,
 ) -> list[InstanceOut]:
-    return await service.list_instances(session, process_id, status)
+    return await service.list_instances(session, process_id, status, decision, q)
+
+
+@router.get(
+    "/processes/{process_id}/events",
+    operation_id="listEvents",
+    summary="The trace of a process, newest first",
+    description="Every recorded step (span, ADR 0018): `decision`, `resolution`, "
+    "`ingest_document`, `upload_document`, `run_process`, `evaluate_rule`, `compile_rule`, "
+    "`llm_run`, `normalize_norm`, `suggest_escalation`, `sync_source`, `export_outcomes`... "
+    "A failed step has `status: error`. Filter with `step` and `instance_id`; "
+    "`GET /traces/{trace_id}` gives the tree a step belongs to.",
+)
+async def list_events(
+    process_id: int,
+    session: Session,
+    step: str | None = None,
+    instance_id: int | None = None,
+    limit: int = Query(200, ge=1, le=2000),
+) -> list[EventOut]:
+    return await service.list_events(session, process_id, step, instance_id, limit)
 
 
 @router.get(
     "/processes/{process_id}/queue",
     operation_id="getQueue",
-    summary="Instances waiting for a person (by default, the escalated ones)",
+    summary="Instances waiting for a person: escalations and reviewer disagreements",
 )
 async def get_queue(
     process_id: int, session: Session, type: str | None = None
@@ -81,7 +145,7 @@ async def resolve_instance(
                 }
             },
         },
-        409: {"description": "Some instance has no decision yet"},
+        409: {"description": "Some instance has no decision or is awaiting human review"},
     },
 )
 async def export_outcomes(process_id: int, session: Session) -> PlainTextResponse:

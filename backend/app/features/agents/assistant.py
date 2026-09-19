@@ -68,12 +68,27 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
             .order_by(DecisionType.priority.desc())
         )
     )
+    from app.features.processes.schemas import DecisionTypeIO
+    from app.features.versions.configuration import rules as frozen_rules
+    from app.features.versions.model import ProcessVersion
+
+    version = (
+        await session.get(ProcessVersion, latest.version_id)
+        if latest and latest.version_id
+        else None
+    )
+    if version:
+        all_types = [
+            DecisionTypeIO.model_validate(t) for t in version.snapshot["process"]["decision_types"]
+        ]
     types = [t.name for t in all_types]
     human = [t.name for t in all_types if t.requires_human]
     if not (latest and latest.decision in human):
         raise ConflictError(f"Instance {instance.id} is not escalated")
 
     rules = {r.id: r for r in await session.scalars(select(Rule).where(Rule.process_id == pid))}
+    if version:
+        rules = {r.id: r for r in frozen_rules(version.snapshot)}
     file = await session.get(File, instance.file_hash)
     resolutions = await session.execute(
         select(Decision, Instance.symbols)
@@ -88,7 +103,10 @@ async def _context(session: AsyncSession, instance: Instance) -> tuple[dict[str,
     fired = [r for r in latest.results if r.get("fires")]
     context = {
         # conventions every rule of the process follows; the proposed rule must too
-        "use_case_description": use_case.description,
+        "version_id": version.id if version else None,
+        "use_case_description": version.snapshot["process"]["description"]
+        if version
+        else use_case.description,
         "decision_types": types,
         "human_decision_types": human,
         "case": {
@@ -131,25 +149,31 @@ async def suggest(session: AsyncSession, instance_id: int) -> Suggestion:
     instance = await session.get(Instance, instance_id)
     if instance is None:
         raise NotFoundError(f"Instance {instance_id} does not exist")
-    context, types = await _context(session, instance)
-    prompt = json.dumps(context, ensure_ascii=False, default=str)
-    process = await session.get(Process, instance.process_id)
-    setup = (await use_cases.setups(session, process.use_case_id)).get("assistant")
-    suggestion, trace = await llm.run(
-        assistant,
-        "assistant",
-        prompt,
-        instructions=llm.prompt("assistant"),
-        setup=setup,
-        deps=Deps(types),
-    )
-    events.record(
-        session,
-        "suggest_escalation",
-        instance_id=instance_id,
-        data={"decision": suggestion.decision, **trace.as_data()},
-        latency_ms=trace.latency_ms,
-        cost=trace.cost,
-    )
-    await session.commit()
+    links = {"instance_id": instance_id, "process_id": instance.process_id}
+    with events.span("suggest_escalation", **links) as span:
+        context, types = await _context(session, instance)
+        prompt = json.dumps(context, ensure_ascii=False, default=str)
+        process = await session.get(Process, instance.process_id)
+        from app.features.versions.configuration import setups
+        from app.features.versions.model import ProcessVersion
+
+        version = (
+            await session.get(ProcessVersion, context["version_id"])
+            if context["version_id"]
+            else None
+        )
+        setup = (
+            setups(version.snapshot)
+            if version
+            else await use_cases.setups(session, process.use_case_id)
+        ).get("assistant")
+        suggestion, trace = await llm.run(
+            assistant,
+            "assistant",
+            prompt,
+            instructions=llm.prompt("assistant"),
+            setup=setup,
+            deps=Deps(types),
+        )
+        span.set(decision=suggestion.decision, model=trace.model)
     return suggestion

@@ -3,13 +3,16 @@
 Pure function. No database, no LLM, no clock, no network: the same inputs always give the
 same verdict, so a past decision can be replayed from its stored symbols.
 
-Every instance gets a decision. When a rule cannot be trusted (its code failed, or two
-decision types tie), the verdict is the process's escalation type with the reason: a
-person looks at it, and the default is never produced while a rule is unevaluated.
+Every instance gets a decision. When a required symbol is missing, or a rule cannot be
+trusted (its code failed, or two decision types tie), the verdict is the process's
+escalation type with the reason: a person looks at it, and the default is never produced
+while a rule is unevaluated. A scan escalates too when its readers did not confirm a required
+symbol, or when the rules would reject it (ADR 0025). A rule that reads a source that is
+down is not run; the case escalates unless the other rules already decide it (ADR 0028).
 """
 
 import hashlib
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,16 +25,19 @@ Sources = dict[str, list[dict[str, Any]]]
 # Returns, per instance, {"fires": bool, "reason": str} or that instance's exception; raises
 # when the whole batch fails.
 RunDataset = Callable[[str, list[DatasetEntry], Sources, list[DatasetEntry]], list[Any]]
+SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE"
 
 
 @dataclass(frozen=True)
 class Outcomes:
     """What a process can conclude: the priority of each decision type, the one that applies
-    when no rule fires, and the one that sends the case to a person."""
+    when no rule fires, and the one that sends the case to a person. An instance missing a
+    `required` symbol always goes to that person, whatever the rules say."""
 
     priorities: dict[str, int]
     default: str
     escalate: str
+    required: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -74,12 +80,21 @@ def _run_rule(
     sources: Sources,
     population: list[DatasetEntry],
     run_dataset: RunDataset,
+    down: Sequence[str] = (),
 ) -> list[RuleResult]:
-    """One rule over every instance. A whole-batch failure is that error for every one."""
-    needs_data = (rule.report or {}).get("needs_data")
+    """One rule over every instance. A whole-batch failure is that error for every one.
+    `down`: the sources this rule reads that are unavailable."""
+    if down:  # a source it reads could not be synced: never run it on an older snapshot
+        reason = f"SOURCE_UNAVAILABLE {rule.id}: {', '.join(down)}"
+        return [RuleResult(rule.id, rule.hash, None, reason)] * len(instances)
+    report = rule.report or {}
+    needs_data = report.get("needs_data")
     if not rule.code and needs_data:
         missing = ", ".join(needs_data.get("missing") or []) or "data"
         reason = f"RULE_NEEDS_DATA {rule.id}: missing {missing}"
+        return [RuleResult(rule.id, rule.hash, None, reason)] * len(instances)
+    if not rule.code and report.get("error"):  # its compilation failed (ADR 0020)
+        reason = f"RULE_COMPILE_FAILED {rule.id}: {report['error'][:200]}"
         return [RuleResult(rule.id, rule.hash, None, reason)] * len(instances)
     try:
         if not rule.code:
@@ -101,30 +116,80 @@ def _run_rule(
     return results
 
 
+def _missing(outcomes: Outcomes, symbols: dict[str, Any]) -> list[str]:
+    """Required symbols absent, None or blank: what a rule would read as "not extracted"."""
+    return [s for s in outcomes.required if (v := symbols.get(s)) is None or not str(v).strip()]
+
+
 def _combine(
-    rules: Sequence[Rule], results: list[RuleResult], outcomes: Outcomes, rules_hash: str
+    rules: Sequence[Rule],
+    results: list[RuleResult],
+    outcomes: Outcomes,
+    rules_hash: str,
+    missing: list[str],
+    scan: Collection[str] | None = None,
 ) -> Verdict:
-    """No rule fires -> the default. Several fire -> the highest priority. A rule that could
-    not be evaluated, or a tie between types -> escalate with the reason."""
+    """A required symbol missing -> escalate, whatever the rules answered. No rule fires ->
+    the default. Several fire -> the highest priority. A rule that could not be evaluated,
+    or a tie between types -> escalate with the reason.
+
+    `scan` is None for a document with a text layer; for a scan, the symbols its readers did
+    not confirm. A required one among them -> escalate, whatever the rules answered. A scan
+    the rules would reject -> escalate: a mismatch on OCR data may be a misread (ADR 0025).
+
+    A rule that reads a down source is `SOURCE_UNAVAILABLE`, not run. Order (ADR 0028):
+    MISSING_DATA, UNVERIFIED_DATA, any other rule failure, then the rules that ran if no
+    unrun rule could outrank or tie their outcome (RULE_CONFLICT, SCAN_REVIEW or the
+    rejection), else SOURCE_UNAVAILABLE: <sources>; last, the default."""
 
     def verdict(decision: str, reason: str) -> Verdict:
         return Verdict(decision, reason, results, rules_hash)
 
+    if missing:
+        return verdict(outcomes.escalate, f"MISSING_DATA: {', '.join(missing)}")
+
+    unconfirmed = [s for s in outcomes.required if s in (scan or ())]
+    if unconfirmed:
+        return verdict(outcomes.escalate, f"UNVERIFIED_DATA: {', '.join(unconfirmed)}")
+
     failures = [r.reason for r in results if r.fires is None]
-    if failures:
+    unavailable = [
+        (rule, r.reason.split(": ", 1)[1])
+        for rule, r in zip(rules, results, strict=True)
+        if r.fires is None and r.reason.startswith(SOURCE_UNAVAILABLE)
+    ]
+    if len(failures) > len(unavailable):
         return verdict(outcomes.escalate, " | ".join(failures))
 
-    fired = [rule for rule, r in zip(rules, results, strict=True) if r.fires]
+    fired = [(rule, r) for rule, r in zip(rules, results, strict=True) if r.fires]
+    highest = max((outcomes.priorities[rule.decision] for rule, _ in fired), default=None)
+    if unavailable:
+        # The rules that ran decide only when no rule that could not run could have
+        # outranked their outcome, or tied it with another type (ADR 0028).
+        top = {rule.decision for rule, _ in fired if outcomes.priorities[rule.decision] == highest}
+        decided = highest is not None and all(
+            outcomes.priorities[rule.decision] < highest
+            or (outcomes.priorities[rule.decision] == highest and top == {rule.decision})
+            for rule, _ in unavailable
+        )
+        if not decided:
+            names = sorted({n for _, down in unavailable for n in down.split(", ")})
+            return verdict(outcomes.escalate, f"{SOURCE_UNAVAILABLE}: {', '.join(names)}")
     if not fired:
         return verdict(outcomes.default, "")
 
-    highest = max(outcomes.priorities[r.decision] for r in fired)
-    winners = [r for r in fired if outcomes.priorities[r.decision] == highest]
-    decisions = sorted({r.decision for r in winners})
+    winners = [(rule, r) for rule, r in fired if outcomes.priorities[rule.decision] == highest]
+    decisions = sorted({rule.decision for rule, _ in winners})
     if len(decisions) > 1:
         tie = f"RULE_CONFLICT: {', '.join(decisions)} share priority {highest}"
         return verdict(outcomes.escalate, tie)
-    return verdict(decisions[0], " | ".join(r.text for r in winners))
+    # The rule's own reason code; its text stays on the rule, joined by `rule_id`.
+    reason = " | ".join(r.reason or rule.text for rule, r in winners)
+    # ponytail: always the escalation type; a process setting (`scan_rejection_decision`)
+    # when a process wants another outcome for rejected scans.
+    if scan is not None and decisions[0] not in (outcomes.default, outcomes.escalate):
+        return verdict(outcomes.escalate, f"SCAN_REVIEW: {reason}")
+    return verdict(decisions[0], reason)
 
 
 def decide(
@@ -134,14 +199,29 @@ def decide(
     sources: Sources,
     population: list[DatasetEntry],
     run_dataset: RunDataset,
+    scans: Mapping[int, Collection[str]] | None = None,
+    down: Mapping[int, Sequence[str]] | None = None,
 ) -> list[Verdict]:
     """Apply every rule to every instance. Each rule's code runs once, over all the instances
-    together; the shared sources and population cross to the sandbox once per rule."""
+    together; the shared sources and population cross to the sandbox once per rule.
+    `scans`: the instances read from a scan, not a text layer, each with the symbols its
+    readers did not confirm. `down`: per rule id, the unavailable sources it reads; the
+    caller finds them, the engine only honours them (ADR 0028)."""
     if not instances:
         return []
-    by_rule = [_run_rule(rule, instances, sources, population, run_dataset) for rule in rules]
+    by_rule = [
+        _run_rule(rule, instances, sources, population, run_dataset, (down or {}).get(rule.id, ()))
+        for rule in rules
+    ]
     rules_hash = hash_rules(rules)
     return [
-        _combine(rules, [r[k] for r in by_rule], outcomes, rules_hash)
-        for k in range(len(instances))
+        _combine(
+            rules,
+            [r[k] for r in by_rule],
+            outcomes,
+            rules_hash,
+            _missing(outcomes, values),
+            (scans or {}).get(key),
+        )
+        for k, (key, values) in enumerate(instances)
     ]

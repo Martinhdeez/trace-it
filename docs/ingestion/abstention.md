@@ -29,5 +29,6 @@ Historical `scan_025.pdf` invoice number lacked corroboration; `scan_026.pdf` ha
 `F26-7712` and `NF26-7712` readings. Their other nine fields retained matching readings.
 Artifacts remain in ignored `backend/reports/abstention-cold/`.
 
-The current API exposes best readings, including single-reader proposals, and produces no
-NEEDS_REVIEW/HUMAN_REVIEW decision.
+The current API preserves single-reader proposals separately. Critical identifiers
+require verification for `value`; see [the current policy](focused-verification.md).
+It produces no NEEDS_REVIEW/HUMAN_REVIEW document decision.

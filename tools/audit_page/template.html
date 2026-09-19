@@ -1,0 +1,782 @@
+<title>La Caja Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --ground: #f4f5f1;
+    --surface: #ffffff;
+    --surface-2: #eceee7;
+    --line: #d8dbd2;
+    --line-soft: #e6e8e1;
+    --ink: #191c1a;
+    --ink-2: #4a514c;
+    --ink-3: #757d77;
+    --accent: #0f6e63;
+    --accent-soft: #dbebe8;
+    --pagar: #2c6e49;
+    --pagar-bg: #dcebe1;
+    --nopagar: #a63b38;
+    --nopagar-bg: #f4dedd;
+    --escalar: #96650f;
+    --escalar-bg: #f6e8cd;
+    --flag: #7a3ea1;
+    --flag-bg: #ece0f4;
+    --shadow: 0 1px 2px rgba(25, 28, 26, .07), 0 6px 18px -10px rgba(25, 28, 26, .18);
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #131614; --surface: #1b1f1d; --surface-2: #232825;
+      --line: #333935; --line-soft: #282e2a;
+      --ink: #e7eae5; --ink-2: #aab2ab; --ink-3: #7d867f;
+      --accent: #4bbfae; --accent-soft: #14312d;
+      --pagar: #6cc08a; --pagar-bg: #1a3325;
+      --nopagar: #e08a86; --nopagar-bg: #3a1f1e;
+      --escalar: #dfae5c; --escalar-bg: #3a2d14;
+      --flag: #c193e0; --flag-bg: #2d1f38;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 22px -12px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #131614; --surface: #1b1f1d; --surface-2: #232825;
+    --line: #333935; --line-soft: #282e2a;
+    --ink: #e7eae5; --ink-2: #aab2ab; --ink-3: #7d867f;
+    --accent: #4bbfae; --accent-soft: #14312d;
+    --pagar: #6cc08a; --pagar-bg: #1a3325;
+    --nopagar: #e08a86; --nopagar-bg: #3a1f1e;
+    --escalar: #dfae5c; --escalar-bg: #3a2d14;
+    --flag: #c193e0; --flag-bg: #2d1f38;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 22px -12px rgba(0,0,0,.7);
+  }
+
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+  .shell { display: flex; flex-direction: column; height: 100%; }
+  header.bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+    background: var(--surface); border-bottom: 1px solid var(--line);
+    padding: 12px 16px 0; display: flex; flex-direction: column; gap: 10px;
+  }
+  .titlerow { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .titlerow h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+  .titlerow .sub { font-size: 12px; color: var(--ink-3); }
+  .titlerow .sub code { font-family: var(--mono); font-size: 11.5px; }
+
+  .tallies { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tally {
+    appearance: none; border: 1px solid var(--line); background: var(--surface-2);
+    color: var(--ink-2); border-radius: 999px; padding: 4px 11px;
+    font: inherit; font-size: 12px; cursor: pointer;
+    display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap;
+  }
+  .tally:hover { border-color: var(--accent); color: var(--ink); }
+  .tally[aria-pressed="true"] {
+    background: var(--accent-soft); border-color: var(--accent);
+    color: var(--ink); font-weight: 600;
+  }
+  .tally b { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+  .tally.v-PAGAR b { color: var(--pagar); }
+  .tally.v-NO_PAGAR b { color: var(--nopagar); }
+  .tally.v-ESCALAR b { color: var(--escalar); }
+  .tally.v-flag b { color: var(--flag); }
+
+  .searchrow { display: flex; gap: 8px; padding-bottom: 12px; align-items: center; flex-wrap: wrap; }
+  input[type="search"] {
+    flex: 1 1 220px; min-width: 0; font: inherit; font-family: var(--mono); font-size: 12.5px;
+    padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--ground); color: var(--ink);
+  }
+  input[type="search"]::placeholder { color: var(--ink-3); font-family: var(--sans); }
+  .hint { font-size: 11.5px; color: var(--ink-3); }
+  .hint kbd {
+    font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--line);
+    border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--surface-2);
+  }
+
+  .panes { flex: 1; display: grid; grid-template-columns: minmax(280px, 360px) 1fr; min-height: 0; }
+  .listpane { border-right: 1px solid var(--line); overflow-y: auto; background: var(--surface); }
+  .detailpane { overflow-y: auto; padding: 20px 24px 64px; }
+
+  .rowcount {
+    position: sticky; top: 0; z-index: 2; padding: 7px 14px; font-size: 11.5px;
+    color: var(--ink-3); background: var(--surface); border-bottom: 1px solid var(--line-soft);
+  }
+  ul.rows { list-style: none; margin: 0; padding: 0; }
+  ul.rows li { border-bottom: 1px solid var(--line-soft); }
+  .row {
+    width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px;
+    align-items: center; padding: 8px 14px; background: none; border: 0;
+    border-left: 3px solid transparent; font: inherit; color: inherit;
+    text-align: left; cursor: pointer;
+  }
+  .row:hover { background: var(--surface-2); }
+  .row[aria-current="true"] { background: var(--accent-soft); border-left-color: var(--accent); }
+  .row .name { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .meta { grid-column: 1 / -1; font-size: 11px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .marks { display: flex; gap: 4px; align-items: center; }
+
+  .pill {
+    font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .04em;
+    padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+  }
+  .pill.PAGAR { background: var(--pagar-bg); color: var(--pagar); }
+  .pill.NO_PAGAR { background: var(--nopagar-bg); color: var(--nopagar); }
+  .pill.ESCALAR { background: var(--escalar-bg); color: var(--escalar); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+  .dot.diverge { background: var(--flag); }
+  .dot.ok { background: var(--pagar); }
+  .dot.wrong { background: var(--nopagar); }
+  .dot.unsure { background: var(--escalar); }
+
+  .detail { max-width: 1000px; display: flex; flex-direction: column; gap: 18px; }
+  .dhead { display: flex; flex-direction: column; gap: 8px; }
+  .dhead .fname { font-family: var(--mono); font-size: 17px; font-weight: 600; letter-spacing: -.01em; word-break: break-all; }
+  .verdicts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .verdict { border: 1px solid var(--line); border-radius: 7px; background: var(--surface); padding: 8px 12px; min-width: 130px; }
+  .verdict .k { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); font-weight: 600; }
+  .verdict .v { font-family: var(--mono); font-size: 14px; font-weight: 600; margin-top: 2px; }
+  .verdict .v.PAGAR { color: var(--pagar); }
+  .verdict .v.NO_PAGAR { color: var(--nopagar); }
+  .verdict .v.ESCALAR { color: var(--escalar); }
+  .verdict .v.none { color: var(--ink-3); font-weight: 400; }
+  .verdict.is-shipped { border-color: var(--accent); box-shadow: var(--shadow); }
+
+  .banner {
+    border-radius: 7px; padding: 10px 13px; font-size: 12.5px; border: 1px solid;
+    display: flex; gap: 9px; align-items: flex-start;
+  }
+  .banner.diverge { background: var(--flag-bg); border-color: var(--flag); color: var(--ink); }
+  .banner.scan { background: var(--surface-2); border-color: var(--line); color: var(--ink-2); }
+  .banner b { font-weight: 600; }
+
+  section.block { display: flex; flex-direction: column; gap: 8px; }
+  section.block > h2 {
+    margin: 0; font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--ink-3); font-weight: 700;
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  }
+  section.block > h2 .note { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11.5px; }
+
+  .reasonbox {
+    font-family: var(--mono); font-size: 13px; background: var(--surface);
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0; padding: 10px 13px; overflow-x: auto; white-space: pre-wrap;
+  }
+  .reasonbox.none { border-left-color: var(--line); color: var(--ink-3); }
+
+  /* --- document viewer --- */
+  .docview {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2);
+    padding: 12px; display: flex; flex-direction: column; gap: 10px; align-items: center;
+  }
+  .docview canvas {
+    max-width: 100%; height: auto; background: #fff;
+    box-shadow: var(--shadow); border-radius: 3px;
+  }
+  .docbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; align-self: stretch; }
+  .btn {
+    appearance: none; font: inherit; font-size: 12.5px; padding: 5px 12px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--ink); }
+  .docstatus { font-size: 11.5px; color: var(--ink-3); }
+
+  /* --- rules --- */
+  .rulegrid { display: flex; flex-direction: column; gap: 6px; }
+  .rule {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 7px;
+    padding: 9px 12px; display: flex; flex-direction: column; gap: 5px;
+  }
+  .rule.fired { border-left: 3px solid var(--escalar); }
+  .rule.quiet { opacity: .62; }
+  .rule.errored { border-left: 3px solid var(--nopagar); }
+  .rule .rhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .rule .rid { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--ink-3); }
+  .rule .verdicttag {
+    font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .04em;
+    padding: 2px 6px; border-radius: 4px; background: var(--surface-2); color: var(--ink-3);
+  }
+  .rule.fired .verdicttag { background: var(--escalar-bg); color: var(--escalar); }
+  .rule.errored .verdicttag { background: var(--nopagar-bg); color: var(--nopagar); }
+  .rule .rreason { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
+  .rule .rtext { font-size: 12.5px; color: var(--ink-2); }
+
+  /* --- source tables --- */
+  table.data { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  table.data th, table.data td {
+    text-align: left; padding: 5px 10px 5px 0;
+    border-bottom: 1px solid var(--line-soft); vertical-align: top;
+  }
+  table.data th { font-weight: 500; color: var(--ink-3); width: 165px; font-size: 12px; }
+  table.data td { font-family: var(--mono); font-variant-numeric: tabular-nums; word-break: break-all; }
+  table.data td.empty { color: var(--ink-3); font-style: italic; font-family: var(--sans); }
+  table.data td .match { color: var(--pagar); font-weight: 600; }
+  table.data td .mismatch { color: var(--nopagar); font-weight: 600; }
+  .srcgroup { background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 10px 13px; }
+  .srcgroup > h3 {
+    margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--ink);
+    display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  }
+  .srcgroup > h3 .from { font-weight: 400; font-size: 11px; color: var(--ink-3); }
+  .srcnone { font-size: 12.5px; color: var(--ink-3); font-style: italic; }
+
+  .doctext {
+    font-family: var(--mono); font-size: 12px; line-height: 1.6; white-space: pre-wrap;
+    word-break: break-word; background: var(--surface-2); border: 1px dashed var(--line);
+    border-radius: 7px; padding: 12px 14px; max-height: 320px; overflow-y: auto; color: var(--ink-2);
+  }
+  .untrusted { font-size: 11px; color: var(--ink-3); display: flex; gap: 6px; align-items: baseline; }
+
+  .review {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    padding: 13px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow);
+  }
+  .choices { display: flex; gap: 7px; flex-wrap: wrap; }
+  .choice {
+    appearance: none; font: inherit; font-size: 12.5px; padding: 6px 13px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--ground); color: var(--ink-2); cursor: pointer;
+  }
+  .choice:hover { border-color: var(--ink-3); color: var(--ink); }
+  .choice[aria-pressed="true"] { font-weight: 600; color: var(--ink); }
+  .choice.ok[aria-pressed="true"] { background: var(--pagar-bg); border-color: var(--pagar); }
+  .choice.wrong[aria-pressed="true"] { background: var(--nopagar-bg); border-color: var(--nopagar); }
+  .choice.unsure[aria-pressed="true"] { background: var(--escalar-bg); border-color: var(--escalar); }
+  .review textarea {
+    font: inherit; font-size: 12.5px; padding: 8px 10px; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--ground); color: var(--ink); resize: vertical;
+    min-height: 54px; width: 100%;
+  }
+  .revstatus { font-size: 11.5px; color: var(--ink-3); min-height: 17px; }
+  .revstatus.off { font-style: italic; }
+  .empty-detail { color: var(--ink-3); font-size: 13px; max-width: 44ch; }
+
+  @media (max-width: 860px) {
+    .panes { grid-template-columns: 1fr; }
+    .listpane { border-right: 0; border-bottom: 1px solid var(--line); max-height: 42vh; }
+    .detailpane { padding: 16px; }
+    .verdict { min-width: 108px; flex: 1 1 108px; }
+    table.data th { width: 120px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="shell">
+  <header class="bar">
+    <div class="titlerow">
+      <h1>La Caja Audit</h1>
+      <span class="sub">500 invoices &middot; shipped <code>outcomes.jsonl</code> vs this machine&rsquo;s engine vs the independent reference</span>
+    </div>
+    <div class="tallies" id="tallies"></div>
+    <div class="searchrow">
+      <input type="search" id="q" placeholder="Search file name, reason, NIF, IBAN, order, invoice text&hellip;" autocomplete="off">
+      <span class="hint"><kbd>j</kbd>/<kbd>k</kbd> move &middot; <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> mark ok / wrong / unsure</span>
+    </div>
+  </header>
+  <div class="panes">
+    <nav class="listpane" aria-label="Invoices">
+      <div class="rowcount" id="rowcount"></div>
+      <ul class="rows" id="rows"></ul>
+    </nav>
+    <main class="detailpane" id="detail"></main>
+  </div>
+</div>
+
+<script id="audit-data" type="application/json">__DATA__</script>
+__PDFS__
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var PAYLOAD = JSON.parse(document.getElementById("audit-data").textContent);
+  var RECORDS = PAYLOAD.records;
+  var ALL_RULES = PAYLOAD.rules;
+  var VERDICT_LABEL = { ok: "Looks right", wrong: "Wrong", unsure: "Unsure" };
+
+  var PDF_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  function pdfLib() {
+    if (!window.pdfjsLib) return null;
+    if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER;
+    }
+    return window.pdfjsLib;
+  }
+
+  RECORDS.forEach(function (r) {
+    r.diverge = r.local !== r.delivered;
+    r.key = r.file_id.replace(/[^A-Za-z0-9]+/g, "_");
+    r.haystack = [
+      r.file_id, r.delivered, r.local, r.reason, r.why || "",
+      r.rules.filter(function (x) { return x.fires; })
+        .map(function (f) { return f.reason + " " + f.text; }).join(" "),
+      Object.keys(r.symbols).map(function (k) { return k + " " + (r.symbols[k] || ""); }).join(" "),
+      r.text
+    ].join(" ").toLowerCase();
+  });
+
+  var state = { filter: null, query: "", selected: RECORDS[0] ? RECORDS[0].file_id : null };
+  var reviews = Object.create(null);
+  var db = null, user = null, myId = null;
+  var pdfScale = 1.35;
+
+  var elRows = document.getElementById("rows");
+  var elCount = document.getElementById("rowcount");
+  var elDetail = document.getElementById("detail");
+  var elTallies = document.getElementById("tallies");
+  var elQ = document.getElementById("q");
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function normKey(v) { return String(v == null ? "" : v).replace(/[\s.\-]/g, "").toUpperCase(); }
+
+  var FILTERS = [
+    { id: null, label: "All", cls: "", count: function () { return RECORDS.length; } },
+    { id: "PAGAR", label: "PAGAR", cls: "v-PAGAR", count: byResult("PAGAR") },
+    { id: "NO_PAGAR", label: "NO_PAGAR", cls: "v-NO_PAGAR", count: byResult("NO_PAGAR") },
+    { id: "ESCALAR", label: "ESCALAR", cls: "v-ESCALAR", count: byResult("ESCALAR") },
+    { id: "diverge", label: "Engines differ", cls: "v-flag", count: function () {
+        return RECORDS.filter(function (r) { return r.diverge; }).length; } },
+    { id: "scan", label: "Scans", cls: "", count: function () {
+        return RECORDS.filter(function (r) { return r.is_scan; }).length; } },
+    { id: "unreviewed", label: "Not reviewed", cls: "", count: function () {
+        return RECORDS.filter(function (r) { return !reviews[r.file_id]; }).length; } }
+  ];
+  function byResult(v) {
+    return function () { return RECORDS.filter(function (r) { return r.delivered === v; }).length; };
+  }
+  function matchesFilter(r) {
+    var f = state.filter;
+    if (!f) return true;
+    if (f === "diverge") return r.diverge;
+    if (f === "scan") return r.is_scan;
+    if (f === "unreviewed") return !reviews[r.file_id];
+    return r.delivered === f;
+  }
+  function visible() {
+    var q = state.query.trim().toLowerCase();
+    return RECORDS.filter(function (r) {
+      return matchesFilter(r) && (!q || r.haystack.indexOf(q) !== -1);
+    });
+  }
+
+  function renderTallies() {
+    elTallies.textContent = "";
+    FILTERS.forEach(function (f) {
+      var b = document.createElement("button");
+      b.className = "tally " + f.cls;
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(state.filter === f.id));
+      b.innerHTML = esc(f.label) + " <b>" + f.count() + "</b>";
+      b.addEventListener("click", function () {
+        state.filter = state.filter === f.id ? null : f.id;
+        renderTallies(); renderList();
+      });
+      elTallies.appendChild(b);
+    });
+  }
+
+  function renderList() {
+    var rows = visible();
+    elCount.textContent = rows.length + " of " + RECORDS.length + " shown";
+    elRows.textContent = "";
+    if (rows.length && !rows.some(function (r) { return r.file_id === state.selected; })) {
+      state.selected = rows[0].file_id;
+    }
+    rows.forEach(function (r) {
+      var li = document.createElement("li");
+      var b = document.createElement("button");
+      b.className = "row"; b.type = "button";
+      b.setAttribute("aria-current", String(r.file_id === state.selected));
+      b.dataset.id = r.file_id;
+      var marks = '<span class="marks">';
+      if (r.diverge) marks += '<span class="dot diverge" title="This machine\'s engine disagrees"></span>';
+      var rev = reviews[r.file_id];
+      if (rev && rev.verdict) marks += '<span class="dot ' + esc(rev.verdict) + '" title="' + esc(VERDICT_LABEL[rev.verdict] || "") + '"></span>';
+      marks += '<span class="pill ' + esc(r.delivered) + '">' + esc(r.delivered) + "</span></span>";
+      b.innerHTML = '<span class="name">' + esc(r.file_id) + "</span>" + marks +
+        '<span class="meta">' + esc(r.reason === "NO_FINDING" ? "no finding" : r.reason) + "</span>";
+      b.addEventListener("click", function () { select(r.file_id); });
+      li.appendChild(b); elRows.appendChild(li);
+    });
+    renderDetail();
+  }
+
+  function select(id) {
+    state.selected = id;
+    Array.prototype.forEach.call(elRows.querySelectorAll(".row"), function (el) {
+      el.setAttribute("aria-current", String(el.dataset.id === id));
+    });
+    var cur = elRows.querySelector('.row[aria-current="true"]');
+    if (cur) cur.scrollIntoView({ block: "nearest" });
+    renderDetail();
+  }
+
+  function verdictCard(k, v, shipped) {
+    return '<div class="verdict' + (shipped ? " is-shipped" : "") + '">' +
+      '<div class="k">' + esc(k) + "</div>" +
+      '<div class="v ' + (v ? esc(v) : "none") + '">' + esc(v || "no opinion") + "</div></div>";
+  }
+
+  // one row of a source table, comparing against the invoice's own symbol
+  function cmpRow(label, sourceValue, symbolValue) {
+    var has = sourceValue !== undefined && sourceValue !== null && sourceValue !== "";
+    if (!has) return "<tr><th>" + esc(label) + '</th><td class="empty">empty</td></tr>';
+    var cell = esc(sourceValue);
+    if (symbolValue !== undefined && symbolValue !== null && symbolValue !== "") {
+      var same = normKey(sourceValue) === normKey(symbolValue);
+      cell = '<span class="' + (same ? "match" : "mismatch") + '">' + esc(sourceValue) + "</span>" +
+        (same ? "" : ' <span style="color:var(--ink-3)">≠ invoice ' + esc(symbolValue) + "</span>");
+    }
+    return "<tr><th>" + esc(label) + "</th><td>" + cell + "</td></tr>";
+  }
+
+  function sourceBlock(r) {
+    var s = r.sources || {}, sym = r.symbols || {}, h = [];
+
+    h.push('<div class="srcgroup"><h3>Supplier master <span class="from">workbook &middot; sheet <code>Proveedores</code>, matched on NIF</span></h3>');
+    if (!s.suppliers || !s.suppliers.length) {
+      h.push('<p class="srcnone">No row in the master has this NIF' +
+        (sym.issuer_nif ? " (" + esc(sym.issuer_nif) + ")" : " (the invoice NIF was not read)") + ".</p>");
+    } else {
+      s.suppliers.forEach(function (row) {
+        h.push('<table class="data"><tbody>');
+        h.push(cmpRow("id", row.id));
+        h.push(cmpRow("company_name", row.company_name));
+        h.push(cmpRow("nif", row.nif, sym.issuer_nif));
+        h.push(cmpRow("iban", row.iban, sym.iban));
+        h.push("</tbody></table>");
+      });
+      if (s.suppliers.length > 1) {
+        h.push('<p class="srcnone">' + s.suppliers.length + " rows share this NIF.</p>");
+      }
+    }
+    h.push("</div>");
+
+    h.push('<div class="srcgroup"><h3>Purchase order <span class="from">workbook &middot; sheet <code>Pedidos_2026</code>, matched on order number</span></h3>');
+    if (!s.order) {
+      h.push('<p class="srcnone">No order row for ' +
+        (sym.purchase_order ? esc(sym.purchase_order) : "this invoice (the order was not read)") + ".</p>");
+    } else {
+      h.push('<table class="data"><tbody>');
+      h.push(cmpRow("purchase_order", s.order.purchase_order, sym.purchase_order));
+      h.push(cmpRow("supplier_id", s.order.supplier_id));
+      h.push(cmpRow("nif", s.order.nif, sym.issuer_nif));
+      h.push(cmpRow("total_amount", s.order.total_amount, sym.total));
+      h.push(cmpRow("status", s.order.status));
+      h.push(cmpRow("order_date", s.order.order_date));
+      h.push("</tbody></table>");
+    }
+    h.push("</div>");
+
+    h.push('<div class="srcgroup"><h3>ERP entry <span class="from">live bridge snapshot &middot; the official accounting reference</span></h3>');
+    if (!s.erp) {
+      h.push('<p class="srcnone">No ERP entry for ' +
+        (sym.purchase_order ? esc(sym.purchase_order) : "this invoice (the order was not read)") + ".</p>");
+    } else {
+      h.push('<table class="data"><tbody>');
+      h.push(cmpRow("entry_id", s.erp.entry_id));
+      h.push(cmpRow("purchase_order", s.erp.purchase_order, sym.purchase_order));
+      h.push(cmpRow("supplier_id", s.erp.supplier_id));
+      h.push(cmpRow("nif", s.erp.nif, sym.issuer_nif));
+      h.push(cmpRow("amount", s.erp.amount, sym.total));
+      h.push(cmpRow("status", s.erp.status));
+      h.push(cmpRow("date", s.erp.date));
+      h.push("</tbody></table>");
+    }
+    h.push("</div>");
+
+    if (s.parameters && s.parameters.length) {
+      h.push('<div class="srcgroup"><h3>Parameters <span class="from">the engine never reads a clock; the cut-off is a source row</span></h3><table class="data"><tbody>');
+      Object.keys(s.parameters[0]).forEach(function (k) {
+        h.push(cmpRow(k, s.parameters[0][k]));
+      });
+      h.push("</tbody></table></div>");
+    }
+    return h.join("");
+  }
+
+  function renderDetail() {
+    var r = RECORDS.filter(function (x) { return x.file_id === state.selected; })[0];
+    if (!r) {
+      elDetail.innerHTML = '<p class="empty-detail">No invoice matches these filters. Clear the search or pick another tally above.</p>';
+      return;
+    }
+    var h = ['<div class="detail">'];
+
+    h.push('<div class="dhead"><div class="fname">' + esc(r.file_id) + "</div>");
+    h.push('<div class="verdicts">');
+    h.push(verdictCard("Shipped", r.delivered, true));
+    h.push(verdictCard("This machine", r.local, false));
+    h.push(verdictCard("Independent reference", r.expected, false));
+    h.push("</div></div>");
+
+    if (r.diverge) {
+      h.push('<div class="banner diverge"><span>&#9670;</span><span>Shipped as <b>' + esc(r.delivered) +
+        "</b>, but this machine's engine says <b>" + esc(r.local) +
+        "</b>. The shipped run read this scan with the full OCR committee; this one had only the local readers, " +
+        "so fields below came back unread and it escalated. Compare the document against the symbols.</span></div>");
+    }
+    if (r.is_scan) {
+      h.push('<div class="banner scan"><span>&#9673;</span><span>Image-only scan. The independent reference has ' +
+        "<b>no expected outcome</b> for it, so nothing here is cross-checked &mdash; this is the set that most needs human eyes.</span></div>");
+    }
+
+    h.push('<section class="block"><h2>Original document</h2>');
+    h.push('<div class="docview" id="docview"><div class="docbar">' +
+      '<button type="button" class="btn" data-zoom="out">Zoom out</button>' +
+      '<button type="button" class="btn" data-zoom="in">Zoom in</button>' +
+      '<span class="docstatus" id="docstatus">Loading&hellip;</span></div>' +
+      '<div id="docpages"></div></div></section>');
+
+    h.push('<section class="block"><h2>Reason recorded with the decision</h2>');
+    h.push('<div class="reasonbox' + (r.reason === "NO_FINDING" ? " none" : "") + '">' +
+      esc(r.reason === "NO_FINDING" ? "NO_FINDING — no rule fired, so the process default applied" : r.reason) +
+      "</div></section>");
+
+    var fired = r.rules.filter(function (x) { return x.fires === true; });
+    var errored = r.rules.filter(function (x) { return x.fires === null; });
+    var quiet = r.rules.filter(function (x) { return x.fires === false; });
+    h.push('<section class="block"><h2>All rules <span class="note">' + fired.length + " fired &middot; " +
+      quiet.length + " did not &middot; " + errored.length + ' could not be evaluated</span></h2><div class="rulegrid">');
+    function ruleCard(f, cls, tag) {
+      return '<div class="rule ' + cls + '"><div class="rhead">' +
+        '<span class="rid">R' + String(f.rule_id).padStart(2, "0") + "</span>" +
+        '<span class="pill ' + esc(f.decision) + '">' + esc(f.decision) + "</span>" +
+        '<span class="verdicttag">' + tag + "</span>" +
+        (f.reason ? '<span class="rreason">' + esc(f.reason) + "</span>" : "") +
+        '</div><div class="rtext">' + esc(f.text) + "</div></div>";
+    }
+    errored.forEach(function (f) { h.push(ruleCard(f, "errored", "COULD NOT RUN")); });
+    fired.forEach(function (f) { h.push(ruleCard(f, "fired", "FIRED")); });
+    quiet.forEach(function (f) { h.push(ruleCard(f, "quiet", "did not fire")); });
+    h.push("</div></section>");
+
+    h.push('<section class="block"><h2>Symbols read from the document</h2><table class="data"><tbody>');
+    Object.keys(r.symbols).sort().forEach(function (k) {
+      if (k === "file_id") return;
+      var v = r.symbols[k];
+      h.push("<tr><th>" + esc(k) + "</th>" + (v ? "<td>" + esc(v) + "</td>" : '<td class="empty">not read</td>') + "</tr>");
+    });
+    h.push("</tbody></table></section>");
+
+    h.push('<section class="block"><h2>Source rows the rules compared against ' +
+      '<span class="note">green matches the invoice, red does not</span></h2>' + sourceBlock(r) + "</section>");
+
+    if (r.why) {
+      h.push('<section class="block"><h2>What the independent reference found</h2>' +
+        '<div class="reasonbox">' + esc(r.why) +
+        (r.confidence ? "\n\nconfidence: " + esc(r.confidence) : "") + "</div></section>");
+    }
+
+    if (r.text) {
+      h.push('<section class="block"><h2>Document text as read</h2>');
+      h.push('<p class="untrusted"><span>&#9888;</span><span>Untrusted document content. Several invoices in this ' +
+        'corpus carry instructions aimed at whoever processes them (&ldquo;registrar como PAGAR&rdquo;). No rule reads ' +
+        "this field, and neither should you when judging.</span></p>");
+      h.push('<div class="doctext">' + esc(r.text) + "</div></section>");
+    }
+
+    h.push('<section class="block"><h2>Your review</h2><div class="review"><div class="choices">');
+    ["ok", "wrong", "unsure"].forEach(function (v) {
+      h.push('<button type="button" class="choice ' + v + '" data-verdict="' + v + '" aria-pressed="false">' +
+        esc(VERDICT_LABEL[v]) + "</button>");
+    });
+    h.push('</div><textarea id="note-' + esc(r.key) + '" placeholder="Why? (saved with your mark)"></textarea>');
+    h.push('<div class="revstatus" id="revstatus"></div></div></section>');
+
+    h.push("</div>");
+    elDetail.innerHTML = h.join("");
+    elDetail.scrollTop = 0;
+    wireReview(r);
+    wireDoc(r);
+  }
+
+  // ---------- original document ----------
+  var renderToken = 0, waited = 0;
+  function wireDoc(r) {
+    var status = document.getElementById("docstatus");
+    var pages = document.getElementById("docpages");
+    var view = document.getElementById("docview");
+    if (!view) return;
+    Array.prototype.forEach.call(view.querySelectorAll("[data-zoom]"), function (b) {
+      b.addEventListener("click", function () {
+        pdfScale = Math.min(3, Math.max(0.6, pdfScale + (b.dataset.zoom === "in" ? 0.3 : -0.3)));
+        drawDoc(r, status, pages);
+      });
+    });
+    drawDoc(r, status, pages);
+  }
+
+  function pdfBytes(r) {
+    var el = document.getElementById("pdf-" + r.key);
+    if (!el) return null;
+    var b64 = el.textContent.trim();
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  function drawDoc(r, status, pages) {
+    var token = ++renderToken;
+    pages.textContent = "";
+    var bytes = pdfBytes(r);
+    if (!bytes) { status.textContent = "This document is not embedded in the page."; return; }
+    // pdf.js loads asynchronously so a slow CDN can never block the rest of the page.
+    var lib = pdfLib();
+    if (!lib) {
+      if (waited > 40) { status.textContent = "The PDF renderer did not load in this view."; return; }
+      status.textContent = "Loading the renderer...";
+      waited++;
+      setTimeout(function () { if (token === renderToken) drawDoc(r, status, pages); }, 250);
+      return;
+    }
+    status.textContent = "Rendering…";
+    lib.getDocument({ data: bytes }).promise.then(function (doc) {
+      if (token !== renderToken) return;
+      status.textContent = doc.numPages + (doc.numPages === 1 ? " page" : " pages") +
+        " · " + Math.round(pdfScale * 100) + "%";
+      var chain = Promise.resolve();
+      for (var p = 1; p <= doc.numPages; p++) {
+        (function (num) {
+          chain = chain.then(function () {
+            if (token !== renderToken) return;
+            return doc.getPage(num).then(function (page) {
+              if (token !== renderToken) return;
+              var vp = page.getViewport({ scale: pdfScale });
+              var canvas = document.createElement("canvas");
+              canvas.width = vp.width; canvas.height = vp.height;
+              canvas.setAttribute("role", "img");
+              canvas.setAttribute("aria-label", "Page " + num + " of " + r.file_id);
+              pages.appendChild(canvas);
+              return page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+            });
+          });
+        })(p);
+      }
+      return chain;
+    }).catch(function () {
+      if (token === renderToken) status.textContent = "This document could not be rendered.";
+    });
+  }
+
+  // ---------- review ----------
+  function wireReview(r) {
+    var rev = reviews[r.file_id] || {};
+    var status = document.getElementById("revstatus");
+    var note = elDetail.querySelector(".review textarea");
+    if (note) note.value = rev.note || "";
+    Array.prototype.forEach.call(elDetail.querySelectorAll(".choice"), function (btn) {
+      btn.setAttribute("aria-pressed", String(rev.verdict === btn.dataset.verdict));
+      btn.addEventListener("click", function () {
+        var next = rev.verdict === btn.dataset.verdict ? null : btn.dataset.verdict;
+        save(r, next, note ? note.value : "");
+      });
+    });
+    if (note) {
+      note.addEventListener("change", function () {
+        if (reviews[r.file_id]) save(r, reviews[r.file_id].verdict, note.value);
+      });
+    }
+    showStatus(status, r);
+  }
+
+  function showStatus(status, r) {
+    if (!status) return;
+    var rev = reviews[r.file_id];
+    if (!db) {
+      status.className = "revstatus off";
+      status.textContent = "Shared review is unavailable in this view — marks will not be saved.";
+      return;
+    }
+    status.className = "revstatus";
+    status.textContent = rev && rev.verdict
+      ? "Marked “" + (VERDICT_LABEL[rev.verdict] || rev.verdict) + "”" +
+        (rev.byName ? " by " + rev.byName : "") +
+        (rev.at ? " · " + new Date(rev.at).toLocaleString() : "")
+      : "Not reviewed yet.";
+  }
+
+  function save(r, verdict, noteText) {
+    var record = verdict
+      ? { file_id: r.file_id, verdict: verdict, note: noteText || "", by: myId || null, at: new Date().toISOString() }
+      : null;
+    if (record) { reviews[r.file_id] = record; } else { delete reviews[r.file_id]; }
+    renderList();
+    if (!db) return;
+    var doc = db.doc("reviews/" + r.key);
+    (record ? doc.set(record) : doc.delete()).catch(function () {
+      var s = document.getElementById("revstatus");
+      if (s) { s.className = "revstatus off"; s.textContent = "Could not save that mark."; }
+    });
+  }
+
+  document.addEventListener("keydown", function (e) {
+    var t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var rows = visible();
+    var i = rows.findIndex(function (r) { return r.file_id === state.selected; });
+    if (e.key === "j" || e.key === "ArrowDown") {
+      if (i < rows.length - 1) { select(rows[i + 1].file_id); e.preventDefault(); }
+    } else if (e.key === "k" || e.key === "ArrowUp") {
+      if (i > 0) { select(rows[i - 1].file_id); e.preventDefault(); }
+    } else if (e.key === "1" || e.key === "2" || e.key === "3") {
+      var map = { "1": "ok", "2": "wrong", "3": "unsure" };
+      var cur = rows[i];
+      if (cur) {
+        var existing = reviews[cur.file_id];
+        save(cur, existing && existing.verdict === map[e.key] ? null : map[e.key], existing ? existing.note : "");
+        e.preventDefault();
+      }
+    }
+  });
+
+  elQ.addEventListener("input", function () {
+    state.query = elQ.value; renderTallies(); renderList();
+  });
+
+  renderTallies();
+  renderList();
+
+  (async function () {
+    try {
+      user = await window.claude?.use?.("user");
+      if (user) myId = await user.id();
+    } catch (err) { /* anonymous */ }
+    try { db = await window.claude?.use?.("db"); } catch (err) { db = null; }
+    if (!db) { renderDetail(); return; }
+    try {
+      db.collection("reviews").onSnapshot(function (docs) {
+        reviews = Object.create(null);
+        var ids = [];
+        (docs || []).forEach(function (d) {
+          var v = d.data ? d.data() : d;
+          if (v && v.file_id) { reviews[v.file_id] = v; if (v.by) ids.push(v.by); }
+        });
+        if (user && ids.length) {
+          user.profiles(ids).then(function (ps) {
+            Object.keys(reviews).forEach(function (f) {
+              var by = reviews[f].by;
+              if (by && ps[by]) reviews[f].byName = ps[by].name || "Someone";
+            });
+            renderTallies(); renderList();
+          }).catch(function () { renderTallies(); renderList(); });
+        } else { renderTallies(); renderList(); }
+      });
+    } catch (err) { db = null; renderDetail(); }
+  })();
+})();
+</script>

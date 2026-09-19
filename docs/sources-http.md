@@ -5,8 +5,20 @@ A process pack declares the external APIs its rules read in `processes/<pack>/so
 connector (`backend/app/features/sources/http_connector.py`) reads that configuration. The
 challenge ERP is its first configuration. ADR 0013 records why it works this way.
 
+**Connectors belong to the use case.** The ERP is the invoice use case's, not one process's.
+A sync of any process finds the pack of the process's use case: the `processes/*.json` whose
+`use_case` names it (a pack without `use_case` gives its own `name` to its use case), and
+reads `sources.json` beside it. A process created later in the same use case (e.g. from a
+norm, "Invoice payment - live norm") syncs with the same connector. A use case with no such
+pack answers 404 naming the use case.
+
 **Rules never call the API.** A sync downloads everything and writes one new `sources` row
 (a snapshot). The engine reads the latest snapshot per source name.
+
+**Live sources sync before every run** (ADR 0028). A source marked `sync_before_run` in the
+pack's `schema.json` is synced at the start of every `run` and `reprocess` (not a dry run).
+If that sync fails the source is down for the run: its snapshots stay stored but are not
+read, and the rules that read it do not run (`SOURCE_UNAVAILABLE: <source>`).
 
 ## Running it
 
@@ -26,8 +38,10 @@ environment wins over `.env`.
 
 - **All or nothing.** A new snapshot is written only when every page arrived, the record
   count equals the total the API reports, and no key appears twice. Otherwise nothing is
-  written, the previous snapshot stays current, and a `sync_source_failed` event records
-  why.
+  written, and an error `sync_source` span records why. The previous snapshot stays in
+  the history, but the source shows `down` and runs do not read it until a sync succeeds.
+- **Canonical.** The rows must have the pack's canonical schema (below): a required field
+  the connector does not map, or that is absent, null or blank in any row, fails the sync.
 - **Deterministic.** Rows are sorted by the key. Two syncs of an unchanged source produce
   identical rows (same `rows_hash`).
 - **Traced.** Every sync writes a `sync_source` event with pages, requests, retries,
@@ -103,6 +117,10 @@ or `python3 alberto_erp.py --lote2 <csv>`), then sync again. The response and th
 endpoint list the added, removed and changed entries. The trace shows
 `status.update_loaded == "SI"`.
 
+A new snapshot changes nothing already decided. To apply it to past decisions:
+`POST /processes/{id}/reprocess?dry_run=true` to see what would change, then without
+`dry_run` to append the new decisions (`docs/runbook-batch2.md`).
+
 
 ## Not generic yet
 
@@ -113,3 +131,26 @@ Each item below needs new code behind the same configuration once a second API n
 - concurrent page downloads (sequential is fast enough at 10 req/s);
 - incremental syncs (every sync downloads everything);
 - a status field that invalidates a sync (it is only recorded).
+
+## Canonical schema (`schema.json`)
+
+Rules see one fixed shape per source, whatever system it comes from. The pack declares it in
+`processes/<pack>/schema.json`; each connector maps its own fields to these names in
+`fields` (`"purchase_order": {"source": "pedido"}`). A new ERP is a new `fields` mapping, not
+new rules. A sync that does not conform fails loudly and the source is down (ADR 0028).
+
+Invoice pack (`processes/invoice-payment/schema.json`), the names the rules already read:
+
+| Source | Required (present, not blank, every row) | Optional | Live |
+|---|---|---|---|
+| `erp` (ERP entries: one per order, with its payment status) | `entry_id`, `date` (ISO), `supplier_id`, `purchase_order`, `amount` (decimal point), `status` (`PENDIENTE`, `PAGADA`) | `nif` | `sync_before_run: true` |
+| `suppliers` (supplier master) | `id`, `nif`, `iban` | `company_name` | no (workbook) |
+| `orders` (purchase orders) | `purchase_order`, `total_amount`, `status` | `supplier_id`, `nif`, `order_date` | no (workbook) |
+| `parameters` | `cut_off_date` | | no (workbook) |
+
+```json
+{"sources": {"erp": {"required": ["entry_id", "..."], "optional": ["nif"], "sync_before_run": true}}}
+```
+
+Only synced (HTTP) sources are validated against it today; the workbook loader checks its
+own required columns (`sources/workbook.py`).

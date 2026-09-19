@@ -1,0 +1,24 @@
+{
+  "source_id": 5,
+  "rows": 516,
+  "diff": {
+    "previous_id": 4,
+    "current_id": 5,
+    "added": [],
+    "removed": [],
+    "changed": {
+      "AS-00096": {
+        "status": [
+          "PENDIENTE",
+          "PAGADA"
+        ]
+      },
+      "AS-00476": {
+        "status": [
+          "PAGADA",
+          "PENDIENTE"
+        ]
+      }
+    }
+  }
+}

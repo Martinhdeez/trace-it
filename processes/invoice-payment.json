@@ -8,22 +8,22 @@
   ],
   "symbols": [
     {"name": "file_id", "type": "text", "description": "Exact name of the PDF (NFC)."},
-    {"name": "issuer_nif", "type": "text", "description": "NIF/CIF of the issuing supplier. Never the customer's (A58231074, Banco Miralmar)."},
+    {"name": "issuer_nif", "type": "text", "description": "NIF/CIF of the issuing supplier. Never the customer's (A58231074, Banco Miralmar).", "required": true},
     {"name": "issuer_name", "type": "text", "description": "Name of the issuer as printed. Trace only; no rule decides with it."},
-    {"name": "iban", "type": "text", "description": "Payment IBAN printed on the invoice."},
+    {"name": "iban", "type": "text", "description": "Payment IBAN printed on the invoice.", "required": true},
     {"name": "invoice_number", "type": "text", "description": "Invoice number as printed (FA-5077, 2026/0811-B, F26-0233)."},
-    {"name": "date", "type": "text", "description": "Issue date as YYYY-MM-DD with the printed numbers, uncorrected: 31/02/2026 -> \"2026-02-31\". Accepts DD/MM/YYYY and '6 de abril de 2026'. Never None because the date is impossible."},
-    {"name": "purchase_order", "type": "text", "description": "Purchase order reference (PO-YYYY-NNNN)."},
-    {"name": "base", "type": "number", "description": "Taxable base / Subtotal."},
-    {"name": "vat_rate", "type": "number", "description": "Printed VAT percentage (21 in 'IVA (21%)')."},
-    {"name": "vat_amount", "type": "number", "description": "Printed VAT amount."},
-    {"name": "total", "type": "number", "description": "Printed total (TOTAL, IMPORTE TOTAL, TOTAL A PAGAR, Total factura). Not Subtotal nor 'Suma y sigue'."},
+    {"name": "date", "type": "text", "description": "Issue date as YYYY-MM-DD with the printed numbers, uncorrected: 31/02/2026 -> \"2026-02-31\". Accepts DD/MM/YYYY and '6 de abril de 2026'. Never None because the date is impossible.", "required": true},
+    {"name": "purchase_order", "type": "text", "description": "Purchase order reference (PO-YYYY-NNNN).", "required": true},
+    {"name": "base", "type": "number", "description": "Taxable base / Subtotal.", "required": true},
+    {"name": "vat_rate", "type": "number", "description": "Printed VAT percentage (21 in 'IVA (21%)').", "required": true},
+    {"name": "vat_amount", "type": "number", "description": "Printed VAT amount.", "required": true},
+    {"name": "total", "type": "number", "description": "Printed total (TOTAL, IMPORTE TOTAL, TOTAL A PAGAR, Total factura). Not Subtotal nor 'Suma y sigue'.", "required": true},
     {"name": "free_text", "type": "text", "description": "Text that is not a header, a line item or totals (notes, notices, terms). Always stored. No rule reads it: it only feeds the embedded-instructions warning in the trace."}
   ],
   "rules": [
     {"type": "requirement", "decision": "ESCALAR", "text": "The symbols `issuer_nif`, `iban`, `purchase_order`, `date`, `base`, `vat_rate`, `vat_amount` and `total` are all other than `None`. Reason: list of the missing ones.", "code": "rules-v3/r01-symbols-present.py"},
     {"type": "requirement", "decision": "NO_PAGAR", "text": "There is at least one row in `suppliers` whose normalised `nif` equals the normalised `issuer_nif`.", "code": "rules-v3/r02-known-supplier.py"},
-    {"type": "requirement", "decision": "NO_PAGAR", "text": "If there are rows in `suppliers` with that `nif`, and all of them have the same `id` and normalised `iban`, then that `iban` equals the normalised `iban` of the invoice. If there are no rows, it does not fire (R02). If the rows disagree with each other, it does not fire (R04).", "code": "rules-v3/r03-master-iban.py"},
+    {"type": "requirement", "decision": "NO_PAGAR", "text": "If there are rows in `suppliers` with that `nif`, and all of them have the same `id` and normalised `iban`, then that `iban` equals the normalised `iban` of the invoice, or differs from it in more than 4 characters. If there are no rows, it does not fire (R02). If the rows disagree with each other, it does not fire (R04). A difference of at most 4 characters is a misreading rather than another account: R17 escalates it.", "code": "rules-v3/r03-master-iban.py"},
     {"type": "prohibition", "decision": "ESCALAR", "text": "There are two or more rows in `suppliers` with the same normalised `nif` as `issuer_nif` and a different `id` or a different normalised `iban` (identical repeated rows do NOT count).", "code": "rules-v3/r04-inconsistent-master.py"},
     {"type": "requirement", "decision": "NO_PAGAR", "text": "There is a row in `orders` whose `purchase_order` equals the `purchase_order` of the invoice.", "code": "rules-v3/r05-order-exists.py"},
     {"type": "requirement", "decision": "NO_PAGAR", "text": "With the `orders` row of that `purchase_order`: if `orders.nif` is not empty, it equals `issuer_nif`; if it is empty, `orders.supplier_id` equals the `id` of the `suppliers` row with `nif = issuer_nif` (if that row does not exist, it does not fire).", "code": "rules-v3/r06-order-of-the-supplier.py"},
@@ -36,7 +36,8 @@
     {"type": "requirement", "decision": "NO_PAGAR", "text": "There is a row in `erp` whose `purchase_order` equals `purchase_order`. Only evaluated if R05 does not fire.", "code": "rules-v3/r13-entry-in-erp.py"},
     {"type": "requirement", "decision": "NO_PAGAR", "text": "With the `orders` and `erp` rows of that `purchase_order`: `erp.amount` matches `orders.total_amount` (±0.01) **and** `erp.supplier_id` equals `orders.supplier_id` **and**, if both `nif` are not empty, they are equal. Reason: fields that differ.", "code": "rules-v3/r14-erp-matches-orders.py"},
     {"type": "prohibition", "decision": "NO_PAGAR", "text": "With the `erp` row of that `purchase_order`: `erp.status` is `PAGADA` (in fact: other than `PENDIENTE`).", "code": "rules-v3/r15-order-already-paid.py"},
-    {"type": "prohibition", "decision": "ESCALAR", "text": "There is at least one instance in `others` with the same normalised `purchase_order`. Each instance in `others` is identified by its `_instance` key (its file name). Reason: the `_instance` values with that purchase order.", "code": "rules-v3/r16-duplicate-order.py"}
+    {"type": "prohibition", "decision": "ESCALAR", "text": "There is at least one instance in `others` with the same normalised `purchase_order`. Each instance in `others` is identified by its `_instance` key (its file name). Reason: the `_instance` values with that purchase order.", "code": "rules-v3/r16-duplicate-order.py"},
+    {"type": "prohibition", "decision": "ESCALAR", "text": "The normalised `iban` of the invoice differs from the one account the master approves for that `nif` in at least 1 and at most 4 characters. Reason: both accounts and how many characters apart they are.", "code": "rules-v3/r17-iban-near-miss.py"}
   ],
   "users": [
     {"name": "Martín", "email": "martin@trace-it.local", "role": "manager"},

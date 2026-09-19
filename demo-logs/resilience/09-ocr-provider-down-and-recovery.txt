@@ -1,0 +1,66 @@
+# OCR/vision provider outage and recovery.
+# Part A: dev as merged. A refused Gemini call is journaled 'uncertain_or_failed' and blocks every later call for that image.
+
+## 2026-09-19T10:16:39Z the vision provider (Gemini) refuses every call; process 3 ('Invoice payment - OCR outage', rules-v3)
+$ restart the API with GEMINI_API_KEY=<invalid>  (Gemini answers HTTP 400 to every call: a definite refusal, like the 429s of the delivery run)
+$ POST /processes/3/files  (vlm=true) scan_010, scan_011, fax_2026_0411
+   scan_010.pdf instance 1001 created True PENDING | warnings ['FIELD_AMBIGUOUS', 'FIELD_UNVERIFIED', 'FOCUSED_READER_ERROR', 'FOCUSED_UNRESOLVED', 'OCR_ARITHMETIC_UNVERIFIED', 'TOTAL_MISMATCH', 'VAT_MISMATCH', 'VLM_ERROR'] | empty symbols ['iban', 'issuer_nif', 'issuer_name', 'purchase_order']
+   scan_011.pdf instance 1002 created True PENDING | warnings ['FIELD_UNVERIFIED', 'FOCUSED_READER_ERROR', 'FOCUSED_UNRESOLVED', 'VLM_ERROR'] | empty symbols ['iban', 'issuer_nif', 'issuer_name', 'purchase_order']
+   fax_2026_0411.pdf instance 1003 created True PENDING | warnings ['FIELD_AMBIGUOUS', 'FIELD_UNVERIFIED', 'FOCUSED_READER_ERROR', 'FOCUSED_UNRESOLVED', 'OCR_SEPARATOR_PROPOSAL', 'VLM_ERROR'] | empty symbols ['base', 'date', 'iban', 'vat_rate', 'issuer_nif', 'vat_amount', 'issuer_name', 'purchase_order']
+provider_call spans: error http=400 outcome=error, error http=- outcome=blocked_uncertain (15 calls)
+$ POST /processes/3/run -> {"decided":3,"by_decision":{"ESCALAR":3}}
+  fax_2026_0411.pdf|ESCALAR|MISSING_DATA: issuer_nif, iban, date, purchase_order, base, vat_rate, vat_amount
+  scan_010.pdf|ESCALAR|MISSING_DATA: issuer_nif, iban, purchase_order
+  scan_011.pdf|ESCALAR|MISSING_DATA: issuer_nif, iban, purchase_order
+$ POST /processes/3/files  scan_012 (arrives during the outage, not decided yet)
+   scan_012.pdf instance 1004 created True PENDING | warnings ['FIELD_AMBIGUOUS', 'FIELD_INVALID', 'FIELD_UNVERIFIED', 'FOCUSED_READER_ERROR', 'FOCUSED_UNRESOLVED', 'VLM_ERROR'] | empty symbols ['iban', 'issuer_name']
+$ GET /health/planes
+   ingestion ok 4744 spans 38 errors 
+   agents degraded 38 spans 4 errors 4/38 spans failed
+   execution ok 1257 spans 0 errors 
+journal records (.data/provider-journal/gemini):
+   {'uncertain_or_failed': 15}
+
+### Recovery: Gemini is back
+$ restart the API with the real GEMINI_API_KEY
+$ POST /processes/3/files  scan_010 again (decided)
+   scan_010.pdf instance 1001 created False DECIDED | warnings ['FIELD_AMBIGUOUS', 'FIELD_UNVERIFIED', 'FOCUSED_READER_ERROR', 'FOCUSED_UNRESOLVED', 'OCR_ARITHMETIC_UNVERIFIED', 'TOTAL_MISMATCH', 'VAT_MISMATCH', 'VLM_ERROR'] | empty symbols ['iban', 'issuer_nif', 'issuer_name', 'purchase_order']
+$ POST /instances/1001/extract  (decided)
+  {"code":"conflict","message":"Only pending instances can be re-extracted; decision history is immutable"}  HTTP 409
+$ POST /instances/1004/extract  (pending)
+   scan_012.pdf PENDING | warnings ['FIELD_AMBIGUOUS', 'FIELD_INVALID', 'FIELD_UNVERIFIED', 'FOCUSED_READER_ERROR', 'FOCUSED_UNRESOLVED', 'VLM_ERROR'] | empty symbols ['iban', 'issuer_name']
+provider_call spans since the recovery: error http=- outcome=blocked_uncertain network=false, error http=- outcome=blocked_uncertain network=false, error http=- outcome=blocked_uncertain network=false
+
+
+# Part B: the same run with this branch's journal fix: a definite HTTP refusal (4xx, 503) is journaled 'refused' and the next call tries again.
+# Fresh process 4 and a fresh gemini journal (part A's records moved to .data/provider-journal/gemini.before-fix).
+
+## 2026-09-19T10:17:54Z the vision provider (Gemini) refuses every call; process 4 ('Invoice payment - OCR outage, journal fix', rules-v3)
+$ restart the API with GEMINI_API_KEY=<invalid>  (Gemini answers HTTP 400 to every call: a definite refusal, like the 429s of the delivery run)
+$ POST /processes/4/files  (vlm=true) scan_010, scan_011, fax_2026_0411
+   scan_010.pdf instance 1005 created True PENDING | warnings ['FIELD_AMBIGUOUS', 'FIELD_UNVERIFIED', 'FOCUSED_READER_ERROR', 'FOCUSED_UNRESOLVED', 'OCR_ARITHMETIC_UNVERIFIED', 'TOTAL_MISMATCH', 'VAT_MISMATCH', 'VLM_ERROR'] | empty symbols ['iban', 'issuer_nif', 'issuer_name', 'purchase_order']
+   scan_011.pdf instance 1006 created True PENDING | warnings ['FIELD_UNVERIFIED', 'FOCUSED_READER_ERROR', 'FOCUSED_UNRESOLVED', 'VLM_ERROR'] | empty symbols ['iban', 'issuer_nif', 'issuer_name', 'purchase_order']
+   fax_2026_0411.pdf instance 1007 created True PENDING | warnings ['FIELD_AMBIGUOUS', 'FIELD_UNVERIFIED', 'FOCUSED_READER_ERROR', 'FOCUSED_UNRESOLVED', 'OCR_SEPARATOR_PROPOSAL', 'VLM_ERROR'] | empty symbols ['base', 'date', 'iban', 'vat_rate', 'issuer_nif', 'vat_amount', 'issuer_name', 'purchase_order']
+provider_call spans: error http=400 outcome=error (15 calls)
+$ POST /processes/4/run -> {"decided":3,"by_decision":{"ESCALAR":3}}
+  fax_2026_0411.pdf|ESCALAR|MISSING_DATA: issuer_nif, iban, date, purchase_order, base, vat_rate, vat_amount
+  scan_010.pdf|ESCALAR|MISSING_DATA: issuer_nif, iban, purchase_order
+  scan_011.pdf|ESCALAR|MISSING_DATA: issuer_nif, iban, purchase_order
+$ POST /processes/4/files  scan_012 (arrives during the outage, not decided yet)
+   scan_012.pdf instance 1008 created True PENDING | warnings ['FIELD_AMBIGUOUS', 'FIELD_INVALID', 'FIELD_UNVERIFIED', 'FOCUSED_READER_ERROR', 'FOCUSED_UNRESOLVED', 'VLM_ERROR'] | empty symbols ['iban', 'issuer_name']
+$ GET /health/planes
+   ingestion ok 4853 spans 80 errors 
+   agents degraded 38 spans 4 errors 4/38 spans failed
+   execution ok 1277 spans 0 errors 
+journal records (.data/provider-journal/gemini):
+   {'refused': 15}
+
+### Recovery: Gemini is back
+$ restart the API with the real GEMINI_API_KEY
+$ POST /processes/4/files  scan_010 again (decided)
+   scan_010.pdf instance 1005 created False DECIDED | warnings ['FIELD_AMBIGUOUS', 'FIELD_UNVERIFIED', 'FOCUSED_READER_ERROR', 'FOCUSED_UNRESOLVED', 'OCR_ARITHMETIC_UNVERIFIED', 'TOTAL_MISMATCH', 'VAT_MISMATCH', 'VLM_ERROR'] | empty symbols ['iban', 'issuer_nif', 'issuer_name', 'purchase_order']
+$ POST /instances/1005/extract  (decided)
+  {"code":"conflict","message":"Only pending instances can be re-extracted; decision history is immutable"}  HTTP 409
+$ POST /instances/1008/extract  (pending)
+   scan_012.pdf PENDING | warnings ['FIELD_AMBIGUOUS'] | empty symbols ['issuer_name']
+provider_call spans since the recovery: ok http=200 outcome=success network=true, ok http=200 outcome=success network=true

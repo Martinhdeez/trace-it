@@ -1,0 +1,29 @@
+[
+    {
+        "plane": "ingestion",
+        "status": "ok",
+        "spans": 61,
+        "errors": 2,
+        "error_rate": 0.033,
+        "p95_ms": 294.0,
+        "reason": null
+    },
+    {
+        "plane": "agents",
+        "status": "ok",
+        "spans": 29,
+        "errors": 0,
+        "error_rate": 0.0,
+        "p95_ms": 6963.9999999999945,
+        "reason": null
+    },
+    {
+        "plane": "execution",
+        "status": "ok",
+        "spans": 31,
+        "errors": 0,
+        "error_rate": 0.0,
+        "p95_ms": 72.79999999999963,
+        "reason": null
+    }
+]

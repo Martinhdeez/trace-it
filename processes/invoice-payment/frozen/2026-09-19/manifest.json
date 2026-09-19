@@ -1,0 +1,3543 @@
+{
+  "frozen_on": "2026-09-19",
+  "norm_sheet": "Norma_Pagos_v3",
+  "norm_runs": 1,
+  "compiled_in": {
+    "database": "trace_freeze",
+    "process_id": 2
+  },
+  "models": {
+    "compiler": "helmcode:deepseek-v4-flash",
+    "tester": "helmcode:deepseek-v4-flash",
+    "normalizer": "helmcode:deepseek-v4-flash"
+  },
+  "golden": "471/471",
+  "rules_digest": "0f2175ad64fe3d114885ef9fd453ba8ff79a2bfab4a227bc293d22d72f62a4ad",
+  "norm_rules": [
+    {
+      "number": 1,
+      "text": "Pagar solo si el NIF esta en el maestro y el IBAN de la factura coincide con el maestro.",
+      "policies": []
+    },
+    {
+      "number": 2,
+      "text": "El pedido debe existir, pertenecer al proveedor y el importe de la factura debe ser igual al del pedido (tolerancia 0,01 EUR).",
+      "policies": []
+    },
+    {
+      "number": 3,
+      "text": "El IVA debe estar bien calculado y el total debe ser base + IVA, con la misma tolerancia de 0,01 EUR.",
+      "policies": []
+    },
+    {
+      "number": 4,
+      "text": "La fecha debe ser valida y no futura.",
+      "policies": []
+    },
+    {
+      "number": 5,
+      "text": "Estado ERP del pedido: PENDIENTE. Nunca pagar dos veces el mismo pedido.",
+      "policies": []
+    },
+    {
+      "number": 6,
+      "text": "Cualquier anomalia que un humano deba ver: ESCALAR con motivo. Ante duda razonable, escalar antes que pagar.",
+      "policies": [
+        "Any anomaly that a human must see must be escalated with a reason (ESCALAR con motivo).",
+        "When in reasonable doubt, escalate rather than pay."
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "file": "rules/n1-1.py",
+      "norm_rule": 1,
+      "hash": "07bc74d3c52ca0f684b17851929bbef35e786d62d511c2d3a65313fa28bf49df",
+      "decision": "NO_PAGAR",
+      "text": "The invoice's issuer_nif, normalised (uppercase, without spaces, hyphens or dots), equals the nif of at least one row in suppliers.",
+      "reading": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "kind_reason": "The data is present and the invoice's NIF is absent from the suppliers master, which clearly breaks the condition for paying.",
+        "interpretation": "'el NIF esta en el maestro' means the invoice's issuer_nif must be found among suppliers.nif; both sides are normalised before comparing. The sentence states a condition for paying, not the outcome of its failure, so the decision comes from the policy for violation checks (NO_PAGAR).",
+        "decision_source": "policy"
+      },
+      "report": {
+        "tests": [
+          {
+            "got": "does not fire",
+            "name": "issuer_nif_exact_match_in_suppliers",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "issuer_nif_lowercase_matches_after_normalisation",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "issuer_nif_with_spaces_hyphens_dots_matches",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "supplier_nif_dirty_matches_clean_issuer_nif",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "issuer_nif_matches_one_of_several_supplier_rows",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (ISSUER_NIF_NOT_IN_SUPPLIERS)",
+            "name": "issuer_nif_not_present_in_suppliers_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "fires (ISSUER_NIF_NOT_IN_SUPPLIERS)",
+            "name": "customer_nif_A58231074_is_not_a_supplier_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "empty_issuer_nif_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (ISSUER_NIF_NOT_IN_SUPPLIERS)",
+            "name": "issuer_nif_near_match_differs_by_one_char_fires",
+            "passed": true,
+            "expected": true
+          }
+        ],
+        "valid": true,
+        "reviews": [],
+        "attempts": 1,
+        "discrepancies": []
+      },
+      "test_rows": [
+        {
+          "name": "issuer_nif_exact_match_in_suppliers",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              },
+              {
+                "id": "P002",
+                "nif": "A41220987",
+                "iban": "ES7621000813610123456789",
+                "company_name": "Transportes Guadaira S.A."
+              }
+            ]
+          },
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "B46102331"
+          }
+        },
+        {
+          "name": "issuer_nif_lowercase_matches_after_normalisation",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "b46102331"
+          }
+        },
+        {
+          "name": "issuer_nif_with_spaces_hyphens_dots_matches",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "B-461.02 331"
+          }
+        },
+        {
+          "name": "supplier_nif_dirty_matches_clean_issuer_nif",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": " b-461.023 31 ",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "B46102331"
+          }
+        },
+        {
+          "name": "issuer_nif_matches_one_of_several_supplier_rows",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              },
+              {
+                "id": "P007",
+                "nif": "J40112358",
+                "iban": "ES0000000000000000000000",
+                "company_name": "Obras del Sur S.A."
+              },
+              {
+                "id": "P003",
+                "nif": "B30455812",
+                "iban": "ES6001825322180201588391",
+                "company_name": "Ofimática Cieza S.L."
+              }
+            ]
+          },
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "J40112358"
+          }
+        },
+        {
+          "name": "issuer_nif_not_present_in_suppliers_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              },
+              {
+                "id": "P002",
+                "nif": "A41220987",
+                "iban": "ES7621000813610123456789",
+                "company_name": "Transportes Guadaira S.A."
+              }
+            ]
+          },
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "X1234567Z"
+          }
+        },
+        {
+          "name": "customer_nif_A58231074_is_not_a_supplier_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              },
+              {
+                "id": "P002",
+                "nif": "A41220987",
+                "iban": "ES7621000813610123456789",
+                "company_name": "Transportes Guadaira S.A."
+              }
+            ]
+          },
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "A58231074"
+          }
+        },
+        {
+          "name": "empty_issuer_nif_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": ""
+          }
+        },
+        {
+          "name": "issuer_nif_near_match_differs_by_one_char_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "B46102332"
+          }
+        }
+      ]
+    },
+    {
+      "file": "rules/n1-2.py",
+      "norm_rule": 1,
+      "hash": "519c75d47fa9727d13356fe541c43d3b952bd78b66b752fd44107e13acbc4168",
+      "decision": "NO_PAGAR",
+      "text": "The invoice's iban, normalised (uppercase, without spaces), equals the iban of the suppliers row whose nif equals the invoice's normalised issuer_nif.",
+      "reading": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "kind_reason": "The invoice's IBAN is present and differs from the master IBAN of the identified supplier, which clearly breaks the condition for paying.",
+        "interpretation": "'el IBAN de la factura coincide con el maestro' means the invoice's iban must equal suppliers.iban of the supplier identified by the invoice's NIF; both are normalised. The sentence does not name the outcome of failure, so the policy decision for violations (NO_PAGAR) applies.",
+        "decision_source": "policy"
+      },
+      "report": {
+        "tests": [
+          {
+            "got": "fires (IBAN_MISMATCH)",
+            "name": "iban_mismatch_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "iban_match_no_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "nif_normalisation_lowercase_hyphen_no_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "iban_normalisation_spaces_lowercase_no_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "no_supplier_row_no_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "empty_issuer_nif_no_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "empty_supplier_iban_no_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "supplier_nif_normalisation_no_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (IBAN_MISMATCH)",
+            "name": "iban_one_digit_different_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "empty_invoice_iban_no_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (IBAN_MISMATCH)",
+            "name": "supplier_nif_normalisation_mismatch_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "none_issuer_nif_no_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "supplier_iban_normalisation_no_fire",
+            "passed": true,
+            "expected": false
+          }
+        ],
+        "valid": true,
+        "reviews": [],
+        "attempts": 1,
+        "discrepancies": []
+      },
+      "test_rows": [
+        {
+          "name": "iban_mismatch_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "ES0000000000000000000000",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B46102331",
+            "vat_amount": 210.0,
+            "issuer_name": "Suministros Levante S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "iban_match_no_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "ES2100491500051234567890",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B46102331",
+            "vat_amount": 210.0,
+            "issuer_name": "Suministros Levante S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "nif_normalisation_lowercase_hyphen_no_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "ES2100491500051234567890",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "b-46102331",
+            "vat_amount": 210.0,
+            "issuer_name": "Suministros Levante S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "iban_normalisation_spaces_lowercase_no_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "es21 0049 1500 0512 3456 7890",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B46102331",
+            "vat_amount": 210.0,
+            "issuer_name": "Suministros Levante S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "no_supplier_row_no_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              },
+              {
+                "id": "P002",
+                "nif": "A41220987",
+                "iban": "ES7621000813610123456789",
+                "company_name": "Transportes Guadaira S.A."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "ES2100491500051234567890",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "X99999999",
+            "vat_amount": 210.0,
+            "issuer_name": "Unknown Supplier",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "empty_issuer_nif_no_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "ES2100491500051234567890",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "",
+            "vat_amount": 210.0,
+            "issuer_name": "Suministros Levante S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "empty_supplier_iban_no_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "ES2100491500051234567890",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B46102331",
+            "vat_amount": 210.0,
+            "issuer_name": "Suministros Levante S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "supplier_nif_normalisation_no_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "b.46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "ES2100491500051234567890",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B46102331",
+            "vat_amount": 210.0,
+            "issuer_name": "Suministros Levante S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "iban_one_digit_different_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "ES2100491500051234567891",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B46102331",
+            "vat_amount": 210.0,
+            "issuer_name": "Suministros Levante S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "empty_invoice_iban_no_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B46102331",
+            "vat_amount": 210.0,
+            "issuer_name": "Suministros Levante S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "supplier_nif_normalisation_mismatch_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "b 46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "ES0000000000000000000000",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B46102331",
+            "vat_amount": 210.0,
+            "issuer_name": "Suministros Levante S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "none_issuer_nif_no_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "ES2100491500051234567890",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": null,
+            "vat_amount": 210.0,
+            "issuer_name": "Suministros Levante S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "supplier_iban_normalisation_no_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B46102331",
+                "iban": "es21 0049 1500 0512 3456 7890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000.0,
+            "date": "2026-01-15",
+            "iban": "ES2100491500051234567890",
+            "total": 1210.0,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B46102331",
+            "vat_amount": 210.0,
+            "issuer_name": "Suministros Levante S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0002"
+          }
+        }
+      ]
+    },
+    {
+      "file": "rules/n2-1.py",
+      "norm_rule": 2,
+      "hash": "f8ec03ed70b0a676efc1720718dfc8f78e87e1c8e3e13c84babb83153cce4a43",
+      "decision": "NO_PAGAR",
+      "text": "The invoice's purchase_order, normalised (uppercase, without spaces), equals the purchase_order of at least one row in orders.",
+      "reading": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "kind_reason": "The invoice references an order that does not exist in orders, which clearly breaks the condition for paying.",
+        "interpretation": "'El pedido debe existir' means the invoice's purchase_order must be found in orders.purchase_order, compared after normalisation. The sentence states a condition, not the outcome of its failure, so the policy decision for violations (NO_PAGAR) applies.",
+        "decision_source": "policy"
+      },
+      "report": {
+        "tests": [
+          {
+            "got": "does not fire",
+            "name": "exact_purchase_order_matches_order_row",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (PURCHASE_ORDER_NOT_FOUND PO-2026-9999)",
+            "name": "purchase_order_not_present_in_any_order_row",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "lowercase_invoice_purchase_order_matches_uppercase_order",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "invoice_purchase_order_with_surrounding_spaces_matches",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "order_row_with_spaces_and_lowercase_still_matches",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "empty_purchase_order_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "match_found_in_second_of_several_order_rows",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (PURCHASE_ORDER_NOT_FOUND PO-2025-0042)",
+            "name": "no_order_row_matches_among_several",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "mixed_case_and_spaces_invoice_reference_matches",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (PURCHASE_ORDER_NOT_FOUND PO-2026-00010)",
+            "name": "similar_but_different_reference_does_not_match",
+            "passed": true,
+            "expected": true
+          }
+        ],
+        "valid": true,
+        "reviews": [],
+        "attempts": 1,
+        "discrepancies": []
+      },
+      "test_rows": [
+        {
+          "name": "exact_purchase_order_matches_order_row",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "purchase_order_not_present_in_any_order_row",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              },
+              {
+                "nif": "B46102331",
+                "status": "ABIERTO",
+                "order_date": "2026-06-27",
+                "supplier_id": "P001",
+                "total_amount": "10325.90",
+                "purchase_order": "PO-2026-0002"
+              }
+            ]
+          },
+          "instance": {
+            "purchase_order": "PO-2026-9999"
+          }
+        },
+        {
+          "name": "lowercase_invoice_purchase_order_matches_uppercase_order",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "nif": "B46102331",
+                "status": "ABIERTO",
+                "order_date": "2026-06-27",
+                "supplier_id": "P001",
+                "total_amount": "10325.90",
+                "purchase_order": "PO-2026-0002"
+              }
+            ]
+          },
+          "instance": {
+            "purchase_order": "po-2026-0002"
+          }
+        },
+        {
+          "name": "invoice_purchase_order_with_surrounding_spaces_matches",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "nif": "J40112358",
+                "status": "ABIERTO",
+                "order_date": "2026-02-16",
+                "supplier_id": "P007",
+                "total_amount": "7829.51",
+                "purchase_order": "PO-2026-0003"
+              }
+            ]
+          },
+          "instance": {
+            "purchase_order": "  PO-2026-0003  "
+          }
+        },
+        {
+          "name": "order_row_with_spaces_and_lowercase_still_matches",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": " po-2026-0001 "
+              }
+            ]
+          },
+          "instance": {
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "empty_purchase_order_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "purchase_order": ""
+          }
+        },
+        {
+          "name": "match_found_in_second_of_several_order_rows",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              },
+              {
+                "nif": "B46102331",
+                "status": "ABIERTO",
+                "order_date": "2026-06-27",
+                "supplier_id": "P001",
+                "total_amount": "10325.90",
+                "purchase_order": "PO-2026-0002"
+              },
+              {
+                "nif": "J40112358",
+                "status": "ABIERTO",
+                "order_date": "2026-02-16",
+                "supplier_id": "P007",
+                "total_amount": "7829.51",
+                "purchase_order": "PO-2026-0003"
+              }
+            ]
+          },
+          "instance": {
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "no_order_row_matches_among_several",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              },
+              {
+                "nif": "B46102331",
+                "status": "ABIERTO",
+                "order_date": "2026-06-27",
+                "supplier_id": "P001",
+                "total_amount": "10325.90",
+                "purchase_order": "PO-2026-0002"
+              },
+              {
+                "nif": "J40112358",
+                "status": "ABIERTO",
+                "order_date": "2026-02-16",
+                "supplier_id": "P007",
+                "total_amount": "7829.51",
+                "purchase_order": "PO-2026-0003"
+              }
+            ]
+          },
+          "instance": {
+            "purchase_order": "PO-2025-0042"
+          }
+        },
+        {
+          "name": "mixed_case_and_spaces_invoice_reference_matches",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "nif": "J40112358",
+                "status": "ABIERTO",
+                "order_date": "2026-02-16",
+                "supplier_id": "P007",
+                "total_amount": "7829.51",
+                "purchase_order": "PO-2026-0003"
+              }
+            ]
+          },
+          "instance": {
+            "purchase_order": "Po-2026-0003"
+          }
+        },
+        {
+          "name": "similar_but_different_reference_does_not_match",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "purchase_order": "PO-2026-00010"
+          }
+        }
+      ]
+    },
+    {
+      "file": "rules/n2-2.py",
+      "norm_rule": 2,
+      "hash": "376a9f3078a8eb81479d3fb9c417e9ed60a25406b013cc743c71ca9420f591a8",
+      "decision": "NO_PAGAR",
+      "text": "The orders row whose purchase_order equals the invoice's normalised purchase_order has supplier_id equal to the id of the suppliers row whose nif equals the invoice's normalised issuer_nif.",
+      "reading": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "kind_reason": "The order exists but belongs to a different supplier than the invoice's issuer, which clearly breaks the condition for paying.",
+        "interpretation": "'pertenecer al proveedor' means the order's supplier_id must match the supplier identified by the invoice's NIF (suppliers.id where suppliers.nif = issuer_nif), since the invoice carries no supplier_id. The sentence does not name the outcome of failure, so the policy decision for violations (NO_PAGAR) applies.",
+        "decision_source": "policy"
+      },
+      "report": {
+        "tests": [
+          {
+            "got": "does not fire",
+            "name": "order_supplier_matches_supplier_of_issuer_nif",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (Order supplier P003 != supplier P001)",
+            "name": "order_supplier_differs_from_supplier_of_issuer_nif",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "normalised_keys_match_after_case_and_separator_cleanup",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "source_nif_with_dots_and_hyphens_is_normalised",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "no_order_row_for_purchase_order_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "no_supplier_row_for_issuer_nif_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "empty_issuer_nif_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "empty_purchase_order_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (Order supplier p003 != supplier P003)",
+            "name": "supplier_id_compared_as_is_case_difference_fires",
+            "passed": true,
+            "expected": true
+          }
+        ],
+        "valid": true,
+        "reviews": [],
+        "attempts": 1,
+        "discrepancies": []
+      },
+      "test_rows": [
+        {
+          "name": "order_supplier_matches_supplier_of_issuer_nif",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [],
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "suppliers": [
+              {
+                "id": "P003",
+                "nif": "B30455812",
+                "iban": "ES6001825322180201588391",
+                "company_name": "Ofimática Cieza S.L."
+              }
+            ],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 1210,
+            "file_id": "FA-001.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 210,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "order_supplier_differs_from_supplier_of_issuer_nif",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "erp": [],
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "suppliers": [
+              {
+                "id": "P001",
+                "nif": "B30455812",
+                "iban": "ES2100491500051234567890",
+                "company_name": "Suministros Levante S.L."
+              }
+            ],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 1210,
+            "file_id": "FA-002.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 210,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5078",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "normalised_keys_match_after_case_and_separator_cleanup",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [],
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "suppliers": [
+              {
+                "id": "P003",
+                "nif": "B30455812",
+                "iban": "ES6001825322180201588391",
+                "company_name": "Ofimática Cieza S.L."
+              }
+            ],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 1210,
+            "file_id": "FA-003.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "b-304.55812",
+            "vat_amount": 210,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5079",
+            "purchase_order": "po-2026-0001"
+          }
+        },
+        {
+          "name": "source_nif_with_dots_and_hyphens_is_normalised",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [],
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "suppliers": [
+              {
+                "id": "P003",
+                "nif": "b-304.55812",
+                "iban": "ES6001825322180201588391",
+                "company_name": "Ofimática Cieza S.L."
+              }
+            ],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 1210,
+            "file_id": "FA-004.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 210,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5080",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "no_order_row_for_purchase_order_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [],
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "suppliers": [
+              {
+                "id": "P003",
+                "nif": "B30455812",
+                "iban": "ES6001825322180201588391",
+                "company_name": "Ofimática Cieza S.L."
+              }
+            ],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 1210,
+            "file_id": "FA-005.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 210,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5081",
+            "purchase_order": "PO-2026-9999"
+          }
+        },
+        {
+          "name": "no_supplier_row_for_issuer_nif_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [],
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "suppliers": [
+              {
+                "id": "P003",
+                "nif": "B30455812",
+                "iban": "ES6001825322180201588391",
+                "company_name": "Ofimática Cieza S.L."
+              }
+            ],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 1210,
+            "file_id": "FA-006.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "X0000000Z",
+            "vat_amount": 210,
+            "issuer_name": "Desconocido S.L.",
+            "invoice_number": "FA-5082",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "empty_issuer_nif_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [],
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "suppliers": [
+              {
+                "id": "P003",
+                "nif": "B30455812",
+                "iban": "ES6001825322180201588391",
+                "company_name": "Ofimática Cieza S.L."
+              }
+            ],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 1210,
+            "file_id": "FA-007.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "",
+            "vat_amount": 210,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5083",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "empty_purchase_order_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [],
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "P003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "suppliers": [
+              {
+                "id": "P003",
+                "nif": "B30455812",
+                "iban": "ES6001825322180201588391",
+                "company_name": "Ofimática Cieza S.L."
+              }
+            ],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 1210,
+            "file_id": "FA-008.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 210,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5084",
+            "purchase_order": ""
+          }
+        },
+        {
+          "name": "supplier_id_compared_as_is_case_difference_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "erp": [],
+            "orders": [
+              {
+                "nif": "B30455812",
+                "status": "ABIERTO",
+                "order_date": "2026-01-31",
+                "supplier_id": "p003",
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "suppliers": [
+              {
+                "id": "P003",
+                "nif": "B30455812",
+                "iban": "ES6001825322180201588391",
+                "company_name": "Ofimática Cieza S.L."
+              }
+            ],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 1000,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 1210,
+            "file_id": "FA-009.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 210,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5085",
+            "purchase_order": "PO-2026-0001"
+          }
+        }
+      ]
+    },
+    {
+      "file": "rules/n2-3.py",
+      "norm_rule": 2,
+      "hash": "707f3fe030480a73312549c5b30261a36b94ce4bd955feb5468acc374c7d0479",
+      "decision": "NO_PAGAR",
+      "text": "The invoice's total matches (±0.01 EUR) the total_amount of the orders row whose purchase_order equals the invoice's normalised purchase_order.",
+      "reading": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "kind_reason": "The invoice total and the order total are both present and differ by more than one cent, which clearly breaks the condition for paying.",
+        "interpretation": "'el importe de la factura debe ser igual al del pedido (tolerancia 0,01 EUR)' maps the invoice's total to orders.total_amount, compared in whole cents with abs(cents(a)-cents(b)) <= 1. The sentence states a condition, not the outcome of its failure, so the policy decision for violations (NO_PAGAR) applies.",
+        "decision_source": "policy"
+      },
+      "report": {
+        "tests": [
+          {
+            "got": "does not fire",
+            "name": "total_matches_order_exactly",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "total_differs_by_one_cent_matches",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (Total 9221.77 != order 9221.75)",
+            "name": "total_differs_by_two_cents_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "purchase_order_normalised_case_and_spaces",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "order_purchase_order_normalised_in_source",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "order_row_missing_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "total_empty_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "purchase_order_empty_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "matching_order_selected_among_many",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "text_amounts_compared_in_cents",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (Total 9221.765 != order 9221.75)",
+            "name": "rounding_half_up_two_cents_fires",
+            "passed": true,
+            "expected": true
+          }
+        ],
+        "valid": true,
+        "reviews": [],
+        "attempts": 1,
+        "discrepancies": []
+      },
+      "test_rows": [
+        {
+          "name": "total_matches_order_exactly",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.75,
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "total_differs_by_one_cent_matches",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.76,
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "total_differs_by_two_cents_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.77,
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "purchase_order_normalised_case_and_spaces",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.75,
+            "purchase_order": " po-2026-0001 "
+          }
+        },
+        {
+          "name": "order_purchase_order_normalised_in_source",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "total_amount": "9221.75",
+                "purchase_order": "po-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.75,
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "order_row_missing_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 100.0,
+            "purchase_order": "PO-2026-9999"
+          }
+        },
+        {
+          "name": "total_empty_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": null,
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "purchase_order_empty_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.75,
+            "purchase_order": ""
+          }
+        },
+        {
+          "name": "matching_order_selected_among_many",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              },
+              {
+                "total_amount": "10325.90",
+                "purchase_order": "PO-2026-0002"
+              },
+              {
+                "total_amount": "7829.51",
+                "purchase_order": "PO-2026-0003"
+              }
+            ]
+          },
+          "instance": {
+            "total": 10325.9,
+            "purchase_order": "PO-2026-0002"
+          }
+        },
+        {
+          "name": "text_amounts_compared_in_cents",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "total_amount": 9221.75,
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": "9221.75",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "rounding_half_up_two_cents_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "orders": [
+              {
+                "total_amount": "9221.75",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.765,
+            "purchase_order": "PO-2026-0001"
+          }
+        }
+      ]
+    },
+    {
+      "file": "rules/n3-1.py",
+      "norm_rule": 3,
+      "hash": "6d62d4c1ff70fb4a5e642ebae801d6cfc11d1cdadb51a5633f424d1d45821580",
+      "decision": "NO_PAGAR",
+      "text": "The invoice's vat_amount matches (±0.01 EUR) base * vat_rate / 100, computed with Decimal and ROUND_HALF_UP.",
+      "reading": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "kind_reason": "The printed VAT amount is present and differs by more than one cent from the correctly computed VAT, which clearly breaks the condition for paying.",
+        "interpretation": "'El IVA debe estar bien calculado' means vat_amount must equal base * vat_rate / 100 (vat_rate is a percentage, 21 = 21 %), compared in whole cents with the 0.01 EUR tolerance. The sentence states a condition, not the outcome of its failure, so the policy decision for violations (NO_PAGAR) applies.",
+        "decision_source": "policy"
+      },
+      "report": {
+        "tests": [
+          {
+            "got": "does not fire",
+            "name": "exact_match_fires_false",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "within_one_cent_fires_false",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (VAT 21.02 != 21.00)",
+            "name": "beyond_one_cent_fires_true",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "text_amounts_match_fires_false",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "rounding_half_up_boundary_fires_false",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "missing_vat_amount_fires_false",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "missing_base_fires_false",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "missing_vat_rate_fires_false",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "empty_string_base_fires_false",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "zero_rate_match_fires_false",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (VAT 0.02 != 0.00)",
+            "name": "zero_rate_mismatch_fires_true",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "large_numbers_match_fires_false",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "vat_amount_extra_decimals_rounds_to_match_fires_false",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (VAT 21.015 != 21.00)",
+            "name": "vat_amount_extra_decimals_rounds_to_mismatch_fires_true",
+            "passed": true,
+            "expected": true
+          }
+        ],
+        "valid": true,
+        "reviews": [],
+        "attempts": 1,
+        "discrepancies": []
+      },
+      "test_rows": [
+        {
+          "name": "exact_match_fires_false",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100,
+            "vat_rate": 21,
+            "vat_amount": 21.0
+          }
+        },
+        {
+          "name": "within_one_cent_fires_false",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100,
+            "vat_rate": 21,
+            "vat_amount": 21.01
+          }
+        },
+        {
+          "name": "beyond_one_cent_fires_true",
+          "fires": true,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100,
+            "vat_rate": 21,
+            "vat_amount": 21.02
+          }
+        },
+        {
+          "name": "text_amounts_match_fires_false",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": "100.00",
+            "vat_rate": "21",
+            "vat_amount": "21.00"
+          }
+        },
+        {
+          "name": "rounding_half_up_boundary_fires_false",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 0.5,
+            "vat_rate": 21,
+            "vat_amount": 0.12
+          }
+        },
+        {
+          "name": "missing_vat_amount_fires_false",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100,
+            "vat_rate": 21,
+            "vat_amount": null
+          }
+        },
+        {
+          "name": "missing_base_fires_false",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": null,
+            "vat_rate": 21,
+            "vat_amount": 21.0
+          }
+        },
+        {
+          "name": "missing_vat_rate_fires_false",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100,
+            "vat_rate": null,
+            "vat_amount": 21.0
+          }
+        },
+        {
+          "name": "empty_string_base_fires_false",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": "",
+            "vat_rate": 21,
+            "vat_amount": 21.0
+          }
+        },
+        {
+          "name": "zero_rate_match_fires_false",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100,
+            "vat_rate": 0,
+            "vat_amount": 0.0
+          }
+        },
+        {
+          "name": "zero_rate_mismatch_fires_true",
+          "fires": true,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100,
+            "vat_rate": 0,
+            "vat_amount": 0.02
+          }
+        },
+        {
+          "name": "large_numbers_match_fires_false",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 12345.67,
+            "vat_rate": 21,
+            "vat_amount": 2592.59
+          }
+        },
+        {
+          "name": "vat_amount_extra_decimals_rounds_to_match_fires_false",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100,
+            "vat_rate": 21,
+            "vat_amount": 21.005
+          }
+        },
+        {
+          "name": "vat_amount_extra_decimals_rounds_to_mismatch_fires_true",
+          "fires": true,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100,
+            "vat_rate": 21,
+            "vat_amount": 21.015
+          }
+        }
+      ]
+    },
+    {
+      "file": "rules/n3-2.py",
+      "norm_rule": 3,
+      "hash": "34995606bd8b393b86f6a34e197b111126807a301a2c171e9941b412ae332a5d",
+      "decision": "NO_PAGAR",
+      "text": "The invoice's total matches (±0.01 EUR) base + vat_amount.",
+      "reading": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "kind_reason": "The printed total is present and differs by more than one cent from base + VAT, which clearly breaks the condition for paying.",
+        "interpretation": "'el total debe ser base + IVA' means total must equal base + vat_amount, compared in whole cents with the same 0.01 EUR tolerance. The sentence states a condition, not the outcome of its failure, so the policy decision for violations (NO_PAGAR) applies.",
+        "decision_source": "policy"
+      },
+      "report": {
+        "tests": [
+          {
+            "got": "does not fire",
+            "name": "exact_match_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "one_cent_difference_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (Total 121.02 != base + VAT (100.0 + 21.0))",
+            "name": "two_cent_difference_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "text_amounts_exact_match_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "missing_total_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "missing_base_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "rounding_half_up_match_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (Total 200.0 != base + VAT (100.0 + 21.0))",
+            "name": "large_mismatch_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "text_decimal_sum_match_does_not_fire",
+            "passed": true,
+            "expected": false
+          }
+        ],
+        "valid": true,
+        "reviews": [],
+        "attempts": 1,
+        "discrepancies": []
+      },
+      "test_rows": [
+        {
+          "name": "exact_match_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100.0,
+            "total": 121.0,
+            "vat_amount": 21.0
+          }
+        },
+        {
+          "name": "one_cent_difference_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100.0,
+            "total": 121.01,
+            "vat_amount": 21.0
+          }
+        },
+        {
+          "name": "two_cent_difference_fires",
+          "fires": true,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100.0,
+            "total": 121.02,
+            "vat_amount": 21.0
+          }
+        },
+        {
+          "name": "text_amounts_exact_match_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": "100.00",
+            "total": "121.00",
+            "vat_amount": "21.00"
+          }
+        },
+        {
+          "name": "missing_total_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100.0,
+            "total": null,
+            "vat_amount": 21.0
+          }
+        },
+        {
+          "name": "missing_base_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": null,
+            "total": 121.0,
+            "vat_amount": 21.0
+          }
+        },
+        {
+          "name": "rounding_half_up_match_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": "10.005",
+            "total": "10.01",
+            "vat_amount": "0"
+          }
+        },
+        {
+          "name": "large_mismatch_fires",
+          "fires": true,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": 100.0,
+            "total": 200.0,
+            "vat_amount": 21.0
+          }
+        },
+        {
+          "name": "text_decimal_sum_match_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "base": "0.1",
+            "total": "0.3",
+            "vat_amount": "0.2"
+          }
+        }
+      ]
+    },
+    {
+      "file": "rules/n4-1.py",
+      "norm_rule": 4,
+      "hash": "984bcc14597a3719ce95e67a92d7144d1d04d8c1139e282fca384aaaaced8b78",
+      "decision": "NO_PAGAR",
+      "text": "The invoice's date is a valid calendar date (a real YYYY-MM-DD date; e.g. 2026-02-31 is invalid).",
+      "reading": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "kind_reason": "The printed date is present and is not a real calendar date, which clearly breaks the condition for paying.",
+        "interpretation": "'La fecha debe ser valida' means the invoice's date must parse as a real calendar date (the printed numbers are uncorrected, so impossible dates like 2026-02-31 are invalid). The sentence states a condition, not the outcome of its failure, so the policy decision for violations (NO_PAGAR) applies.",
+        "decision_source": "policy"
+      },
+      "report": {
+        "tests": [
+          {
+            "got": "does not fire",
+            "name": "valid_date_january",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "valid_date_end_of_year",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "valid_leap_day_2024",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (INVALID_DATE 2026-02-31)",
+            "name": "invalid_day_february_31",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "fires (INVALID_DATE 2026-02-29)",
+            "name": "invalid_february_29_non_leap",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "fires (INVALID_DATE 2026-13-01)",
+            "name": "invalid_month_13",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "fires (INVALID_DATE 2026-04-31)",
+            "name": "invalid_day_april_31",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "empty_date_does_not_fire",
+            "passed": true,
+            "expected": false
+          }
+        ],
+        "valid": true,
+        "reviews": [],
+        "attempts": 1,
+        "discrepancies": []
+      },
+      "test_rows": [
+        {
+          "name": "valid_date_january",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "date": "2026-01-31"
+          }
+        },
+        {
+          "name": "valid_date_end_of_year",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "date": "2026-12-31"
+          }
+        },
+        {
+          "name": "valid_leap_day_2024",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "date": "2024-02-29"
+          }
+        },
+        {
+          "name": "invalid_day_february_31",
+          "fires": true,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "date": "2026-02-31"
+          }
+        },
+        {
+          "name": "invalid_february_29_non_leap",
+          "fires": true,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "date": "2026-02-29"
+          }
+        },
+        {
+          "name": "invalid_month_13",
+          "fires": true,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "date": "2026-13-01"
+          }
+        },
+        {
+          "name": "invalid_day_april_31",
+          "fires": true,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "date": "2026-04-31"
+          }
+        },
+        {
+          "name": "empty_date_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "date": ""
+          }
+        }
+      ]
+    },
+    {
+      "file": "rules/n4-2.py",
+      "norm_rule": 4,
+      "hash": "74d20695119df4ce0c9811b9868d72f625c924dbfeafc96c86ea1f88dbd3b00c",
+      "decision": "NO_PAGAR",
+      "text": "The invoice's date is not later than parameters.cut_off_date.",
+      "reading": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "kind_reason": "The invoice date is present and falls after the cut-off date, which clearly breaks the condition for paying.",
+        "interpretation": "'no futura' is read against the process's reference date parameters.cut_off_date (dates are compared as datetime.date, never against the clock), so the invoice's date must be <= cut_off_date. The sentence states a condition, not the outcome of its failure, so the policy decision for violations (NO_PAGAR) applies.",
+        "decision_source": "policy"
+      },
+      "report": {
+        "tests": [
+          {
+            "got": "does not fire",
+            "name": "date_before_cut_off_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "date_equal_to_cut_off_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (DATE_AFTER_CUT_OFF)",
+            "name": "date_one_day_after_cut_off_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "fires (DATE_AFTER_CUT_OFF)",
+            "name": "date_much_later_than_cut_off_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "date_much_earlier_than_cut_off_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "empty_date_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "impossible_date_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "missing_parameters_row_does_not_fire",
+            "passed": true,
+            "expected": false
+          }
+        ],
+        "valid": true,
+        "reviews": [],
+        "attempts": 1,
+        "discrepancies": []
+      },
+      "test_rows": [
+        {
+          "name": "date_before_cut_off_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "date": "2026-09-17",
+            "file_id": "F-001.pdf"
+          }
+        },
+        {
+          "name": "date_equal_to_cut_off_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "date": "2026-09-18",
+            "file_id": "F-002.pdf"
+          }
+        },
+        {
+          "name": "date_one_day_after_cut_off_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "date": "2026-09-19",
+            "file_id": "F-003.pdf"
+          }
+        },
+        {
+          "name": "date_much_later_than_cut_off_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "date": "2027-03-01",
+            "file_id": "F-004.pdf"
+          }
+        },
+        {
+          "name": "date_much_earlier_than_cut_off_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "date": "2025-12-31",
+            "file_id": "F-005.pdf"
+          }
+        },
+        {
+          "name": "empty_date_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "date": "",
+            "file_id": "F-006.pdf"
+          }
+        },
+        {
+          "name": "impossible_date_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "date": "2026-02-31",
+            "file_id": "F-007.pdf"
+          }
+        },
+        {
+          "name": "missing_parameters_row_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "parameters": []
+          },
+          "instance": {
+            "date": "2027-01-01",
+            "file_id": "F-008.pdf"
+          }
+        }
+      ]
+    },
+    {
+      "file": "rules/n5-1.py",
+      "norm_rule": 5,
+      "hash": "11acf68b12ff88a24b6ff8a2833879d37511259c8fc55b81139027c65a6ed150",
+      "decision": "NO_PAGAR",
+      "text": "The erp row whose purchase_order equals the invoice's normalised purchase_order has status PENDIENTE.",
+      "reading": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "kind_reason": "The ERP entry for the order exists and its status is not PENDIENTE, which clearly breaks the condition for paying.",
+        "interpretation": "'Estado ERP del pedido: PENDIENTE' means the erp entry matching the invoice's purchase_order must have status PENDIENTE. The sentence states a condition, not the outcome of its failure, so the policy decision for violations (NO_PAGAR) applies.",
+        "decision_source": "policy"
+      },
+      "report": {
+        "tests": [
+          {
+            "got": "fires (The ERP says PAGADA)",
+            "name": "erp_row_matching_po_is_pagada_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "erp_row_matching_po_is_pendiente_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "no_erp_row_with_matching_po_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "normalised_po_lowercase_and_spaces_matches_pendiente_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (The ERP says PAGADA)",
+            "name": "normalised_po_lowercase_and_spaces_matches_pagada_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "empty_purchase_order_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (The ERP says PAGADA)",
+            "name": "multiple_erp_rows_one_matching_pagada_fires",
+            "passed": true,
+            "expected": true
+          }
+        ],
+        "valid": true,
+        "reviews": [],
+        "attempts": 1,
+        "discrepancies": []
+      },
+      "test_rows": [
+        {
+          "name": "erp_row_matching_po_is_pagada_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PAGADA",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "orders": [],
+            "suppliers": [],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 7621.28,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 1600.47,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "erp_row_matching_po_is_pendiente_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PENDIENTE",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "orders": [],
+            "suppliers": [],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 7621.28,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 1600.47,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "no_erp_row_with_matching_po_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B46102331",
+                "date": "2026-06-27",
+                "amount": "10325.90",
+                "status": "PAGADA",
+                "entry_id": "AS-00002",
+                "supplier_id": "P001",
+                "purchase_order": "PO-2026-0002"
+              }
+            ],
+            "orders": [],
+            "suppliers": [],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 7621.28,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 1600.47,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "normalised_po_lowercase_and_spaces_matches_pendiente_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PENDIENTE",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "orders": [],
+            "suppliers": [],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 7621.28,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 1600.47,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "po 2026 0001"
+          }
+        },
+        {
+          "name": "normalised_po_lowercase_and_spaces_matches_pagada_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PAGADA",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "orders": [],
+            "suppliers": [],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 7621.28,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 1600.47,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "po 2026 0001"
+          }
+        },
+        {
+          "name": "empty_purchase_order_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PAGADA",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "orders": [],
+            "suppliers": [],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 7621.28,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 1600.47,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": ""
+          }
+        },
+        {
+          "name": "multiple_erp_rows_one_matching_pagada_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B46102331",
+                "date": "2026-06-27",
+                "amount": "10325.90",
+                "status": "PENDIENTE",
+                "entry_id": "AS-00002",
+                "supplier_id": "P001",
+                "purchase_order": "PO-2026-0002"
+              },
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PAGADA",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              }
+            ],
+            "orders": [],
+            "suppliers": [],
+            "parameters": [
+              {
+                "cut_off_date": "2026-09-18"
+              }
+            ]
+          },
+          "instance": {
+            "base": 7621.28,
+            "date": "2026-01-31",
+            "iban": "ES6001825322180201588391",
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "vat_rate": 21,
+            "free_text": "",
+            "issuer_nif": "B30455812",
+            "vat_amount": 1600.47,
+            "issuer_name": "Ofimática Cieza S.L.",
+            "invoice_number": "FA-5077",
+            "purchase_order": "PO-2026-0001"
+          }
+        }
+      ]
+    },
+    {
+      "file": "rules/n5-2.py",
+      "norm_rule": 5,
+      "hash": "f914df847fd27c22384380ab0f2c6e81ba4a6e2aa66d84ecc39e0e7a48343ca8",
+      "decision": "NO_PAGAR",
+      "text": "The erp row whose purchase_order equals the invoice's normalised purchase_order does not have status PAGADA (the order has not already been paid).",
+      "reading": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "kind_reason": "The external ERP record shows the order already paid, which clearly proves the invoice must not be paid again.",
+        "interpretation": "'Nunca pagar dos veces el mismo pedido' is checked first against the external record: the erp entry of the invoice's purchase_order must not already be PAGADA. The sentence does not name the outcome of this failure, so the policy decision for violations (NO_PAGAR) applies.",
+        "decision_source": "policy"
+      },
+      "report": {
+        "tests": [
+          {
+            "got": "fires (The ERP says PAGADA for PO20260001)",
+            "name": "erp_row_matching_po_is_pagada_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "erp_row_matching_po_is_pendiente_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "no_erp_row_with_matching_po_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "empty_purchase_order_does_not_fire",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "fires (The ERP says PAGADA for PO20260001)",
+            "name": "lowercase_invoice_po_normalised_matches_pagada_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "fires (The ERP says PAGADA for PO20260001)",
+            "name": "spaces_in_invoice_po_normalised_matches_pagada_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "fires (The ERP says PAGADA for PO20260001)",
+            "name": "one_of_several_matching_erp_rows_is_pagada_fires",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "pagada_erp_row_with_different_po_does_not_fire",
+            "passed": true,
+            "expected": false
+          }
+        ],
+        "valid": true,
+        "reviews": [],
+        "attempts": 1,
+        "discrepancies": []
+      },
+      "test_rows": [
+        {
+          "name": "erp_row_matching_po_is_pagada_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PAGADA",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "B30455812",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "erp_row_matching_po_is_pendiente_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PENDIENTE",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "B30455812",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "no_erp_row_with_matching_po_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B46102331",
+                "date": "2026-06-27",
+                "amount": "10325.90",
+                "status": "PAGADA",
+                "entry_id": "AS-00002",
+                "supplier_id": "P001",
+                "purchase_order": "PO-2026-0002"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "B30455812",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "empty_purchase_order_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PAGADA",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "B30455812",
+            "purchase_order": ""
+          }
+        },
+        {
+          "name": "lowercase_invoice_po_normalised_matches_pagada_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PAGADA",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "B30455812",
+            "purchase_order": "po-2026-0001"
+          }
+        },
+        {
+          "name": "spaces_in_invoice_po_normalised_matches_pagada_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PAGADA",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "B30455812",
+            "purchase_order": "PO 2026 0001"
+          }
+        },
+        {
+          "name": "one_of_several_matching_erp_rows_is_pagada_fires",
+          "fires": true,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PENDIENTE",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              },
+              {
+                "nif": "B30455812",
+                "date": "2026-02-10",
+                "amount": "9221.75",
+                "status": "PAGADA",
+                "entry_id": "AS-00009",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0001"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "B30455812",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "pagada_erp_row_with_different_po_does_not_fire",
+          "fires": false,
+          "others": [],
+          "sources": {
+            "erp": [
+              {
+                "nif": "B30455812",
+                "date": "2026-01-31",
+                "amount": "9221.75",
+                "status": "PAGADA",
+                "entry_id": "AS-00001",
+                "supplier_id": "P003",
+                "purchase_order": "PO-2026-0002"
+              }
+            ]
+          },
+          "instance": {
+            "total": 9221.75,
+            "file_id": "FA-5077.pdf",
+            "issuer_nif": "B30455812",
+            "purchase_order": "PO-2026-0001"
+          }
+        }
+      ]
+    },
+    {
+      "file": "rules/n5-3.py",
+      "norm_rule": 5,
+      "hash": "3d660b924066687b0a41301f9fe9e22a58579dd0907819875036423d26cfab39",
+      "decision": "ESCALAR",
+      "text": "No other instance in others carries the same normalised purchase_order as this invoice.",
+      "reading": {
+        "kind": "doubt",
+        "quote": "",
+        "covered": [],
+        "kind_reason": "Several instances share an order reference that should be unique, so the system cannot tell which invoice is the legitimate one and a person must decide.",
+        "interpretation": "'Nunca pagar dos veces el mismo pedido' is checked against the other instances of the process: if another instance in others has the same normalised purchase_order, the system cannot tell which one is legitimate, so every such instance is escalated. The sentence does not name the outcome, so the policy decision for doubt checks (ESCALAR) applies.",
+        "decision_source": "policy"
+      },
+      "report": {
+        "tests": [
+          {
+            "got": "fires (Same order as: FA-5078.pdf)",
+            "name": "fires_when_another_instance_has_same_purchase_order",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "fires (Same order as: FA-5079.pdf)",
+            "name": "fires_when_other_purchase_order_differs_only_in_case_and_spaces",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "fires (Same order as: FA-5081.pdf)",
+            "name": "fires_when_one_of_several_others_matches",
+            "passed": true,
+            "expected": true
+          },
+          {
+            "got": "does not fire",
+            "name": "does_not_fire_when_no_other_instance_has_same_purchase_order",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "does_not_fire_when_others_is_empty",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "does_not_fire_when_this_purchase_order_is_empty",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "does_not_fire_when_this_purchase_order_is_missing",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "does_not_fire_when_other_purchase_order_is_empty",
+            "passed": true,
+            "expected": false
+          },
+          {
+            "got": "does not fire",
+            "name": "does_not_fire_when_other_purchase_order_differs_by_a_character",
+            "passed": true,
+            "expected": false
+          }
+        ],
+        "valid": true,
+        "reviews": [],
+        "attempts": 1,
+        "discrepancies": []
+      },
+      "test_rows": [
+        {
+          "name": "fires_when_another_instance_has_same_purchase_order",
+          "fires": true,
+          "others": [
+            {
+              "_instance": "FA-5078.pdf",
+              "purchase_order": "PO-2026-0001"
+            }
+          ],
+          "sources": {},
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "fires_when_other_purchase_order_differs_only_in_case_and_spaces",
+          "fires": true,
+          "others": [
+            {
+              "_instance": "FA-5079.pdf",
+              "purchase_order": " po-2026-0001 "
+            }
+          ],
+          "sources": {},
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "fires_when_one_of_several_others_matches",
+          "fires": true,
+          "others": [
+            {
+              "_instance": "FA-5080.pdf",
+              "purchase_order": "PO-2026-0002"
+            },
+            {
+              "_instance": "FA-5081.pdf",
+              "purchase_order": "po-2026-0001"
+            },
+            {
+              "_instance": "FA-5082.pdf",
+              "purchase_order": "PO-2026-0003"
+            }
+          ],
+          "sources": {},
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "does_not_fire_when_no_other_instance_has_same_purchase_order",
+          "fires": false,
+          "others": [
+            {
+              "_instance": "FA-5083.pdf",
+              "purchase_order": "PO-2026-0002"
+            },
+            {
+              "_instance": "FA-5084.pdf",
+              "purchase_order": "PO-2026-0003"
+            }
+          ],
+          "sources": {},
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "does_not_fire_when_others_is_empty",
+          "fires": false,
+          "others": [],
+          "sources": {},
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "does_not_fire_when_this_purchase_order_is_empty",
+          "fires": false,
+          "others": [
+            {
+              "_instance": "FA-5085.pdf",
+              "purchase_order": "PO-2026-0001"
+            }
+          ],
+          "sources": {},
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "purchase_order": ""
+          }
+        },
+        {
+          "name": "does_not_fire_when_this_purchase_order_is_missing",
+          "fires": false,
+          "others": [
+            {
+              "_instance": "FA-5086.pdf",
+              "purchase_order": "PO-2026-0001"
+            }
+          ],
+          "sources": {},
+          "instance": {
+            "file_id": "FA-5077.pdf"
+          }
+        },
+        {
+          "name": "does_not_fire_when_other_purchase_order_is_empty",
+          "fires": false,
+          "others": [
+            {
+              "_instance": "FA-5087.pdf",
+              "purchase_order": ""
+            },
+            {
+              "_instance": "FA-5088.pdf"
+            }
+          ],
+          "sources": {},
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "purchase_order": "PO-2026-0001"
+          }
+        },
+        {
+          "name": "does_not_fire_when_other_purchase_order_differs_by_a_character",
+          "fires": false,
+          "others": [
+            {
+              "_instance": "FA-5089.pdf",
+              "purchase_order": "PO-2026-0010"
+            }
+          ],
+          "sources": {},
+          "instance": {
+            "file_id": "FA-5077.pdf",
+            "purchase_order": "PO-2026-0001"
+          }
+        }
+      ]
+    }
+  ]
+}

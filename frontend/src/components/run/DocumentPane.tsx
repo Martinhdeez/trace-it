@@ -1,34 +1,69 @@
 import { Download, Minus, Plus, RotateCw, Search } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../../api/client'
+import type { DocumentEvidence } from '../../api/contracts'
 import type { InvoiceDocument } from '../../api/types'
+import { keys } from '../../api/queries'
 import { extractedDocuments } from '../../data/documents.generated'
 import { formatEuro } from '../../lib/format'
+import { cn } from '../../lib/cn'
 
 /**
  * The facsimile of the document. A scan has no parsed version, which is exactly
  * the case that ends in REVISION.
  */
-export function DocumentPane({ name }: { name: string | undefined }) {
+export function DocumentPane({
+  instanceId,
+  name,
+  embedded = false,
+}: {
+  instanceId: number | undefined
+  name: string | undefined
+  embedded?: boolean
+}) {
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
   const doc = name ? (extractedDocuments[name] ?? null) : null
+  const evidence = useQuery({
+    queryKey: keys.document(instanceId ?? 0),
+    queryFn: () => api.getDocument(instanceId!),
+    enabled: Boolean(instanceId),
+  })
 
   const bumpZoom = (delta: number) => {
     setZoom((value) => Math.min(2, Math.max(0.5, Math.round((value + delta) * 10) / 10)))
   }
 
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col px-2 pb-3">
-      <div className="flex items-end justify-between gap-3 px-3 pb-3 pt-1">
-        <div>
-          <p className="text-[11px] text-muted">Documento</p>
-          <h2 className="text-[20px] font-medium tracking-[-0.03em]">
-            {name ?? 'Sin archivo'}
-          </h2>
-        </div>
-        <div className="flex items-center gap-1 rounded-full bg-canvas px-1 py-1 ring-1 ring-black/[0.06]">
+    <section
+      className={cn(
+        'flex h-full min-h-0 min-w-0 flex-1 flex-col',
+        embedded ? '' : 'px-2 pb-3',
+      )}
+    >
+      <div
+        className={cn(
+          'flex gap-3',
+          embedded ? 'items-center px-3 py-2' : 'items-end justify-between px-3 pb-3 pt-1',
+        )}
+      >
+        {embedded ? null : (
+          <div>
+            <p className="text-[11px] text-muted">Documento</p>
+            <h2 className="text-[20px] font-medium tracking-[-0.03em]">
+              {name ?? 'Sin archivo'}
+            </h2>
+          </div>
+        )}
+        <div
+          className={cn(
+            'flex items-center gap-1 rounded-full bg-canvas px-1 py-1 ring-1 ring-line',
+            embedded && 'ml-auto',
+          )}
+        >
           <IconBtn
             label="Buscar en el documento"
             pressed={searchOpen}
@@ -61,7 +96,12 @@ export function DocumentPane({ name }: { name: string | undefined }) {
           </IconBtn>
           <IconBtn
             label="Descargar facsímil"
-            onClick={() => name && downloadFacsimile(name, doc)}
+            onClick={() =>
+              name &&
+              (evidence.data
+                ? downloadEvidence(name, evidence.data)
+                : downloadFacsimile(name, doc))
+            }
           >
             <Download size={15} strokeWidth={1.5} />
           </IconBtn>
@@ -75,13 +115,16 @@ export function DocumentPane({ name }: { name: string | undefined }) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="NIF, IBAN, pedido…"
-            className="w-full rounded-full bg-canvas px-3 py-1.5 text-[13px] outline-none ring-1 ring-black/[0.06] placeholder:text-faint"
+            className="w-full rounded-full bg-canvas px-3 py-1.5 text-[13px] outline-none ring-1 ring-line placeholder:text-faint"
           />
         </div>
       ) : null}
 
       <div
-        className="relative min-h-0 flex-1 overflow-auto rounded-[16px] bg-well ring-1 ring-black/[0.04]"
+        className={cn(
+          'relative min-h-0 flex-1 overflow-auto bg-canvas',
+          embedded ? '' : 'rounded-[16px] ring-1 ring-line',
+        )}
         onWheel={(event) => {
           if (!event.ctrlKey && !event.metaKey) return
           event.preventDefault()
@@ -91,6 +134,16 @@ export function DocumentPane({ name }: { name: string | undefined }) {
         <div className="flex min-h-full justify-center p-8">
           {!name ? (
             <p className="self-center text-[13px] text-muted">Selecciona un archivo de la cola.</p>
+          ) : evidence.data ? (
+            <div
+              style={{
+                width: 560,
+                transform: `rotate(${rotation}deg) scale(${zoom})`,
+                transformOrigin: 'top center',
+              }}
+            >
+              <EvidencePaper evidence={evidence.data} query={query} />
+            </div>
           ) : doc ? (
             <div
               style={{
@@ -113,7 +166,14 @@ export function DocumentPane({ name }: { name: string | undefined }) {
         </div>
       </div>
 
-      {doc ? (
+      {embedded ? null : evidence.data ? (
+        <div className="flex items-center justify-between px-3 pt-2 text-[12px] text-muted">
+          <span className="font-mono">{evidence.data.sha256.slice(0, 12)}</span>
+          <span>
+            {evidence.data.pipeline_version} · {evidence.data.cache_hit ? 'caché' : 'extraído'}
+          </span>
+        </div>
+      ) : doc ? (
         <div className="flex items-center justify-between px-3 pt-2 text-[12px] text-muted">
           <span className="font-mono">{name?.replace('.pdf', '')}</span>
           <span>
@@ -125,10 +185,55 @@ export function DocumentPane({ name }: { name: string | undefined }) {
   )
 }
 
+function EvidencePaper({
+  evidence,
+  query,
+}: {
+  evidence: DocumentEvidence
+  query: string
+}) {
+  return (
+    <article className="rounded-[12px] bg-paper px-9 py-8 text-ink shadow-float ring-1 ring-line">
+      <div className="flex items-start justify-between gap-5 border-b border-hairline pb-5">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.08em] text-muted">Documento leído</p>
+          <h1 className="mt-1 font-mono text-[16px]">{evidence.file_id}</h1>
+        </div>
+        <span className="rounded-full bg-ocr-soft px-2 py-0.5 font-mono text-[10px] text-ocr">
+          {evidence.kind}
+        </span>
+      </div>
+
+      <dl className="mt-5 grid grid-cols-2 gap-x-6">
+        {Object.entries(evidence.fields).map(([name, field]) => (
+          <div key={name} className="border-b border-hairline py-2">
+            <dt className="font-mono text-[10.5px] text-faint">{name}</dt>
+            <dd className="mt-0.5 break-words font-mono text-[12.5px]">
+              {highlight(field.value ?? '—', query)}
+            </dd>
+            {field.selected_by ? (
+              <p className="mt-0.5 text-[10px] text-faint">
+                {field.selected_by}
+                {field.confidence != null ? ` · ${Math.round(field.confidence * 100)} %` : ''}
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </dl>
+
+      {evidence.text ? (
+        <pre className="mt-6 max-h-[320px] overflow-auto whitespace-pre-wrap border-t border-hairline pt-5 font-mono text-[11px] leading-5 text-muted">
+          {highlight(evidence.text, query)}
+        </pre>
+      ) : null}
+    </article>
+  )
+}
+
 function InvoicePaper({ doc, query }: { doc: InvoiceDocument; query: string }) {
   const H = (text: string) => highlight(text, query)
   return (
-    <article className="rounded-[12px] bg-paper px-9 py-8 text-ink shadow-[0_8px_30px_rgba(19,19,19,0.06)] ring-1 ring-black/[0.06]">
+    <article className="rounded-[12px] bg-paper px-9 py-8 text-ink shadow-float ring-1 ring-line">
       <header className="flex items-start justify-between gap-6">
         <div>
           <h1 className="text-[22px] font-medium tracking-[-0.035em]">{H(doc.supplierName)}</h1>
@@ -266,8 +371,8 @@ function IconBtn({
       title={label}
       aria-pressed={pressed}
       onClick={onClick}
-      className={`grid h-7 w-7 place-items-center rounded-full hover:bg-white hover:text-ink ${
-        pressed ? 'bg-white text-ink shadow-[0_1px_2px_rgba(19,19,19,0.06)]' : ''
+      className={`grid h-7 w-7 place-items-center rounded-full hover:bg-surface hover:text-ink ${
+        pressed ? 'bg-surface text-ink shadow-lift' : ''
       }`}
     >
       {children}
@@ -312,6 +417,17 @@ function downloadFacsimile(name: string, doc: InvoiceDocument | null) {
   const link = document.createElement('a')
   link.href = url
   link.download = name.replace(/\.pdf$/i, '') + '.html'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function downloadEvidence(name: string, evidence: DocumentEvidence) {
+  const body = evidence.text || JSON.stringify(evidence.fields, null, 2)
+  const blob = new Blob([body], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name.replace(/\.pdf$/i, '') + '.txt'
   link.click()
   URL.revokeObjectURL(url)
 }

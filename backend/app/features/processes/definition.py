@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError
+from app.core import events
 from app.features.agents import sandbox
 from app.features.processes.model import DecisionType, Process, Symbol
 from app.features.processes.schemas import ProcessDetail, ProcessIn
@@ -95,6 +96,22 @@ def _rule(data: RuleDefinition, process_id: int, base: Path | None) -> Rule:
 async def load_definition(
     session: AsyncSession, data: Definition, base: Path | None = None
 ) -> LoadResult:
+    """`_load` in a span: what the definition added to which process."""
+    with events.span("load_definition", name=data.name) as span:
+        result = await _load(session, data, base)
+        p = result.process
+        span.set(
+            process_id=p.id,
+            use_case_id=p.use_case_id,
+            decision_types=len(p.decision_types),
+            symbols=len(p.symbols),
+            new_rules=result.new_rules,
+            new_users=result.new_users,
+        )
+        return result
+
+
+async def _load(session: AsyncSession, data: Definition, base: Path | None) -> LoadResult:
     """Create the process if missing (by name), upsert its decision types and symbols, add each
     rule as a draft unless the process already has one with the same text, and create missing
     users by email. Existing rules are never touched. `base` is the folder a rule's `code`
@@ -109,7 +126,14 @@ async def load_definition(
     if process is None:
         process = Process(name=data.name, use_case_id=use_case.id)
         session.add(process)
+    from app.features.versions import configuration as version_config
+    from app.features.versions import service as versions
+    from app.features.versions.model import ProcessDraft
+
+    await session.flush()
+    await versions.lock(session, process.id)
     process.use_case_id = use_case.id
+    process.decision_review = data.decision_review.model_dump() if data.decision_review else None
     await session.flush()
 
     for t in data.decision_types:
@@ -125,6 +149,33 @@ async def load_definition(
     users = [u for u in data.users if u.email not in emails]
     session.add_all(User(**u.model_dump()) for u in users)
 
+    await session.flush()
+    candidate = await version_config.workspace(session, process.id)
+    candidate["process"]["decision_types"] = [t.model_dump() for t in data.decision_types]
+    candidate["process"]["symbols"] = [s.model_dump() for s in data.symbols]
+    selected = await session.scalars(
+        select(Rule)
+        .where(Rule.process_id == process.id, Rule.text.in_([r.text for r in data.rules]))
+        .order_by(Rule.id)
+    )
+    candidate["rules"] = [version_config.artifact(r) for r in selected]
+    if data.execution is not None:
+        from app.features.processes.execution import write
+
+        write(candidate, data.execution)
+    existing = await session.get(ProcessDraft, process.id, populate_existing=True)
+    published = await versions.active(session, process.id, required=False)
+    if published:
+        process.use_case_id = published.snapshot["process"]["use_case_id"]
+        candidate["guidance"] = published.snapshot["guidance"]
+    if existing and existing.snapshot != candidate:
+        raise ConflictError(
+            "A different process draft already exists; edit or discard it before loading a pack"
+        )
+    if not existing and (
+        not published or published.content_hash != version_config.digest(candidate)
+    ):
+        await versions.stage(session, process.id, candidate, "pack")
     await session.commit()
     return LoadResult(
         process=await get(session, process.id),

@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 
 
 class DecisionOut(BaseModel):
+    version_id: int | None = None
+    execution_id: int | None = None
     id: int
     decision: str
     author: str  # "engine" or the person's name
@@ -15,9 +17,14 @@ class DecisionOut(BaseModel):
 
 
 class EventOut(BaseModel):
-    step: str
+    id: int
+    trace_id: str  # `GET /traces/{trace_id}`: the tree this step belongs to
+    instance_id: int | None
+    rule_id: int | None = None  # a rule's step: saved, compiled, activated, retired
+    step: str = Field(examples=["decision", "resolution", "compile_rule", "sync_source"])
+    status: str  # "ok" or "error"
     data: dict[str, Any] | None
-    latency_ms: int | None
+    duration_ms: int | None
     created_at: datetime
 
 
@@ -25,7 +32,26 @@ class InstanceOut(BaseModel):
     id: int
     name: str = Field(examples=["factura_1217.pdf"])  # the exact file_id of the export
     status: str
-    decision: str | None  # the latest decision, if any
+    # The latest decision, if any: what it was, who took it and why.
+    decision: str | None
+    author: str | None = None  # "engine" or the person's name
+    reason: str | None = None
+    decided_at: datetime | None = None
+    review_pending: bool = False
+
+
+class DecisionReviewOut(BaseModel):
+    id: int
+    decision_id: int
+    status: str
+    recommendation: str | None
+    reasoning: str | None
+    evidence: list[str]
+    requires_human: bool
+    snapshot: dict[str, Any]
+    model: str | None
+    error: str | None
+    created_at: datetime
 
 
 class InstanceDetail(InstanceOut):
@@ -33,6 +59,7 @@ class InstanceDetail(InstanceOut):
     symbols: dict[str, Any] | None
     decisions: list[DecisionOut]  # append-only history, oldest first
     events: list[EventOut]
+    reviews: list[DecisionReviewOut] = []
 
 
 class ResolveIn(BaseModel):
@@ -40,9 +67,45 @@ class ResolveIn(BaseModel):
     reason: str
 
 
+class RuleSummary(BaseModel):
+    id: int
+    text: str
+    type: str
+    decision: str
+    status: str
+    fires: int  # instances whose latest engine decision has this rule firing
+
+
+class SourceSummary(BaseModel):
+    id: int
+    name: str = Field(examples=["suppliers", "erp"])
+    origin: str
+    rows: int
+    loaded_at: datetime
+
+
+class ProcessSummary(BaseModel):
+    """Everything a process page shows in one call."""
+
+    id: int
+    name: str
+    instances: int
+    by_status: dict[str, int] = Field(examples=[{"PENDING": 0, "DECIDED": 500}])
+    by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
+    # Live sources whose pre-run sync failed, name -> why; omitted when none (ADR 0028).
+    down_sources: dict[str, str] = {}
+    queue: int  # latest decision is one a person must look at
+    resolved: int  # instances whose latest decision a person took
+    rules: list[RuleSummary]
+    sources: list[SourceSummary]  # the current load of each source
+    last_run_at: datetime | None  # the engine's most recent decision
+
+
 class RunSummary(BaseModel):
     decided: int
     by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
+    # Live sources whose pre-run sync failed, name -> why; omitted when none (ADR 0028).
+    down_sources: dict[str, str] = {}
 
 
 class ChangeOut(BaseModel):
@@ -60,6 +123,19 @@ class ImpactOut(BaseModel):
     unchanged: int
     changes: list[ChangeOut]  # the engine decided it and would now decide otherwise
     conflicts: list[ChangeOut]  # a person decided it and the rules would contradict them
+
+
+class ReprocessIn(BaseModel):
+    names: list[str] | None = Field(None, examples=[["factura_1217.pdf"]])  # None: all
+
+
+class ReprocessSummary(BaseModel):
+    """What re-deciding the decided instances changed. Only `changes` got a new decision."""
+
+    unchanged: int
+    changes: list[ChangeOut]  # the engine decided it before and decides otherwise now
+    conflicts: list[ChangeOut]  # a person decided it last; left alone, for the manager
+    down_sources: dict[str, str] = {}  # as in RunSummary; omitted when none
 
 
 class FindingOut(BaseModel):

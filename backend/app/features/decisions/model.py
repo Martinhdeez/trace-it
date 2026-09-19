@@ -16,6 +16,8 @@ class Decision(Base):
     __tablename__ = "decisions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int | None] = mapped_column(ForeignKey("process_versions.id"))
+    execution_id: Mapped[int | None] = mapped_column(ForeignKey("executions.id"))
     instance_id: Mapped[int] = mapped_column(ForeignKey("instances.id"), index=True)
     decision: Mapped[str]
     results: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)  # per rule: RuleResult
@@ -35,4 +37,22 @@ class Finding(Base):
     rule_id: Mapped[int | None] = mapped_column(ForeignKey("rules.id"))
     type: Mapped[str]  # kind of error; e.g. in the invoice process: wrongly_paid
     detail: Mapped[str | None]
+    created_at: Mapped[created_at]
+
+
+class DecisionReview(Base):
+    """Immutable advice about one engine decision, never a decision itself."""
+
+    __tablename__ = "decision_reviews"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    decision_id: Mapped[int] = mapped_column(ForeignKey("decisions.id"), unique=True)
+    status: Mapped[str]  # completed or failed; failures keep the engine outcome
+    recommendation: Mapped[str | None]
+    reasoning: Mapped[str | None]
+    evidence: Mapped[list[str]] = mapped_column(JSONB)
+    requires_human: Mapped[bool]
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    model: Mapped[str | None]
+    error: Mapped[str | None]
     created_at: Mapped[created_at]

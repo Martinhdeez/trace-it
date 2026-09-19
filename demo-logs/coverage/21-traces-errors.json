@@ -1,0 +1,52 @@
+[
+  {
+    "id": 283,
+    "trace_id": "01a0b88f5477fd8e81484f92387ae04a",
+    "span_id": "d50a2959d4a7eb95",
+    "parent_id": null,
+    "step": "sync_source",
+    "status": "error",
+    "started_at": "2026-09-19T07:26:36.158223Z",
+    "duration_ms": 8366,
+    "data": {
+      "error": "SourceUnavailableError: Sync of 'erp' failed; the previous snapshot stays current. POST /erp/login : gave up after 6 attempts (last: transport error: ConnectError('All connection attempts failed'))",
+      "pages": 0,
+      "logins": 0,
+      "source": "erp",
+      "status": {
+        "error": "GET /erp/estado : gave up after 6 attempts (last: transport error: ConnectError('All connection attempts failed'))"
+      },
+      "retries": 10,
+      "requests": 12,
+      "timeouts": 0,
+      "duration_ms": 8366,
+      "rate_limited": 0,
+      "invalid_values": 0,
+      "transient_errors": {
+        "ConnectError": 12
+      },
+      "invalid_responses": 0
+    },
+    "instance_id": null,
+    "process_id": 2,
+    "rule_id": null,
+    "norm_rule_id": null
+  },
+  {
+    "id": 20,
+    "trace_id": "01a0b88d9ad5711595bb56b92ad71bc6",
+    "span_id": "efc1980f2b1ad839",
+    "parent_id": null,
+    "step": "run_process",
+    "status": "error",
+    "started_at": "2026-09-19T07:24:43.098825Z",
+    "duration_ms": 2,
+    "data": {
+      "error": "ConflictError: The process has no active rules; activate its rules first"
+    },
+    "instance_id": null,
+    "process_id": 2,
+    "rule_id": null,
+    "norm_rule_id": null
+  }
+]

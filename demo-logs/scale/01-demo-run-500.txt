@@ -1,0 +1,49 @@
+spreadsheet: suppliers=12, orders=516, parameters=1
+extraction: 471 read from the text layer, 29 scans left without symbols
+erp sync: 516 rows, 26 pages, 3 retries, 1 logins, 5333ms
+
+run: {'decided': 500, 'by_decision': {'PAGAR': 433, 'ESCALAR': 31, 'NO_PAGAR': 36}}  (1s)
+export: 500 lines
+
+why an invoice is not paid:
+   29x ESCALAR   MISSING_DATA: base, date, iban, issuer_nif, purchase_order, 
+    9x NO_PAGAR  The ERP says PAGADA
+    2x NO_PAGAR  Impossible date: 2026-02-31
+    2x NO_PAGAR  IBAN ES9100754477116000219042 is not the master's
+    1x ESCALAR   Same order as: factura_41082.pdf
+    1x NO_PAGAR  IBAN ES2702390806667122334455 is not the master's | The orde
+    1x NO_PAGAR  Total 2920.10 != order 2795.1 | Total 2920.10 != base + VAT 
+    1x NO_PAGAR  Total 1819.00 != order 1754.5 | Total 1819.00 != base + VAT 
+    1x NO_PAGAR  Total 4872.00 != order 5082 | VAT 672.00 != 882.00
+    1x NO_PAGAR  Total 3538.00 != order 3690.5 | VAT 488.00 != 640.50
+    1x NO_PAGAR  Total 3480.00 != order 3630 | VAT 480.00 != 630.00
+    1x NO_PAGAR  Total 2750.00 != order 3025 | VAT 250.00 != 525.00
+    1x NO_PAGAR  IBAN ES0221008877334600214488 is not the master's
+    1x NO_PAGAR  IBAN ES1800815290070001234567 is not the master's | The orde
+    1x NO_PAGAR  Total 3248.00 != order 3388 | VAT 448.00 != 588.00
+    1x NO_PAGAR  Impossible date: 2026-02-30
+    1x NO_PAGAR  NIF B87654321 is not in suppliers | Order PO20269999 does no
+    1x NO_PAGAR  IBAN ES8721004433115088770011 is not the master's
+    1x NO_PAGAR  IBAN ES3900815290070012345678 is not the master's
+    1x NO_PAGAR  Total 12874.40 != order 12847.4
+
+written to /private/tmp/claude-501/-Users-apple-orca-workspaces-trace-pay-pelican/81951f95-6768-4335-9ebf-6930a2d5a39b/scratchpad/out
+total: 16s
+       46.90 real         6.72 user         3.65 sys
+           306348032  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1321589  page reclaims
+                9891  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                5213  messages sent
+                4985  messages received
+                   1  signals received
+               14264  voluntary context switches
+               15795  involuntary context switches
+           176399851  instructions retired
+            63660144  cycles elapsed
+            13287904  peak memory footprint

@@ -30,7 +30,7 @@ export function setUserId(id: number | null) {
 
 function headers(extra?: HeadersInit): Headers {
   const result = new Headers(extra)
-  if (userId != null) result.set('X-Usuario-Id', String(userId))
+  if (userId != null) result.set('X-User-Id', String(userId))
   return result
 }
 
@@ -42,6 +42,9 @@ async function fail(response: Response): Promise<never> {
     if (typeof body?.code === 'string') code = body.code
     if (typeof body?.message === 'string') message = body.message
     else if (typeof body?.detail === 'string') message = body.detail
+    else if (Array.isArray(body?.detail)) message = body.detail.map(
+      (error: { loc?: string[]; msg?: string }) => `${error.loc?.join('.') ?? 'Configuration'}: ${error.msg ?? 'Invalid value'}`,
+    ).join('; ')
   } catch {
     // Body was not the `{code, message}` envelope. Keep the status text.
   }

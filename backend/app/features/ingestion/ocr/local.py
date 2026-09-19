@@ -1,13 +1,19 @@
 import io
-import json
 import threading
 from dataclasses import replace
+from pathlib import Path
 
 import yaml
 from PIL import Image
 
 from app.common.extraction import TextLine
 from app.common.normalization import clean_text
+from app.features.ingestion.cache import (
+    cached_read,
+    file_identity,
+    package_version,
+    source_identity,
+)
 from app.features.ingestion.config import Settings
 from app.features.ingestion.ocr.preprocessing import prepare_ocr_image
 
@@ -22,21 +28,66 @@ class LocalOCR:
         self.lock = threading.Lock()
         self.engine = None
         self.verifier = None
+        self.engine_identity = None
 
     def signature(self):
-        manifest = self.settings.model_dir / "manifest.json"
-        signature = json.loads(manifest.read_text()) if manifest.exists() else {"available": False}
-        verification = self.settings.model_dir / "verify/manifest.json"
-        signature["verification"] = (
-            json.loads(verification.read_text()) if verification.exists() else {"available": False}
-        )
-        return signature
+        return {
+            "primary": self._model_signature(self.settings.model_dir),
+            "verification": self._model_signature(
+                self.settings.verification_model_dir or self.settings.model_dir / "verify"
+            ),
+        }
+
+    @staticmethod
+    def _model_signature(directory):
+        return {
+            name: file_identity(directory / name)
+            for name in (
+                "manifest.json",
+                "det/inference.onnx",
+                "det/inference.yml",
+                "rec/inference.onnx",
+                "rec/keys.txt",
+            )
+        }
+
+    def reader_signature(self):
+        return {
+            "models": self._model_signature(self.settings.model_dir),
+            "implementation": source_identity(
+                __file__,
+                Path(__file__).with_name("preprocessing.py"),
+                Path(__file__).resolve().parents[3] / "common/normalization.py",
+                Path(__file__).resolve().parents[3] / "common/extraction.py",
+            ),
+            "runtime": {
+                name: package_version(name)
+                for name in (
+                    "rapidocr",
+                    "onnxruntime",
+                    "onnxruntime-gpu",
+                    "opencv-python",
+                    "numpy",
+                    "pillow",
+                )
+            },
+            "cuda": self.settings.ocr_use_cuda,
+        }
 
     def verify(self, png: bytes, page: int, point_size: tuple[float, float]):
+        signatures = self.signature()
+        primary = signatures["primary"]["rec/inference.onnx"]
+        secondary = signatures["verification"]["rec/inference.onnx"]
+        if primary is not None and primary == secondary:
+            raise ProviderUnavailable("Verification requires different recognition weights")
         with self.lock:
             if self.verifier is None:
                 self.verifier = LocalOCR(
-                    replace(self.settings, model_dir=self.settings.model_dir / "verify")
+                    replace(
+                        self.settings,
+                        model_dir=self.settings.verification_model_dir
+                        or self.settings.model_dir / "verify",
+                    )
                 )
         lines = self.verifier.recognize(png, page, point_size)
         return [
@@ -45,6 +96,27 @@ class LocalOCR:
         ]
 
     def recognize(self, png: bytes, page: int, point_size: tuple[float, float]):
+        import hashlib
+
+        signature = self.reader_signature()
+        identity = {
+            "reader": signature,
+            "image": hashlib.sha256(png).hexdigest(),
+            "page": page,
+            "point_size": list(point_size),
+        }
+        result = cached_read(
+            self.settings.data_dir / "reader-cache" / "local",
+            identity,
+            lambda: [
+                line.model_dump() for line in self._recognize(png, page, point_size, signature)
+            ],
+            validate=lambda values: [TextLine.model_validate(line).model_dump() for line in values],
+            force=self.settings.ocr_force_recompute,
+        )
+        return [TextLine.model_validate(line) for line in result]
+
+    def _recognize(self, png, page, point_size, signature):
         png, preprocessing, _ = prepare_ocr_image(png)
         # Remove blank margins before detector resizing. Sparse scans otherwise lose
         # small characters when an A4-sized canvas is downsampled. Keep coordinates.
@@ -62,8 +134,9 @@ class LocalOCR:
             buffer = io.BytesIO()
             prepared.save(buffer, format="PNG")
         with self.lock:
-            if self.engine is None:
+            if self.engine is None or self.engine_identity != signature:
                 self._load()
+                self.engine_identity = signature
             result = self.engine(buffer.getvalue(), use_cls=False)
         if not result.txts:
             return []

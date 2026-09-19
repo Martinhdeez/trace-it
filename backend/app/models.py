@@ -2,19 +2,39 @@
 
 from app.core.database import Base
 from app.core.events import Event
-from app.features.decisions.model import Decision, Finding
+from app.features.alerts.model import Alert
+from app.features.decisions.model import Decision, DecisionReview, Finding
 from app.features.ingestion.model import File, Instance
-from app.features.processes.model import DecisionType, Process, Symbol
+from app.features.learning.model import Adoption, Analysis, Proposal, Validation
+from app.features.processes.model import (
+    DecisionType,
+    DiscoveryRevision,
+    DiscoverySession,
+    Process,
+    Symbol,
+)
 from app.features.rules.model import NormRule, Rule
 from app.features.sources.model import Source
 from app.features.use_cases.model import AgentConfig, UseCase
 from app.features.users.model import User
+from app.features.versions.model import Execution, ProcessDraft, ProcessVersion
 
 __all__ = [
+    "Alert",
+    "Execution",
+    "ProcessDraft",
+    "ProcessVersion",
+    "Adoption",
+    "Analysis",
+    "Proposal",
+    "Validation",
     "AgentConfig",
     "Base",
     "Decision",
+    "DecisionReview",
     "DecisionType",
+    "DiscoveryRevision",
+    "DiscoverySession",
     "Event",
     "File",
     "Finding",

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,20 +15,42 @@ class Settings(BaseSettings):
     processes_dir: Path = Path(__file__).resolve().parents[3] / "processes"
     # One model per agent role, in PydanticAI's `provider:model` form (ADR 0006): any
     # provider PydanticAI supports. The tester writes the tests the compiler's code must
-    # pass; a different provider makes a shared misreading less likely (ADR 0004).
-    compiler_model: str = "anthropic:claude-opus-5"
-    tester_model: str = "openai:gpt-5"
-    assistant_model: str = "anthropic:claude-opus-5"
-    normalizer_model: str = "anthropic:claude-opus-5"
+    # pass (ADR 0004). Defaults: the Helmcode models the team runs, with `fallback_models`
+    # tried in order when a role has no model of its own in the use case (ADR 0019).
+    compiler_model: str = "helmcode:deepseek-v4-flash"
+    tester_model: str = "helmcode:deepseek-v4-flash"
+    assistant_model: str = "helmcode:deepseek-v4-flash"
+    decision_reviewer_model: str = "helmcode:deepseek-v4-flash"
+    learner_model: str = "helmcode:deepseek-v4-flash"
+    normalizer_model: str = "helmcode:deepseek-v4-flash"
+    discovery_model: str = "helmcode:deepseek-v4-flash"
+    fallback_models: list[str] = ["helmcode:glm5.3", "helmcode:qwen3.6"]
     # Helmcode, an OpenAI-compatible API: select it with `helmcode:<model>` (e.g.
     # `helmcode:deepseek-v4-flash`). Its key is read like every provider's: HELMCODE_API_KEY.
-    helmcode_base_url: str = "https://api.helmcode.com/v1"
+    # HELMCODE_URL (the ingestion's older name) is read when this one is not set.
+    helmcode_base_url: str = Field(
+        "https://api.helmcode.com/v1",
+        validation_alias=AliasChoices("TRACE_HELMCODE_BASE_URL", "HELMCODE_URL"),
+    )
+    # The deployment's trusted local OpenAI-compatible server. Key: LOCAL_LLM_API_KEY.
+    local_base_url: str = "http://localhost:11434/v1"
+    # Optional per-preset model/effort overrides. No credentials in this JSON.
+    execution_presets: dict[str, dict] = {}
     # A compiled rule activates by itself when it would change at most this share of the
     # decisions already taken and contradicts no decision a person took (ADR 0004).
     auto_activate_max_change: float = 0.05
     # Rules one background job compiles at once (Helmcode allows 5 concurrent requests
     # per model).
     compile_concurrency: int = 5
+    # `GET /health/planes`: over the last `health_window_minutes`, a plane is `down` from
+    # this error rate, `degraded` from the lower one or when its p95 span duration passes
+    # its limit (`TRACE_HEALTH_P95_MS='{"agents": 90000}'`). Below `health_min_spans` spans
+    # in the window a plane is `ok` ("not enough data"): one failed span out of one is noise.
+    health_window_minutes: int = 15
+    health_min_spans: int = 5
+    health_degraded_error_rate: float = 0.05
+    health_down_error_rate: float = 0.5
+    health_p95_ms: dict[str, int] = {"ingestion": 10_000, "agents": 60_000, "execution": 5_000}
 
 
 settings = Settings()

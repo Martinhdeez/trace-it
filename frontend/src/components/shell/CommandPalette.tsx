@@ -37,7 +37,7 @@ export function CommandPalette() {
     const list: Hit[] = [
       { id: 'processes', label: 'Procesos', hint: 'todos', to: paths.processes },
       { id: 'new', label: 'Nuevo proceso', hint: 'crear o importar', to: paths.newProcess },
-      { id: 'settings', label: 'Ajustes', hint: 'usuario y modelos', to: paths.settings },
+      { id: 'settings', label: 'Ajustes del espacio', hint: 'usuario y modelos', to: paths.settings },
       ...(processes.data ?? []).map((process) => ({
         id: `p-${process.id}`,
         label: process.nombre,
@@ -47,11 +47,15 @@ export function CommandPalette() {
     ]
     if (processId) {
       list.push(
-        { id: 'inst', label: 'Instancias', hint: 'consola', to: paths.instances(processId) },
-        { id: 'queue', label: 'Cola', hint: 'esperando a una persona', to: paths.queue(processId) },
-        { id: 'rules', label: 'Reglas', hint: 'la norma', to: paths.rules(processId) },
-        { id: 'audit', label: 'Auditoría', hint: 'hallazgos', to: paths.audit(processId) },
-        { id: 'sources', label: 'Fuentes', hint: 'ingesta', to: paths.sources(processId) },
+        { id: 'panel', label: 'Panel', hint: 'proceso', to: paths.process(processId) },
+        { id: 'definition', label: 'Definición', hint: 'normas y contexto', to: paths.definition(processId) },
+        { id: 'normas', label: 'Normas', hint: 'definición', to: paths.definition(processId) },
+        { id: 'contexto', label: 'Contexto', hint: 'definición', to: paths.definitionContext(processId) },
+        { id: 'inputs', label: 'Inputs', hint: 'definición', to: paths.definitionInputs(processId) },
+        { id: 'fuentes', label: 'Fuentes de verdad', hint: 'ERP y maestros', to: paths.definitionSources(processId) },
+        { id: 'inst', label: 'Ejecuciones', hint: 'histórico del lote', to: paths.instances(processId) },
+        { id: 'review', label: 'Revisión', hint: 'esperando a una persona', to: paths.review(processId) },
+        { id: 'psettings', label: 'Ajustes del proceso', hint: 'OCR y modelos', to: paths.processSettings(processId) },
       )
     }
 
@@ -104,7 +108,7 @@ export function CommandPalette() {
 
   return (
     <Overlay onClose={() => setPaletteOpen(false)}>
-      <div className="overflow-hidden rounded-[16px] bg-white shadow-[0_16px_50px_rgba(19,19,19,0.12)] ring-1 ring-black/[0.06]">
+      <div className="overflow-hidden rounded-[16px] bg-surface shadow-pop ring-1 ring-line">
         <input
           autoFocus
           value={query}

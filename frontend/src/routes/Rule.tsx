@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Hammer, X } from 'lucide-react'
 import { api } from '../api/client'
 import { keys } from '../api/queries'
 import type { AuditChange, CrossTest, Impact, RuleDetail, RuleReport } from '../api/contracts'
-import { Button, Segmented } from '../components/shell/Controls'
+import { ProcessScreen } from '../components/process/ProcessScreen'
+import { Button } from '../components/shell/Controls'
 import { ErrorNotice, Notice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
-import { Topbar } from '../components/shell/Topbar'
 import { NestedCard, PageIntro } from '../components/shell/Well'
 import { JsonHighlight } from '../lib/jsonHighlight'
 import { cn } from '../lib/cn'
@@ -18,22 +18,26 @@ import { useSession } from '../state/session'
 export function Rule() {
   const processId = Number(useParams().processId)
   const ruleId = Number(useParams().ruleId)
-  const [params, setParams] = useSearchParams()
   const queryClient = useQueryClient()
   const { isManager } = useSession()
-  const [view, setView] = useState<'a' | 'b'>('a')
 
   const process = useQuery({
     queryKey: keys.process(processId),
     queryFn: () => api.getProcess(processId),
   })
-  const rule = useQuery({ queryKey: keys.rule(ruleId), queryFn: () => api.getRule(ruleId) })
+  const rule = useQuery({
+    queryKey: keys.rule(ruleId),
+    queryFn: () => api.getRule(ruleId),
+    refetchInterval: (query) =>
+      query.state.data?.estado === 'compilando' ? 1_500 : false,
+  })
 
   const data = rule.data
   const report = data?.informe
-  const compiled = Boolean(report)
+  const compiled = Boolean(report || data?.codigo || data?.codigo_a)
   const valid = Boolean(report?.valida)
   const isActive = data?.estado === 'activa'
+  const isCompiling = data?.estado === 'compilando'
 
   // Activating and retiring are the same question asked of a different rule set,
   // so the impact is worth seeing before either.
@@ -55,62 +59,61 @@ export function Rule() {
   const activate = useMutation({ mutationFn: () => api.activateRule(ruleId), onSuccess: refresh })
   const retire = useMutation({ mutationFn: () => api.retireRule(ruleId), onSuccess: refresh })
 
-  // Coming from "crear y compilar": start the two agents without a second click.
-  const launched = useRef(false)
-  const autoCompile = params.get('compile') === '1'
-  useEffect(() => {
-    if (!autoCompile || launched.current || !data) return
-    launched.current = true
-    params.delete('compile')
-    setParams(params, { replace: true })
-    if (data.estado === 'borrador' && !data.informe) compile.mutate()
-  }, [autoCompile, data, compile, params, setParams])
-
-  const code = view === 'a' ? data?.codigo_a : data?.codigo_b
-  const tests = view === 'a' ? data?.tests_a : data?.tests_b
+  const code = data?.codigo ?? data?.codigo_a
+  const tests = data?.tests ?? data?.tests_a
   const conflicts = impact.data?.conflictos ?? []
 
   return (
-    <>
-      <Topbar
-        crumbs={[
-          { label: process.data?.nombre ?? '…', to: paths.process(processId) },
-          { label: 'Reglas', to: paths.rules(processId) },
-          { label: `Regla ${ruleId}` },
-        ]}
-        actions={
-          <>
+    <ProcessScreen
+      processId={processId}
+      crumbs={[
+        { label: 'Procesos', to: paths.processes },
+        { label: process.data?.nombre ?? '…', to: paths.process(processId) },
+        { label: 'Definición', to: paths.definition(processId) },
+        { label: `Regla ${ruleId}` },
+      ]}
+      actions={
+        <>
+          <Button
+            onClick={() => compile.mutate()}
+            disabled={
+              compile.isPending ||
+              isCompiling ||
+              !data ||
+              !['borrador', 'bloqueada'].includes(data.estado)
+            }
+          >
+            <Hammer size={12} strokeWidth={2} />
+            {compile.isPending || isCompiling
+              ? 'Compilando…'
+              : compiled
+                ? 'Recompilar'
+                : 'Compilar'}
+          </Button>
+          {isActive ? (
             <Button
-              onClick={() => compile.mutate()}
-              disabled={compile.isPending || data?.estado !== 'borrador'}
+              tone="danger"
+              onClick={() => retire.mutate()}
+              disabled={!isManager || retire.isPending}
+              title={isManager ? undefined : 'Solo un responsable puede retirar reglas'}
             >
-              <Hammer size={12} strokeWidth={2} />
-              {compile.isPending ? 'Compilando…' : compiled ? 'Recompilar' : 'Compilar'}
+              <X size={12} strokeWidth={2} />
+              {retire.isPending ? 'Retirando…' : 'Retirar'}
             </Button>
-            {isActive ? (
-              <Button
-                tone="danger"
-                onClick={() => retire.mutate()}
-                disabled={!isManager || retire.isPending}
-                title={isManager ? undefined : 'Solo un responsable puede retirar reglas'}
-              >
-                <X size={12} strokeWidth={2} />
-                {retire.isPending ? 'Retirando…' : 'Retirar'}
-              </Button>
-            ) : (
-              <Button
-                tone="primary"
-                onClick={() => activate.mutate()}
-                disabled={!isManager || !valid || activate.isPending}
-                title={isManager ? undefined : 'Solo un responsable puede activar reglas'}
-              >
-                <Check size={12} strokeWidth={2} />
-                {activate.isPending ? 'Activando…' : 'Activar'}
-              </Button>
-            )}
-          </>
-        }
-      />
+          ) : (
+            <Button
+              tone="primary"
+              onClick={() => activate.mutate()}
+              disabled={!isManager || !valid || activate.isPending}
+              title={isManager ? undefined : 'Solo un responsable puede activar reglas'}
+            >
+              <Check size={12} strokeWidth={2} />
+              {activate.isPending ? 'Activando…' : 'Activar'}
+            </Button>
+          )}
+        </>
+      }
+    >
 
       <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
         {rule.isError ? <ErrorNotice error={rule.error} /> : null}
@@ -144,7 +147,7 @@ export function Rule() {
           {compile.isError ? <ErrorNotice error={compile.error} /> : null}
           {retire.isError ? <ErrorNotice error={retire.error} /> : null}
 
-          {compile.isPending ? <Compiling /> : null}
+          {compile.isPending || isCompiling ? <Compiling /> : null}
 
           {conflicts.length > 0 ? (
             <Notice
@@ -156,17 +159,17 @@ export function Rule() {
             </Notice>
           ) : null}
 
-          {!compiled && !compile.isPending ? (
+          {!compiled && !compile.isPending && !isCompiling ? (
             <Notice title="Sin compilar">
-              Pulsa <strong>Compilar</strong>: dos agentes escriben, cada uno por su lado, el código
-              y los tests de esta regla. Hasta que pasen los tests cruzados no se puede activar.
+              Al guardar, un tester ciego escribe los casos y un compilador autónomo escribe el
+              código contra ellos. También puedes pulsar <strong>Compilar</strong> para reintentarlo.
             </Notice>
           ) : null}
 
           {compiled && !valid ? (
             <Notice tone="error" title="La validación no salió limpia">
-              Los dos códigos no coinciden en algún test o en alguna instancia del histórico. La
-              regla se queda en borrador. Normalmente se arregla aclarando el texto y recompilando.
+              El código no pasa algún caso del tester, o la regla pide datos que el proceso no
+              tiene. La versión activa anterior sigue funcionando.
             </Notice>
           ) : null}
         </div>
@@ -176,19 +179,11 @@ export function Rule() {
         {impact.data ? <ImpactSection impact={impact.data} retiring={isActive} /> : null}
 
         <section className="mt-8">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="font-mono text-[11px] tracking-[0.12em] text-faint">CÓDIGO GENERADO</p>
-            <Segmented
-              value={view}
-              onChange={setView}
-              options={[
-                { value: 'a', label: 'Agente A' },
-                { value: 'b', label: 'Agente B' },
-              ]}
-            />
-          </div>
+          <p className="mb-3 font-mono text-[11px] tracking-[0.12em] text-faint">
+            CÓDIGO Y CASOS DEL TESTER
+          </p>
           <div className="grid gap-3 lg:grid-cols-2">
-            <NestedCard label={`codigo_${view}.py`}>
+            <NestedCard label="evaluate.py · compilador">
               {code ? (
                 <pre className="max-h-[420px] overflow-auto bg-[#161615] px-3 py-3 font-mono text-[12px] leading-5 text-[#eceae4]">
                   {code}
@@ -197,7 +192,7 @@ export function Rule() {
                 <p className="px-3.5 py-6 text-[13px] text-muted">Todavía no hay código.</p>
               )}
             </NestedCard>
-            <NestedCard label={`tests_${view} · ${tests?.length ?? 0}`}>
+            <NestedCard label={`tester ciego · ${tests?.length ?? 0} casos`}>
               {tests?.length ? (
                 <JsonHighlight value={tests} />
               ) : (
@@ -207,11 +202,11 @@ export function Rule() {
           </div>
         </section>
       </div>
-    </>
+    </ProcessScreen>
   )
 }
 
-/** Two agents, two LLM round trips. Showing the clock beats showing a spinner. */
+/** Background compiler progress. Showing the clock beats showing a spinner. */
 function Compiling() {
   const [seconds, setSeconds] = useState(0)
   useEffect(() => {
@@ -221,9 +216,10 @@ function Compiling() {
 
   return (
     <Notice title={`Compilando · ${seconds} s`}>
-      Los agentes A y B escriben a la vez, sin verse. Después se pasan todos los tests por los dos
-      códigos y los dos corren el histórico entero. Suele tardar entre 30 y 60 segundos.
-      <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-black/[0.06]">
+      El tester ciego escribe los casos sin ver el código. El compilador escribe y corrige la
+      función hasta pasarlos; si discuten un caso, el tester lo revisa sin adoptar la respuesta del
+      compilador.
+      <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-rule">
         <div
           className="h-full rounded-full bg-ink/70 transition-[width] duration-1000 ease-linear"
           style={{ width: `${Math.min(95, seconds * 2)}%` }}
@@ -236,35 +232,46 @@ function Compiling() {
 function Report({ report }: { report: RuleReport }) {
   const tests = report.tests ?? []
   const failing = tests.filter((test) => !test.pasa)
-  const history = report.historico
+  const needsData = report.necesita_datos
 
   return (
     <section className="mt-8">
       <p className="mb-3 font-mono text-[11px] tracking-[0.12em] text-faint">VALIDACIÓN</p>
       <div className="grid gap-3 sm:grid-cols-3">
         <Score
-          title="Tests cruzados"
+          title="Casos del tester"
           value={`${tests.length - failing.length}/${tests.length}`}
           good={tests.length > 0 && failing.length === 0}
-          foot="Cada test de A y de B, por los dos códigos."
+          foot="Casos que pasa el código generado."
         />
         <Score
-          title="Histórico"
-          value={history ? `${history.coinciden}/${history.instancias}` : '—'}
-          good={Boolean(history) && history!.coinciden === history!.instancias}
-          foot="Instancias en que A y B dicen lo mismo."
+          title="Intentos"
+          value={String(report.intentos ?? '—')}
+          good={Boolean(report.valida)}
+          foot={`${report.revisiones?.length ?? 0} revisiones del tester.`}
         />
         <Score
           title="Se puede activar"
           value={report.valida ? 'sí' : 'no'}
           good={Boolean(report.valida)}
-          foot="Sin un solo desacuerdo entre los dos códigos."
+          foot="Todos los casos pasan y no faltan datos."
         />
       </div>
 
+      {needsData ? (
+        <div className="mt-3">
+          <Notice tone="warning" title="Esta regla pide datos que el proceso no tiene">
+            {needsData.missing?.length ? (
+              <span className="font-mono">{needsData.missing.join(' · ')}</span>
+            ) : null}{' '}
+            {needsData.explanation}
+          </Notice>
+        </div>
+      ) : null}
+
       {tests.length > 0 ? (
         <div className="mt-3">
-          <NestedCard label="caso · esperado · A y B">
+          <NestedCard label="caso · esperado · resultado">
             <ul className="divide-y divide-hairline">
               {[...failing, ...tests.filter((test) => test.pasa)].slice(0, 12).map((test, index) => (
                 <Case key={`${test.autor}-${test.nombre}-${index}`} test={test} />
@@ -317,7 +324,7 @@ function ImpactSection({ impact, retiring }: { impact: Impact; retiring: boolean
 function Case({ test }: { test: CrossTest }) {
   return (
     <li className="flex items-baseline gap-3 px-3.5 py-2">
-      <span className="w-4 shrink-0 font-mono text-[11px] text-faint">{test.autor}</span>
+      <span className="w-10 shrink-0 font-mono text-[10px] text-faint">{test.autor}</span>
       <span className="min-w-0 flex-1 truncate text-[12.5px]">{test.nombre}</span>
       <span className="shrink-0 font-mono text-[11px] text-muted">
         {test.esperado ? 'salta' : 'no salta'}
@@ -327,9 +334,9 @@ function Case({ test }: { test: CrossTest }) {
           'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px]',
           test.pasa ? 'bg-pagar-soft text-pagar' : 'bg-nopagar-soft text-nopagar',
         )}
-        title={`A: ${test.a} · B: ${test.b}`}
+        title={`Resultado: ${test.a}`}
       >
-        {test.pasa ? 'A = B' : `A ${test.a} / B ${test.b}`}
+        {test.pasa ? 'pasa' : test.a}
       </span>
     </li>
   )

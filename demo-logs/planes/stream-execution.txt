@@ -1,0 +1,600 @@
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+id: 91
+event: execution
+data: {"id":91,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"690e5c5454b75be3","parent_id":"7a106ed5bc9beafc","step":"decision","status":"ok","started_at":"2026-09-19T08:30:49.653984Z","duration_ms":null,"data":{"fired":[],"reason":"","decision":"PAGAR","rules_hash":"2684496177cc1bceefc7e82385d1524f085019d883dfc0a33970f9de54b3b294"},"instance_id":1,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 92
+event: execution
+data: {"id":92,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"d6c4adb290e350a7","parent_id":"7a106ed5bc9beafc","step":"decision","status":"ok","started_at":"2026-09-19T08:30:49.654067Z","duration_ms":null,"data":{"fired":[],"reason":"","decision":"PAGAR","rules_hash":"2684496177cc1bceefc7e82385d1524f085019d883dfc0a33970f9de54b3b294"},"instance_id":2,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 93
+event: execution
+data: {"id":93,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"ac248c116399fe80","parent_id":"7a106ed5bc9beafc","step":"decision","status":"ok","started_at":"2026-09-19T08:30:49.654112Z","duration_ms":null,"data":{"fired":[],"reason":"","decision":"PAGAR","rules_hash":"2684496177cc1bceefc7e82385d1524f085019d883dfc0a33970f9de54b3b294"},"instance_id":3,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 94
+event: execution
+data: {"id":94,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"35f76c8f28f41b88","parent_id":"7a106ed5bc9beafc","step":"decision","status":"ok","started_at":"2026-09-19T08:30:49.654151Z","duration_ms":null,"data":{"fired":[],"reason":"","decision":"PAGAR","rules_hash":"2684496177cc1bceefc7e82385d1524f085019d883dfc0a33970f9de54b3b294"},"instance_id":4,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 95
+event: execution
+data: {"id":95,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"10e05593c9fdaadc","parent_id":"7a106ed5bc9beafc","step":"decision","status":"ok","started_at":"2026-09-19T08:30:49.654187Z","duration_ms":null,"data":{"fired":[],"reason":"","decision":"PAGAR","rules_hash":"2684496177cc1bceefc7e82385d1524f085019d883dfc0a33970f9de54b3b294"},"instance_id":5,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 96
+event: execution
+data: {"id":96,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"eac780e8e3babee9","parent_id":"7a106ed5bc9beafc","step":"decision","status":"ok","started_at":"2026-09-19T08:30:49.654225Z","duration_ms":null,"data":{"fired":[],"reason":"","decision":"PAGAR","rules_hash":"2684496177cc1bceefc7e82385d1524f085019d883dfc0a33970f9de54b3b294"},"instance_id":6,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 97
+event: execution
+data: {"id":97,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"0e01f052f3802895","parent_id":"7a106ed5bc9beafc","step":"decision","status":"ok","started_at":"2026-09-19T08:30:49.654262Z","duration_ms":null,"data":{"fired":[],"reason":"","decision":"PAGAR","rules_hash":"2684496177cc1bceefc7e82385d1524f085019d883dfc0a33970f9de54b3b294"},"instance_id":7,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 98
+event: execution
+data: {"id":98,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"2b6175e8bce913b3","parent_id":"7a106ed5bc9beafc","step":"decision","status":"ok","started_at":"2026-09-19T08:30:49.654299Z","duration_ms":null,"data":{"fired":[],"reason":"","decision":"PAGAR","rules_hash":"2684496177cc1bceefc7e82385d1524f085019d883dfc0a33970f9de54b3b294"},"instance_id":8,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 99
+event: execution
+data: {"id":99,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"2ae73de4a450a772","parent_id":"7a106ed5bc9beafc","step":"decision","status":"ok","started_at":"2026-09-19T08:30:49.654333Z","duration_ms":null,"data":{"fired":[],"reason":"","decision":"PAGAR","rules_hash":"2684496177cc1bceefc7e82385d1524f085019d883dfc0a33970f9de54b3b294"},"instance_id":9,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 100
+event: execution
+data: {"id":100,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"44eadd2b3ea6e0ed","parent_id":"7a106ed5bc9beafc","step":"decision","status":"ok","started_at":"2026-09-19T08:30:49.654369Z","duration_ms":null,"data":{"fired":[],"reason":"","decision":"PAGAR","rules_hash":"2684496177cc1bceefc7e82385d1524f085019d883dfc0a33970f9de54b3b294"},"instance_id":10,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 101
+event: execution
+data: {"id":101,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"54a63bef0c06324e","parent_id":"7a106ed5bc9beafc","step":"decision","status":"ok","started_at":"2026-09-19T08:30:49.654403Z","duration_ms":null,"data":{"fired":[1],"reason":"MISSING_DATA: base, date, iban, issuer_nif, purchase_order, total, vat_amount, vat_rate","decision":"ESCALAR","rules_hash":"2684496177cc1bceefc7e82385d1524f085019d883dfc0a33970f9de54b3b294"},"instance_id":11,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 102
+event: execution
+data: {"id":102,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"c5b651b922e740ad","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.200132Z","duration_ms":27,"data":{"fired":1,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":1,"norm_rule_id":null}
+
+id: 103
+event: execution
+data: {"id":103,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"89941a308dc223ea","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.228495Z","duration_ms":26,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":2,"norm_rule_id":null}
+
+id: 104
+event: execution
+data: {"id":104,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"a2488e2486805c19","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.254989Z","duration_ms":27,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":3,"norm_rule_id":null}
+
+id: 105
+event: execution
+data: {"id":105,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"f73052ec87498b63","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.282694Z","duration_ms":27,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":4,"norm_rule_id":null}
+
+id: 106
+event: execution
+data: {"id":106,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"8cf67af4389f1c02","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.310307Z","duration_ms":25,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":5,"norm_rule_id":null}
+
+id: 107
+event: execution
+data: {"id":107,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"7eba9b96e628da90","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.336320Z","duration_ms":25,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":6,"norm_rule_id":null}
+
+id: 108
+event: execution
+data: {"id":108,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"a1fc744d875a20ed","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.362388Z","duration_ms":26,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":7,"norm_rule_id":null}
+
+id: 109
+event: execution
+data: {"id":109,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"5a43f206c39793fa","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.389002Z","duration_ms":25,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":8,"norm_rule_id":null}
+
+id: 110
+event: execution
+data: {"id":110,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"8a4cb04607384ed7","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.415197Z","duration_ms":25,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":9,"norm_rule_id":null}
+
+id: 111
+event: execution
+data: {"id":111,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"591f6eb8aa41ca54","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.441577Z","duration_ms":24,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":10,"norm_rule_id":null}
+
+id: 112
+event: execution
+data: {"id":112,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"7ecc2e3efddb0acb","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.466881Z","duration_ms":24,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":11,"norm_rule_id":null}
+
+id: 113
+event: execution
+data: {"id":113,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"c67481c4a10ffc47","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.491731Z","duration_ms":24,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":12,"norm_rule_id":null}
+
+id: 114
+event: execution
+data: {"id":114,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"3e7ea55fac0b67a9","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.516704Z","duration_ms":26,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":13,"norm_rule_id":null}
+
+id: 115
+event: execution
+data: {"id":115,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"4e5fcbd9f7fd1961","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.543349Z","duration_ms":26,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":14,"norm_rule_id":null}
+
+id: 116
+event: execution
+data: {"id":116,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"d20985873d8a6208","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.570563Z","duration_ms":27,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":15,"norm_rule_id":null}
+
+id: 117
+event: execution
+data: {"id":117,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"9e487706c58e4811","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.598763Z","duration_ms":27,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":16,"norm_rule_id":null}
+
+id: 118
+event: execution
+data: {"id":118,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"9176e16717dd9128","parent_id":"7a106ed5bc9beafc","step":"evaluate_rule","status":"ok","started_at":"2026-09-19T08:30:49.626321Z","duration_ms":26,"data":{"fired":0,"errors":0,"instances":11},"instance_id":null,"process_id":1,"rule_id":17,"norm_rule_id":null}
+
+id: 119
+event: execution
+data: {"id":119,"trace_id":"01a0b8ca1f580243bd4779c523a99196","span_id":"7a106ed5bc9beafc","parent_id":null,"step":"run_process","status":"ok","started_at":"2026-09-19T08:30:49.183773Z","duration_ms":485,"data":{"rules":17,"failures":{"MISSING_DATA":1},"instances":11,"by_decision":{"PAGAR":10,"ESCALAR":1}},"instance_id":null,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 120
+event: execution
+data: {"id":120,"trace_id":"06fe12cc4c0c7a70798cf3f365f56272","span_id":"0271ef72ef97fe68","parent_id":null,"step":"resolution","status":"ok","started_at":"2026-09-19T08:30:49.710235Z","duration_ms":null,"data":{"author":"Martín","before":"ESCALAR","reason":"live check","decision":"NO_PAGAR","previous_author":"engine"},"instance_id":11,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+id: 121
+event: execution
+data: {"id":121,"trace_id":"01a0b8ca217cdb4bea490412aeac19bf","span_id":"f2cdb9687c2ac009","parent_id":null,"step":"export_outcomes","status":"ok","started_at":"2026-09-19T08:30:49.724807Z","duration_ms":6,"data":{"batch":0,"lines":11,"duplicates":0},"instance_id":null,"process_id":1,"rule_id":null,"norm_rule_id":null}
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+

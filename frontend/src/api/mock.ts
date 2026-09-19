@@ -240,6 +240,9 @@ function eventsOf(item: Row): TraceEvent[] {
       datos: {
         fuente: scanned ? 'vision · render 300 dpi' : 'pdftotext',
         simbolos: Object.keys(symbolsOf(item.instance.nombre)).length,
+        ...(scanned
+          ? { input_tokens: 2140, output_tokens: 96 }
+          : { input_tokens: 0, output_tokens: 0 }),
       },
       latencia_ms: scanned ? 1840 : 180,
       creado: NOW,
@@ -471,6 +474,59 @@ export const mockClient: ApiClient = {
   listRules: (processId, state?: RuleState) =>
     wait(rules.filter((rule) => rule.proceso_id === processId && (!state || rule.estado === state))),
 
+  listNormRules: (processId) =>
+    wait(
+      rules
+        .filter((rule) => rule.proceso_id === processId)
+        .map((rule, index) => ({
+          id: rule.id,
+          numero: index + 1,
+          texto: rule.texto,
+          politicas: [],
+          creada: rule.creada,
+          reglas: [
+            {
+              id: rule.id,
+              texto: rule.texto,
+              decision: rule.decision,
+              estado: rule.estado,
+            },
+          ],
+        })),
+    ),
+
+  normalizeNorm: async (processId, text) => {
+    const lines = text
+      .split(/\n+/)
+      .map((line) => line.replace(/^\s*\d+[.)]\s*/, '').trim())
+      .filter(Boolean)
+    const created = []
+    for (const [index, line] of lines.entries()) {
+      const rule = await mockClient.createRule(processId, {
+        texto: line,
+        tipo: 'requisito',
+        decision: processById(processId).tipos_decision.find((item) => !item.por_defecto)
+          ?.nombre ?? 'REVISAR',
+      })
+      created.push({
+        id: rule.id,
+        numero: index + 1,
+        texto: line,
+        politicas: [],
+        creada: rule.creada,
+        reglas: [
+          {
+            id: rule.id,
+            texto: rule.texto,
+            decision: rule.decision,
+            estado: rule.estado,
+          },
+        ],
+      })
+    }
+    return wait({ reglas_norma: created })
+  },
+
   getRule: async (id) => wait(ruleById(id)),
 
   createRule: async (processId, body: RuleInput) => {
@@ -614,6 +670,8 @@ export const mockClient: ApiClient = {
     return wait(detail)
   },
 
+  getDocument: () => wait(null),
+
   queue: (processId, outcome?: string) => {
     const human = new Set(
       processById(processId)
@@ -714,23 +772,47 @@ export const mockClient: ApiClient = {
       tiene_texto: !file.name.startsWith('scan'),
       ingerido: new Date().toISOString(),
     }))
-    if (processId === 1) files.unshift(...added)
+    if (processId === 1) {
+      files.unshift(...added)
+      let nextId = instances.reduce((max, item) => Math.max(max, item.instance.id), 0) + 1
+      for (const file of incoming) {
+        instances.push({
+          instance: {
+            id: nextId++,
+            nombre: file.name,
+            estado: 'PENDIENTE',
+            decision: null,
+          },
+          reason: '',
+          latencyMs: 0,
+          decisions: [],
+        })
+      }
+    }
     return wait(added, 600)
   },
 
   listSources: (processId) => wait(processId === 1 ? [...sources] : []),
 
-  uploadSource: async (_processId, name, file) => {
-    const load: SourceLoad = {
-      nombre: name,
-      origen: file.name,
-      filas: 0,
-      cargada: new Date().toISOString(),
+  uploadWorkbook: async (processId, file) => {
+    const loads: SourceLoad[] = [
+      { nombre: 'suppliers', origen: file.name, filas: 12, cargada: new Date().toISOString() },
+      { nombre: 'orders', origen: file.name, filas: 516, cargada: new Date().toISOString() },
+      { nombre: 'parameters', origen: file.name, filas: 1, cargada: new Date().toISOString() },
+    ]
+    if (processId === 1) {
+      for (const load of loads) {
+        const index = sources.findIndex((item) => item.nombre === load.nombre)
+        if (index >= 0) sources[index] = load
+        else sources.push(load)
+      }
     }
-    const index = sources.findIndex((item) => item.nombre === name)
-    if (index >= 0) sources[index] = load
-    else sources.push(load)
-    return wait(load, 500)
+    return wait(loads, 400)
+  },
+
+  uploadSource: async (processId, name, file) => {
+    const loads = await mockClient.uploadWorkbook(processId, file)
+    return loads.find((item) => item.nombre === name) ?? loads[0]
   },
 
   syncErp: async () => {

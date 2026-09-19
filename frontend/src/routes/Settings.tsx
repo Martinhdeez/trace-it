@@ -2,12 +2,13 @@ import { useSyncExternalStore } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, apiTrace, mode } from '../api/client'
 import { keys } from '../api/queries'
-import { Button, Input } from '../components/shell/Controls'
+import { Button, Input, Segmented } from '../components/shell/Controls'
 import { Empty, ErrorNotice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
 import { Topbar } from '../components/shell/Topbar'
 import { NestedCard, PageIntro } from '../components/shell/Well'
 import { useSession } from '../state/session'
+import { useTheme, type Theme } from '../state/theme'
 
 export function Settings() {
   const { user, use, signOut } = useSession()
@@ -29,10 +30,12 @@ export function Settings() {
         <PageIntro
           kicker="Espacio"
           title="Ajustes"
-          description="Quién eres para el backend, qué modelo lleva cada papel y qué parte de la API está viva."
+          description="Quién eres para el backend y el estado de la API. OCR y modelos de un proceso concreto están en Ajustes de ese proceso."
         />
 
         <div className="max-w-2xl space-y-3">
+          <Appearance />
+
           <NestedCard
             label="usuario"
             action={
@@ -45,7 +48,7 @@ export function Settings() {
           >
             <div className="space-y-2 px-3.5 py-3">
               <p className="text-[12px] text-muted">
-                Tu id viaja en la cabecera <span className="font-mono">X-Usuario-Id</span>. Activar
+                Tu id viaja en la cabecera <span className="font-mono">X-User-Id</span>. Activar
                 y retirar reglas solo lo puede hacer un responsable.
               </p>
               {users.isError ? <ErrorNotice error={users.error} /> : null}
@@ -57,7 +60,7 @@ export function Settings() {
                       onClick={() => use(candidate)}
                       className={
                         candidate.id === user?.id
-                          ? 'flex w-full items-center justify-between rounded-[10px] bg-well px-3 py-2 text-left ring-1 ring-black/[0.05]'
+                          ? 'flex w-full items-center justify-between rounded-[10px] bg-well px-3 py-2 text-left ring-1 ring-line'
                           : 'flex w-full items-center justify-between rounded-[10px] px-3 py-2 text-left hover:bg-canvas'
                       }
                     >
@@ -82,8 +85,8 @@ export function Settings() {
           <NestedCard label="modelo por papel">
             <div className="space-y-2 px-3.5 py-3">
               <p className="text-[12px] text-muted">
-                Formato de LiteLLM. Los papeles emparejados conviene que usen proveedores distintos,
-                para que no se equivoquen igual.
+                Configuración activa por caso de uso y papel. Cada cambio crea una versión nueva:
+                compilador, tester ciego, normalizador y asistente pueden usar modelos distintos.
               </p>
               {llm.isError ? <ErrorNotice error={llm.error} /> : null}
               {llm.data?.length === 0 ? <Empty>Sin papeles configurados.</Empty> : null}
@@ -112,6 +115,28 @@ export function Settings() {
         </div>
       </div>
     </>
+  )
+}
+
+function Appearance() {
+  const { theme, setTheme } = useTheme()
+
+  return (
+    <NestedCard label="apariencia">
+      <div className="space-y-3 px-3.5 py-3">
+        <p className="text-[12px] text-muted">
+          Claro por defecto. Oscuro se guarda en este navegador.
+        </p>
+        <Segmented<Theme>
+          value={theme}
+          onChange={setTheme}
+          options={[
+            { value: 'light', label: 'Claro' },
+            { value: 'dark', label: 'Oscuro' },
+          ]}
+        />
+      </div>
+    </NestedCard>
   )
 }
 

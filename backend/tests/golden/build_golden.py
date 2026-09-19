@@ -328,6 +328,7 @@ def dump(rows: list[dict[str, Any]], path: Path) -> None:
     path.write_text(
         "".join(json.dumps(r, ensure_ascii=False, sort_keys=False) + "\n" for r in rows),
         encoding="utf-8",
+        newline="\n",
     )
 
 

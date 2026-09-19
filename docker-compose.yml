@@ -5,7 +5,7 @@ services:
       POSTGRES_USER: trace
       POSTGRES_PASSWORD: trace
       POSTGRES_DB: trace
-    ports: ["5432:5432"]
+    ports: ["${DB_PORT:-5432}:5432"]  # DB_PORT=5442 make setup if 5432 is taken
     volumes: [db:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "trace"]
@@ -17,7 +17,7 @@ services:
     env_file: [{path: .env, required: false}]
     environment:
       TRACE_DATABASE_URL: postgresql+psycopg://trace:trace@db:5432/trace
-      TRACE_ERP_URL: http://host.docker.internal:8009
+      TRACE_ERP_URL: http://host.docker.internal:${ERP_PORT:-8009}
       TRACEPAY_DATA_DIR: /srv/.data
       TRACEPAY_MODEL_DIR: /srv/.models
     ports: ["${BACKEND_PORT:-8000}:8000"]
@@ -33,6 +33,14 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 2s
       retries: 30
+
+  # Optional live monitoring (ADR 0018): `docker compose --profile observability up -d`, UI at
+  # http://localhost:6006. Point the backend at it with
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://phoenix:6006 (in Docker) or http://localhost:6006.
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    profiles: [observability]
+    ports: ["6006:6006"]
 
 volumes:
   db:

@@ -1,0 +1,45 @@
+{
+  "open_alerts": 1,
+  "escalated": 0,
+  "decisions_by_outcome": {
+    "NO_PAGAR": 2,
+    "PAGAR": 2
+  },
+  "steps": [
+    {
+      "step": "decision",
+      "count": 4,
+      "errors": 0,
+      "p50_ms": null,
+      "p95_ms": null
+    },
+    {
+      "step": "detect_stale_decisions",
+      "count": 1,
+      "errors": 0,
+      "p50_ms": 440.0,
+      "p95_ms": 440.0
+    },
+    {
+      "step": "evaluate_rule",
+      "count": 32,
+      "errors": 0,
+      "p50_ms": 25.0,
+      "p95_ms": 27.45
+    },
+    {
+      "step": "reprocess",
+      "count": 1,
+      "errors": 0,
+      "p50_ms": 425.0,
+      "p95_ms": 425.0
+    },
+    {
+      "step": "run_process",
+      "count": 1,
+      "errors": 0,
+      "p50_ms": 454.0,
+      "p95_ms": 454.0
+    }
+  ]
+}

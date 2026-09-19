@@ -224,6 +224,54 @@ def read_keys(code: str) -> tuple[set[str], set[str]]:
     return keys.get(params[0], set()), keys.get(params[1], set())
 
 
+ANY_SOURCE = "*"
+
+
+def source_reads(code: str | None) -> list[str]:
+    """The sources a rule's `evaluate` reads (ADR 0028): the literal keys `read_keys` finds
+    on its second parameter, plus the literal names passed with it to a helper
+    (`rows(sources, "erp")`, as the hand-written and frozen rules do). Any other use of the
+    parameter (a computed key, iterating it, passing it on without a name) could read
+    anything: `["*"]`, every source. No code reads nothing."""
+    if not code:
+        return []
+    tree = ast.parse(code)
+    function = next(
+        (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "evaluate"),
+        None,
+    )
+    if function is None or len(function.args.args) < 2:
+        return []
+    param = function.args.args[1].arg
+    names = set(read_keys(code)[1])
+    parents = {child: node for node in ast.walk(function) for child in ast.iter_child_nodes(node)}
+    for node in ast.walk(function):
+        if not (isinstance(node, ast.Name) and node.id == param):
+            continue
+        parent = parents.get(node)
+        keyed = isinstance(parent, ast.Subscript) and parent.value is node
+        if isinstance(parent, ast.Attribute) and parent.attr == "get":
+            call = parents.get(parent)
+            keyed = isinstance(call, ast.Call) and call.func is parent
+            parent = call
+        if keyed:
+            key = parent.slice if isinstance(parent, ast.Subscript) else (parent.args or [None])[0]
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                continue
+            return [ANY_SOURCE]
+        if isinstance(parent, ast.Call) and node in parent.args:
+            literals = [
+                a.value
+                for a in parent.args
+                if isinstance(a, ast.Constant) and isinstance(a.value, str)
+            ]
+            if literals:
+                names.update(literals)
+                continue
+        return [ANY_SOURCE]
+    return sorted(names)
+
+
 @coder.output_validator
 def _allowed(ctx: RunContext[CoderDeps], output: Proposal | NeedsData) -> Any:
     if isinstance(output, NeedsData):
@@ -378,11 +426,16 @@ async def compile_text(
     feedback = ""
     for attempt in range(1, max_attempts + 1):
         prompt = f"{ctx}\n\nTests your code must pass (JSON):\n{_as_json(tests)}{feedback}"
-        proposal = await runs(coder, "compiler", prompt, coder_instructions, deps=coder_deps)
-        if isinstance(proposal, NeedsData):
-            return _needs_data(proposal, "compiler")
-        results = await asyncio.to_thread(run_tests, proposal.code, tests)
-        failures = [r for r in results if not r["passed"]]
+        with events.span("coder_attempt", attempt=attempt) as span:
+            proposal = await runs(coder, "compiler", prompt, coder_instructions, deps=coder_deps)
+            if isinstance(proposal, NeedsData):
+                span.set(needs_data=proposal.missing)
+                return _needs_data(proposal, "compiler")
+            with events.span("run_tests", cases=len(tests)) as run:
+                results = await asyncio.to_thread(run_tests, proposal.code, tests)
+                run.set(passed=sum(r["passed"] for r in results))
+            failures = [r for r in results if not r["passed"]]
+            span.set(failures=len(failures), disputes=len(proposal.disputes))
         if not failures or attempt == max_attempts:
             break
         feedback = "\n\nYour previous code:\n" + proposal.code + "\n\nIt fails these tests:\n"
@@ -406,6 +459,7 @@ async def compile_text(
         "discrepancies": [f"Test {_failure(f)}" for f in failures],
         "attempts": attempt,
         "reviews": reviews,
+        "sources": source_reads(proposal.code),  # ADR 0028: what a source outage stops
     }
     return Compilation(proposal.code, tests, report)
 
@@ -421,6 +475,23 @@ async def read_process(session: AsyncSession, process_id: int) -> tuple[str, Sou
         .order_by(Source.name, Source.loaded_at.desc())
         .distinct(Source.name)
     )
+    from app.features.versions.configuration import setups as pinned_setups
+    from app.features.versions.model import ProcessDraft, ProcessVersion
+
+    draft = await session.get(ProcessDraft, process_id)
+    if draft:
+        return (
+            draft.snapshot["process"]["description"],
+            {s.name: s.rows for s in loads},
+            pinned_setups(draft.snapshot),
+        )
+    if process.active_version_id:
+        version = await session.get(ProcessVersion, process.active_version_id)
+        return (
+            version.snapshot["process"]["description"],
+            {s.name: s.rows for s in loads},
+            pinned_setups(version.snapshot),
+        )
     setups = await use_cases.setups(session, use_case.id)
     return use_case.description, {s.name: s.rows for s in loads}, setups
 
@@ -432,15 +503,10 @@ async def compile_rule(session: AsyncSession, rule: Rule, symbols: list[Symbol])
             # returns {"fires": bool, "reason": str}
 
     against them. The result is reported, never silently accepted."""
+    from app.features.versions.model import ProcessDraft
+
+    draft = await session.get(ProcessDraft, rule.process_id)
+    if draft:
+        symbols = [Symbol(**s) for s in draft.snapshot["process"]["symbols"]]
     description, sources, setups = await read_process(session, rule.process_id)
-    runs = Runs(setups)
-    result = await compile_text(rule, symbols, sources, description, runs)
-    for trace in runs.traces:
-        events.record(
-            session,
-            "compile_rule",
-            data={"rule_id": rule.id, "valid": result.report["valid"], **trace.as_data()},
-            latency_ms=trace.latency_ms,
-            cost=trace.cost,
-        )
-    return result
+    return await compile_text(rule, symbols, sources, description, Runs(setups))

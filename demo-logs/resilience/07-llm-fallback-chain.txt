@@ -1,0 +1,33 @@
+## 2026-09-19T10:13:38Z the fallback chain (ADR 0019), real Helmcode models, spans in trace_resilience
+
+### make demo-llm-down   (primary at http://127.0.0.1:9/v1: connection refused)
+  primary openai:deepseek-v4-flash at http://127.0.0.1:9/v1 (unreachable)
+  fallbacks ['helmcode:glm5.3', 'helmcode:qwen3.6']
+  
+  llm_run span (trace 4ff8e551fa5f15684a011f2a82700dfb):
+    chain: ["deepseek-v4-flash", "glm5.3", "qwen3.6"]
+    failed_attempts: [{"model": "deepseek-v4-flash", "error": "ModelAPIError: Connection error."}]
+    model: "glm5.3"
+    requests: 1
+    retries: 0
+    output_tokens: 3710
+    -> prohibition ESCALAR: The invoice's printed total `total` is above 50000 euros: cents(total) > 5000000, i.e. total strictly greater than 50000.00 (an invoice of exactly 50000.00 does not fire).
+
+### primary openai-chat:deepseek-v4-flash (Chat Completions, the protocol Helmcode speaks) -> stub answering HTTP 429 + Retry-After: 1 (Helmcode's rate limit)
+  requests the stub received: 3
+  llm_run span (trace 4fa1fd85f6e2acc821983f93731f8e7c):
+    chain: ["deepseek-v4-flash", "glm5.3", "qwen3.6"]
+    failed_attempts: [{"model": "deepseek-v4-flash", "error": "ModelHTTPError: status_code: 429, model_name: deepseek-v4-flash, body: {'message': 'Rate limit exceeded: 100 requests per minute', 'type': 'rate_limit_error', 'code': 'rate_limit_exceeded'}"}]
+    model: "glm5.3"
+    output_tokens: 3710
+  -> 1 check(s): ["The invoice's printed total `total` is above 50000 euros: cents(total) > 5000000, i.e. total strictly greater than 50000.00 (an invoice of exactly 50000.00 does not fire)."]
+
+### primary openai-chat:deepseek-v4-flash (Chat Completions, the protocol Helmcode speaks) -> stub answering 200 with finish_reason=length (answer cut by the token limit)
+  requests the stub received: 1
+  llm_run span (trace e280977e0ca9c0bda6b9d33d5012e92f):
+    chain: ["deepseek-v4-flash", "glm5.3", "qwen3.6"]
+    failed_attempts: [{"model": "deepseek-v4-flash", "error": "output token limit hit"}]
+    model: "glm5.3"
+    output_tokens: 3710
+  -> 1 check(s): ["The invoice's printed total `total` is above 50000 euros: cents(total) > 5000000, i.e. total strictly greater than 50000.00 (an invoice of exactly 50000.00 does not fire)."]
+

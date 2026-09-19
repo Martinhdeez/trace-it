@@ -1,4 +1,4 @@
-"""The sixteen Norma_Pagos_v3 rules as the process pack ships them.
+"""The seventeen Norma_Pagos_v3 rules as the process pack ships them.
 
 The code is not written here: it is read from `processes/rules-v3/`, the same files the
 loader installs, so what these tests exercise is exactly what runs. They are hand-written

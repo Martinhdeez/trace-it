@@ -1,0 +1,4 @@
+{
+  "code": "source_unavailable",
+  "message": "Sync of 'erp' failed; the previous snapshot stays current. POST /erp/login : gave up after 6 attempts (last: transport error: ConnectError('All connection attempts failed'))"
+}

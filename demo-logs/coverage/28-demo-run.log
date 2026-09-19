@@ -1,0 +1,11 @@
+spreadsheet: suppliers=12, orders=516, parameters=1
+extraction: 6 read from the text layer, 0 scans left without symbols
+erp sync: 516 rows, 26 pages, 2 retries, 1 logins, 4852ms
+
+run: {'decided': 6, 'by_decision': {'PAGAR': 6}}  (0s)
+export: 6 lines
+
+why an invoice is not paid:
+
+written to /private/tmp/claude-501/-Users-apple-orca-workspaces-trace-pay-pelican/81951f95-6768-4335-9ebf-6930a2d5a39b/scratchpad/demo-out
+total: 6s

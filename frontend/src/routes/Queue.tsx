@@ -5,20 +5,18 @@ import { FileText, Sparkles } from 'lucide-react'
 import { api } from '../api/client'
 import { families, keys } from '../api/queries'
 import type { ProcessDetail, RuleKind, Suggestion } from '../api/contracts'
+import { ProcessScreen } from '../components/process/ProcessScreen'
 import { Button, Field, Segmented, Select, Textarea } from '../components/shell/Controls'
 import { Empty, ErrorNotice, Notice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
-import { Topbar } from '../components/shell/Topbar'
 import { PageIntro } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { paths } from '../lib/paths'
 import { byPriority, humanOutcomes } from '../lib/process'
 
-const REVIEW = 'REVISION'
-
 /**
- * F8. What is waiting on a person: every outcome the process marked
- * `requiere_persona`, plus the instances stuck in REVISION (P21).
+ * What is waiting on a person: every outcome the process marked
+ * `requiere_persona`. Extraction gaps stay pending; they are not queue decisions.
  */
 export function Queue() {
   const processId = Number(useParams().processId)
@@ -32,67 +30,51 @@ export function Queue() {
     queryKey: keys.queue(processId, 'all'),
     queryFn: () => api.queue(processId),
   })
-  const review = useQuery({
-    queryKey: keys.instances(processId, 'REVISION'),
-    queryFn: () => api.listInstances(processId, 'REVISION'),
-  })
-
   const human = byPriority(humanOutcomes(process.data))
   const tabs = useMemo(
-    () => [
-      ...human.map((outcome) => ({
+    () =>
+      human.map((outcome) => ({
         value: outcome.nombre,
         label: outcome.nombre.replaceAll('_', ' '),
         count: (escalated.data ?? []).filter((item) => item.decision === outcome.nombre).length,
       })),
-      { value: REVIEW, label: REVIEW, count: review.data?.length },
-    ],
-    [human, escalated.data, review.data],
+    [human, escalated.data],
   )
 
-  const tab = params.get('tipo') ?? human[0]?.nombre ?? REVIEW
-  const items =
-    tab === REVIEW
-      ? (review.data ?? [])
-      : (escalated.data ?? []).filter((item) => item.decision === tab)
+  const tab = params.get('tipo') ?? human[0]?.nombre ?? ''
+  const items = (escalated.data ?? []).filter((item) => item.decision === tab)
   const selectedId = params.get('i') ? Number(params.get('i')) : undefined
   const current = items.find((item) => item.id === selectedId) ?? items[0]
 
   return (
-    <>
-      <Topbar
-        crumbs={[
-          { label: process.data?.nombre ?? '…', to: paths.process(processId) },
-          { label: 'Cola' },
-        ]}
-        actions={
-          tabs.length > 1 ? (
-            <Segmented value={tab} onChange={(next) => setParams({ tipo: next })} options={tabs} />
-          ) : null
-        }
-      />
-
+    <ProcessScreen
+      processId={processId}
+      crumbs={[
+        { label: 'Procesos', to: paths.processes },
+        { label: process.data?.nombre ?? '…', to: paths.process(processId) },
+        { label: 'Revisión' },
+      ]}
+      actions={
+        tabs.length > 1 ? (
+          <Segmented value={tab} onChange={(next) => setParams({ tipo: next })} options={tabs} />
+        ) : null
+      }
+    >
       <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
         <PageIntro
-          kicker="Cola"
-          title={tab === REVIEW ? 'En revisión' : tab.replaceAll('_', ' ')}
-          description={
-            tab === REVIEW
-              ? 'REVISION es un estado interno, no una decisión: las dos extracciones no coinciden, o una regla falló al evaluarse. Mientras quede una, no se puede exportar.'
-              : 'El proceso marcó esta salida como algo que decide una persona. Lo que resuelvas entra en el histórico como una decisión nueva, y la regla que escribas cierra los casos parecidos que vengan después.'
-          }
+          kicker="Revisión"
+          title={tab.replaceAll('_', ' ') || 'Cola'}
+          description="Excepciones que el proceso no cierra. Tu decisión queda en el histórico y puede volverse una regla nueva, desde Definición."
         />
 
         {escalated.isError ? <ErrorNotice error={escalated.error} /> : null}
 
         <div className="grid gap-3 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <ul className="max-h-[560px] overflow-y-auto rounded-[16px] bg-well p-1 ring-1 ring-black/[0.04]">
+          <ul className="max-h-[560px] overflow-y-auto rounded-[16px] bg-surface p-1 ring-1 ring-line">
             {items.length === 0 ? (
               <li>
                 <Empty>
-                  {tab === REVIEW
-                    ? 'Nada en revisión. Se puede exportar.'
-                    : 'Nada esperando. Las reglas cierran todos los casos.'}
+                  Nada esperando. Las reglas cierran todos los casos.
                 </Empty>
               </li>
             ) : (
@@ -104,8 +86,8 @@ export function Queue() {
                     className={cn(
                       'mb-0.5 flex w-full items-center gap-2 rounded-[12px] px-2.5 py-2 text-left',
                       item.id === current?.id
-                        ? 'bg-white shadow-[0_1px_2px_rgba(19,19,19,0.06)]'
-                        : 'hover:bg-white/70',
+                        ? 'bg-canvas'
+                        : 'hover:bg-canvas/70',
                     )}
                   >
                     <FileText size={13} strokeWidth={1.5} className="shrink-0 text-faint" />
@@ -129,7 +111,7 @@ export function Queue() {
           ) : null}
         </div>
       </div>
-    </>
+    </ProcessScreen>
   )
 }
 
@@ -191,7 +173,7 @@ function Resolve({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-[16px] bg-white px-4 py-3.5 ring-1 ring-black/[0.06]">
+      <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
         <div className="flex items-baseline justify-between gap-3">
           <p className="font-mono text-[13px]">{name}</p>
           <Link
@@ -210,7 +192,7 @@ function Resolve({
 
       <Suggested suggestion={suggestion.data} loading={suggestion.isPending} />
 
-      <div className="rounded-[16px] bg-white px-4 py-3.5 ring-1 ring-black/[0.06]">
+      <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
         <p className="text-[13px] font-medium">Tu decisión</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="Decisión">
@@ -323,7 +305,7 @@ function Suggested({
   loading: boolean
 }) {
   return (
-    <div className="rounded-[16px] bg-well px-4 py-3.5 ring-1 ring-black/[0.04]">
+    <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
       <p className="flex items-center gap-1.5 text-[13px] font-medium">
         <Sparkles size={13} strokeWidth={1.75} className="text-faint" />
         El asistente propone
@@ -336,7 +318,7 @@ function Suggested({
             <StatusBadge value={suggestion.decision} className="mt-0.5 shrink-0" />
             <span className="text-muted">{suggestion.razonamiento}</span>
           </p>
-          <p className="mt-2 rounded-[10px] bg-white px-3 py-2 text-[13px] ring-1 ring-black/[0.05]">
+          <p className="mt-2 rounded-[10px] bg-canvas px-3 py-2 text-[13px] ring-1 ring-line">
             {suggestion.regla_propuesta}
           </p>
         </>

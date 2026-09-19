@@ -1,0 +1,11 @@
+## 2026-09-19T10:18:58Z OCR request journal: no double provider call
+scan_012.pdf was read by Gemini for process 4 in 09 (journal: .data/provider-journal/gemini, sha256 of the page image).
+It is also a pending instance (1004) of process 3. Re-extract it there:
+$ POST /instances/1004/extract  {vlm: true}
+   scan_012.pdf PENDING | warnings ['FIELD_AMBIGUOUS'] | vlm_calls_this_request 0 vlm_cache_hits_this_request 0
+provider_call spans: none (0 provider calls: the extraction result cache, keyed by the file's sha256 and the
+  reader options, answered before any reader ran; below it the journal answers per page image, see 09 part A
+  "outcome=blocked_uncertain network=false" and the unit test test_gemini_provider_spans_distinguish_network_and_replay)
+$ POST /instances/1004/extract  again (the stored reading has no transient warning: reused, no reader runs)
+   scan_012.pdf cache_hit True
+journal files for gemini: 15, states: {'refused': 13, 'complete': 2}

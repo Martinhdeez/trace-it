@@ -15,18 +15,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pydantic_ai import Agent, AgentRunError
-from pydantic_ai.exceptions import FallbackExceptionGroup
-from pydantic_ai.messages import RetryPromptPart
+from pydantic import BaseModel
+from pydantic_ai import Agent, AgentRunError, capture_run_messages
+from pydantic_ai.exceptions import FallbackExceptionGroup, ModelAPIError
+from pydantic_ai.messages import ModelMessage, ModelResponse, RetryPromptPart
 from pydantic_ai.models import Model
+from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.usage import UsageLimits
 
 from app.common.exceptions import TraceError
+from app.core import events
 from app.core.config import settings
 from app.features.use_cases.schemas import AgentSettings
 
 PROMPTS = Path(__file__).parent / "prompts"
+TRUNCATED = "output token limit hit"  # a `failed_attempts` error: the answer was cut
 
 
 class AgentError(TraceError):
@@ -38,7 +43,7 @@ class AgentError(TraceError):
 
 @dataclass(frozen=True)
 class Trace:
-    """What one agent run cost, for the events table."""
+    """What one agent run cost (in tokens), as its `llm_run` span records it."""
 
     role: str
     model: str
@@ -46,14 +51,17 @@ class Trace:
     retries: int  # answers the validators rejected and the model was asked to fix
     input_tokens: int
     output_tokens: int
-    cost: float | None
+    cost: float | None  # USD when the provider's price is known; only the evals report it
     latency_ms: int
     config_id: int | None = None  # the AgentConfig version it ran with (None: defaults)
     prompt_hash: str = ""  # sha256[:12] of the effective instructions
+    agent: str = ""  # the agent's name: tester, compiler, reviewer, normalizer, assistant
+    cached_tokens: int = 0  # input tokens the provider served from its prompt cache
 
     def as_data(self) -> dict[str, Any]:
         return {
             "role": self.role,
+            "agent": self.agent,
             "model": self.model,
             "config_id": self.config_id,
             "prompt_hash": self.prompt_hash,
@@ -61,6 +69,7 @@ class Trace:
             "retries": self.retries,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "cached_tokens": self.cached_tokens,
         }
 
 
@@ -70,6 +79,10 @@ class Setup:
 
     settings: AgentSettings = field(default_factory=AgentSettings)
     config_id: int | None = None
+
+    local_only: bool = False
+    local_endpoint: str | None = None
+    execution_hash: str | None = None
 
     def limit(self, name: str, default: float) -> float:
         return self.settings.limits.get(name, default)
@@ -85,15 +98,75 @@ def model_for(role: str) -> Model | str:
     return getattr(settings, f"{role}_model")
 
 
-def resolve(model: Model | str) -> Model | str:
+def resolve(model: Model | str, local_endpoint: str | None = None) -> Model | str:
     """`helmcode:<model>` runs on Helmcode's OpenAI-compatible API (EU inference, key in
     `HELMCODE_API_KEY`); any other `provider:model` string goes to PydanticAI as is."""
+    if isinstance(model, str) and model.startswith("local:"):
+        return OpenAIChatModel(
+            model.removeprefix("local:"),
+            provider=OpenAIProvider(
+                base_url=local_endpoint or settings.local_base_url,
+                api_key=os.environ.get("LOCAL_LLM_API_KEY") or "local",
+            ),
+        )
     if isinstance(model, str) and model.startswith("helmcode:"):
         provider = OpenAIProvider(
             base_url=settings.helmcode_base_url, api_key=os.environ.get("HELMCODE_API_KEY")
         )
         return OpenAIChatModel(model.removeprefix("helmcode:"), provider=provider)
     return model
+
+
+def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackModel:
+    """The role's model, then its `fallback_models` in order (ADR 0019). A provider failure
+    (`ModelAPIError`: 4xx/5xx, 429 after the SDK's retries, timeout, connection) or an
+    answer cut by the output-token limit (`finish_reason == "length"`) moves on to the next
+    model; each one is appended to `failed` for the trace."""
+
+    def on_failure(error: Exception) -> bool:
+        if not isinstance(error, ModelAPIError):
+            return False
+        failed.append({"model": error.model_name, "error": f"{type(error).__name__}: {error}"})
+        return True
+
+    def truncated(response: ModelResponse) -> bool:
+        if response.finish_reason != "length":
+            return False
+        failed.append({"model": response.model_name or "", "error": TRUNCATED})
+        return True
+
+    own = setup.settings
+    fallbacks = own.fallback_models or ([] if own.model else settings.fallback_models)
+    models = [own.model or model_for(role), *fallbacks]
+    if setup.local_only and any(
+        not isinstance(model, str) or not model.startswith("local:") for model in models
+    ):
+        raise AgentError(f"{role}: local-only execution cannot call a hosted model")
+    return FallbackModel(
+        *(
+            resolve(model, setup.local_endpoint)
+            if isinstance(model, str) and model.startswith("local:")
+            else resolve(model)
+            for model in models
+        ),
+        fallback_on=[on_failure, truncated],
+    )
+
+
+def _retry_prompts(messages: list[ModelMessage]) -> list[str]:
+    """What the output validators sent back to the model to fix, in order."""
+    return [p.model_response() for m in messages for p in m.parts if isinstance(p, RetryPromptPart)]
+
+
+def _spent(messages: list[ModelMessage]) -> dict[str, int]:
+    """What the model calls of a failed run cost, from the answers that came back."""
+    answers = [m for m in messages if isinstance(m, ModelResponse)]
+    return {
+        "requests": len(answers),
+        "input_tokens": sum(m.usage.input_tokens for m in answers),
+        "output_tokens": sum(m.usage.output_tokens for m in answers),
+        "cached_tokens": sum(m.usage.cache_read_tokens for m in answers),
+    }
 
 
 def _cost(usage: Any) -> float | None:
@@ -118,33 +191,74 @@ async def run(
     setup = setup or Setup()
     if setup.settings.instructions:
         instructions += "\n\n## Guidance for this use case\n" + setup.settings.instructions
-    model = resolve(setup.settings.model or model_for(role))
-    start = time.perf_counter()
-    try:
-        result = await agent.run(
-            user_prompt,
-            model=model,
-            deps=deps,
-            instructions=instructions,
-            model_settings=setup.settings.model_settings or None,
-        )
-    except (AgentRunError, FallbackExceptionGroup, TimeoutError) as error:
-        raise AgentError(f"{role}: {type(error).__name__}: {error}") from error
-    latency_ms = int((time.perf_counter() - start) * 1000)
-    usage = result.usage
-    retries = sum(
-        isinstance(part, RetryPromptPart) for m in result.all_messages() for part in m.parts
-    )
-    trace = Trace(
+    failed: list[dict[str, str]] = []
+    model = chain(setup, role, failed)
+    model_settings = dict(setup.settings.model_settings)
+    if setup.settings.timeout_seconds:
+        model_settings["timeout"] = setup.settings.timeout_seconds
+    prompt_hash = hashlib.sha256(instructions.encode()).hexdigest()[:12]
+    with events.span(
+        "llm_run",
         role=role,
-        model=result.response.model_name or str(model),
-        requests=usage.requests,
-        retries=retries,
-        input_tokens=usage.input_tokens,
-        output_tokens=usage.output_tokens,
-        cost=_cost(usage),
-        latency_ms=latency_ms,
+        agent=agent.name or "",
+        model=model.models[0].model_name,  # the answering model replaces it
+        chain=[m.model_name for m in model.models],
         config_id=setup.config_id,
-        prompt_hash=hashlib.sha256(instructions.encode()).hexdigest()[:12],
-    )
+        execution_hash=setup.execution_hash,
+        local_endpoint=setup.local_endpoint,
+        model_settings=model_settings,
+        prompt_hash=prompt_hash,
+        # Exactly what the model saw (ADR 0018): instructions with the use case's guidance and
+        # examples, and the case in the user message.
+        instructions=instructions,
+        user_prompt=user_prompt,
+    ) as span:
+        start = time.perf_counter()
+        with capture_run_messages() as messages:
+            try:
+                result = await agent.run(
+                    user_prompt,
+                    model=model,
+                    deps=deps,
+                    instructions=instructions,
+                    model_settings=model_settings or None,
+                    retries=setup.settings.retries,
+                    usage_limits=UsageLimits(request_limit=setup.settings.request_limit)
+                    if setup.settings.request_limit is not None
+                    else None,
+                )
+            except (AgentRunError, FallbackExceptionGroup, TimeoutError) as error:
+                span.set(
+                    retry_prompts=_retry_prompts(messages),
+                    failed_attempts=failed,
+                    **_spent(messages),
+                )
+                if isinstance(error, FallbackExceptionGroup):
+                    tried = "; ".join(f"{f['model']}: {f['error']}" for f in failed)
+                    raise AgentError(f"{role}: every model failed: {tried}") from error
+                raise AgentError(f"{role}: {type(error).__name__}: {error}") from error
+        usage = result.usage
+        retry_prompts = _retry_prompts(messages)
+        output = result.output
+        span.set(
+            output=output.model_dump(mode="json") if isinstance(output, BaseModel) else output,
+            retry_prompts=retry_prompts,
+            failed_attempts=failed,  # provider failures before the model that answered
+        )
+        retries = len(retry_prompts)
+        trace = Trace(
+            role=role,
+            model=result.response.model_name or model.models[0].model_name,
+            requests=usage.requests,
+            retries=retries,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cost=_cost(usage),
+            latency_ms=int((time.perf_counter() - start) * 1000),
+            config_id=setup.config_id,
+            prompt_hash=prompt_hash,
+            agent=agent.name or "",
+            cached_tokens=usage.cache_read_tokens,
+        )
+        span.set(**trace.as_data(), cost=trace.cost, latency_ms=trace.latency_ms)
     return result.output, trace

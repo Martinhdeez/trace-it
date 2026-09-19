@@ -1,0 +1,51 @@
+== scan_002.pdf  (instance 476, process 1 'Invoice payment')
+state: DECIDED   exported result: ESCALAR
+file: sha256 912c8408714d, 57181 bytes, read 2026-09-19T10:04:09.198318Z
+
+-- Decisions (oldest first; history is append-only)
+#476 2026-09-19T10:05:12  ESCALAR  by engine
+   reason: MISSING_DATA: issuer_nif, iban
+   process version: v1 (published by Martín: Explicit CLI --activate approval; content 8503b6fc8d22)   rules hash: cf741d48f1e4
+   FIRED rule 1 (code 144f2c803bef): Missing: issuer_nif, iban
+      text: The symbols `issuer_nif`, `iban`, `purchase_order`, `date`, `base`, `vat_rate`, `vat_amount` and `total` are a
+
+-- Evidence: symbols and their origin
+   base            1292.88                                  scan:6499f47edce5492f91142ab21cb6ddef:unverified
+   date            2026-07-23                               scan:6499f47edce5492f91142ab21cb6ddef
+   file_id         scan_002.pdf                             scan:6499f47edce5492f91142ab21cb6ddef
+   free_text       [Page 1; reader=primary; document con... scan:6499f47edce5492f91142ab21cb6ddef
+   iban            None                                     scan:6499f47edce5492f91142ab21cb6ddef:unverified
+   invoice_number  2026/50749                               scan:6499f47edce5492f91142ab21cb6ddef
+   issuer_name     None                                     scan:6499f47edce5492f91142ab21cb6ddef
+   issuer_nif      None                                     scan:6499f47edce5492f91142ab21cb6ddef:unverified
+   purchase_order  PO-2026-0478                             scan:6499f47edce5492f91142ab21cb6ddef
+   total           1564.38                                  scan:6499f47edce5492f91142ab21cb6ddef:ambiguous
+   vat_amount      271.50                                   scan:6499f47edce5492f91142ab21cb6ddef:unverified
+   vat_rate        21                                       scan:6499f47edce5492f91142ab21cb6ddef:unverified
+   scan (no text layer, ADR 0025); not confirmed by its readers: ['base', 'iban', 'total', 'vat_rate', 'issuer_nif', 'vat_amount']
+
+-- Latency per step (spans of this instance, ADR 0018)
+   upload_document          ok    1198 ms
+     store_file             ok    0 ms
+     extraction             ok    1183 ms
+       native_text          ok    1 ms
+       ocr                  ok    338 ms  (page 1, reader primary)
+       ocr                  ok    836 ms  (page 1, reader secondary)
+     ingest_document        ok    1180 ms
+   run_process              ok    1237 ms  (batch: 500 instances, 16 rules)
+     decision               ok    -  -> ESCALAR
+   export_outcomes          ok    27 ms
+
+-- Errors and retries
+   extraction 6499f47edce5: 2 OCR, 0 vision, 0 judge calls; warnings 7 ['FIELD_AMBIGUOUS', 'FIELD_UNVERIFIED', 'OCR_SEPARATOR_PROPOSAL']
+   rules [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]: no LLM compilation (hand-written or loaded from a pack)
+   rule runtime errors across their runs: 0
+   erp sync 2026-09-19T10:03:41 (ok): 31 requests, 3 retries, 0 timeouts, 5480 ms
+   no error span on this instance
+
+-- Pending work
+   ESCALATED, waiting for a person: MISSING_DATA: issuer_nif, iban
+   resolve: POST /instances/476/resolve (manager)
+   no stale-decision alert on this instance (ADR 0026)
+   process: 28 escalated, 0 pending, 1 open alerts; decisions {'ESCALAR': 28, 'PAGAR': 436, 'NO_PAGAR': 36}
+   planes now: ingestion ok, agents ok, execution ok

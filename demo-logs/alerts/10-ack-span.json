@@ -1,0 +1,16 @@
+[
+    {
+        "id": 70,
+        "trace_id": "01a0b90c54a4d77bb444d96aa8ef18a1",
+        "instance_id": 3,
+        "rule_id": null,
+        "step": "ack_alert",
+        "status": "ok",
+        "data": {
+            "author": "Mart\u00edn",
+            "alert_id": 1
+        },
+        "duration_ms": 1,
+        "created_at": "2026-09-19T09:43:08.201319Z"
+    }
+]

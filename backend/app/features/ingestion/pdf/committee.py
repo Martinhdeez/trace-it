@@ -11,6 +11,14 @@ from .uncertainty import preserve_unreadable
 POLICY_VERSION = "committee-v1"
 
 
+def independent_reader(reader: str) -> str:
+    """Provider wrappers around one model contribute one visual vote."""
+    parts = reader.split(":", 2)
+    if len(parts) == 3 and parts[0] == "visual":
+        return "visual-model:" + parts[2].rsplit("/", 1)[-1].lower()
+    return reader
+
+
 def reconcile(readers, min_confidence):
     parsed = {name: parse_invoice(lines, min_confidence)[0] for name, lines in readers.items()}
     fields, decisions, warnings = {}, {}, []
@@ -22,7 +30,8 @@ def reconcile(readers, min_confidence):
             candidates.extend(field.candidates)
             statuses.append(field.status)
             eligible = field.status == "OBSERVED" or (
-                reader == "visual" and field.status == "UNVERIFIED"
+                (reader == "visual" or reader.startswith("visual:"))
+                and field.status == "UNVERIFIED"
             )
             if eligible and field.value is not None and not any(c.error for c in field.candidates):
                 votes[field.value].append(reader)
@@ -39,7 +48,8 @@ def reconcile(readers, min_confidence):
             elif len(values) == 1 and not errors:
                 proposed = next(iter(values))
                 supporters = votes.get(proposed, [])
-                if "native" in supporters or len(supporters) >= 2:
+                independent = {independent_reader(reader) for reader in supporters}
+                if "native" in supporters or len(independent) >= 2:
                     status, value, reason = "OBSERVED", proposed, "corroborated"
         fields[name] = ExtractedField(value=value, status=status, candidates=candidates)
         decisions[name] = {"reason": reason, "support": dict(votes)}

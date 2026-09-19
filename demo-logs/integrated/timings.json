@@ -1,0 +1,1 @@
+{"ingest_s": 6.1, "erp_sync_s": 5.5, "normalizer_http_s": 19.6, "norm_to_settled_s": 84.7, "run_http_s": 0.6, "pid": 5, "rules": {"active": 11}}

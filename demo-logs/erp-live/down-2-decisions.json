@@ -1,0 +1,42 @@
+[
+  {
+    "name": "2026-01-08_P001.pdf",
+    "decision": "PAGAR",
+    "reason": null
+  },
+  {
+    "name": "2026-03-28_P002.pdf",
+    "decision": "NO_PAGAR",
+    "reason": "The ERP says PAGADA | The ERP says PAGADA for PO20260476"
+  },
+  {
+    "name": "2026-07-08_P010.pdf",
+    "decision": "NO_PAGAR",
+    "reason": "IBAN_MISMATCH | Order supplier P010 != supplier P004"
+  },
+  {
+    "name": "2026-03-19_P008.pdf",
+    "decision": "NO_PAGAR",
+    "reason": "INVALID_DATE 2026-02-31"
+  },
+  {
+    "name": "2026-01-11_P007.pdf",
+    "decision": "ESCALAR",
+    "reason": "SOURCE_UNAVAILABLE: erp"
+  },
+  {
+    "name": "2026-04-08_P007.pdf",
+    "decision": "ESCALAR",
+    "reason": "SOURCE_UNAVAILABLE: erp"
+  },
+  {
+    "name": "F26-8812_electricidad.pdf",
+    "decision": "NO_PAGAR",
+    "reason": "IBAN_MISMATCH"
+  },
+  {
+    "name": "FA-1123_construcciones.pdf",
+    "decision": "NO_PAGAR",
+    "reason": "INVALID_DATE 2026-02-30"
+  }
+]
