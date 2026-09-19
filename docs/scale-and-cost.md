@@ -102,6 +102,8 @@ default output limit and returned nothing (`UnexpectedModelBehavior`). That is n
 error, so the fallback chain did not switch (ADR 0019); the rule stayed `draft` with the
 error, as designed, and `POST /rules/23/compile` made it active in 103 s (the tester call alone
 took 98 s). One slow call dominates a norm's wall time; the median rule takes about 11 s.
+**Fixed** (ADR 0019): every role of the invoice use case now has a `max_tokens`, and an
+answer cut by it (`finish_reason == "length"`) moves to the next model of the chain.
 
 ## 3. Cost model, in tokens
 
@@ -117,8 +119,10 @@ deterministic (ADR 0002, 0003). Tokens are spent only when:
 
 Averages from `GET /processes/1/metrics` (`llm`, by model and role) over this run. The
 previous integrated run: normalizer 3.4k / 3.8k, tester ~2.6k / 2.8k, coder ~6.4k / 1.2k.
-The assistant has no model in the invoice use case (platform default `anthropic:claude-opus-5`);
-for this measurement it ran on `helmcode:deepseek-v4-flash` (`TRACE_ASSISTANT_MODEL`).
+The assistant had no model in the invoice use case (platform default
+`anthropic:claude-opus-5`, so `GET /instances/{id}/suggestion` answered 502 without that
+key); for this measurement it ran on `helmcode:deepseek-v4-flash` (`TRACE_ASSISTANT_MODEL`).
+**Fixed:** the use case now gives it `deepseek-v4-flash` with the `glm5.3`, `qwen3.6` chain.
 The failed coder call recorded 0 tokens; a provider may still bill what it generated.
 
 ```
@@ -156,8 +160,8 @@ and the assistant opened on every escalation at batch 1's rate (31/500 = 6.2 %, 
 - **Rate limits** on norm changes: 5 concurrent requests per model (`compile_concurrency: 5`)
   and 100 requests/min. A norm of 50 rules is ~100 requests: about a minute of quota.
 - **Slow or runaway LLM calls** set a norm's wall time (above: 85 s and 98 s calls against an
-  11 s median). A `max_tokens` in the roles' `model_settings` would cut the runaway case
-  sooner; it is configuration, not code.
+  11 s median). **Fixed:** `max_tokens` in every role's `model_settings` cuts the runaway
+  case sooner, and the chain moves on (ADR 0019).
 - **One API process.** Background compilations run in the API's own event loop
   (`BackgroundTasks`), so a norm's compilation shares it with requests; a killed process loses
   in-flight compilations (the rules stay `compiling` and are recompiled by hand).

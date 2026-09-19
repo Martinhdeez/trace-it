@@ -7,7 +7,8 @@
       "fallback_models": ["helmcode:glm5.3", "helmcode:qwen3.6"],
       "timeout_seconds": 180,
       "model_settings": {
-        "temperature": 0
+        "temperature": 0,
+        "max_tokens": 6000
       },
       "instructions": "Symbols come from OCR and document parsing: numbers may arrive as text with a comma or a dot as decimal separator; never assume a type, convert as the description says. Put the helpers you need (normalise, cents) inside the code: there is no shared library.",
       "limits": {
@@ -42,7 +43,8 @@
       "fallback_models": ["helmcode:qwen3.6", "helmcode:glm5.3"],
       "timeout_seconds": 180,
       "model_settings": {
-        "temperature": 0
+        "temperature": 0,
+        "max_tokens": 8000
       },
       "instructions": "Build test rows with the real column names of the sources shown. Include the limits the conventions define (exactly 1 cent of difference, normalised keys that only differ in spaces or case).",
       "limits": {
@@ -51,8 +53,12 @@
       }
     },
     "assistant": {
+      "model": "helmcode:deepseek-v4-flash",
+      "fallback_models": ["helmcode:glm5.3", "helmcode:qwen3.6"],
+      "timeout_seconds": 120,
       "model_settings": {
-        "temperature": 0
+        "temperature": 0,
+        "max_tokens": 4000
       }
     },
     "normalizer": {
@@ -60,7 +66,8 @@
       "fallback_models": ["helmcode:glm5.3", "helmcode:qwen3.6"],
       "timeout_seconds": 300,
       "model_settings": {
-        "temperature": 0
+        "temperature": 0,
+        "max_tokens": 8000
       },
       "failed_check_decision": "NO_PAGAR",
       "instructions": "Never paying the same order twice means two checks: the `erp` entry of the invoice's `purchase_order` already has `status` PAGADA (a `violation`), and another instance in `others` has the same normalised `purchase_order` (a `doubt`: the system cannot tell which invoice is the legitimate one, so every invoice sharing the order goes to a person)."
