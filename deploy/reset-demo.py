@@ -148,6 +148,8 @@ def restore_rules(db, baselines):
             )
         if baseline.get("source_schemas"):
             snapshot.setdefault("source_schemas", {}).update(baseline["source_schemas"])
+        if baseline.get("connectors"):
+            snapshot.setdefault("connectors", {}).update(baseline["connectors"])
         db.execute("DELETE FROM process_drafts WHERE process_id=%s", (pid,))
         db.execute("UPDATE processes SET active_version_id=NULL WHERE id=%s", (pid,))
         db.execute("DELETE FROM process_versions WHERE process_id=%s", (pid,))
@@ -311,6 +313,33 @@ def validate_seed(seed):
                 raise ValueError("Wrong ERP snapshot for challenge batch")
         if [b["erp_count"] for b in batches] != [516, 556]:
             raise ValueError("Expected original and updated ERP snapshots")
+        hiring = seed.get("hiring")
+        if hiring:
+            if hiring["count"] != 41 or len(hiring["documents"]) != 41:
+                raise ValueError("Hiring seed requires exactly 41 cached CVs")
+            if hiring["withheld"] != ["cv-002.pdf", "cv-021.pdf", "cv-024.pdf"]:
+                raise ValueError("Hiring seed must withhold one interview, reject and review")
+            actual = {
+                e["name"]: e["hash"]
+                for e in seed["examples"]
+                if e["process_id"] == hiring["process_id"]
+            }
+            if actual != hiring["documents"]:
+                raise ValueError("Hiring names and PDF hashes must match the manifest")
+            if hiring["source"] != "criminal_records" or hiring["erp_count"] != len(
+                hiring["source_rows"]
+            ):
+                raise ValueError("Hiring criminal-records snapshot is incomplete")
+            ana = next(
+                e
+                for e in seed["examples"]
+                if e["process_id"] == hiring["process_id"]
+                and e["name"] == "cv-001.pdf"
+            )
+            if ana.get("expected") != "REJECT" or ana.get("expected_reasons") != [
+                "CRIMINAL_RECORD_MATCH"
+            ]:
+                raise ValueError("Ana Molina must be rejected by the ERP match")
         if not re.fullmatch(r"[0-9a-f]{40}", seed["challenge_commit"]):
             raise ValueError("A pinned challenge commit is required")
         for item in seed["reference_files"]:
@@ -404,6 +433,16 @@ def restore_challenge_sources(db, seed):
                     Jsonb(rows),
                 ),
             )
+    if hiring := seed.get("hiring"):
+        db.execute(
+            "INSERT INTO sources(process_id,name,origin,rows) VALUES (%s,%s,%s,%s)",
+            (
+                hiring["process_id"],
+                hiring["source"],
+                "hiring-seed:criminal-records",
+                Jsonb(hiring["source_rows"]),
+            ),
+        )
 
 
 def reset(db, seed, data_dir):
