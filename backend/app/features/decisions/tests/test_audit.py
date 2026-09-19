@@ -25,7 +25,7 @@ from app.features.ingestion.model import File, Instance
 from app.features.rules import service as rules
 from app.features.rules.model import Rule
 from tests.support.fakes import dataset_runner
-from tests.support.models import per_role
+from tests.support.models import down, per_role
 
 # A rule nobody has activated yet: it escalates any invoice from this supplier. It stays
 # out of RULES_V3 so `seed` does not seed it as active.
@@ -253,6 +253,24 @@ async def test_a_saved_rule_compiles_itself_and_activates(
     assert rule["status"] == "active" and rule["code"] == QUIET_RULE
 
 
+async def decide_a_clean_invoice(api: AsyncClient, process_id: int) -> tuple[dict, dict]:
+    """Add an invoice the v3 rules would pay and run: the instance and its decision."""
+    async with session_factory() as session:
+        digest = uuid.uuid4().hex
+        session.add(File(hash=digest, name="late.pdf", content=b"%PDF", text=""))
+        symbols = stored(INVOICES["factura_1217.pdf"])  # a clean invoice
+        session.add(
+            Instance(process_id=process_id, file_hash=digest, name="late.pdf", symbols=symbols)
+        )
+        await session.commit()
+    r = await api.post(f"/processes/{process_id}/run")
+    assert r.json() == {"decided": 1, "by_decision": {"ESCALAR": 1}}
+    instances = (await api.get(f"/processes/{process_id}/instances")).json()
+    late = next(i for i in instances if i["name"] == "late.pdf")
+    [decision] = (await api.get(f"/instances/{late['id']}")).json()["decisions"]
+    return late, decision
+
+
 @pytest.mark.parametrize("person_decided", [False, True])
 async def test_a_rule_that_needs_data_escalates_every_instance(
     monkeypatch: pytest.MonkeyPatch, person_decided: bool
@@ -272,19 +290,7 @@ async def test_a_rule_that_needs_data_escalates_every_instance(
         assert rule["status"] == "blocked" and rule["code"] is None
         assert rule["report"]["needs_data"]["missing"] == ["symbol: delivery_date"]
 
-        async with session_factory() as session:
-            digest = uuid.uuid4().hex
-            session.add(File(hash=digest, name="late.pdf", content=b"%PDF", text=""))
-            symbols = stored(INVOICES["factura_1217.pdf"])  # a clean invoice
-            session.add(
-                Instance(process_id=process_id, file_hash=digest, name="late.pdf", symbols=symbols)
-            )
-            await session.commit()
-        r = await api.post(f"/processes/{process_id}/run")
-        assert r.json() == {"decided": 1, "by_decision": {"ESCALAR": 1}}
-        instances = (await api.get(f"/processes/{process_id}/instances")).json()
-        late = next(i for i in instances if i["name"] == "late.pdf")
-        [decision] = (await api.get(f"/instances/{late['id']}")).json()["decisions"]
+        late, decision = await decide_a_clean_invoice(api, process_id)
         assert decision["reason"] == f"RULE_NEEDS_DATA {rule['id']}: missing symbol: delivery_date"
 
         if person_decided:
@@ -310,6 +316,37 @@ async def test_a_rule_that_needs_data_escalates_every_instance(
         else:
             assert rule["status"] == "active"
             assert activation["unblocked"] == 1 and activation["changed"] == 0
+
+
+async def test_a_rule_whose_compile_fails_escalates_every_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every model down: the saved rule is enforced as `blocked`, never a draft the older
+    rules decide without (ADR 0016, 0020); a recompile with working models activates it."""
+    monkeypatch.setattr(llm, "resolve", lambda name: down(str(name)))
+    async with client() as api:
+        process_id, _ = await prepare(api)
+        rule = await save(api, process_id, "Escalate late deliveries")
+        assert rule["status"] == "blocked" and rule["code"] is None
+        assert "503" in rule["report"]["error"]
+
+        r = await api.get(f"/processes/{process_id}/events", params={"step": "compile_rule"})
+        [span] = r.json()
+        assert span["status"] == "error" and span["data"]["rule_status"] == "blocked"
+
+        # An invoice the older rules would pay escalates with the error, never PAGAR.
+        _, decision = await decide_a_clean_invoice(api, process_id)
+        assert decision["decision"] == "ESCALAR"
+        assert decision["reason"].startswith(f"RULE_COMPILE_FAILED {rule['id']}: ")
+
+        monkeypatch.setattr(sandbox, "run_dataset", dataset_runner(QUIET))
+        monkeypatch.setattr(compiler, "compile_rule", compiled(QUIET_RULE))
+        r = await api.post(f"/rules/{rule['id']}/compile")
+        assert r.status_code == 200, r.text
+        rule = r.json()
+        assert rule["status"] == "active" and rule["code"] == QUIET_RULE
+        activation = rule["report"]["activation"]
+        assert activation["unblocked"] == 1 and activation["changed"] == 0
 
 
 async def test_startup_resumes_rules_left_compiling(monkeypatch: pytest.MonkeyPatch) -> None:

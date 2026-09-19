@@ -55,8 +55,8 @@ A manager saves a rule in plain language (`POST /processes/{id}/rules`); nobody 
 |---|---|---|
 | `compiling` | Saved; tester and coder are writing its tests and code in the background (1-4 min). A restart re-queues it | no |
 | `active` | Its code passed the tests and changes few past decisions (ADR 0004), or a manager activated it | yes |
-| `blocked` | The agents answered NeedsData: the process lacks a symbol or source it needs. Every instance escalates with `RULE_NEEDS_DATA` (ADR 0016) until the data exists and it is recompiled | yes, as an escalation |
-| `draft` | Compiled but waiting for a person: failing tests, too much impact, or `report.error` (LLM down) | no |
+| `blocked` | The agents answered NeedsData: the process lacks a symbol or source it needs, and every instance escalates with `RULE_NEEDS_DATA` (ADR 0016) until the data exists and it is recompiled. Or its compile on save failed (`report.error`), and every instance escalates with `RULE_COMPILE_FAILED` until a recompile succeeds (ADR 0020) | yes, as an escalation |
+| `draft` | Compiled but waiting for a person: failing tests or too much impact | no |
 | `retired` | Taken out of the process by a manager | no |
 
 `POST /rules/{id}/compile` recompiles a `draft` or `blocked` rule and waits for the result; `make compile` does the same for every draft. A `blocked` rule that compiles goes through the impact check, where undoing its own escalations does not count: it becomes `active` by itself unless it would contradict a person.
@@ -72,7 +72,7 @@ A **use case** is what the app is used for (e.g. "Invoice payment"): its `descri
 | `PUT /use-cases/{id}/agents/{role}` | manager | Body `{config, note}`: a new version, active from now on |
 | `POST /agent-configs/{id}/activate` | manager | Activate an existing version: rollback, or adopt one loaded from the pack |
 
-**When a provider fails** (ADR 0019): a role's `fallback_models` are tried in order when the model before answers 5xx, 429 (after the SDK's two retries), times out (`timeout_seconds`) or refuses the connection. An answer a validator rejects never switches models. The `llm_run` span holds `chain`, `failed_attempts` (`[{model, error}]`) and `model`, the one that answered. When every model fails the run is a 502 and the rule stays a draft with the error. The invoice use case starts every role on `deepseek-v4-flash` and falls back to `glm5.3` / `qwen3.6`. To see it: `make demo-llm-down` sends the normalizer's primary model to an unreachable address (`OPENAI_BASE_URL=http://127.0.0.1:9/v1`) and prints the span:
+**When a provider fails** (ADR 0019): a role's `fallback_models` are tried in order when the model before answers 5xx, 429 (after the SDK's two retries), times out (`timeout_seconds`) or refuses the connection. An answer a validator rejects never switches models. The `llm_run` span holds `chain`, `failed_attempts` (`[{model, error}]`) and `model`, the one that answered. When every model fails the run is a 502 and the rule is `blocked` with the error: every instance escalates with `RULE_COMPILE_FAILED` until a recompile succeeds (ADR 0020). The invoice use case starts every role on `deepseek-v4-flash` and falls back to `glm5.3` / `qwen3.6`. To see it: `make demo-llm-down` sends the normalizer's primary model to an unreachable address (`OPENAI_BASE_URL=http://127.0.0.1:9/v1`) and prints the span:
 
 ```
 chain: ["deepseek-v4-flash", "glm5.3", "qwen3.6"]
@@ -144,7 +144,7 @@ children nest by themselves across `await`, `gather` and threads.
 | `GET /traces/{trace_id}` | One trace as a tree (`children`) |
 | `GET /instances/{id}/trace` | An invoice's journey: file, reading spans, symbols with origin, decisions with each rule's answer (rule text, norm rule), resolutions, exports, `exported_decision` |
 | `GET /rules/{id}/trace` | How a rule was produced (norm sentence, normalizer run, each compilation: tester, coder attempts, test runs, reviews, impact check, activation), its `lifecycle` (saved, compiled, activated, retired, impact previews, with author) and its runtime in process runs (fired, errors, p50/p95) |
-| `GET /processes/{id}/metrics?since=` | Completed runs (refused ones are `run_process` errors), instances/s, p50/p95 per step type, LLM calls/retries/errors/tokens by model and role, decisions by outcome, escalations by cause (`MISSING_DATA`, `RULE_ERROR`, `RULE_NEEDS_DATA`, `RULE_CONFLICT`), escalated and pending |
+| `GET /processes/{id}/metrics?since=` | Completed runs (refused ones are `run_process` errors), instances/s, p50/p95 per step type, LLM calls/retries/errors/tokens by model and role, decisions by outcome, escalations by cause (`MISSING_DATA`, `RULE_ERROR`, `RULE_NEEDS_DATA`, `RULE_COMPILE_FAILED`, `RULE_CONFLICT`), escalated and pending |
 
 Who changed what is in the feed: rule saves, compilations, activations and retirements carry
 `author` (a person, `cli` or `auto`) and the status before and after; agent configuration

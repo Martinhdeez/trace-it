@@ -79,10 +79,14 @@ def _run_rule(
     run_dataset: RunDataset,
 ) -> list[RuleResult]:
     """One rule over every instance. A whole-batch failure is that error for every one."""
-    needs_data = (rule.report or {}).get("needs_data")
+    report = rule.report or {}
+    needs_data = report.get("needs_data")
     if not rule.code and needs_data:
         missing = ", ".join(needs_data.get("missing") or []) or "data"
         reason = f"RULE_NEEDS_DATA {rule.id}: missing {missing}"
+        return [RuleResult(rule.id, rule.hash, None, reason)] * len(instances)
+    if not rule.code and report.get("error"):  # its compilation failed (ADR 0020)
+        reason = f"RULE_COMPILE_FAILED {rule.id}: {report['error'][:200]}"
         return [RuleResult(rule.id, rule.hash, None, reason)] * len(instances)
     try:
         if not rule.code:

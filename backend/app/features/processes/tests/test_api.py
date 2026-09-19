@@ -59,12 +59,13 @@ async def test_process_rule_flow(monkeypatch: pytest.MonkeyPatch) -> None:
         )
         assert r.status_code == 201, r.text
         rule = r.json()
-        # Saved as `compiling`; the background compilation fails (no LLM) and leaves a
-        # draft with the error, never a rule stuck in `compiling`.
+        # Saved as `compiling`; the background compilation fails (no LLM) and leaves it
+        # `blocked` with the error: enforced by escalating, never a draft the engine skips.
         assert rule["status"] == "compiling"
         rule = (await api.get(f"/rules/{rule['id']}")).json()
-        assert rule["status"] == "draft"
-        assert rule["report"] == {"valid": False, "error": "CompilationError: no LLM in tests"}
+        assert rule["status"] == "blocked"
+        assert rule["report"]["valid"] is False
+        assert rule["report"]["error"] == "CompilationError: no LLM in tests"
 
         r = await api.post(f"/rules/{rule['id']}/compile")
         assert r.status_code == 502, r.text
@@ -72,7 +73,7 @@ async def test_process_rule_flow(monkeypatch: pytest.MonkeyPatch) -> None:
 
         r = await api.post(f"/rules/{rule['id']}/activate", headers=headers)
         assert r.status_code == 409, r.text
-        assert "not compiled" in r.json()["message"]
+        assert "Only a draft rule can be activated" in r.json()["message"]
 
 
 @pytest.mark.parametrize(

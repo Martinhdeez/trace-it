@@ -168,7 +168,8 @@ def _traced(rules: list[Rule]) -> RunDataset:
 
 
 def _causes(verdicts: list[Verdict]) -> dict[str, dict[str, int]]:
-    """Escalations by cause: MISSING_DATA, RULE_ERROR, RULE_NEEDS_DATA, RULE_CONFLICT."""
+    """Escalations by cause: MISSING_DATA, RULE_ERROR, RULE_NEEDS_DATA, RULE_COMPILE_FAILED,
+    RULE_CONFLICT."""
     causes: Counter[str] = Counter()
     for verdict in verdicts:
         causes.update(r.reason.split(" ", 1)[0] for r in verdict.results if r.fires is None)

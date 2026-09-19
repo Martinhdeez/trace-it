@@ -17,7 +17,8 @@ costs and how it grows. What is already true:
   2.6 GB of RAM with the default workers.
 - Background compilation lives in the API process (ADR 0004): one API process only.
 - A norm check whose compile fails (for example every model rate-limited, ADR 0019) ends
-  `draft`, which the engine does not run: the older rule set decides without it.
+  `draft`, which the engine does not run: the older rule set decides without it (fixed,
+  see Decision).
 
 ## Alternatives considered
 - **Build for scale now: Kubernetes, a queue, a sandbox pool and partitioned tables.**
@@ -53,7 +54,10 @@ costs and how it grows. What is already true:
   `events`; H8 read replica; H9 PDFs to object storage; H10 a second LLM key or provider.
 - **Fail closed on a failed compile:** a norm check that ends `draft` with a compile error is
   enforced like a `blocked` rule (every instance escalates with the error) until it compiles,
-  as ADR 0016 requires of a rule that cannot be evaluated. Not built yet.
+  as ADR 0016 requires of a rule that cannot be evaluated. Done (2026-09-19): a rule whose
+  compilation on save errors ends `blocked` with `report.error`, and the engine escalates
+  every instance with `RULE_COMPILE_FAILED <id>: <error>` (`rules/service.py`
+  `_block_failed`, `decisions/engine.py`).
 - **Cost is tracked in three parts** (`C_tokens + C_infra + C_people`) with the formulas of
   section 6; tokens and span counts come from our own metrics.
 
@@ -78,7 +82,8 @@ costs and how it grows. What is already true:
 - `06-ingest.txt`: 500 PDFs in 74.4 s, scan median 1,216 ms, 2.64 GB peak RSS.
 - `08-ollama-compile.txt`: `llama3.1:8b` 384 / 38.5 tokens/s, R02 and R16 compiles failed.
 - Code: `agents/sandbox.py` (`_RUNNER` builds `others`), `rules/service.py`
-  (`compile_in_background` leaves `draft`), `rules/model.py` (`ENFORCED`).
+  (`compile_in_background` left `draft` until the fail-closed fix), `rules/model.py`
+  (`ENFORCED`).
 - Helmcode limits: helmcode.com/docs/rate-limits (100 rpm, 5-10 concurrent per model, 429 with
   `Retry-After`), read 2026-09-19.
 

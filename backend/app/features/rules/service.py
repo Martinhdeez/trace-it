@@ -4,7 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -110,10 +110,35 @@ def _kept(rule: Rule, report: dict[str, Any]) -> dict[str, Any]:
 
 async def _compile(session: AsyncSession, rule: Rule, author: str = AUTO) -> RuleDetail:
     links = {"rule_id": rule.id, "process_id": rule.process_id, "norm_rule_id": rule.norm_rule_id}
-    with events.span("compile_rule", author=author, before=rule.status, **links) as span:
-        detail = await _compile_traced(session, rule)
+    before = rule.status
+    with events.span("compile_rule", author=author, before=before, **links) as span:
+        try:
+            detail = await _compile_traced(session, rule)
+        except Exception as e:
+            if before == "compiling" and await _block_failed(session, links["rule_id"], e):
+                span.set(rule_status="blocked", valid=False)
+            raise
         span.set(rule_status=detail.status, valid=bool((detail.report or {}).get("valid")))
         return detail
+
+
+async def _block_failed(session: AsyncSession, rule_id: int, error: Exception) -> bool:
+    """Fail closed: a saved rule whose compilation errored (LLM down, tokens out, output still
+    malformed) is enforced as `blocked`, so every instance escalates with the error instead
+    of the older rules deciding without it (ADR 0016, 0020). A recompile lifts it."""
+    await session.rollback()
+    rule = await _rule(session, rule_id)
+    if rule.status != "compiling":  # it got past compiling before failing
+        return False
+    why = "its compilation failed: every instance escalates until it compiles"
+    error_text = f"{type(error).__name__}: {error}"
+    rule.report = _kept(
+        rule, {"valid": False, "error": error_text, "activation": {"auto": True, "why": why}}
+    )
+    rule.status = "blocked"
+    rule.activated_at = datetime.now(UTC)
+    await session.commit()
+    return True
 
 
 async def _compile_traced(session: AsyncSession, rule: Rule) -> RuleDetail:
@@ -144,20 +169,12 @@ async def _compile_traced(session: AsyncSession, rule: Rule) -> RuleDetail:
 
 async def compile_in_background(rule_id: int) -> None:
     """Compile a rule saved as `compiling`, with its own session. Whatever happens, the rule
-    leaves `compiling`: a failure leaves a draft with the error in its report."""
+    leaves `compiling`: a failure leaves it `blocked` with the error in its report."""
     async with session_factory() as session:
         try:
             await _compile(session, await _rule(session, rule_id))
-        except Exception as e:  # noqa: BLE001 - LLM down, malformed answers, anything
+        except Exception:  # noqa: BLE001 - LLM down, malformed answers, anything
             logger.exception("Compiling rule %s failed", rule_id)
-            await session.rollback()
-            rule = await _rule(session, rule_id)
-            if rule.status != "compiling":  # it got past compiling before failing
-                return
-            error = f"{type(e).__name__}: {e}"
-            rule.status = "draft"
-            rule.report = _kept(rule, {"valid": False, "error": error})
-            await session.commit()
 
 
 async def compile_all_in_background(rule_ids: list[int], parent: events.Span | None = None) -> None:
@@ -200,8 +217,11 @@ async def _own_escalations(session: AsyncSession, rule: Rule, impact: audit.Impa
     """The changed decisions this rule itself escalated while blocked. Undoing them is the
     point of recompiling it, not an effect on history to weigh."""
     ids = [c.decision_id for c in impact.changes]
-    own = f"RULE_NEEDS_DATA {rule.id}:"
-    query = select(Decision.id).where(Decision.id.in_(ids), Decision.reason.contains(own))
+    own = or_(
+        Decision.reason.contains(f"RULE_NEEDS_DATA {rule.id}:"),
+        Decision.reason.contains(f"RULE_COMPILE_FAILED {rule.id}:"),
+    )
+    query = select(Decision.id).where(Decision.id.in_(ids), own)
     return set(await session.scalars(query)) if ids else set()
 
 
