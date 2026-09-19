@@ -1,6 +1,7 @@
 import type {
   ApiClient,
   DocumentEvidence,
+  IngestedFile,
   Instance,
   InstanceState,
   NormResult,
@@ -452,37 +453,65 @@ export const liveClient: ApiClient = {
     }))
   },
   uploadFiles: async (processId, files) => {
-    const results = await Promise.all(
-      files.map(async (file) => {
-        const form = new FormData()
-        form.append('file', file)
-        const raw = await upload<{
-          name: string
-          file_hash: string
-          extraction: { text: string }
-        }>(`/processes/${processId}/files`, form)
-        return {
-          hash: raw.file_hash,
-          nombre: raw.name,
-          bytes: file.size,
-          tiene_texto: Boolean(raw.extraction.text),
-          ingerido: new Date().toISOString(),
-        }
-      }),
-    )
+    const results: IngestedFile[] = []
+    for (const file of files) {
+      const form = new FormData()
+      form.append('file', file)
+      const raw = await upload<{
+        name: string
+        file_hash: string
+        extraction?: { text?: string }
+        symbols?: Record<string, { value?: unknown } | null>
+      }>(`/processes/${processId}/files`, form)
+      const filled = raw.symbols
+        ? Object.entries(raw.symbols).some(
+            ([key, item]) =>
+              key !== 'file_id' &&
+              key !== 'free_text' &&
+              item != null &&
+              item.value != null &&
+              item.value !== '',
+          )
+        : Boolean(raw.extraction?.text)
+      results.push({
+        hash: raw.file_hash,
+        nombre: raw.name,
+        bytes: file.size,
+        tiene_texto: filled,
+        ingerido: new Date().toISOString(),
+      })
+    }
     return results
   },
-  listSources: async () => [],
-  uploadSource: async (_processId, name, file) => {
+  listSources: async (processId) => {
+    const items = await get<
+      { name: string; origin: string; rows: number; loaded_at: string }[]
+    >(`/processes/${processId}/sources`)
+    return items.map((item) => ({
+      nombre: item.name,
+      origen: item.origin,
+      filas: item.rows,
+      cargada: item.loaded_at,
+    }))
+  },
+  uploadWorkbook: async (processId, file, cutOffDate = '2026-09-18') => {
     const form = new FormData()
     form.append('file', file)
-    const raw = await upload<{ data?: unknown[]; text?: string }>('/v1/extractions', form)
-    return {
-      nombre: name,
+    form.append('cut_off_date', cutOffDate)
+    const raw = await upload<{
+      sources: { name: string; rows: number }[]
+      file_hash: string
+    }>(`/processes/${processId}/sources/workbook`, form)
+    return raw.sources.map((item) => ({
+      nombre: item.name,
       origen: file.name,
-      filas: Array.isArray(raw.data) ? raw.data.length : 0,
+      filas: item.rows,
       cargada: new Date().toISOString(),
-    }
+    }))
+  },
+  uploadSource: async (processId, name, file) => {
+    const loads = await liveClient.uploadWorkbook(processId, file)
+    return loads.find((item) => item.nombre === name) ?? loads[0]
   },
   syncErp: async (processId) => {
     const raw = await post<{ origin: string; rows: number }>(

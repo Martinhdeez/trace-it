@@ -5,10 +5,10 @@ import { Check, Hammer, X } from 'lucide-react'
 import { api } from '../api/client'
 import { keys } from '../api/queries'
 import type { AuditChange, CrossTest, Impact, RuleDetail, RuleReport } from '../api/contracts'
+import { ProcessScreen } from '../components/process/ProcessScreen'
 import { Button } from '../components/shell/Controls'
 import { ErrorNotice, Notice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
-import { Topbar } from '../components/shell/Topbar'
 import { NestedCard, PageIntro } from '../components/shell/Well'
 import { JsonHighlight } from '../lib/jsonHighlight'
 import { cn } from '../lib/cn'
@@ -64,55 +64,56 @@ export function Rule() {
   const conflicts = impact.data?.conflictos ?? []
 
   return (
-    <>
-      <Topbar
-        crumbs={[
-          { label: process.data?.nombre ?? '…', to: paths.process(processId) },
-          { label: 'Reglas', to: paths.rules(processId) },
-          { label: `Regla ${ruleId}` },
-        ]}
-        actions={
-          <>
+    <ProcessScreen
+      processId={processId}
+      crumbs={[
+        { label: 'Procesos', to: paths.processes },
+        { label: process.data?.nombre ?? '…', to: paths.process(processId) },
+        { label: 'Definición', to: paths.definition(processId) },
+        { label: `Regla ${ruleId}` },
+      ]}
+      actions={
+        <>
+          <Button
+            onClick={() => compile.mutate()}
+            disabled={
+              compile.isPending ||
+              isCompiling ||
+              !data ||
+              !['borrador', 'bloqueada'].includes(data.estado)
+            }
+          >
+            <Hammer size={12} strokeWidth={2} />
+            {compile.isPending || isCompiling
+              ? 'Compilando…'
+              : compiled
+                ? 'Recompilar'
+                : 'Compilar'}
+          </Button>
+          {isActive ? (
             <Button
-              onClick={() => compile.mutate()}
-              disabled={
-                compile.isPending ||
-                isCompiling ||
-                !data ||
-                !['borrador', 'bloqueada'].includes(data.estado)
-              }
+              tone="danger"
+              onClick={() => retire.mutate()}
+              disabled={!isManager || retire.isPending}
+              title={isManager ? undefined : 'Solo un responsable puede retirar reglas'}
             >
-              <Hammer size={12} strokeWidth={2} />
-              {compile.isPending || isCompiling
-                ? 'Compilando…'
-                : compiled
-                  ? 'Recompilar'
-                  : 'Compilar'}
+              <X size={12} strokeWidth={2} />
+              {retire.isPending ? 'Retirando…' : 'Retirar'}
             </Button>
-            {isActive ? (
-              <Button
-                tone="danger"
-                onClick={() => retire.mutate()}
-                disabled={!isManager || retire.isPending}
-                title={isManager ? undefined : 'Solo un responsable puede retirar reglas'}
-              >
-                <X size={12} strokeWidth={2} />
-                {retire.isPending ? 'Retirando…' : 'Retirar'}
-              </Button>
-            ) : (
-              <Button
-                tone="primary"
-                onClick={() => activate.mutate()}
-                disabled={!isManager || !valid || activate.isPending}
-                title={isManager ? undefined : 'Solo un responsable puede activar reglas'}
-              >
-                <Check size={12} strokeWidth={2} />
-                {activate.isPending ? 'Activando…' : 'Activar'}
-              </Button>
-            )}
-          </>
-        }
-      />
+          ) : (
+            <Button
+              tone="primary"
+              onClick={() => activate.mutate()}
+              disabled={!isManager || !valid || activate.isPending}
+              title={isManager ? undefined : 'Solo un responsable puede activar reglas'}
+            >
+              <Check size={12} strokeWidth={2} />
+              {activate.isPending ? 'Activando…' : 'Activar'}
+            </Button>
+          )}
+        </>
+      }
+    >
 
       <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
         {rule.isError ? <ErrorNotice error={rule.error} /> : null}
@@ -201,7 +202,7 @@ export function Rule() {
           </div>
         </section>
       </div>
-    </>
+    </ProcessScreen>
   )
 }
 

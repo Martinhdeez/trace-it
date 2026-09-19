@@ -101,7 +101,7 @@ export function DocumentPane({
       ) : null}
 
       <div
-        className="relative min-h-0 flex-1 overflow-auto rounded-[16px] bg-well ring-1 ring-black/[0.04]"
+        className="relative min-h-0 flex-1 overflow-auto rounded-[16px] bg-canvas ring-1 ring-black/[0.06]"
         onWheel={(event) => {
           if (!event.ctrlKey && !event.metaKey) return
           event.preventDefault()

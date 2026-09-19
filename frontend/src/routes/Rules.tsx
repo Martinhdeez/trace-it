@@ -29,6 +29,8 @@ export function Rules() {
   const rules = useQuery({
     queryKey: keys.rules(processId),
     queryFn: () => api.listRules(processId),
+    refetchInterval: (query) =>
+      query.state.data?.some((rule) => rule.estado === 'compilando') ? 2_000 : false,
   })
   const norm = useQuery({
     queryKey: keys.norm(processId),
@@ -54,7 +56,7 @@ export function Rules() {
         crumbs={[
           { label: 'Procesos', to: paths.processes },
           { label: process.data?.nombre ?? '…', to: paths.process(processId) },
-          { label: 'Reglas' },
+          { label: 'Reglas y versiones' },
         ]}
         actions={
           <Button tone="primary" onClick={() => setFormOpen((open) => !open)}>
@@ -66,9 +68,9 @@ export function Rules() {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
         <PageIntro
-          kicker="Reglas"
-          title="Reglas del proceso"
-          description="Pega la norma como la escribió el cliente, o añade una comprobación concreta. Un normalizador conserva cada frase y la divide; después un tester ciego escribe los casos y un compilador genera el código hasta pasarlos."
+          kicker="Configuración"
+          title="Reglas y versiones"
+          description="Cada regla conserva su estado, validación y hash. Activa una versión solo cuando sus pruebas y su impacto histórico estén claros."
         />
 
         {formOpen ? (

@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { api } from '../api/client'
 import { keys } from '../api/queries'
+import type { IngestedFile, SourceLoad } from '../api/contracts'
 import { DropZone } from '../components/process/DropZone'
 import { Button } from '../components/shell/Controls'
 import { DataTable } from '../components/shell/DataTable'
@@ -16,6 +18,7 @@ import { paths } from '../lib/paths'
 export function Sources() {
   const processId = Number(useParams().processId)
   const queryClient = useQueryClient()
+  const [ingest, setIngest] = useState<{ done: number; total: number } | null>(null)
 
   const process = useQuery({
     queryKey: keys.process(processId),
@@ -30,11 +33,41 @@ export function Sources() {
     queryFn: () => api.listSources(processId),
   })
 
+  const refreshLoads = () => {
+    void queryClient.invalidateQueries({ queryKey: keys.files(processId) })
+    void queryClient.invalidateQueries({ queryKey: ['instances'] })
+    void queryClient.invalidateQueries({ queryKey: keys.sources(processId) })
+  }
+
   const upload = useMutation({
-    mutationFn: (incoming: File[]) => api.uploadFiles(processId, incoming),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['files'] })
-      void queryClient.invalidateQueries({ queryKey: ['instances'] })
+    mutationFn: async (incoming: File[]) => {
+      const pdfs = incoming.filter((file) => file.name.toLowerCase().endsWith('.pdf'))
+      const added: IngestedFile[] = []
+      setIngest({ done: 0, total: pdfs.length })
+      try {
+        for (const file of pdfs) {
+          added.push(...(await api.uploadFiles(processId, [file])))
+          setIngest({ done: added.length, total: pdfs.length })
+        }
+      } finally {
+        setIngest(null)
+      }
+      return added
+    },
+    onSuccess: refreshLoads,
+  })
+  const workbook = useMutation({
+    mutationFn: (file: File) => api.uploadWorkbook(processId, file),
+    onSuccess: (loads: SourceLoad[]) => {
+      queryClient.setQueryData(keys.sources(processId), (current: typeof sources.data) => {
+        const next = [...(current ?? [])]
+        for (const load of loads) {
+          const index = next.findIndex((item) => item.nombre === load.nombre)
+          if (index >= 0) next[index] = load
+          else next.push(load)
+        }
+        return next
+      })
     },
   })
   const sync = useMutation({
@@ -51,15 +84,15 @@ export function Sources() {
       <Topbar
         crumbs={[
           { label: process.data?.nombre ?? '…', to: paths.process(processId) },
-          { label: 'Fuentes' },
+          { label: 'Inicializar' },
         ]}
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
         <PageIntro
-          kicker="Fuentes"
-          title="Lo que entra"
-          description="Los ficheros se guardan tal cual, identificados por el hash de su contenido, junto al texto completo que se les extrae. Las fuentes de verdad se cargan aparte, y de cada una vale la última carga: el mismo fichero dos veces no se procesa dos veces."
+          kicker="Configuración"
+          title="Inicializar proceso"
+          description="Carga los documentos del lote y conecta sus fuentes de referencia. Los archivos repetidos se detectan por hash."
         />
 
         <div className="grid gap-3 lg:grid-cols-2">
@@ -69,8 +102,12 @@ export function Sources() {
                 multiple
                 accept="application/pdf"
                 disabled={upload.isPending}
-                label={upload.isPending ? 'Subiendo…' : 'Facturas en PDF'}
-                hint="Arrastra la carpeta del lote o pulsa para elegir"
+                label={
+                  ingest
+                    ? `Subiendo ${ingest.done} / ${ingest.total}`
+                    : 'Facturas en PDF'
+                }
+                hint="Uno a uno por la API, como en la prueba en vivo. Arrastra el lote o elige."
                 onFiles={(incoming) => upload.mutate(incoming)}
               />
               {upload.isError ? <ErrorNotice error={upload.error} /> : null}
@@ -79,13 +116,17 @@ export function Sources() {
 
           <NestedCard label="fuentes de verdad">
             <div className="space-y-2 px-3.5 py-3">
-              <div className="rounded-[12px] bg-well px-3 py-3 ring-1 ring-black/[0.04]">
-                <p className="text-[13px] text-ink">Excel de proveedores y pedidos</p>
-                <p className="mt-1 text-[11px] leading-5 text-muted">
-                  Lo declara el pack del proceso. Las hojas y columnas que entran quedan versionadas
-                  con la configuración, no se eligen de nuevo en cada ejecución.
-                </p>
-              </div>
+              <DropZone
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                disabled={workbook.isPending}
+                label={workbook.isPending ? 'Cargando el Excel…' : 'Excel de proveedores y pedidos'}
+                hint="FINAL_v7…xlsx · hojas de proveedores, pedidos y parámetros"
+                onFiles={(incoming) => {
+                  const file = incoming[0]
+                  if (file) workbook.mutate(file)
+                }}
+              />
+              {workbook.isError ? <ErrorNotice error={workbook.error} /> : null}
               <div className="flex items-center justify-between gap-3 rounded-[12px] bg-well px-3 py-3 ring-1 ring-black/[0.04]">
                 <div className="min-w-0">
                   <p className="text-[13px] text-ink">Conector del ERP</p>
@@ -153,7 +194,10 @@ export function Sources() {
             {files.data?.length ? (
               <DataTable
                 framed={false}
-                rows={files.data.slice(0, 50).map((file) => ({ ...file, id: file.hash }))}
+                rows={files.data.slice(0, 50).map((file, index) => ({
+                  ...file,
+                  id: file.hash || `${file.nombre}-${index}`,
+                }))}
                 columns={[
                   {
                     key: 'nombre',
@@ -166,7 +210,7 @@ export function Sources() {
                     width: '9rem',
                     render: (row) => (
                       <span className="text-[12px] text-muted">
-                        {row.tiene_texto ? 'extraído' : 'escaneada · visión'}
+                        {row.tiene_texto ? 'extraído' : 'sin símbolos'}
                       </span>
                     ),
                   },
@@ -176,8 +220,7 @@ export function Sources() {
                     width: '10rem',
                     render: (row) => (
                       <span className="font-mono text-[11px] text-faint">
-                        {row.hash.slice(0, 16)}
-                        {!row.hash ? '—' : null}
+                        {row.hash ? row.hash.slice(0, 16) : '—'}
                       </span>
                     ),
                   },

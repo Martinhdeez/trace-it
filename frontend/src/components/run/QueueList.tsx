@@ -26,7 +26,7 @@ export function QueueList({
         </span>
       </div>
       {header ? <div className="px-1 pb-2">{header}</div> : null}
-      <ul className="min-h-0 flex-1 overflow-y-auto rounded-[16px] bg-well p-1 ring-1 ring-black/[0.04]">
+      <ul className="min-h-0 flex-1 overflow-y-auto rounded-[16px] bg-white p-1 ring-1 ring-black/[0.04]">
         {items.map((item) => (
           <li key={item.id}>
             <button
@@ -35,8 +35,8 @@ export function QueueList({
               className={cn(
                 'mb-0.5 flex w-full items-center gap-2.5 rounded-[12px] px-2.5 py-2 text-left',
                 item.id === selectedId
-                  ? 'bg-white shadow-[0_1px_2px_rgba(19,19,19,0.06)]'
-                  : 'hover:bg-white/70',
+                  ? 'bg-canvas'
+                  : 'hover:bg-canvas/70',
               )}
             >
               <FileText size={13} strokeWidth={1.5} className="shrink-0 text-faint" />

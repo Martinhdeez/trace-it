@@ -133,7 +133,7 @@ function ByHand() {
     mutationFn: (body: ProcessInput) => api.createProcess(body),
     onSuccess: (process) => {
       void queryClient.invalidateQueries({ queryKey: ['processes'] })
-      navigate(paths.sources(process.id))
+      navigate(paths.definition(process.id))
     },
   })
 
@@ -395,7 +395,7 @@ function ByHand() {
           </Button>
         </div>
         <p className="text-[12px] text-faint">
-          Al crearlo vas a Fuentes para subir los datos. Las reglas se dan de alta una a una.
+          Al crearlo vas a Definición. Ahí están la norma, el contexto, los inputs y las fuentes de verdad.
         </p>
       </div>
     </form>

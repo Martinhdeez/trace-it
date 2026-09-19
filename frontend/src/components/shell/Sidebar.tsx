@@ -8,28 +8,28 @@ import { keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
 import { t } from '../../i18n'
 import { paths, processFromPath } from '../../lib/paths'
-import { countsOf, waitingOnPerson } from '../../lib/process'
 import { useAppState } from '../../state/app'
 import { useSession } from '../../state/session'
 
 function NavItem({
   to,
   children,
-  indent,
+  end,
+  active,
 }: {
   to: string
   children: ReactNode
-  indent?: boolean
+  end?: boolean
+  active?: boolean
 }) {
   return (
     <NavLink
       to={to}
-      end
+      end={end}
       className={({ isActive }) =>
         cn(
-          'flex items-center justify-between rounded-[10px] py-[7px] pr-2.5 text-[13px] tracking-[-0.01em]',
-          indent ? 'pl-5' : 'pl-2.5',
-          isActive
+          'flex items-center justify-between rounded-[10px] py-[7px] pr-2.5 pl-2.5 text-[13px] tracking-[-0.01em]',
+          (active ?? isActive)
             ? 'bg-white text-ink shadow-[0_1px_2px_rgba(19,19,19,0.06)]'
             : 'text-ink/80 hover:bg-white/60 hover:text-ink',
         )
@@ -40,11 +40,6 @@ function NavItem({
   )
 }
 
-function Counter({ value }: { value: number | undefined }) {
-  if (!value) return null
-  return <span className="font-mono text-[11px] text-ink">{value}</span>
-}
-
 export function Sidebar() {
   const { setPaletteOpen } = useAppState()
   const { user } = useSession()
@@ -52,17 +47,6 @@ export function Sidebar() {
   const activeId = processFromPath(location.pathname)
 
   const processes = useQuery({ queryKey: keys.processes, queryFn: () => api.listProcesses() })
-  const process = useQuery({
-    queryKey: keys.process(activeId ?? 0),
-    queryFn: () => api.getProcess(activeId!),
-    enabled: Boolean(activeId),
-  })
-  const counts = useQuery({
-    queryKey: keys.instances(activeId ?? 0),
-    queryFn: () => api.listInstances(activeId!),
-    enabled: Boolean(activeId),
-    select: countsOf,
-  })
 
   return (
     <aside className="flex w-[232px] shrink-0 flex-col">
@@ -107,46 +91,20 @@ export function Sidebar() {
         </div>
 
         <ul className="flex flex-col gap-0.5">
-          {(processes.data ?? []).map((item) => (
-            <li key={item.id}>
-              <NavItem to={paths.process(item.id)}>{item.nombre}</NavItem>
-              {item.id === activeId ? (
-                <ul className="mt-0.5 flex flex-col gap-0.5">
-                  <li>
-                    <NavItem indent to={paths.instances(item.id)}>
-                      {t('nav.instances')}
-                      <Counter value={counts.data?.total} />
-                    </NavItem>
-                  </li>
-                  <li>
-                    <NavItem indent to={paths.queue(item.id)}>
-                      {t('nav.queue')}
-                      <Counter value={waitingOnPerson(process.data, counts.data)} />
-                    </NavItem>
-                  </li>
-                  <li>
-                    <NavItem indent to={paths.rules(item.id)}>
-                      {t('nav.rules')}
-                    </NavItem>
-                  </li>
-                  <li>
-                    <NavItem indent to={paths.audit(item.id)}>
-                      {t('nav.audit')}
-                    </NavItem>
-                  </li>
-                  <li>
-                    <NavItem indent to={paths.sources(item.id)}>
-                      {t('nav.sources')}
-                    </NavItem>
-                  </li>
-                </ul>
-              ) : null}
-            </li>
-          ))}
+          {(processes.data ?? []).map((item) => {
+            const open = item.id === activeId
+            return (
+              <li key={item.id}>
+                <NavItem to={paths.process(item.id)} active={open}>
+                  <span className="min-w-0 truncate">{item.nombre}</span>
+                </NavItem>
+              </li>
+            )
+          })}
         </ul>
 
         <div className="mt-auto pb-4 pt-6">
-          <NavItem to={paths.settings}>
+          <NavItem to={paths.settings} end>
             <span className="min-w-0 truncate">{user?.nombre ?? t('nav.signIn')}</span>
             <span className="shrink-0 font-mono text-[10px] text-faint">
               {user?.rol ?? t('nav.anonymous')}
