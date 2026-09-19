@@ -12,6 +12,7 @@ export const keys = {
     ['instances', processId, filters ?? 'all'] as const,
   instance: (id: number) => ['instance', id] as const,
   document: (instanceId: number) => ['document', instanceId] as const,
+  trace: (instanceId: number) => ['trace', instanceId] as const,
   queue: (processId: number, outcome: string) => ['queue', processId, outcome] as const,
   suggestion: (instanceId: number) => ['suggestion', instanceId] as const,
   findings: (processId: number) => ['findings', processId] as const,
@@ -29,6 +30,6 @@ export const keys = {
 
 /** After a decision moves, everything that counts instances is stale. */
 export const families = {
-  decisions: ['instances', 'instance', 'queue', 'findings', 'summary', 'alerts'],
+  decisions: ['instances', 'instance', 'queue', 'findings', 'summary', 'alerts', 'trace'],
   rules: ['rules', 'rule'],
 }

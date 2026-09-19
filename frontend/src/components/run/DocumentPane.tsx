@@ -2,14 +2,15 @@ import { Download, Minus, Plus, RotateCw, Search } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
-import type { DocumentEvidence } from '../../api/contracts'
+import type { ExtractionResult } from '../../api/contracts'
 import { keys } from '../../api/queries'
-import { ErrorNotice } from '../shell/Notice'
 import { cn } from '../../lib/cn'
+import { symbolLabel, symbolOfField } from '../../lib/symbols'
+import { ErrorNotice } from '../shell/Notice'
 
 /**
- * The facsimile of the document. A scan has no parsed version, which is exactly
- * the case that ends in REVISION.
+ * The stored PDF, as the backend serves it. Searching switches to the text the
+ * extraction read, with each field next to the symbol it feeds.
  */
 export function DocumentPane({
   instanceId,
@@ -92,12 +93,8 @@ export function DocumentPane({
             <Plus size={15} strokeWidth={1.5} />
           </IconBtn>
           <IconBtn
-            label="Descargar facsímil"
-            onClick={() =>
-              name &&
-              evidence.data &&
-              downloadEvidence(name, evidence.data)
-            }
+            label="Descargar PDF"
+            onClick={() => name && instanceId && downloadFile(api.fileUrl(instanceId), name)}
           >
             <Download size={15} strokeWidth={1.5} />
           </IconBtn>
@@ -130,7 +127,11 @@ export function DocumentPane({
         <div className="flex min-h-full justify-center p-8">
           {!name ? (
             <p className="self-center text-[13px] text-muted">Selecciona un archivo de la cola.</p>
-          ) : evidence.data ? (
+          ) : evidence.isError ? (
+            <div className="max-w-[420px] self-center">
+              <ErrorNotice error={evidence.error} />
+            </div>
+          ) : (
             <div
               style={{
                 width: 560,
@@ -138,19 +139,15 @@ export function DocumentPane({
                 transformOrigin: 'top center',
               }}
             >
-              <EvidencePaper evidence={evidence.data} query={query} />
-            </div>
-          ) : evidence.isError ? (
-            <div className="max-w-[420px] self-center">
-              <ErrorNotice error={evidence.error} />
-            </div>
-          ) : (
-            <div className="max-w-[420px] self-center text-center">
-              <p className="font-mono text-[12px]">{name}</p>
-              <p className="mt-2 text-[13px] text-muted">
-                Sin texto extraíble. Escaneada, fax o copia: la leen dos extractores con visión y,
-                si no coinciden, la instancia queda en REVISION.
-              </p>
+              {searchOpen && evidence.data ? (
+                <EvidencePaper evidence={evidence.data} query={query} />
+              ) : instanceId ? (
+                <iframe
+                  src={api.fileUrl(instanceId)}
+                  title={name}
+                  style={{ width: '100%', aspectRatio: '1 / 1.414', border: 0 }}
+                />
+              ) : null}
             </div>
           )}
         </div>
@@ -172,7 +169,7 @@ function EvidencePaper({
   evidence,
   query,
 }: {
-  evidence: DocumentEvidence
+  evidence: ExtractionResult
   query: string
 }) {
   return (
@@ -188,9 +185,11 @@ function EvidencePaper({
       </div>
 
       <dl className="mt-5 grid grid-cols-2 gap-x-6">
-        {Object.entries(evidence.fields).map(([name, field]) => (
+        {Object.entries(evidence.fields ?? {}).map(([name, field]) => (
           <div key={name} className="border-b border-hairline py-2">
-            <dt className="font-mono text-[10.5px] text-faint">{name}</dt>
+            <dt className="font-mono text-[10.5px] text-faint">
+              {symbolLabel(symbolOfField(name))}
+            </dt>
             <dd className="mt-0.5 break-words font-mono text-[12.5px]">
               {highlight(field.value ?? '—', query)}
             </dd>
@@ -253,13 +252,9 @@ function highlight(text: string, query: string): ReactNode {
   )
 }
 
-function downloadEvidence(name: string, evidence: DocumentEvidence) {
-  const body = evidence.text || JSON.stringify(evidence.fields, null, 2)
-  const blob = new Blob([body], { type: 'text/plain;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
+function downloadFile(url: string, name: string) {
   const link = document.createElement('a')
   link.href = url
-  link.download = name.replace(/\.pdf$/i, '') + '.txt'
+  link.download = name
   link.click()
-  URL.revokeObjectURL(url)
 }

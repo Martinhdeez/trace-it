@@ -18,7 +18,8 @@ import type {
   WorkbookUpload,
   VersionDraft,
   VersionOut,
-  DocumentEvidence,
+  ExtractionResult,
+  InstanceTrace,
   InstanceOut,
   NormResult,
   NormRule,
@@ -32,7 +33,7 @@ import type {
   RuleState,
   User,
 } from './contracts'
-import { get, getText, post, put, query, upload } from './http'
+import { BASE, get, getText, post, put, query, upload } from './http'
 
 type RawProcess = { id: number; name: string; use_case_id: number; description: string }
 type RawProcessDetail = RawProcess & {
@@ -321,8 +322,9 @@ export const liveClient: ApiClient = {
   listInstances: (processId, filters) =>
     get<InstanceOut[]>(`/processes/${processId}/instances${query({ ...filters })}`),
   getInstance: (id) => get<InstanceDetail>(`/instances/${id}`),
-  getDocument: (instanceId) =>
-    get<DocumentEvidence>(`/instances/${instanceId}/document`),
+  getDocument: (instanceId) => get<ExtractionResult>(`/instances/${instanceId}/document`),
+  getTrace: (instanceId) => get<InstanceTrace>(`/instances/${instanceId}/trace`),
+  fileUrl: (instanceId) => `${BASE}/instances/${instanceId}/file`,
   queue: (processId) => get<InstanceOut[]>(`/processes/${processId}/queue`),
   suggestion: (instanceId) => get<Suggestion>(`/instances/${instanceId}/suggestion`),
   resolve: (instanceId, body) => post<InstanceDetail>(`/instances/${instanceId}/resolve`, body),

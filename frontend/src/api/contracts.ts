@@ -37,6 +37,10 @@ export type Suggestion = Schemas['Suggestion']
 export type ResolveIn = Schemas['ResolveIn']
 export type RuleIn = Schemas['RuleIn']
 export type RuleDetailOut = Schemas['RuleDetail']
+export type InstanceTrace = Schemas['InstanceTrace']
+export type SpanNode = Schemas['SpanNode']
+export type ExtractionResult = Schemas['ExtractionResult']
+export type FieldReading = Schemas['FieldReading']
 
 /** One agreed symbol inside `InstanceDetail.symbols`: the value and where it came from. */
 export type SymbolReading = { value: string | number | boolean | null; origin?: string }
@@ -301,27 +305,6 @@ export type Finding = {
   creado: string
 }
 
-export type DocumentEvidence = {
-  id: string
-  file_id: string
-  sha256: string
-  kind: 'invoice' | 'workbook'
-  fields: Record<
-    string,
-    {
-      value: string | null
-      text: string | null
-      selected_by: string | null
-      confidence: number | null
-    }
-  >
-  text: string
-  warnings: Record<string, unknown>[]
-  metrics: Record<string, unknown>
-  cache_hit: boolean
-  pipeline_version: string
-}
-
 export type LlmConfig = {
   papel: string
   modelo: string
@@ -366,7 +349,11 @@ export interface ApiClient {
   run(processId: number): Promise<RunSummary>
   listInstances(processId: number, filters?: InstanceFilters): Promise<InstanceOut[]>
   getInstance(id: number): Promise<InstanceDetail>
-  getDocument(instanceId: number): Promise<DocumentEvidence | null>
+  getDocument(instanceId: number): Promise<ExtractionResult>
+  /** The decision, its rule results with their text, the file and the span tree. */
+  getTrace(instanceId: number): Promise<InstanceTrace>
+  /** Where the stored PDF is served, for an iframe or a download link. */
+  fileUrl(instanceId: number): string
   /** Everything waiting for a person, including cases the reviewer disagreed with. */
   queue(processId: number): Promise<InstanceOut[]>
   suggestion(instanceId: number): Promise<Suggestion>
