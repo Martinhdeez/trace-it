@@ -6,6 +6,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -167,3 +168,16 @@ def test_retry_after_http_date_is_parsed():
     assert journal.retry_after(later) > 0
     assert journal.retry_after(httpx.Response(429, headers={"Retry-After": "7"})) == 7.0
     assert journal.retry_after(httpx.Response(429)) is None
+
+
+def test_helmcode_primary_config_pins_qwen_in_the_version(settings, monkeypatch):
+    from app.features.processes import execution
+
+    monkeypatch.setenv("TRACEPAY_VISION_PROVIDERS", "helmcode,gemini")
+    monkeypatch.setenv("HELMCODE_API_KEY", "secret")
+    monkeypatch.setenv("GEMINI_API_KEY", "secret")
+    extraction = execution.extraction_defaults()  # what a version publishes
+    assert extraction.vision_model == "helmcode:qwen3.6"
+    config = SimpleNamespace(extraction=extraction, local_endpoint=None, compatible_endpoint=None)
+    bound = execution.ingestion_settings(config, replace(settings, helmcode_api_key="secret"))
+    assert bound.visual_chain() == [("helmcode", "qwen3.6")]
