@@ -77,6 +77,7 @@ fi
   'import sys, tarfile; t=tarfile.open(fileobj=sys.stdout.buffer, mode="w|gz"); t.add("/srv/.data", arcname="data"); t.close()' > "$backup/ingestion.tar.gz"
 # Runtime may be restricted; only this one-off migration container receives owner credentials.
 set -a
+# shellcheck source=/dev/null
 source secrets/compose.env
 set +a
 export TRACE_DATABASE_URL="postgresql+psycopg://trace:${POSTGRES_PASSWORD}@db:5432/trace"

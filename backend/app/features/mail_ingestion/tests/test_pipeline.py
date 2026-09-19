@@ -280,7 +280,7 @@ async def test_manual_content_conflict_and_scoped_credential(pipeline):
     assert (await worker.api.get(f"/mail-ingestion/{pid + 100000}")).status_code == 403
     assert (
         await worker.api.post(f"/processes/{pid}/run", headers=dict(human.headers))
-    ).status_code == 403
+    ).status_code == 401
     assert (await human.get(f"/mail-ingestion/{pid}")).status_code == 401
 
 
@@ -493,3 +493,17 @@ async def test_committed_import_finishes_independently_of_mailbox_availability(p
     with pytest.raises(RuntimeError, match="authentication"):
         await worker.cycle()
     assert (await overview(worker, human))["messages"][0]["state"] == "completed"
+
+
+async def test_administrative_bearer_and_mail_bearer_keep_separate_scopes(pipeline, monkeypatch):
+    from pydantic import SecretStr
+
+    from app.core.config import settings as core_settings
+
+    _, worker, human = pipeline
+    monkeypatch.setattr(core_settings, "api_token", SecretStr("synthetic-admin-test-token"))
+    administrative = {"Authorization": "Bearer synthetic-admin-test-token"}
+    assert (await human.get("/health", headers=administrative)).status_code == 200
+    assert (await worker.api.get("/db/tables")).status_code == 401
+    assert (await human.get(worker.root, headers=administrative)).status_code == 401
+    assert (await worker.api.get(worker.root)).status_code == 200

@@ -90,7 +90,9 @@ No body, attachment content, password or token is included in worker logs.
 
 `/mail-ingestion/{process_id}` and its initialize/discover/claim/message operations use
 HTTP Bearer authentication against a SHA-256 service-token hash. A credential is bound to
-one process and mailbox. Bearer requests to human endpoints are denied even with X-User-Id.
+one process and mailbox. Mail-token requests to human or administrative endpoints are denied
+even with X-User-Id. The existing administrative Bearer retains its separate API permissions
+and cannot substitute for the scoped mailbox credential.
 The worker can neither publish rules nor resolve/reprocess instances nor change providers.
 Automatic run authors are `mail_ingestion:<account_id>`, not a person's identity.
 

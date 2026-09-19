@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "trace-it",
-    "description": "Deterministic decision processes with rules compiled to code by agents.\n\nUse `Authorization: Bearer <API_TOKEN>` for every application endpoint and the `/db` administration endpoints. Bearer calls act as the dedicated API manager; `X-User-Id` is ignored. Browser/HTTP Basic callers continue to identify with `X-User-Id` (see `POST /login`). `/db` always requires Bearer authentication. See the [API guide](guide) for examples, permissions and deployment details. Errors are `{\"code\", \"message\"}`, except request validation (422), which keeps FastAPI's `{\"detail\": [...]}`.",
+    "description": "Deterministic decision processes with rules compiled to code by agents.\n\nUse `Authorization: Bearer <API_TOKEN>` for every application endpoint and the `/db` administration endpoints. Bearer calls act as the dedicated API manager; `X-User-Id` is ignored. Browser/HTTP Basic callers continue to identify with `X-User-Id` (see `POST /login`). `/db` always requires Bearer authentication. Mail-ingestion endpoints require their separate process-scoped mail service token. See the [API guide](guide) for examples, permissions and deployment details. Errors are `{\"code\", \"message\"}`, except request validation (422), which keeps FastAPI's `{\"detail\": [...]}`.",
     "version": "0.1.0"
   },
   "paths": {
@@ -691,9 +691,6 @@
         "operationId": "getMailState",
         "security": [
           {
-            "TraceItBearer": []
-          },
-          {
             "MailIngestionBearer": []
           }
         ],
@@ -740,9 +737,6 @@
         "summary": "Initialize",
         "operationId": "initializeMailCursor",
         "security": [
-          {
-            "TraceItBearer": []
-          },
           {
             "MailIngestionBearer": []
           }
@@ -801,9 +795,6 @@
         "operationId": "discoverMailMessages",
         "security": [
           {
-            "TraceItBearer": []
-          },
-          {
             "MailIngestionBearer": []
           }
         ],
@@ -861,9 +852,6 @@
         "operationId": "recordMailPollFailure",
         "security": [
           {
-            "TraceItBearer": []
-          },
-          {
             "MailIngestionBearer": []
           }
         ],
@@ -920,9 +908,6 @@
         "summary": "Claim",
         "operationId": "claimMailMessage",
         "security": [
-          {
-            "TraceItBearer": []
-          },
           {
             "MailIngestionBearer": []
           }
@@ -988,9 +973,6 @@
         "summary": "Manifest",
         "operationId": "saveMailManifest",
         "security": [
-          {
-            "TraceItBearer": []
-          },
           {
             "MailIngestionBearer": []
           }
@@ -1069,9 +1051,6 @@
         "operationId": "importMailPDF",
         "security": [
           {
-            "TraceItBearer": []
-          },
-          {
             "MailIngestionBearer": []
           }
         ],
@@ -1147,9 +1126,6 @@
         "summary": "Reject",
         "operationId": "rejectMailAttachment",
         "security": [
-          {
-            "TraceItBearer": []
-          },
           {
             "MailIngestionBearer": []
           }
@@ -1237,9 +1213,6 @@
         "operationId": "evaluateMailMessage",
         "security": [
           {
-            "TraceItBearer": []
-          },
-          {
             "MailIngestionBearer": []
           }
         ],
@@ -1306,9 +1279,6 @@
         "summary": "Fail",
         "operationId": "recordMailMessageFailure",
         "security": [
-          {
-            "TraceItBearer": []
-          },
           {
             "MailIngestionBearer": []
           }

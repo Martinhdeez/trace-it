@@ -225,7 +225,9 @@ class Mailbox:
         cfg = self.settings
         encoding, advertised = part["encoding"], part["advertised_size"]
         # Encoded data has its own bound, as does decoded PDF data.
-        encoded_limit = min(cfg.max_message_bytes, cfg.max_pdf_bytes * 2)
+        encoded_limit = cfg.max_message_bytes
+        if encoding in ("7bit", "8bit", "binary"):
+            encoded_limit = min(encoded_limit, cfg.max_pdf_bytes)
         if advertised > encoded_limit:
             raise RejectedDocument("size_limit")
         if encoding not in ("base64", "quoted-printable", "7bit", "8bit", "binary"):
