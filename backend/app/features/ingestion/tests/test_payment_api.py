@@ -62,7 +62,7 @@ async def payment_api(settings):
     definition = pack.definition()
     async with session_factory() as session:
         process = await rows.process(session, "Payment API " + uuid.uuid4().hex)
-        user = User(name="Operator", email=uuid.uuid4().hex + "@test.invalid", role="operator")
+        user = User(name="Manager", email=uuid.uuid4().hex + "@test.invalid", role="manager")
         session.add(user)
         await session.flush()
         for spec in definition["decision_types"]:

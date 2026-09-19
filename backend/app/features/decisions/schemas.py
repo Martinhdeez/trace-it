@@ -138,6 +138,40 @@ class ReprocessSummary(BaseModel):
     down_sources: dict[str, str] = {}  # as in RunSummary; omitted when none
 
 
+class RunOut(BaseModel):
+    """One stored execution (a run or a reprocess), read back from its row and its span."""
+
+    id: int  # the execution id; decisions carry it as `execution_id`
+    kind: str | None = Field(examples=["run", "reprocess"])  # None: stored before run history
+    started_at: datetime
+    finished_at: datetime | None
+    author: str | None  # the manager who started it
+    version_id: int
+    version_number: int
+    rules_hash: str | None
+    instances: int  # instances the engine evaluated
+    decided: int  # decisions this execution appended (a reprocess only writes changes)
+    # The engine's outcome for every evaluated instance, written or not, so runs compare.
+    by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
+    escalated: int  # outcomes whose decision type requires a human
+    escalation_reasons: dict[str, int] = Field(examples=[{"SOURCE_UNAVAILABLE": 3}])
+    down_sources: dict[str, str] = {}
+    trace_id: str | None  # `GET /traces/{trace_id}`
+
+
+class RunDecisionOut(BaseModel):
+    decision_id: int
+    instance_id: int
+    name: str
+    decision: str
+    reason: str | None
+    created_at: datetime
+
+
+class RunDetail(RunOut):
+    decisions: list[RunDecisionOut]  # the rows this execution appended, by instance id
+
+
 class FindingOut(BaseModel):
     id: int
     decision_id: int

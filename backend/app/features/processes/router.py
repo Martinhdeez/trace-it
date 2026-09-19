@@ -4,6 +4,7 @@ from app.core.database import Session
 from app.features.processes import service
 from app.features.processes.definition import Definition, LoadResult, load_definition
 from app.features.processes.schemas import ProcessDetail, ProcessOut
+from app.features.users.dependencies import Manager
 
 router = APIRouter(prefix="/processes", tags=["processes"])
 
@@ -20,7 +21,7 @@ async def list_processes(session: Session) -> list[ProcessOut]:
     description="Same format as the files under `processes/`. New rules enter as drafts; "
     "rules whose text already exists, and users whose email exists, are left as they are.",
 )
-async def load(body: Definition, session: Session) -> LoadResult:
+async def load(body: Definition, session: Session, _: Manager) -> LoadResult:
     return await load_definition(session, body)
 
 

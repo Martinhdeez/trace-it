@@ -4,7 +4,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import PlainTextResponse
 
 from app.core.database import Session
-from app.features.decisions import service
+from app.features.decisions import runs, service
 from app.features.decisions.schemas import (
     EventOut,
     FindingOut,
@@ -14,9 +14,11 @@ from app.features.decisions.schemas import (
     ReprocessIn,
     ReprocessSummary,
     ResolveIn,
+    RunDetail,
+    RunOut,
     RunSummary,
 )
-from app.features.users.dependencies import CurrentUser
+from app.features.users.dependencies import Manager
 
 router = APIRouter(tags=["decisions"])
 
@@ -29,8 +31,8 @@ router = APIRouter(tags=["decisions"])
     "this run and listed in `down_sources` (ADR 0028).",
     response_model_exclude_defaults=True,
 )
-async def run_process(process_id: int, session: Session) -> RunSummary:
-    return await service.run(session, process_id)
+async def run_process(process_id: int, session: Session, user: Manager) -> RunSummary:
+    return await service.run(session, process_id, author=user.name)
 
 
 @router.post(
@@ -46,9 +48,39 @@ async def run_process(process_id: int, session: Session) -> RunSummary:
     response_model_exclude_defaults=True,
 )
 async def reprocess_process(
-    process_id: int, session: Session, body: ReprocessIn | None = None, dry_run: bool = False
+    process_id: int,
+    session: Session,
+    user: Manager,
+    body: ReprocessIn | None = None,
+    dry_run: bool = False,
 ) -> ReprocessSummary:
-    return await service.reprocess(session, process_id, body.names if body else None, dry_run)
+    names = body.names if body else None
+    return await service.reprocess(session, process_id, names, dry_run, author=user.name)
+
+
+@router.get(
+    "/processes/{process_id}/runs",
+    operation_id="listRuns",
+    summary="Run history, newest first: each run and reprocess with its outcome",
+    description="One entry per stored execution: when, who, the process version and rules "
+    "hash, the engine's outcome per decision type for every instance it evaluated, the "
+    "escalations and their reason codes, `down_sources` and the `trace_id`. `by_decision` "
+    "and `escalated` cover every evaluated instance, so a rerun of the same invoices "
+    "compares with the run before it; `decided` counts only the decisions it appended.",
+)
+async def list_runs(
+    process_id: int, session: Session, limit: int = Query(50, ge=1, le=500)
+) -> list[RunOut]:
+    return await runs.list_runs(session, process_id, limit)
+
+
+@router.get(
+    "/runs/{run_id}",
+    operation_id="getRun",
+    summary="One past run with the decisions it appended, read-only",
+)
+async def get_run(run_id: int, session: Session) -> RunDetail:
+    return await runs.get_run(session, run_id)
 
 
 @router.get(
@@ -124,7 +156,7 @@ async def get_instance(instance_id: int, session: Session) -> InstanceDetail:
     responses={409: {"description": "Not a decision type of this process"}},
 )
 async def resolve_instance(
-    instance_id: int, body: ResolveIn, session: Session, user: CurrentUser
+    instance_id: int, body: ResolveIn, session: Session, user: Manager
 ) -> InstanceDetail:
     return await service.resolve(session, instance_id, body, user)
 

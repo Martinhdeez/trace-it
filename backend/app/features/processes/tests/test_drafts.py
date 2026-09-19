@@ -20,6 +20,7 @@ from app.features.processes.model import Process
 from app.features.rules.model import Rule
 from app.main import app
 from tests.support.models import per_role, user_json
+from tests.support.users import manager
 
 
 def scripted_pinned_models(monkeypatch):
@@ -133,15 +134,7 @@ def scripts(proposal, threshold=100, field="amount", broken=False):
 async def api(monkeypatch):
     scripted_pinned_models(monkeypatch)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        user = await client.post(
-            "/users",
-            json={
-                "name": "Draft manager",
-                "role": "manager",
-                "email": f"draft-{uuid.uuid4().hex}@test.com",
-            },
-        )
-        client.headers["X-User-Id"] = str(user.json()["id"])
+        await manager(client, "Draft manager")
         yield client
 
 

@@ -183,7 +183,7 @@ async def upload_workbook(
     user: CurrentUser,
     service: Service,
     file: Annotated[UploadFile, File()],
-    cut_off_date: Annotated[date | None, Form()] = None,
+    cut_off_date: Annotated[date, Form()],  # required, no default: the manager sets it (Q4)
 ):
     try:
         await process_service.require_process(session, process_id)
