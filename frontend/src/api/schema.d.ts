@@ -3676,6 +3676,10 @@ export interface components {
              * @default false
              */
             review_pending: boolean;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
             /** File Hash */
             file_hash: string;
             /** Symbols */
@@ -3716,6 +3720,10 @@ export interface components {
              * @default false
              */
             review_pending: boolean;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * InstanceTrace
