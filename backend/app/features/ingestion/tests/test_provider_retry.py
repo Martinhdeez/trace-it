@@ -180,7 +180,11 @@ def test_helmcode_primary_config_pins_qwen_in_the_version(settings, monkeypatch)
     assert extraction.vision_model == "helmcode:qwen3.6"
     config = SimpleNamespace(extraction=extraction, local_endpoint=None, compatible_endpoint=None)
     bound = execution.ingestion_settings(config, replace(settings, helmcode_api_key="secret"))
-    assert bound.visual_chain() == [("helmcode", "qwen3.6")]
+    assert bound.visual_chain() == [("helmcode", "qwen3.6"), ("helmcode", "gemma4")]
+    assert extraction.vision_verification_models == [
+        "helmcode:gemma4",
+        "gemini:gemini-3.1-flash-lite",
+    ]
 
 
 def test_default_retry_budget_falls_back_within_two_seconds(settings, monkeypatch, isolated):

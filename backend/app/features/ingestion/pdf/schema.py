@@ -31,7 +31,9 @@ def extract_schema_pdf(content, options, settings, ocr, vlm, field_reader, field
     def image(page):
         number = page["number"]
         if number not in images:
-            images[number] = render(content, number, settings)
+            with events.span("render_page", page=number, dpi=settings.ocr_dpi) as span:
+                images[number] = render(content, number, settings)
+                span.set(image_bytes=len(images[number]))
         return images[number]
 
     def failure(code, page, exc):
@@ -112,6 +114,14 @@ def extract_schema_pdf(content, options, settings, ocr, vlm, field_reader, field
                         generated_readers = vlm.transcribe_readers(
                             image(page), page["number"], page["size"], **params
                         )
+                        if len(generated_readers) < min(2, getattr(vlm, "independent_readers", 1)):
+                            warnings.append(
+                                {
+                                    "code": "VLM_ERROR",
+                                    "stage": "verification",
+                                    "page": page["number"],
+                                }
+                            )
                     else:
                         generated_readers = {
                             "schema_visual": vlm.transcribe(
@@ -129,6 +139,9 @@ def extract_schema_pdf(content, options, settings, ocr, vlm, field_reader, field
                     report["method"] += "+vlm"
             except Exception as exc:
                 failure("VLM_ERROR", page["number"], exc)
+            finally:
+                if options.mode == "api":
+                    images.pop(page["number"], None)
 
     if targets and vision_enabled and getattr(field_reader, "configured", False):
         with events.span("schema_fields", fields=[field.name for field in targets]):

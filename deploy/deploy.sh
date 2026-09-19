@@ -109,13 +109,32 @@ if [[ "${TRACE_DATABASE_USER:-trace}" == trace_app ]]; then
 fi
 if [[ -f DEMO_RESET_ENABLED ]]; then
   [[ -s reset-demo.py && -s demo-seed.json ]]
+  seed_version=$(python3 -c 'import json; print(json.load(open("demo-seed.json"))["version"])')
+  if [[ "$seed_version" == 4 ]]; then
+    [[ -s run-seed.py && -s seed_cache.py ]]
+    "${compose[@]}" run --rm --no-deps -T -e TRACE_DATABASE_URL \
+      -v /opt/trace-it/run-seed.py:/srv/run-seed.py:ro \
+      -v /opt/trace-it/seed_cache.py:/srv/seed_cache.py:ro \
+      -v /opt/trace-it/demo-seed.json:/srv/demo-seed.json:ro \
+      backend python /srv/run-seed.py verify-cache --seed /srv/demo-seed.json \
+      > "$backup/demo-cache-check.json"
+  fi
   "${compose[@]}" run --rm --no-deps -T -e TRACE_DATABASE_URL \
     -v /opt/trace-it/reset-demo.py:/srv/reset-demo.py:ro \
     -v /opt/trace-it/demo-seed.json:/srv/demo-seed.json:ro \
     backend python /srv/reset-demo.py reset --seed /srv/demo-seed.json --confirm-demo-reset \
     > "$backup/demo-reset.json"
-  "${compose[@]}" run --rm --no-deps -T -e TRACE_DATABASE_URL \
-    backend python -m app.features.decisions.demo_seed > "$backup/demo-seed-run.json"
+  if [[ "$seed_version" == 4 ]]; then
+    "${compose[@]}" run --rm --no-deps -T -e TRACE_DATABASE_URL \
+      -v /opt/trace-it/run-seed.py:/srv/run-seed.py:ro \
+      -v /opt/trace-it/seed_cache.py:/srv/seed_cache.py:ro \
+      -v /opt/trace-it/demo-seed.json:/srv/demo-seed.json:ro \
+      backend python /srv/run-seed.py run --seed /srv/demo-seed.json \
+      > "$backup/demo-seed-run.json"
+  else
+    "${compose[@]}" run --rm --no-deps -T -e TRACE_DATABASE_URL \
+      backend python -m app.features.decisions.demo_seed > "$backup/demo-seed-run.json"
+  fi
 fi
 unset TRACE_DATABASE_URL
 if [[ ! -f INITIALIZED ]]; then

@@ -8,6 +8,7 @@ import re
 import uuid
 from dataclasses import dataclass
 
+from .ocr.budget import extraction_budget
 from .schemas import CriticalField, ExtractionResult, ExtractOptions
 
 PAYMENT_FIELDS = {
@@ -110,6 +111,11 @@ class PaymentReading:
 
 
 def extract_for_payment(service, item, options: ExtractOptions, sources: dict) -> PaymentReading:
+    with extraction_budget(getattr(getattr(service, "settings", None), "extraction_timeout", 120)):
+        return _extract_for_payment(service, item, options, sources)
+
+
+def _extract_for_payment(service, item, options: ExtractOptions, sources: dict) -> PaymentReading:
     """At most one source-triggered extraction; preserve both persisted results."""
     if hasattr(service, "settings"):
         options = options.normalized(service.settings)

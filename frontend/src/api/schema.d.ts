@@ -3700,6 +3700,8 @@ export interface components {
             secondary_ocr: boolean;
             /** Vision Model */
             vision_model?: string | null;
+            /** Vision Verification Models */
+            vision_verification_models?: string[];
             /** Text Judge Model */
             text_judge_model?: string | null;
             /**
@@ -3737,6 +3739,11 @@ export interface components {
              * @default 4096
              */
             judge_max_tokens: number;
+            /**
+             * Timeout Seconds
+             * @default 120
+             */
+            timeout_seconds: number;
         };
         /** FieldConfig */
         FieldConfig: {

@@ -8,16 +8,20 @@ from pathlib import Path
 import pytest
 
 
+@pytest.mark.parametrize("version", [3, 4])
 @pytest.mark.parametrize(
-    "failure", ["none", "backup", "reset", "seed-run", "mail-check"]
+    "failure", ["none", "backup", "reset", "seed-run", "mail-check", "cache"]
 )
-def test_demo_deployment_order_and_failure(tmp_path, failure):
+def test_demo_deployment_order_and_failure(tmp_path, failure, version):
+    if version == 3 and failure == "cache":
+        pytest.skip("cache check applies to the full challenge")
     root = tmp_path / "app"
     (root / "secrets").mkdir(parents=True)
     for name in ["DEPLOY_ENABLED", "DEMO_RESET_ENABLED", "INITIALIZED"]:
         (root / name).touch()
-    for name in ["reset-demo.py", "demo-seed.json"]:
+    for name in ["reset-demo.py", "run-seed.py", "seed_cache.py"]:
         (root / name).write_text("fixture")
+    (root / "demo-seed.json").write_text(json.dumps({"version": version}))
     for name in ["runtime.env", "htpasswd", "curl.conf"]:
         (root / "secrets" / name).touch()
     (root / "secrets/compose.env").write_text("POSTGRES_PASSWORD=test\n")
@@ -46,6 +50,8 @@ elif cmd == "docker":
         with tarfile.open(fileobj=sys.stdout.buffer, mode="w|gz"): pass
     if "--confirm-demo-reset" in args and failure == "reset": sys.exit(1)
     if "app.features.decisions.demo_seed" in args and failure == "seed-run": sys.exit(1)
+    if "verify-cache" in args and failure == "cache": sys.exit(1)
+    if "/srv/run-seed.py" in args and args[-3] == "run" and failure == "seed-run": sys.exit(1)
     if "check" in args and failure == "mail-check": sys.exit(1)
 """)
     fake.chmod(0o755)
@@ -81,9 +87,12 @@ elif cmd == "docker":
     args = [call[1] for call in calls]
     resets = [i for i, a in enumerate(args) if "--confirm-demo-reset" in a]
     seed_runs = [
-        i for i, a in enumerate(args) if "app.features.decisions.demo_seed" in a
+        i
+        for i, a in enumerate(args)
+        if "app.features.decisions.demo_seed" in a
+        or ("/srv/run-seed.py" in a and a[-3] == "run")
     ]
-    if failure == "backup":
+    if failure in {"backup", "cache"}:
         assert not resets
     else:
         assert len(resets) == 1
@@ -93,7 +102,7 @@ elif cmd == "docker":
             next(i for i, a in enumerate(args) if "stop" in a and "frontend" in a)
             < resets[0]
         )
-    if failure in {"backup", "reset"}:
+    if failure in {"backup", "reset", "cache"}:
         assert not seed_runs
     else:
         assert len(seed_runs) == 1
@@ -106,6 +115,10 @@ elif cmd == "docker":
         assert len(mail) == 1
         assert mail[0][2].endswith("b" * 64)
         assert "b" * 64 in (root / "secrets/mail-compose.env").read_text()
+        if version == 4:
+            cache = next(i for i, a in enumerate(args) if "verify-cache" in a)
+            assert cache < resets[0] < seed_runs[0]
+            assert not any("app.features.decisions.demo_seed" in a for a in args)
     else:
         assert result.returncode != 0
         assert (root / "current.env").read_text() == previous
