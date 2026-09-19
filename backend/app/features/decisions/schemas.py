@@ -92,6 +92,8 @@ class ProcessSummary(BaseModel):
     instances: int
     by_status: dict[str, int] = Field(examples=[{"PENDING": 0, "DECIDED": 500}])
     by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
+    # Live sources whose pre-run sync failed, name -> why; omitted when none (ADR 0028).
+    down_sources: dict[str, str] = {}
     queue: int  # latest decision is one a person must look at
     resolved: int  # instances whose latest decision a person took
     rules: list[RuleSummary]
@@ -102,6 +104,8 @@ class ProcessSummary(BaseModel):
 class RunSummary(BaseModel):
     decided: int
     by_decision: dict[str, int] = Field(examples=[{"PAGAR": 433, "NO_PAGAR": 36, "ESCALAR": 31}])
+    # Live sources whose pre-run sync failed, name -> why; omitted when none (ADR 0028).
+    down_sources: dict[str, str] = {}
 
 
 class ChangeOut(BaseModel):
@@ -131,6 +135,7 @@ class ReprocessSummary(BaseModel):
     unchanged: int
     changes: list[ChangeOut]  # the engine decided it before and decides otherwise now
     conflicts: list[ChangeOut]  # a person decided it last; left alone, for the manager
+    down_sources: dict[str, str] = {}  # as in RunSummary; omitted when none
 
 
 class FindingOut(BaseModel):

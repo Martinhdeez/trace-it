@@ -69,14 +69,14 @@ def differences(one, other):
     return previous[-1]
 
 
-def approved_account(instance, sources):
+def approved_account(instance, suppliers):
     """The one account the master approves for this invoice's supplier, or None when the
     master cannot answer: no NIF, no IBAN on the invoice, no rows, or rows that disagree
     (R02 and R04 already fire on those)."""
     nif = key(instance.get("issuer_nif"))
     if not nif or empty(instance.get("iban")):
         return None
-    theirs = [r for r in rows(sources, "suppliers") if key(r.get("nif")) == nif]
+    theirs = [r for r in suppliers if key(r.get("nif")) == nif]
     if not theirs:
         return None
     ids = {text(r.get("id")) for r in theirs}
@@ -89,7 +89,7 @@ def approved_account(instance, sources):
 def evaluate(instance, sources, others):
     """An IBAN a few characters away from the approved one is far more likely our
     misreading than the supplier's new account: a person looks instead of a refusal."""
-    approved = approved_account(instance, sources)
+    approved = approved_account(instance, rows(sources, "suppliers"))
     if approved is None:
         return passes()
     theirs = iban(instance.get("iban"))

@@ -1,0 +1,58 @@
+[
+  {
+    "depth": 0,
+    "step": "run_process",
+    "status": "ok",
+    "ms": 15735,
+    "data": {
+      "failures": {
+        "SOURCE_UNAVAILABLE": 8
+      },
+      "by_decision": {
+        "ESCALAR": 2,
+        "NO_PAGAR": 2
+      },
+      "down_sources": {
+        "erp": "Sync of 'erp' failed; the previous snapshot stays stored, unused by runs. POST /erp/login : gave up after 6 attempts (last: transport error: ConnectError('All connection attempts failed'))"
+      }
+    }
+  },
+  {
+    "depth": 1,
+    "step": "sync_source",
+    "status": "error",
+    "ms": 15441,
+    "data": {
+      "error": "SourceUnavailableError: Sync of 'erp' failed; the previous snapshot stays stored, unused by runs. POST /erp/login : gave up after 6 attempts (last: transport error: ConnectError('All connection attempts failed'))",
+      "source": "erp"
+    }
+  },
+  {
+    "depth": 1,
+    "step": "decision",
+    "status": "ok",
+    "ms": null,
+    "data": {}
+  },
+  {
+    "depth": 1,
+    "step": "decision",
+    "status": "ok",
+    "ms": null,
+    "data": {}
+  },
+  {
+    "depth": 1,
+    "step": "decision",
+    "status": "ok",
+    "ms": null,
+    "data": {}
+  },
+  {
+    "depth": 1,
+    "step": "decision",
+    "status": "ok",
+    "ms": null,
+    "data": {}
+  }
+]
