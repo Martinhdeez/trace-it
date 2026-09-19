@@ -11,7 +11,7 @@ from app.features.agents import sandbox
 from app.features.decisions.engine import decide
 from app.features.decisions.model import Decision, DecisionReview
 from app.features.ingestion.model import Instance
-from app.features.ingestion.symbols import flatten_symbols
+from app.features.ingestion.symbols import flatten_symbols, scan
 from app.features.sources import service as sources
 from app.features.sources.model import Source
 from app.features.versions import configuration as config
@@ -105,6 +105,11 @@ async def evaluate(
         tables,
         population,
         run_dataset,
+        {
+            i["id"]: unconfirmed
+            for i in inputs["instances"]
+            if i["id"] in selected and (unconfirmed := scan(i["symbols"])) is not None
+        },
     )
     return dict(zip((key for key, _ in dataset), verdicts, strict=True))
 

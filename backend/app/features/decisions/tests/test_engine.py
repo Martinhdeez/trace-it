@@ -257,3 +257,55 @@ def test_each_instance_sees_the_others_but_not_itself() -> None:
         [{**NEW_IBAN, "_instance": "b"}],
         [{**CLEAN, "_instance": "a"}],
     ]
+
+
+# ADR 0025: a scan is read and decided, but a rejection on data read by OCR escalates.
+IBAN_REJECTS = [
+    Rule(id=1, text="iban", type="prohibition", decision="NO_PAGAR", code="iban_mismatch", hash="h")
+]
+
+
+WITH_TOTAL = Outcomes(
+    OUTCOMES.priorities, "PAGAR", "ESCALAR", required=(*REQUIRED.required, "total")
+)
+
+
+def decide_scan(instance: dict[str, Any], unconfirmed: list[str] | None) -> Any:
+    """`unconfirmed` None: a text PDF; a list: a scan and the symbols its readers doubted."""
+    scans = {} if unconfirmed is None else {1: unconfirmed}
+    instance = {"total": "919.60", **instance}
+    [verdict] = decide(IBAN_REJECTS, WITH_TOTAL, [(1, instance)], SOURCES, [], RUN, scans)
+    return verdict
+
+
+def test_a_scan_the_rules_would_reject_escalates_naming_the_rule() -> None:
+    verdict = decide_scan(NEW_IBAN, [])
+
+    assert verdict.decision == "ESCALAR"
+    assert verdict.reason == "SCAN_REVIEW: iban_mismatch"
+    assert [(r.rule_id, r.fires) for r in verdict.results] == [(1, True)]
+
+
+def test_a_clean_scan_is_paid() -> None:
+    assert decide_scan(CLEAN, []).decision == "PAGAR"
+
+
+def test_a_text_pdf_with_the_same_mismatch_is_still_rejected() -> None:
+    verdict = decide_scan(NEW_IBAN, None)
+
+    assert (verdict.decision, verdict.reason) == ("NO_PAGAR", "iban_mismatch")
+
+
+def test_a_scan_with_a_null_field_is_missing_data() -> None:
+    verdict = decide_scan({**NEW_IBAN, "iban": None}, ["iban"])
+
+    assert (verdict.decision, verdict.reason) == ("ESCALAR", "MISSING_DATA: iban")
+
+
+def test_a_scan_with_a_conflicting_total_escalates_whatever_the_rules_say() -> None:
+    """Readers disagreed on the total: a clean scan is not paid on it. A symbol no rule
+    requires does not count."""
+    verdict = decide_scan(CLEAN, ["total", "free_text"])
+
+    assert (verdict.decision, verdict.reason) == ("ESCALAR", "UNVERIFIED_DATA: total")
+    assert decide_scan(CLEAN, ["free_text"]).decision == "PAGAR"

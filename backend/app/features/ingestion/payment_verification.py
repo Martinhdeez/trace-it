@@ -40,9 +40,18 @@ def payment_symbols(result: ExtractionResult, names: set[str]) -> dict:
             values["date"] = f"{year:04d}-{month:02d}-{day:02d}"
     values.update(file_id=result.file_id, free_text=result.text)
     return {
-        name: {"value": values.get(name), "origin": f"document:{result.id}"}
-        for name in sorted(names)
+        name: {"value": values.get(name), "origin": origin(result, name)} for name in sorted(names)
     }
+
+
+def origin(result: ExtractionResult, name: str) -> str:
+    """No page with native text: every value was read by OCR or vision, and one its readers
+    did not confirm says so (ADR 0025)."""
+    if result.metrics.get("native_pages") != 0:
+        return f"document:{result.id}"
+    reading = result.fields.get(PAYMENT_FIELDS.get(name, ""))
+    check = reading.verification if reading else "verified"
+    return f"scan:{result.id}" + ("" if check == "verified" else f":{check}")
 
 
 def key(value):
