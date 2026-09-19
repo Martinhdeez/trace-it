@@ -20,7 +20,6 @@ import type {
 } from './contracts'
 import { get, getText, post, put, query, upload } from './http'
 
-type RawUser = { id: number; name: string; email: string; role: 'manager' | 'operator' }
 type RawProcess = { id: number; name: string; use_case_id: number; description: string }
 type RawProcessDetail = RawProcess & {
   decision_types: { name: string; priority: number; is_default: boolean; requires_human: boolean }[]
@@ -53,13 +52,6 @@ type RawAgentConfig = {
   created_at: string
 }
 type RawUseCaseDetail = RawUseCase & { agents: RawAgentConfig[] }
-
-const user = (raw: RawUser): User => ({
-  id: raw.id,
-  nombre: raw.name,
-  email: raw.email,
-  rol: raw.role === 'manager' ? 'responsable' : 'operador',
-})
 
 const process = (raw: RawProcess): Process => ({
   id: raw.id,
@@ -212,8 +204,9 @@ export const liveClient: ApiClient = {
     return body.status === 'ok'
   },
 
-  login: async (email) => user(await post<RawUser>('/login', { email })),
-  listUsers: async () => (await get<RawUser[]>('/users')).map(user),
+  login: (email) => post<User>('/login', { email }),
+  me: () => get<User>('/me'),
+  listUsers: () => get<User[]>('/users'),
 
   listProcesses: async () => (await get<RawProcess[]>('/processes')).map(process),
   getProcess: async (id) => processDetail(await get<RawProcessDetail>(`/processes/${id}`)),

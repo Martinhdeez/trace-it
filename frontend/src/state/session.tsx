@@ -10,14 +10,18 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { User } from '../api/contracts'
-import { setUserId } from '../api/http'
+import { ApiError, setOnUnauthenticated, setUserId } from '../api/http'
 
 const STORAGE_KEY = 'trace.usuario'
 
 function stored(): User | null {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as User) : null
+    const user = raw ? (JSON.parse(raw) as Partial<User>) : null
+    // An older build stored the Spanish shape; treat it as signed out.
+    return user && typeof user.id === 'number' && (user.role === 'manager' || user.role === 'operator')
+      ? (user as User)
+      : null
   } catch {
     return null
   }
@@ -25,10 +29,9 @@ function stored(): User | null {
 
 type Session = {
   user: User | null
-  /** Activating or retiring a rule is only for a `responsable` (P9, step 4). */
+  /** Only a manager handles escalations, and the backend refuses everyone else. */
   isManager: boolean
   signIn: (email: string) => Promise<User>
-  use: (user: User) => void
   signOut: () => void
 }
 
@@ -43,35 +46,43 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUserId(user?.id ?? null)
   }, [user])
 
-  const use = useCallback(
-    (next: User) => {
+  const signIn = useCallback(
+    async (email: string) => {
+      const next = await api.login(email)
       setUserId(next.id)
       setUser(next)
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
       void queryClient.invalidateQueries()
-    },
-    [queryClient],
-  )
-
-  const signIn = useCallback(
-    async (email: string) => {
-      const next = await api.login(email)
-      use(next)
       return next
     },
-    [use],
+    [queryClient],
   )
 
   const signOut = useCallback(() => {
     setUserId(null)
     setUser(null)
     window.localStorage.removeItem(STORAGE_KEY)
-    void queryClient.invalidateQueries()
+    queryClient.clear()
   }, [queryClient])
 
+  // A stored id can outlive its user (a database reset). Ask the backend once on boot.
+  useEffect(() => {
+    if (!user) return
+    api.me().then(setUser, (error) => {
+      if (error instanceof ApiError && (error.status === 404 || error.status === 401)) signOut()
+    })
+    // Only on boot: `user` changes on every sign-in, which already came from the backend.
+  }, [])
+
+  // The console shows Login as soon as there is no user, so signing out is the whole reaction.
+  useEffect(() => {
+    setOnUnauthenticated(signOut)
+    return () => setOnUnauthenticated(null)
+  }, [signOut])
+
   const value = useMemo(
-    () => ({ user, isManager: user?.rol === 'responsable', signIn, use, signOut }),
-    [user, signIn, use, signOut],
+    () => ({ user, isManager: user?.role === 'manager', signIn, signOut }),
+    [user, signIn, signOut],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

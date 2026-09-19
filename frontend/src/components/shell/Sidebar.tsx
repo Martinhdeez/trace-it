@@ -112,9 +112,9 @@ export function Sidebar() {
 
         <div className="mt-auto pb-4 pt-6">
           <NavItem to={paths.settings} end>
-            <span className="min-w-0 truncate">{user?.nombre ?? t('nav.signIn')}</span>
+            <span className="min-w-0 truncate">{user?.name ?? t('nav.signIn')}</span>
             <span className="shrink-0 font-mono text-[10px] text-faint">
-              {user?.rol ?? t('nav.anonymous')}
+              {user ? t(`roles.${user.role}`) : t('nav.anonymous')}
             </span>
           </NavItem>
         </div>

@@ -62,8 +62,8 @@ function hash(seed: string): string {
 }
 
 const users: User[] = [
-  { id: 1, nombre: 'Alberto Núñez', email: 'alberto@miralmar.es', rol: 'responsable' },
-  { id: 2, nombre: 'Sonia Prats', email: 'sonia@miralmar.es', rol: 'operador' },
+  { id: 1, name: 'Alberto Núñez', email: 'alberto@miralmar.es', role: 'manager' },
+  { id: 2, name: 'Sonia Prats', email: 'sonia@miralmar.es', role: 'operator' },
 ]
 
 const processes: ProcessDetail[] = [
@@ -413,6 +413,7 @@ export const mockClient: ApiClient = {
     session = user.id
     return wait(user)
   },
+  me: async () => wait(currentUser()),
   listUsers: () => wait([...users]),
 
   listProcesses: () =>
@@ -457,7 +458,14 @@ export const mockClient: ApiClient = {
 
     const emails = new Set(users.map((item) => item.email))
     const newUsers = (body.usuarios ?? []).filter((item) => !emails.has(item.email))
-    for (const item of newUsers) users.push({ ...item, id: users.length + 1 })
+    for (const item of newUsers) {
+      users.push({
+        id: users.length + 1,
+        name: item.nombre,
+        email: item.email,
+        role: item.rol === 'responsable' ? 'manager' : 'operator',
+      })
+    }
 
     return wait<DefinitionLoad>(
       { proceso: process, reglas_nuevas: newRules.length, usuarios_nuevos: newUsers.length },
@@ -583,7 +591,7 @@ export const mockClient: ApiClient = {
 
   activateRule: async (id) => {
     const rule = ruleById(id)
-    if (currentUser().rol !== 'responsable') {
+    if (currentUser().role !== 'manager') {
       throw new ApiError(403, 'permission_denied', 'Solo un responsable puede activar reglas')
     }
     if (!rule.informe?.valida) {
@@ -622,7 +630,7 @@ export const mockClient: ApiClient = {
 
   retireRule: async (id) => {
     const rule = ruleById(id)
-    if (currentUser().rol !== 'responsable') {
+    if (currentUser().role !== 'manager') {
       throw new ApiError(403, 'permission_denied', 'Solo un responsable puede retirar reglas')
     }
     rule.estado = 'retirada'
@@ -730,7 +738,7 @@ export const mockClient: ApiClient = {
       id: item.decisions.length + 1,
       decision: body.decision,
       motivo: body.motivo,
-      autor: currentUser().nombre,
+      autor: currentUser().name,
       reglas_hash: previous?.reglas_hash ?? '',
       resultados: [],
       creada: new Date().toISOString(),
