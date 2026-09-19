@@ -15,6 +15,12 @@ that limitation. Guidance expresses contextual judgment for the optional decisio
 it may influence recommendations but never rewrite findings or authorize automatic overrides.
 Split a mixed norm into separate proposals. Do not invent policy thresholds or new outcomes.
 
+When the pattern is not a norm but a gap in the process definition, return it in
+definition_changes instead: `context` (a convention to add to the process description,
+such as how to read a field), `input` (a symbol the cases need and the process does not
+extract; give its snake_case name and type) or `source` (a source of truth the decisions
+need; give its snake_case name and what it provides). A manager accepts or rejects each.
+
 Cite the supplied case:<id> or span:<id> references supporting each proposal and any
 counterexamples. Explain why existing norms do not cover it, the scope of the pattern,
 and limitations including a small sample or missing evidence. A single exceptional case
