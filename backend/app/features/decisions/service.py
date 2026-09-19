@@ -32,6 +32,7 @@ from app.features.ingestion.model import Instance
 from app.features.ingestion.symbols import flatten_symbols
 from app.features.processes.model import DecisionType, Symbol
 from app.features.processes.service import get as get_process
+from app.features.processes.service import lock as lock_process
 from app.features.rules.model import ENFORCED, Rule
 from app.features.sources import service as sources
 from app.features.sources.model import Source
@@ -202,6 +203,7 @@ async def run(session: AsyncSession, process_id: int) -> RunSummary:
     reads the clock: anything like a cut-off date is a row in a source of truth. An
     instance without symbols is not run and stays PENDING until extraction fills them.
     """
+    await lock_process(session, process_id)
     process = await get_process(session, process_id)
     with events.span("run_process", process_id=process_id) as span:
         rules = await ready_rules(session, process_id)
@@ -278,6 +280,7 @@ async def reprocess(
     `names` limits it to those instance names (all decided instances if None); `dry_run`
     compares engine outcomes without writing or calling the optional reviewer.
     """
+    await lock_process(session, process_id)
     process = await get_process(session, process_id)
     with events.span("reprocess", process_id=process_id, dry_run=dry_run) as span:
         rules = await ready_rules(session, process_id)
@@ -503,6 +506,7 @@ async def resolve(
 ) -> InstanceDetail:
     """A person's decision is a new row, never an edit of the engine's (ADR 0008)."""
     instance = await _instance(session, instance_id)
+    await lock_process(session, instance.process_id)
     await session.refresh(instance, with_for_update=True)
     out = await outcomes(session, instance.process_id)
     if data.decision not in out.priorities:

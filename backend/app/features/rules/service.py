@@ -17,6 +17,7 @@ from app.features.decisions import audit
 from app.features.decisions.model import Decision, Finding
 from app.features.processes.model import DecisionType, Process, Symbol
 from app.features.processes.service import get as get_process
+from app.features.processes.service import lock as lock_process
 from app.features.rules.model import ENFORCED, NormRule, Rule
 from app.features.rules.schemas import CheckOut, NormRuleOut, RuleDetail, RuleIn, RuleOut
 from app.features.use_cases import service as use_cases
@@ -146,6 +147,7 @@ async def _compile_traced(session: AsyncSession, rule: Rule) -> RuleDetail:
         await session.scalars(select(Symbol).where(Symbol.process_id == rule.process_id))
     )
     result = await compiler.compile_rule(session, rule, symbols)
+    await lock_process(session, rule.process_id)
     rule.code, rule.tests = result.code, result.tests
     rule.hash = rule_hash(rule.text, rule.code) if rule.code else None
     if "needs_data" in result.report:
@@ -312,6 +314,7 @@ async def activate(session: AsyncSession, rule_id: int, author: str = AUTO) -> R
     """A rule only enters the process when its validation found no discrepancy. `author`:
     the person who activated it, or `auto` when its compilation did (ADR 0004)."""
     rule = await _rule(session, rule_id)
+    await lock_process(session, rule.process_id)
     with _status_span("activate_rule", rule, author) as span:
         if rule.status != "draft":
             raise ConflictError(f"Only a draft rule can be activated (it is {rule.status})")
@@ -329,6 +332,7 @@ async def retire(session: AsyncSession, rule_id: int, author: str) -> RuleDetail
     """Retiring a rule can change a past decision just as adding one can, so it goes
     through the same check."""
     rule = await _rule(session, rule_id)
+    await lock_process(session, rule.process_id)
     with _status_span("retire_rule", rule, author) as span:
         if rule.status not in ENFORCED:
             raise ConflictError(

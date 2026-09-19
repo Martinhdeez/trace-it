@@ -19,6 +19,7 @@ from app.common.exceptions import NotFoundError, TraceError
 from app.core import events
 from app.core.config import settings
 from app.features.processes.model import Process
+from app.features.processes.service import lock as lock_process
 from app.features.sources.http_connector import (
     HttpConnector,
     HttpSourceConfig,
@@ -224,6 +225,7 @@ async def sync(
 
         origin = f"{name}:{started.isoformat(timespec='seconds')}|{connector.base_url}"
         digest = rows_hash(rows)
+        await lock_process(session, process_id)
         source = Source(process_id=process_id, name=name, origin=origin, rows=rows)
         session.add(source)
         await session.flush()

@@ -12,6 +12,16 @@ from app.features.processes.schemas import (
 from app.features.use_cases.model import UseCase
 
 
+async def lock(session: AsyncSession, process_id: int) -> Process:
+    """Serialize publication with runs and other configuration changes."""
+    process = await session.scalar(
+        select(Process).where(Process.id == process_id).with_for_update()
+    )
+    if process is None:
+        raise NotFoundError(f"Process {process_id} does not exist")
+    return process
+
+
 async def list_all(session: AsyncSession) -> list[ProcessOut]:
     rows = await session.execute(
         select(Process, UseCase.description).join(UseCase).order_by(Process.id)

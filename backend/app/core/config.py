@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     decision_reviewer_model: str = "anthropic:claude-opus-5"
     learner_model: str = "anthropic:claude-opus-5"
     normalizer_model: str = "anthropic:claude-opus-5"
+    discovery_model: str = "anthropic:claude-opus-5"
     # Helmcode, an OpenAI-compatible API: select it with `helmcode:<model>` (e.g.
     # `helmcode:deepseek-v4-flash`). Its key is read like every provider's: HELMCODE_API_KEY.
     helmcode_base_url: str = "https://api.helmcode.com/v1"

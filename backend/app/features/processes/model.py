@@ -46,3 +46,26 @@ class DecisionType(Base):
     priority: Mapped[int]
     is_default: Mapped[bool] = mapped_column(default=False)
     requires_human: Mapped[bool] = mapped_column(default=False, server_default=false())
+
+
+class ProcessDraft(Base):
+    __tablename__ = "process_drafts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    process_id: Mapped[int | None] = mapped_column(ForeignKey("processes.id"))
+    use_case_id: Mapped[int | None] = mapped_column(ForeignKey("use_cases.id"))
+    revision: Mapped[int] = mapped_column(default=1)
+    published_process_id: Mapped[int | None] = mapped_column(ForeignKey("processes.id"))
+    created_at: Mapped[created_at]
+
+
+class DraftRevision(Base):
+    """Append-only proposal, materials and user answers at a revision."""
+
+    __tablename__ = "draft_revisions"
+
+    draft_id: Mapped[int] = mapped_column(ForeignKey("process_drafts.id"), primary_key=True)
+    number: Mapped[int] = mapped_column(primary_key=True)
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[created_at]

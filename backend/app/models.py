@@ -5,7 +5,7 @@ from app.core.events import Event
 from app.features.decisions.model import Decision, DecisionReview, Finding
 from app.features.ingestion.model import File, Instance
 from app.features.learning.model import Adoption, Analysis, Proposal, Validation
-from app.features.processes.model import DecisionType, Process, Symbol
+from app.features.processes.model import DecisionType, DraftRevision, Process, ProcessDraft, Symbol
 from app.features.rules.model import NormRule, Rule
 from app.features.sources.model import Source
 from app.features.use_cases.model import AgentConfig, UseCase
@@ -21,12 +21,14 @@ __all__ = [
     "Decision",
     "DecisionReview",
     "DecisionType",
+    "DraftRevision",
     "Event",
     "File",
     "Finding",
     "Instance",
     "NormRule",
     "Process",
+    "ProcessDraft",
     "Rule",
     "Source",
     "Symbol",

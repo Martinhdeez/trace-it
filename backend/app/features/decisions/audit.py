@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.features.decisions import service
 from app.features.decisions.model import ENGINE, Finding
 from app.features.rules.model import Rule
+from app.features.sources.model import Source
 
 
 @dataclass(frozen=True)
@@ -48,13 +49,23 @@ async def proposal_without(session: AsyncSession, rule: Rule) -> list[Rule]:
     return [r for r in active if r.id != rule.id]
 
 
-async def check(session: AsyncSession, process_id: int, proposed: list[Rule]) -> Impact:
+async def check(
+    session: AsyncSession,
+    process_id: int,
+    proposed: list[Rule],
+    source_rows: dict[str, list[dict]] | None = None,
+) -> Impact:
     """Decide every already-decided instance again under `proposed` and compare."""
     instances = await service.instances_of(session, process_id)
     latest = await service.latest_decisions(session, instances)
     # nothing decided yet, or nothing to decide it with, is skipped
     decided = [i for i in instances if latest.get(i.id) is not None and i.symbols is not None]
-    verdicts = await service.decide_all(session, process_id, proposed, decided)
+    source_loads = (
+        [Source(name=name, rows=rows) for name, rows in source_rows.items()]
+        if source_rows is not None
+        else None
+    )
+    verdicts = await service.decide_all(session, process_id, proposed, decided, source_loads)
 
     unchanged = 0
     changes: list[Change] = []
