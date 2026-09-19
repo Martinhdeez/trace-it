@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [dev, main]
   workflow_dispatch:
 
 permissions:
@@ -52,7 +50,6 @@ jobs:
 
   # The demo path through the real console and API in Chromium (tests/integration/README.md).
   e2e-integration:
-    # Every push to dev and main; the deploy needs it green.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
