@@ -43,7 +43,7 @@ The first manager comes from the pack (`make setup` loads its `users`).
 | Instance trace | `GET /instances/{id}/trace` | reading/provider spans, stored evidence, decisions and the current export result |
 | Provider activity | `GET /traces?process_id={id}&name=provider_call` | model, HTTP status, request fingerprint, replay/network outcome and reported tokens |
 | Metrics | `GET /processes/{id}/metrics` | stage timings, agent `llm` usage and separate reader `providers` totals; replay does not count as network usage |
-| Assistant | `GET /instances/{id}/suggestion` | decision, reasoning and a proposed rule. 409 if not escalated, 502 if the model failed |
+| Assistant | `GET /instances/{id}/suggestion` | decision, `why` (≤ 2 lines), `reasoning` (≤ 2 sentences), `options` (each a one-line `consequence` and the English `rule` that justifies it), `proposed_rule`, or `no_rule_reason` when a person must always decide such cases (then `proposed_rule` is null). 409 if not escalated, 502 if the model failed |
 | Resolve | `POST /instances/{id}/resolve` `{decision, reason, proposal_id?}` | manager; adds a decision, the engine's stays. With `proposal_id`, the resolution event records it and settles that proposal |
 | Proposals | `GET /processes/{id}/proposals?status=open`, `POST /proposals/{id}/accept`, `POST /proposals/{id}/reject` `{reason?}`, `POST /instances/{id}/proposal`, `POST /instances/{id}/rule-proposal` (the reviewer agent) | everything an agent proposes, in one shape; manager-only. See [Proposals](#proposals) |
 | Rules | `GET /processes/{id}/rules?status=` | compiling, draft, active, blocked, retired. Show `summary` (one plain line, may be null) in lists and `text` (what compiles) in the detail |
@@ -141,12 +141,21 @@ English rule that gets compiled:
     "decision_id": 9120, "engine_decision_id": 9004, "replaces": 9,
     "text": "The printed vat_rate is other than 21 and other than 10.",
     "summary": "Escala un IVA distinto del 21 % y del 10 %", "type": "prohibition",
-    "decision": "ESCALAR", "resolved_as": "PAGAR", "version_id": 5
+    "decision": "ESCALAR", "resolved_as": "PAGAR", "version_id": 5, "no_rule_reason": null
   },
   "status": "open", "author": "assistant", "created_at": "2026-09-19T18:10:02Z",
   "resolved_by": null, "resolved_at": null, "outcome": null
 }
 ```
+
+**"No rule" is an answer too.** When the manager's reason is not a rule to learn (it rests
+on a call or a document outside the data, or no condition separates the cases), the agent
+says so. The proposal is stored like any other, with `payload.text: ""`,
+`payload.no_rule_reason` (Spanish), the same reason as `rationale`, and a `summary` that
+starts `Sin regla:`. The manager dismisses it with `/reject`, or writes a rule and accepts
+it with `text`; accepting it without `text` is 409 (`Esta sugerencia no trae regla: ...`).
+Asking again after a reject tells the agent that "no rule" was rejected. The `suggest_rule`
+span records `no_rule`.
 
 `POST /proposals/{id}/accept` `{reason?, text?}` on it returns it `accepted` with
 `outcome: {reason, rule_id, retired, draft_revision}`. `text` is the manager's edit of the
@@ -166,13 +175,14 @@ on accept, `accept_proposal` → `save_rule`, `retire_rule`, `compile_rules`.
   "evidence": ["symbol:purchase_order", "rule:41", "escalation"],
   "payload": {
     "proposed": "NO_PAGAR",
-    "why": ["Two rules disagree about this invoice, so a person must look at it."],
+    "why": ["Dos reglas chocan en esta factura, así que la mira una persona."],
     "options": [
-      {"decision": "PAGAR", "consequence": "The supplier is paid now."},
-      {"decision": "NO_PAGAR", "consequence": "The invoice is held and not paid."}
+      {"decision": "PAGAR", "consequence": "Se paga si se añade la regla: un pedido pendiente en el ERP no escala.", "rule": "..."},
+      {"decision": "NO_PAGAR", "consequence": "No se paga por la regla 15: el pedido ya está pagado en el ERP.", "rule": "Rule 15"}
     ],
     "decision_id": 9001, "escalated_as": "ESCALAR", "escalation_reason": "RULE_CONFLICT: ...",
-    "fired_rules": [41, 44], "proposed_rule": {"text": "...", "type": "prohibition"}
+    "fired_rules": [41, 44], "proposed_rule": {"text": "...", "type": "prohibition"},
+    "no_rule_reason": null
   },
   "status": "accepted", "author": "assistant", "created_at": "2026-09-19T18:02:11Z",
   "resolved_by": "Ana", "resolved_at": "2026-09-19T18:03:40Z",
