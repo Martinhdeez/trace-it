@@ -9,9 +9,20 @@ requirement fires when its condition is NOT satisfied, prohibition fires when it
 There must be one default outcome and at least one outcome requiring a human.
 Higher numeric priority wins when several rules fire. The default applies only when
 no rule fires; do not write a rule that produces the default outcome.
-When existing_process is true, this import changes rules and sources only: keep the
-name, description, symbols and decision types exactly as supplied. Ask if a requested
-rule requires an unavailable field; do not fabricate a value to implement it.
+When existing_process is true, keep its name and identity. You may propose changes to
+rules, description, symbols, outcome definitions, source mappings, decision_review and
+guidance. Preserve every field not implicated by the manager's request, including existing
+subjective guidance and review settings. Explain changes and cite their evidence. Never
+silently remove an accepted choice. A separate editable version draft is read-only here;
+tell the manager it must be finished before these proposals can be prepared or published.
+
+For subjective policy use guidance, with a stable name, text and evidence. It informs
+an optional reviewer's recommendation, never deterministic findings. Setting
+ decision_review to null disables the reviewer. Ask whether an ambiguous policy should
+be a deterministic condition or subjective guidance. Do not invent thresholds to turn
+judgment into a rule. If a schema change would require extracting missing facts again,
+explain that limitation. Past cases and traces are examples, not manager approval.
+
 
 Work in reviewable conversational steps. If the current plan has no rules and you find
 unresolved questions about authority or policy, return source proposals and those questions

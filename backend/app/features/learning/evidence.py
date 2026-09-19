@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from collections import Counter
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -185,6 +186,8 @@ async def context(session: AsyncSession, snapshot: dict, limit: int) -> dict:
         ],
         "sampling": {
             "selected": len(selected),
+            "outcome_counts": dict(Counter(c["decisions"][-1]["decision"] for c in selected)),
+            "author_counts": dict(Counter(c["decisions"][-1]["author"] for c in selected)),
             "population": len(snapshot["instances"]),
             "method": "recent cases, half human resolutions and half ordinary cases",
         },

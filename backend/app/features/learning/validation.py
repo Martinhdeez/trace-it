@@ -147,67 +147,81 @@ async def deterministic(text: str, snapshot: dict) -> dict:
 
 
 async def subjective(text: str, snapshot: dict) -> dict:
-    process = snapshot["process"]
-    config = process["decision_review"]
-    if config is None:
+    if snapshot["process"]["decision_review"] is None:
         return {"valid": False, "error": "Enable decision review before validating guidance"}
-    setup = setups(snapshot).get("decision_reviewer")
+    proposed = copy.deepcopy(snapshot)
+    proposed["guidance"]["proposed_norm"] = text
+    return await compare_reviews(snapshot, proposed)
+
+
+def review_context(snapshot: dict, case: dict, engine: dict) -> dict:
+    config = snapshot["process"]["decision_review"]
+    evidence = {
+        "guidance": config["guidance"],
+        f"file:{case['file_hash']}": snapshot["files"][case["file_hash"]],
+        **snapshot["guidance"],
+        **{f"symbol:{k}": v for k, v in (case["symbols"] or {}).items()},
+        **{
+            f"source:{s['id']}": {"name": s["name"], "rows": s["rows"], "origin": s["origin"]}
+            for s in snapshot["sources"]
+        },
+        **{
+            f"rule:{r['id']}": {"text": r["text"], "decision": r["decision"], "hash": r["hash"]}
+            for r in snapshot["rules"]
+            if r["status"] in ENFORCED
+        },
+    }
+    return {
+        "use_case_description": snapshot["process"]["description"],
+        "decision_types": snapshot["process"]["decision_types"],
+        "case": {"name": case["name"], "file_hash": case["file_hash"]},
+        "engine": {k: engine[k] for k in ("decision", "reason", "results", "rules_hash")},
+        "evidence": evidence,
+    }
+
+
+async def compare_reviews(before: dict, after: dict) -> dict:
+    """Paired recommendations only; writes no decisions, resolutions or live reviews."""
     previews = []
-    for case in cases(snapshot, 10):
-        engine = next((d for d in reversed(case["decisions"]) if d["author"] == "engine"), None)
-        if engine is None:
-            continue
-        evidence = {
-            "guidance": config["guidance"],
-            f"file:{case['file_hash']}": snapshot["files"][case["file_hash"]],
-            **snapshot["guidance"],
-            **{f"symbol:{k}": v for k, v in (case["symbols"] or {}).items()},
-            **{
-                f"source:{s['id']}": {"name": s["name"], "rows": s["rows"], "origin": s["origin"]}
-                for s in snapshot["sources"]
-            },
-            **{
-                f"rule:{r['id']}": {"text": r["text"], "decision": r["decision"], "hash": r["hash"]}
-                for r in snapshot["rules"]
-                if r["status"] in ENFORCED
-            },
-        }
-        context = {
-            "use_case_description": process["description"],
-            "decision_types": process["decision_types"],
-            "case": {"name": case["name"], "file_hash": case["file_hash"]},
-            "engine": {k: engine[k] for k in ("decision", "reason", "results", "rules_hash")},
-            "evidence": evidence,
-        }
+    after_cases = {c["id"]: c for c in cases(after, 10)}
+    for original in cases(before, 10):
         answers = []
-        for proposed in (False, True):
-            current = copy.deepcopy(context)
-            if proposed:
-                current["evidence"]["proposed_norm"] = text
+        for snapshot, case in ((before, original), (after, after_cases[original["id"]])):
+            config = snapshot["process"]["decision_review"]
+            engine = next((d for d in reversed(case["decisions"]) if d["author"] == "engine"), None)
+            if engine is None:
+                break
+            if config is None:
+                answers.append({"assessment": None, "model": None, "status": "disabled"})
+                continue
+            context = review_context(snapshot, case, engine)
             async with asyncio.timeout(config["timeout_seconds"]):
                 answer, trace = await llm.run(
                     decision_reviewer.reviewer,
                     "decision_reviewer",
-                    json.dumps(current, default=str),
-                    instructions=llm.prompt("decision_reviewer"),
-                    setup=setup,
+                    json.dumps(context, default=str),
+                    instructions=snapshot["prompts"]["decision_reviewer"],
+                    setup=setups(snapshot).get("decision_reviewer"),
                     deps=decision_reviewer.Deps(
-                        {t["name"] for t in process["decision_types"]}, set(current["evidence"])
+                        {t["name"] for t in snapshot["process"]["decision_types"]},
+                        set(context["evidence"]),
                     ),
                 )
             answers.append({"assessment": answer.model_dump(), "model": trace.model})
-        previews.append(
-            {
-                "instance_id": case["id"],
-                "decision_id": engine["id"],
-                "before": answers[0],
-                "after": answers[1],
-                "final_decision": case["decisions"][-1],
-            }
-        )
+        if len(answers) == 2:
+            previews.append(
+                {
+                    "instance_id": original["id"],
+                    "decision_id": next(
+                        d["id"] for d in reversed(original["decisions"]) if d["author"] == "engine"
+                    ),
+                    "before": answers[0],
+                    "after": answers[1],
+                    "final_decision": original["decisions"][-1],
+                }
+            )
     return {
         "valid": bool(previews),
-        "basis": "paired reviewer calls on stored findings and current captured evidence; "
-        "model outputs can vary",
+        "basis": "Paired reviewer calls on captured evidence; model outputs can vary",
         "previews": previews,
     }

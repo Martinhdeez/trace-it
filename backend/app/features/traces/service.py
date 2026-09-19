@@ -90,6 +90,7 @@ PLANES: dict[str, Plane] = {
     "norm": _AGENTS,
     "normalize_norm": _AGENTS,
     "discover_process": _AGENTS,
+    "discuss_process": _AGENTS,
     "compile_process_draft": _AGENTS,
     "publish_process_draft": _AGENTS,
     "compile_rules": _AGENTS,

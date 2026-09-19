@@ -132,6 +132,8 @@ async def api():
 
 
 async def post(api, draft, action, **body):
+    if action == "messages":
+        body.setdefault("mode", "revise")
     response = await api.post(
         f"/process-drafts/{draft['id']}/{action}", json={"revision": draft["revision"], **body}
     )
@@ -446,20 +448,26 @@ async def test_erp_sync_is_complete_and_failed_sync_preserves_draft(api, monkeyp
     assert after["snapshots"] == draft["snapshots"]
 
 
-async def test_existing_setup_cannot_be_changed_by_an_import(api, monkeypatch):
+async def test_existing_setup_changes_require_review_and_publication(api, monkeypatch):
     original = await post(api, await prepare_new(api, monkeypatch), "publish")
     draft = (
         await api.post("/process-drafts", json={"process_id": original["published_process_id"]})
     ).json()
     changed = plan(original["plan"]["name"])
     changed["symbols"].append({"name": "new_field", "type": "text"})
-    monkeypatch.setattr(llm, "model_for", per_role({"discovery": [changed]}))
+    monkeypatch.setattr(llm, "model_for", per_role(scripts(changed)))
     draft = await post(api, draft, "messages", message="Add a field.")
     draft = await accept(api, draft)
     r = await api.post(
         f"/process-drafts/{draft['id']}/prepare", json={"revision": draft["revision"]}
     )
-    assert r.status_code == 409 and "keep existing symbols" in r.text
+    assert r.status_code == 200 and r.json()["preview"]["valid"], r.text
+    pid = original["published_process_id"]
+    before = (await api.get(f"/processes/{pid}")).json()
+    assert "new_field" not in {s["name"] for s in before["symbols"]}
+    await post(api, r.json(), "publish")
+    after = (await api.get(f"/processes/{pid}")).json()
+    assert "new_field" in {s["name"] for s in after["symbols"]}
 
 
 async def test_runtime_error_cannot_satisfy_an_escalation_example():
