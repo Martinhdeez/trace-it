@@ -17,6 +17,9 @@ activating rules, document extraction and source uploads need it. CORS is open.
 | Instance | `GET /instances/{id}` | symbols `{name: {value, origin}}`, decision history, `review_pending`, append-only `reviews` with recommendations and reasoning, events |
 | Invoice viewer | `GET /instances/{id}/file` | the PDF bytes, `Content-Disposition: inline` |
 | Reading evidence | `GET /instances/{id}/document` | what extraction read, field by field |
+| Instance trace | `GET /instances/{id}/trace` | reading/provider spans, stored evidence, decisions and the current export result |
+| Provider activity | `GET /traces?process_id={id}&name=provider_call` | model, HTTP status, request fingerprint, replay/network outcome and reported tokens |
+| Metrics | `GET /processes/{id}/metrics` | stage timings, agent `llm` usage and separate reader `providers` totals; replay does not count as network usage |
 | Assistant | `GET /instances/{id}/suggestion` | decision, reasoning and a proposed rule. 409 if not escalated, 502 if the model failed |
 | Resolve | `POST /instances/{id}/resolve` `{decision, reason}` | adds a decision; the engine's stays |
 | Rules | `GET /processes/{id}/rules?status=` | compiling, draft, active, blocked, retired |

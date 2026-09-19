@@ -2,7 +2,9 @@
 
 import os
 import uuid
+from dataclasses import replace
 
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
@@ -119,6 +121,42 @@ async def test_unreadable_scan_does_not_decide_the_process_review_state(process_
     assert detail["symbols"] is None and detail["decisions"] == []
 
 
+@pytest.mark.parametrize("decided", [False, True])
+async def test_reupload_does_not_replace_the_attached_reading(process_api, decided):
+    client, process_id, _ = process_api
+    content = pdf_bytes(VALID)
+    endpoint = f"/processes/{process_id}/files"
+    first = (await client.post(endpoint, files={"file": ("invoice.pdf", content)})).json()
+    instance_id = first["instance_id"]
+    fresh = await client.post(
+        f"/instances/{instance_id}/extract", json={"ocr": False, "vlm": False, "jev": False}
+    )
+    assert fresh.status_code == 200, fresh.text
+    attached = fresh.json()["extraction"]
+    if decided:
+        async with session_factory() as session:
+            instance = await session.get(Instance, instance_id)
+            instance.status = "DECIDED"
+            await session.commit()
+
+    duplicate = await client.post(endpoint, files={"file": ("invoice.pdf", content)})
+    assert duplicate.status_code == 201, duplicate.text
+    assert duplicate.json()["created"] is False
+    assert duplicate.json()["extraction"]["id"] != attached["id"]
+    stored = await client.get(f"/instances/{instance_id}/document")
+    assert stored.json() == attached
+    async with session_factory() as session:
+        audit = list(
+            await session.scalars(
+                select(Event)
+                .where(Event.instance_id == instance_id, Event.step == "ingest_document")
+                .order_by(Event.id)
+            )
+        )
+        assert [event.data["created"] for event in audit] == [True, False]
+        assert audit[-1].data["extraction"] == duplicate.json()["extraction"]
+
+
 async def test_generic_document_is_not_forced_into_invoice_symbols(process_api):
     client, process_id, _ = process_api
     response = await client.post(
@@ -166,3 +204,75 @@ async def test_upload_and_reextraction_are_each_one_trace_of_the_instance(proces
         ),
         ("reextract_document", [("extraction", [("native_text", [])]), ("extract_document", [])]),
     ]
+
+
+async def test_visual_provider_is_linked_to_invoice_and_cache_usage_is_not_billed_twice(
+    process_api, monkeypatch
+):
+    from app.features.ingestion.ocr.vision import VisionFallback
+
+    client, process_id, service = process_api
+    service.settings = replace(
+        service.settings, gemini_api_key="offline-test-key", vlm_model="incomplete-config"
+    )
+    service.vlm = VisionFallback(service.settings)
+    sent = []
+
+    def respond(request):
+        sent.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": VALID}]}}],
+                "usageMetadata": {"promptTokenCount": 20, "candidatesTokenCount": 10},
+            },
+        )
+
+    original_client = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: original_client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    content = pdf_bytes("")
+    options = {"ocr": "false", "vlm": "true", "jev": "false"}
+    uploads = []
+    for index in range(3):
+        response = await client.post(
+            f"/processes/{process_id}/files",
+            files={"file": (f"scan-{index}.pdf", content)},
+            data=options if index < 2 else {**options, "verify_fields": "supplier_tax_id"},
+        )
+        assert response.status_code == 201, response.text
+        uploads.append(response.json())
+        assert response.json()["extraction"]["data"]["provenance"]["visual_model"] == (
+            service.settings.gemini_model
+        )
+    assert len(sent) == 1
+    assert uploads[1]["extraction"]["cache_hit"] is True
+    assert uploads[2]["extraction"]["cache_hit"] is False
+
+    def flatten(nodes):
+        return [row for node in nodes for row in [node, *flatten(node["children"])]]
+
+    for index, upload in enumerate(uploads):
+        journey = (await client.get(f"/instances/{upload['instance_id']}/trace")).json()
+        nodes = flatten(journey["spans"])
+        extraction = next(node for node in nodes if node["step"] == "extraction")
+        assert extraction["data"]["extraction_id"] == upload["extraction"]["id"]
+        providers = [node for node in nodes if node["step"] == "provider_call"]
+        if index == 1:
+            assert providers == []
+            assert extraction["data"]["cached_from_extraction_id"] == uploads[0]["extraction"]["id"]
+            continue
+        [provider] = providers
+        assert provider["data"]["outcome"] == ("success" if index == 0 else "replay")
+        assert provider["data"]["network_attempted"] is (index == 0)
+        assert provider["process_id"] == process_id
+        assert provider["parent_id"] == next(n["span_id"] for n in nodes if n["step"] == "vision")
+
+    metrics = (await client.get(f"/processes/{process_id}/metrics")).json()["providers"]
+    assert len(metrics) == 1
+    assert metrics[0]["attempts"] == 2
+    assert metrics[0]["network_requests"] == metrics[0]["replays"] == 1
+    assert metrics[0]["input_tokens"] == 20 and metrics[0]["output_tokens"] == 10

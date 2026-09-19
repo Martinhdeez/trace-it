@@ -6,6 +6,7 @@ import re
 import httpx
 
 from .errors import ProviderUnavailable
+from .journal import record_response
 
 PROMPT = (
     "Transcribe the invoice image literally, in reading order, as plain text. "
@@ -39,19 +40,30 @@ def request_body(images: list[bytes]) -> dict:
     }
 
 
-def generate(client: httpx.Client, model: str, key: str, images: list[bytes]) -> dict:
+def generate(
+    client: httpx.Client,
+    model: str,
+    key: str,
+    images: list[bytes],
+    *,
+    before_request=None,
+) -> dict:
     if not re.fullmatch(r"gemini-[a-zA-Z0-9._-]+", model):
         raise ValueError("Expected a Gemini model identifier, without a URL or models/ prefix")
+    if before_request is not None:
+        before_request()
     response = client.post(
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
         headers={"x-goog-api-key": key},
         json=request_body(images),
     )
+    record_response("gemini", response.status_code)
     if not response.is_success:
         raise ProviderUnavailable(
             f"Gemini returned HTTP {response.status_code}; no automatic retry"
         )
     result = response.json()
+    record_response("gemini", response.status_code, result)
     if not isinstance(result, dict):
         raise ProviderUnavailable("Invalid Gemini response")
     return result

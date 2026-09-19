@@ -1,6 +1,6 @@
 """Persist document evidence using dev's existing files, instances and trace contracts."""
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.common.exceptions import NotFoundError
@@ -87,6 +87,10 @@ async def document_result(session, instance_id):
         .where(
             Event.instance_id == instance_id,
             Event.step.in_(("ingest_document", "extract_document")),
+            # A duplicate upload is audited, but never changes the instance's
+            # symbols. Its attempted reading must not replace attached evidence.
+            # Older ingestion events without `created` remain readable.
+            or_(Event.step == "extract_document", Event.data["created"].as_boolean().is_not(False)),
         )
         .order_by(Event.id.desc())
         .limit(1)

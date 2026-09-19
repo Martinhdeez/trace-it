@@ -2,6 +2,7 @@
 process and across processes, their health and the live stream. Models are scripted."""
 
 import ast
+import uuid
 from pathlib import Path
 
 import pytest
@@ -55,6 +56,7 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
     models = {m.model_name: m for m in (down("down/a"), scripted([{"text": "ok"}], name="ok/b"))}
     monkeypatch.setattr(llm, "resolve", lambda name: models[name])
     setup = llm.Setup(AgentSettings(model="down/a", fallback_models=["ok/b"]))
+    provider_model = f"gemini-plane-{uuid.uuid4().hex}"
     async with client() as api:
         process_id, headers = await create_process(api, "manager")
         rule_id = (await api.get(f"/processes/{process_id}/rules")).json()[0]["id"]
@@ -67,7 +69,28 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
             with events.span("native_text", pages=2):
                 pass
             with events.span("ocr"):
-                pass
+                with events.span(
+                    "provider_call",
+                    provider="gemini",
+                    model=provider_model,
+                    operation="image_transcription",
+                    network_attempted=True,
+                    outcome="success",
+                    input_tokens=12,
+                    output_tokens=4,
+                ):
+                    pass
+                with events.span(
+                    "provider_call",
+                    provider="gemini",
+                    model=provider_model,
+                    operation="image_transcription",
+                    network_attempted=False,
+                    outcome="replay",
+                    input_tokens=12,
+                    output_tokens=4,
+                ):
+                    pass
         async with session_factory() as session:
             symbols = {"iban": {"value": None, "origin": "d"}, "nif": {"value": "B", "origin": "d"}}
             events.record(
@@ -98,6 +121,7 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
         ingestion = (await api.get(f"{url}/ingestion")).json()
         agents = (await api.get(f"{url}/agents")).json()
         execution = (await api.get(f"{url}/execution")).json()
+        ingestion_everywhere = (await api.get("/metrics/ingestion")).json()
         everywhere = (await api.get("/metrics/agents")).json()
         assert (await api.get(f"{url}/nothing")).status_code == 422
         old = (await api.get(url)).json()
@@ -108,9 +132,27 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
         "extraction",
         "native_text",
         "ocr",
+        "provider_call",
         "ingest_document",
     }
     assert (ingestion["files"], ingestion["pages"], ingestion["ocr_calls"]) == (1, 2, 1)
+    assert ingestion["providers"] == [
+        {
+            "provider": "gemini",
+            "model": provider_model,
+            "operation": "image_transcription",
+            "attempts": 2,
+            "network_requests": 1,
+            "replays": 1,
+            "errors": 0,
+            "input_tokens": 12,
+            "output_tokens": 4,
+        }
+    ]
+    assert (
+        next(p for p in ingestion_everywhere["providers"] if p["model"] == provider_model)
+        == (ingestion["providers"][0])
+    )
     assert ingestion["cache_hits"] == 1 and ingestion["abstentions_by_field"] == {"iban": 1}
 
     [compiler] = agents["by_role"]

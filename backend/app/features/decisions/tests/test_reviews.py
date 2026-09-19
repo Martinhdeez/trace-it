@@ -97,6 +97,8 @@ async def test_disagreement_waits_for_human_and_exports_resolution(monkeypatch):
         with pytest.raises(ConflictError, match="awaiting human review"):
             await export(pid)
         assert (await export(pid, [NAMES[0]]))[0]["result"] == "PAGAR"
+        trace = (await api.get(f"/instances/{case['id']}/trace")).json()
+        assert trace["exported_decision"] is None
 
         # Disabling review cannot remove an already-pending approval or change its snapshot.
         await configure(api, pid, None)
@@ -115,6 +117,8 @@ async def test_disagreement_waits_for_human_and_exports_resolution(monkeypatch):
         assert resolved["reviews"] == [review]
         assert resolved["decisions"][-1]["author"] == "Ana"
         assert (await export(pid))[1]["result"] == "PAGAR"
+        trace = (await api.get(f"/instances/{case['id']}/trace")).json()
+        assert trace["exported_decision"] == "PAGAR"
         assert (await api.get(f"/processes/{pid}/summary")).json()["queue"] == 1
         # Running again never calls the reviewer for an already-decided instance.
         assert (await api.post(f"/processes/{pid}/run")).json()["decided"] == 0

@@ -74,8 +74,10 @@ async def get_rule_trace(rule_id: int, session: Session) -> RuleTrace:
     summary="Aggregates of a process: runs, throughput, step durations, LLM tokens, outcomes",
     description="`steps` gives count, errors and p50/p95 duration per step type "
     "(`compile_rule` is the rule compile time, `evaluate_rule` one rule over a run); `llm` the "
-    "calls, retries, errors and tokens by model and role. Cost is counted in tokens. `since` "
-    "keeps the spans and decisions from that moment on.",
+    "calls, retries, errors and tokens by model and role. `providers` separates OCR provider "
+    "attempts, network requests, journal replays, errors and reported tokens by provider, "
+    "model and operation. Replayed tokens do not count as new usage. `since` keeps the spans "
+    "and decisions from that moment on.",
 )
 async def get_process_metrics(
     process_id: int, session: Session, since: datetime | None = None
@@ -86,13 +88,15 @@ async def get_process_metrics(
 PLANES_DOC = (
     "Three monitoring planes over the same spans (ADR 0018, `service.PLANES` maps every span "
     "name to one): `ingestion` (upload, store, extraction, native text, OCR, vision, "
-    "workbook, source sync: files/s, pages, calls, cache hits, abstentions), `agents` "
+    "workbook, source sync: files/s, pages, calls, cache hits, abstentions, provider "
+    "attempts, network requests, replays and reported tokens), `agents` "
     "(normalizer, tester, compiler, reviewer and assistant LLM calls; compile, tests, "
     "impact, activation: tokens by model, role, rule, norm rule, use case and hour, "
     "fallbacks, truncations, compile success, norm to active), `execution` (runs, rules, "
     "decisions, reviews, people, exports: invoices/s, per-rule time, escalation causes, the "
-    "human queue, time to resolution). Each has `steps` with count, errors, p50/p95. Cost "
-    "is counted in tokens. `since` keeps what happened from that moment on."
+    "human queue, time to resolution). Each has `steps` with count, errors, p50/p95. "
+    "Provider token totals exclude journal replay and reflect reported usage, not billing. "
+    "`since` keeps what happened from that moment on."
 )
 PlaneOut = IngestionMetrics | AgentsMetrics | ExecutionMetrics
 

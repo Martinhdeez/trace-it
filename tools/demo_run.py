@@ -44,7 +44,7 @@ async def run(
     *,
     local_only: bool = False,
 ) -> None:
-    """Publish a complete set of artifacts only after the whole run succeeds."""
+    """Stage artifacts until the API run and export both succeed."""
     output.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix=".demo-", dir=output) as temporary:
         staging = Path(temporary)
@@ -168,24 +168,28 @@ async def _run(
         response = await api.get(f"/instances/{instance['id']}")
         response.raise_for_status()
         document = response.json()
-        # Match export: engine-first unless its optional review has a later resolution.
+        # Export prefers the latest engine row, except when an optional review
+        # permits a later human resolution. Keep rule reasons tied to the engine.
         decisions = document["decisions"]
-        latest = next((d for d in reversed(decisions) if d["author"] == "engine"), decisions[-1])
-        if latest["author"] == "engine" and any(
-            review["decision_id"] == latest["id"] for review in document.get("reviews", [])
-        ):
-            latest = next(
-                (
-                    d
-                    for d in reversed(decisions)
-                    if d["author"] != "engine" and d["id"] > latest["id"]
-                ),
-                latest,
-            )
+        engine = next((d for d in reversed(decisions) if d["author"] == "engine"), None)
+        human = next((d for d in reversed(decisions) if d["author"] != "engine"), None)
+        review = next(
+            (r for r in document.get("reviews", []) if engine and r["decision_id"] == engine["id"]),
+            None,
+        )
+        exported = engine or human
+        if review and human and human["id"] > engine["id"]:
+            exported = human
+        if exported is None or exported["decision"] != outcome["result"]:
+            raise ValueError(f"Export and decision history disagree for {outcome['file_id']}")
+        engine_reasons = [r["reason"] for r in engine["results"] if r["fires"]] if engine else []
         detail.append(
             {
                 **outcome,
-                "rules_that_fired": [r["reason"] for r in latest["results"] if r["fires"]],
+                "decision_author": exported["author"],
+                "decision_reason": exported.get("reason"),
+                "engine_rules_that_fired": engine_reasons,
+                "rules_that_fired": [r["reason"] for r in exported["results"] if r["fires"]],
                 "symbols": document["symbols"],
             }
         )
