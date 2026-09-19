@@ -234,9 +234,11 @@ async def run(
     instructions: str,
     setup: Setup | None = None,
     deps: Any = None,
+    instance_id: int | None = None,
 ) -> tuple[Any, Trace]:
     """One agent run for `role`: the platform `instructions` plus the use case's guidance,
-    with the use case's model and settings. Returns the validated output and its trace."""
+    with the use case's model and settings. Returns the validated output and its trace.
+    `instance_id` links the `llm_run` span to the case it is about (its trace shows it)."""
     setup = setup or Setup()
     if setup.settings.instructions:
         instructions += "\n\n## Guidance for this use case\n" + setup.settings.instructions
@@ -251,6 +253,7 @@ async def run(
     prompt_hash = hashlib.sha256(instructions.encode()).hexdigest()[:12]
     with events.span(
         "llm_run",
+        instance_id=instance_id,
         role=role,
         agent=agent.name or "",
         model=model.models[0].model_name,  # the answering model replaces it

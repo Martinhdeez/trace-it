@@ -27,7 +27,17 @@ Status: backend done (this PR). Frontend: work packages FE-1 to FE-6 below.
 5. **Sugerir regla** → `POST /instances/{id}/rule-proposal`. The pure gate
    `learnable()` runs first: 409 with a Spanish reason and 0 tokens when the case cannot be
    learned. Otherwise the reviewer agent writes the amended rule, stored as a proposal
-   `channel: escalation`, `kind: rule`. Spans: `suggest_rule`, `llm_run`.
+   `channel: escalation`, `kind: rule`. Spans: `suggest_rule`, `llm_run` (both carry the
+   instance id, so `GET /instances/{id}/trace` shows the model call).
+   What the agent is given, besides the rule and the resolution: the case's symbols, the
+   fired rule's own reason (`escalation.rule_evidence`), the other cases that reason names
+   with their symbols and `same_as_case` (`escalation.related_cases`: the other invoice of
+   a duplicate order), and the suggestions the manager already rejected on this case with
+   their reason (`rejected_suggestions`). Its answer is sent back once when it names the
+   case or a related one, repeats a rejected rule, or quotes an identifier (a nif, an iban,
+   an order) that is none of the values it was shown. It runs on the `assistant` role's
+   settings with reasoning off and `max_tokens` 1500: about 450 output tokens a call,
+   against 3.5k per call (9-15k with the fallbacks) when reasoning ran into the cap.
 6. **The manager decides on the suggestion:**
    - **Accept** → `POST /proposals/{id}/accept`. The new rule is created in the process
      draft and `payload.replaces` is retired there; the rule compiles in the background.
@@ -162,9 +172,13 @@ Checked with the hand-written v3 rule code in the real sandbox and the real sour
 
 Script: resolve A as `PAGAR` with "La hostelería tributa al 10 %", Sugerir regla, Aceptar,
 wait for the compile, Validar (A in `resolved_by_person` with `after: PAGAR`, B in
-`changes` `ESCALAR → PAGAR`), Publicar, Reprocesar: B becomes `PAGAR` by the engine. The two
-PDFs are not in the repository; generate them for the rehearsal with those values (any
-invoice number and date up to 2026-09-18). The backend loop test
+`changes` `ESCALAR → PAGAR`), Publicar, Reprocesar: B becomes `PAGAR` by the engine. The
+PDFs are not in the repository; `make reviewer-demo-pdfs [OUT=<folder>]`
+([`tools/reviewer_demo_pdfs.py`](../tools/reviewer_demo_pdfs.py), default
+`output/reviewer-demo/`) writes A (`hosteleria_A_F26-0726.pdf`), B
+(`hosteleria_B_F26-0717.pdf`) and `sin_pedido_F26-0999.pdf`, an invoice without a purchase
+order that escalates `MISSING_DATA` and shows the 409 of a case no rule can learn. Upload
+them like any invoice. The backend loop test
 `proposals/tests/test_reviewer_agent.py::test_the_program_learns_from_a_resolved_escalation`
 runs the same shape with no LLM key.
 

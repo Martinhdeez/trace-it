@@ -12,6 +12,7 @@ the demo does not use them.
 | `demo_run.py` | Drive the invoice process through the production HTTP API |
 | `hiring_mock.py` | `make hiring-data`: the hiring-screening mock data (CVs, workbook, answer key), deterministic |
 | `hiring_demo.py` | `make hiring-demo`: a hiring process born from discovery, then the CV batch and a learning round; writes an evaluation report ([the experiment](../processes/hiring-screening/README.md)) |
+| `reviewer_demo_pdfs.py` | `make reviewer-demo-pdfs`: the reviewer agent's demo invoices, 10 % VAT pair plus one without order ([docs](../docs/reviewer-agent.md#demo-pair)) |
 | `trace_decision.py` | `make trace-decision FILE=<file_id>`: one invoice's state, decisions, evidence, latency, errors, retries and pending work, as text |
 | `workbook.py` | Historical spreadsheet mapping helper for the text-layer baseline |
 | `extractor.py` | Historical PDF text-layer extractor and regex symbols, without OCR |

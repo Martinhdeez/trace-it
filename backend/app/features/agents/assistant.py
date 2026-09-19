@@ -6,12 +6,13 @@ to a person, who then resolves the case and, if they want, adds the proposed rul
 compiled and validated like any other rule)."""
 
 import json
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, ModelRetry, RunContext
-from sqlalchemy import select
+from sqlalchemy import func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError, NotFoundError
@@ -21,6 +22,7 @@ from app.features.decisions.model import ENGINE, Decision
 from app.features.ingestion.model import File, Instance
 from app.features.ingestion.symbols import flatten_symbols
 from app.features.processes.model import DecisionType, Process
+from app.features.proposals.model import ManagerProposal
 from app.features.rules.model import Rule
 from app.features.use_cases import service as use_cases
 from app.features.use_cases.model import UseCase
@@ -200,6 +202,7 @@ async def suggest(session: AsyncSession, instance_id: int) -> Suggestion:
             prompt,
             instructions=llm.prompt("assistant"),
             setup=setup,
+            instance_id=instance_id,
             deps=Deps(
                 types,
                 [t for t in types if t not in context["human_decision_types"]],
@@ -223,6 +226,8 @@ class RuleSuggestion(BaseModel):
 class RuleDeps:
     identifiers: list[str]  # this case's own names: a general rule never mentions them
     references: set[str]
+    values: dict[str, set[str]] = field(default_factory=dict)  # from `known_values`
+    rejected: list[str] = field(default_factory=list)  # rule texts the manager rejected
 
 
 reviewer_agent = Agent(
@@ -242,7 +247,58 @@ def _general(ctx: RunContext[RuleDeps], suggestion: RuleSuggestion) -> RuleSugge
     unknown = set(suggestion.evidence) - ctx.deps.references
     if unknown:
         raise ModelRetry(f"cite only references in evidence_refs: {sorted(unknown)}")
+    if " ".join(text.split()) in {" ".join(r.casefold().split()) for r in ctx.deps.rejected}:
+        raise ModelRetry(
+            "the manager already rejected this rule (rejected_suggestions): propose a "
+            "different one that answers the reject reason"
+        )
+    invented = made_up_values(f"{suggestion.text} {suggestion.rationale}", ctx.deps.values)
+    if invented:
+        raise ModelRetry(
+            "these values are not in case.symbols or related_cases: "
+            + ", ".join(f"{name} {value}" for name, value in invented)
+            + ". The true ones: "
+            + "; ".join(
+                f"{name}: {', '.join(sorted(ctx.deps.values[name]))}"
+                for name in sorted({name for name, _ in invented})
+            )
+            + ". Read every fact from the context; never infer one"
+        )
     return suggestion
+
+
+def known_values(*symbol_sets: dict[str, Any]) -> dict[str, set[str]]:
+    """The identifier-like values the model was shown (letters and digits: a nif, an iban,
+    an order), by symbol. Amounts, rates and dates are left out: a rule may state a new
+    threshold. So is free text, over 40 characters."""
+    known: dict[str, set[str]] = {}
+    for symbols in symbol_sets:
+        for name, value in symbols.items():
+            value = str(value or "")
+            if 6 <= len(value) <= 40 and re.search(r"[A-Za-z]", value) and re.search(r"\d", value):
+                known.setdefault(name, set()).add(value.upper())
+    return known
+
+
+def made_up_values(text: str, known: dict[str, set[str]]) -> list[tuple[str, str]]:
+    """Tokens of `text` written like a value of a symbol (same runs of letters, digits and
+    separators: B96233419 is one letter and eight digits) that are none of its values shown:
+    a nif or an order the model invented, as in "the other invoice is from B12345678"."""
+    found = set()
+    for name, values in known.items():
+        for value in values:
+            shape = "".join(
+                f"[A-Za-z]{{{len(run)}}}"
+                if run.isalpha()
+                else rf"\d{{{len(run)}}}"
+                if run.isdigit()
+                else re.escape(run)
+                for run in re.findall(r"[A-Za-z]+|\d+|.", value)
+            )
+            for token in re.findall(rf"(?<![A-Za-z\d]){shape}(?![A-Za-z\d])", text):
+                if token.upper() not in values:
+                    found.add((name, token))
+    return sorted(found)
 
 
 def identifiers(instance: Instance) -> list[str]:
@@ -296,13 +352,48 @@ async def suggest_rule(
             )
     similar = similar[-MAX_RESOLUTIONS:]
     sources = await current_sources(session, instance.process_id)
+    case = flatten_symbols(instance.symbols or {})
+    evidence = next(
+        (r.get("reason") or "" for r in engine.results if r.get("rule_id") == rule_id), ""
+    )
+    # The other cases the rule's own reason names (a duplicate order names the invoices it
+    # shares the order with), with which of their symbols equal this case's.
+    named = await session.execute(
+        select(Instance.name, Instance.symbols)
+        .where(
+            Instance.process_id == instance.process_id,
+            Instance.id != instance.id,
+            func.strpos(literal(evidence), Instance.name) > 0,
+        )
+        .order_by(Instance.id)
+        .limit(MAX_RESOLUTIONS)
+    )
+    related = []
+    for name, symbols in named:
+        flat = flatten_symbols(symbols or {})
+        same = sorted(k for k in case if k in flat and flat[k] == case[k])
+        related.append({"name": name, "symbols": flat, "same_as_case": same})
+    rejected = [
+        {"text": p.payload.get("text"), "reject_reason": (p.outcome or {}).get("reason")}
+        for p in await session.scalars(
+            select(ManagerProposal)
+            .where(
+                ManagerProposal.instance_id == instance.id,
+                ManagerProposal.kind == "rule",
+                ManagerProposal.status == "rejected",
+            )
+            .order_by(ManagerProposal.id)
+        )
+    ]
     context = {
         "use_case_description": version.snapshot["process"]["description"],
         "decision_types": version.snapshot["process"]["decision_types"],
-        "case": {"symbols": flatten_symbols(instance.symbols or {})},
+        "case": {"symbols": case},
         "escalation": {
             "reason": engine.reason,
             "rule": {"id": old.id, "text": old.text, "type": old.type, "decision": old.decision},
+            "rule_evidence": evidence,  # what the rule itself reported when it fired
+            "related_cases": related,
             "other_rules_fired": [
                 {"id": r["rule_id"], "decision": rules[r["rule_id"]].decision}
                 for r in engine.results
@@ -315,6 +406,7 @@ async def suggest_rule(
             "reason": resolution.reason,
         },
         "similar_resolutions": similar,
+        "rejected_suggestions": rejected,
         "sources": {name: sorted(rows[0]) if rows else [] for name, rows in sources.items()},
     }
     context["evidence_refs"] = sorted(
@@ -328,6 +420,12 @@ async def suggest_rule(
         json.dumps(context, ensure_ascii=False, default=str),
         instructions=llm.prompt("reviewer_agent", "shared"),
         setup=setups(version.snapshot).get("assistant"),
-        deps=RuleDeps(identifiers(instance), set(context["evidence_refs"])),
+        deps=RuleDeps(
+            identifiers(instance) + [r["name"] for r in related],
+            set(context["evidence_refs"]),
+            known_values(case, *(r["symbols"] for r in related + similar)),
+            [r["text"] for r in rejected if r["text"]],
+        ),
+        instance_id=instance.id,
     )
     return suggestion
