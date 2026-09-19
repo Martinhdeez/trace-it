@@ -101,29 +101,40 @@ def model_for(role: str) -> Model | str:
     return getattr(settings, f"{role}_model")
 
 
-def resolve(model: Model | str, local_endpoint: str | None = None) -> Model | str:
+def _openai(base_url: str | None, api_key: str | None, retries: float | None) -> OpenAIProvider:
+    """An OpenAI-compatible provider. `retries`: how often the SDK repeats a failed request
+    (timeout, 429, 5xx) before the chain moves on; None keeps the SDK's 2. Each repeat waits
+    a whole timeout again, unseen by `failed_attempts`."""
+    provider = OpenAIProvider(base_url=base_url, api_key=api_key)
+    if retries is None:
+        return provider
+    return OpenAIProvider(openai_client=provider.client.with_options(max_retries=int(retries)))
+
+
+def resolve(
+    model: Model | str, local_endpoint: str | None = None, retries: float | None = None
+) -> Model | str:
     """`helmcode:<model>` runs on Helmcode's OpenAI-compatible API (EU inference, key in
-    `HELMCODE_API_KEY`); any other `provider:model` string goes to PydanticAI as is."""
+    `HELMCODE_API_KEY`); any other `provider:model` string goes to PydanticAI as is.
+    `retries`: the SDK's own repeats of one request (`limits.http_retries`)."""
     if isinstance(model, str) and model.startswith("local:"):
         from app.core.api_boundary import endpoint
 
         endpoint(local_endpoint, settings.local_base_url)
         return OpenAIChatModel(
             model.removeprefix("local:"),
-            provider=OpenAIProvider(
-                base_url=local_endpoint or settings.local_base_url,
-                api_key=os.environ.get("LOCAL_LLM_API_KEY") or "local",
+            provider=_openai(
+                local_endpoint or settings.local_base_url,
+                os.environ.get("LOCAL_LLM_API_KEY") or "local",
+                retries,
             ),
         )
     if isinstance(model, str) and model.startswith("helmcode:"):
-        provider = OpenAIProvider(
-            base_url=settings.helmcode_base_url, api_key=os.environ.get("HELMCODE_API_KEY")
-        )
+        provider = _openai(settings.helmcode_base_url, os.environ.get("HELMCODE_API_KEY"), retries)
         return OpenAIChatModel(model.removeprefix("helmcode:"), provider=provider)
     if isinstance(model, str) and model.startswith("vercel:"):
-        provider = OpenAIProvider(
-            base_url=settings.ai_gateway_base_url,
-            api_key=os.environ.get("AI_GATEWAY_API_KEY"),
+        provider = _openai(
+            settings.ai_gateway_base_url, os.environ.get("AI_GATEWAY_API_KEY"), retries
         )
         return OpenAIChatModel(model.removeprefix("vercel:"), provider=provider)
     return model
@@ -170,15 +181,17 @@ def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackMode
         return True
 
     models = _models(setup, role)
+    retries = setup.settings.limits.get("http_retries")
+    extra = () if retries is None else (retries,)
     if setup.local_only and any(
         not isinstance(model, str) or not model.startswith("local:") for model in models
     ):
         raise AgentError(f"{role}: local-only execution cannot call a hosted model")
     return FallbackModel(
         *(
-            resolve(model, setup.local_endpoint)
+            resolve(model, setup.local_endpoint, *extra)
             if isinstance(model, str) and model.startswith("local:")
-            else resolve(model)
+            else resolve(model, *((None, *extra) if extra else ()))
             for model in models
         ),
         fallback_on=[on_failure, truncated],

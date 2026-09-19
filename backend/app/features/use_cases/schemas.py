@@ -46,7 +46,8 @@ class AgentSettings(BaseModel):
     instructions: str = ""
     # PydanticAI model settings, e.g. {"temperature": 0}.
     model_settings: dict[str, Any] = {}
-    # compiler: max_attempts, auto_activate_max_change; tester: min_tests, max_reviews.
+    # compiler: max_attempts, auto_activate_max_change; tester: min_tests, max_reviews; any
+    # role: http_retries, the SDK's repeats of one request before the next model (default 2).
     limits: dict[str, float] = {}
     examples: list[Example] = []
     # normalizer: the decision of a check whose failure the norm does not name (ADR 0017).
@@ -60,6 +61,7 @@ class AgentSettings(BaseModel):
             ("max_attempts", 1, 20),
             ("max_reviews", 0, 20),
             ("min_tests", 1, 100),
+            ("http_retries", 0, 5),
         ):
             value = limits.get(name)
             if value is not None and (not minimum <= value <= maximum or value != int(value)):

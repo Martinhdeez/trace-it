@@ -1,6 +1,7 @@
 """`llm.run`: the platform prompt plus the use case's guidance, model and trace."""
 
 import hashlib
+import json
 import uuid
 
 import pytest
@@ -19,6 +20,76 @@ from app.features.use_cases.schemas import AgentSettings
 from app.main import app
 from tests.support.models import down, instructions, per_role, scripted
 from tests.support.users import manager
+
+
+def test_http_retries_reach_the_sdk(monkeypatch):
+    """`limits.http_retries`: the SDK repeats a stalled request that many times, each a whole
+    timeout, before the chain moves on; unset keeps the SDK's default of 2."""
+    monkeypatch.setenv("HELMCODE_API_KEY", "k")
+    setup = llm.Setup(AgentSettings(model="helmcode:a", limits={"http_retries": 0}))
+    fast = llm.chain(setup, "assistant", [])
+    default = llm.chain(llm.Setup(AgentSettings(model="helmcode:a")), "assistant", [])
+    assert [m.client.max_retries for m in fast.models] == [0]
+    assert [m.client.max_retries for m in default.models] == [2]
+    with pytest.raises(ValueError):
+        AgentSettings(limits={"http_retries": 9})
+
+
+def stalling_provider(monkeypatch, calls: list) -> None:
+    """Helmcode on a fake transport: model "stalled" hangs until its timeout, "fast" answers."""
+    import httpx2
+
+    def handler(request):
+        body = json.loads(request.content)
+        calls.append((body["model"], request.extensions["timeout"]["read"]))
+        if body["model"] == "stalled":
+            raise httpx2.ReadTimeout("stalled", request=request)
+        message = {"role": "assistant", "content": "ok"}
+        return httpx2.Response(
+            200,
+            json={
+                "id": "x",
+                "object": "chat.completion",
+                "created": 0,
+                "model": body["model"],
+                "choices": [{"index": 0, "message": message, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+
+    real = llm.OpenAIProvider
+
+    def provider(**kw):
+        if "openai_client" not in kw:
+            kw["http_client"] = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
+        return real(**kw)
+
+    monkeypatch.setenv("HELMCODE_API_KEY", "k")
+    monkeypatch.setattr(llm, "OpenAIProvider", provider)
+
+
+async def test_a_stalled_request_moves_to_the_fallback_at_once(monkeypatch):
+    """Latency: with `http_retries: 0` a request that times out goes to the next model after
+    one timeout, and the failure is in the trace. Without it the SDK repeats the stalled
+    request twice more, unseen: three timeouts before the fallback."""
+    fast = AgentSettings(
+        model="helmcode:stalled",
+        fallback_models=["helmcode:fast"],
+        timeout_seconds=12,
+        limits={"http_retries": 0},
+    )
+    calls: list = []
+    stalling_provider(monkeypatch, calls)
+    output, trace = await llm.run(
+        Agent(None), "assistant", "hi", instructions="", setup=llm.Setup(fast)
+    )
+    assert (output, trace.model) == ("ok", "fast")
+    assert calls == [("stalled", 12.0), ("fast", 12.0)]
+
+    calls.clear()
+    slow = fast.model_copy(update={"limits": {}})
+    await llm.run(Agent(None), "assistant", "hi", instructions="", setup=llm.Setup(slow))
+    assert [model for model, _ in calls] == ["stalled", "stalled", "stalled", "fast"]
 
 
 class Answer(BaseModel):
