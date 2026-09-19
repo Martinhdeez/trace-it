@@ -7,7 +7,9 @@ No LLM decides: the manager accepts, validates and publishes, and the engine dec
 Why it works this way: [ADR 0035](adr/detail/0035-learn-from-resolved-escalations.md).
 Endpoints and payloads: [api.md, Proposals](api.md#proposals).
 
-Status: backend done (this PR). Frontend: work packages FE-1 to FE-6 below.
+Status: backend done (#152). Frontend: FE-1, FE-2, FE-3 and FE-6 built on Carlos's patterns
+(see [Frontend implementation and merge notes](#frontend-implementation-and-merge-notes));
+FE-4 and FE-5 on a separate branch.
 
 ## Target flow
 
@@ -149,6 +151,49 @@ Done in `feat/reviewer-agent-publish-impact`, functionality only, in Carlos's ex
   `proposeRule(instanceId: number): Promise<Proposal>` →
   `post(`/instances/${instanceId}/rule-proposal`)`. `schema.d.ts` is regenerated here;
   re-run `make openapi` if the backend changes.
+
+## Frontend implementation and merge notes
+
+Built for Carlos, on his patterns: react-query through the typed client (`api/live.ts`,
+`api/queries.ts` keys, `families` invalidation), his components (`Notice`, `ErrorNotice`,
+`Button`, `Textarea`, `StatusBadge`, `TerminalLoader`), his classes only, no new styling.
+The rule suggestion card follows #159's "preview, then accept" (`NormProposal`) and the
+Definition inbox's "Rechazar needs a reason" (`InboxCard`). Every changed block carries a
+`// reviewer-agent FE-n (docs/reviewer-agent.md)` comment with the invariants below.
+
+| Package | Files | Components and what they do |
+|---|---|---|
+| FE-1 | `frontend/src/routes/Queue.tsx` | `Resolve`: the open decision proposal is listed (`listProposals`, `status=open`, `instance_id`, `kind === 'decision'`); `ask` mutation behind "Pedir propuesta al asistente", hidden on `SOURCE_UNAVAILABLE`; `Suggested` options clickable only while `open`; the Decisión dropdown lists only final types (no ESCALAR); one "Resolver" button |
+| FE-2 | `frontend/src/routes/Queue.tsx`, `frontend/src/i18n/es.ts` (`escalationWhy`) | `explain()` and `WhyEscalated`: one Spanish sentence per code from the engine's decision (also on a resolved case), `symbols.*` labels and the fired rules' `rule_summary`; the raw reason stays as a chip |
+| FE-3 | `frontend/src/routes/Queue.tsx`, `frontend/src/api/queries.ts` (`caseRuleProposal`), `frontend/src/api/contracts.ts` (`RuleProposalPayload`, `ProposalOutcome`), `frontend/src/i18n/es.ts` (`proposalCause`) | `Queue` keeps a resolved case open through `?i=`; `SuggestRule`: "Sugerir regla" → `proposeRule`; 409 `message` in a `Notice`; 502 `ErrorNotice` with Reintentar; the card (summary, rationale, `payload.text`, "Sustituye a la regla N", Aceptar / Rechazar with a reason); accepted shows the new rule and its status with links to the rule and Panel → Publicar; `rejected` shows its reason, `superseded` its `outcome.cause` |
+| FE-6 | `frontend/src/api/contracts.ts`, `frontend/src/api/live.ts` | `proposeRule(instanceId)`; `make openapi` left `openapi.json` and `schema.d.ts` unchanged |
+| Test | `tests/integration/demo-path.spec.ts` | no POST /proposal on opening a case; resolve; 409 on a MISSING_DATA scan; a rule suggestion stored with `tests.support.proposals rule`, shown, rejected, `Rechazada` |
+
+**Behaviour invariants a merge must preserve**
+
+- Opening a case makes no LLM call: no `POST /instances/{id}/proposal` (nor `/suggestion`)
+  until the manager presses the button.
+- Resolving never waits on the rule suggestion; "Sugerir regla" only appears after it.
+- A 409 from `/rule-proposal` shows the backend's Spanish `message` as is.
+- Aceptar stages the rule in the process draft and does not publish; publishing stays in
+  Panel → Publicar.
+- `rejected` (the manager's no, with a reason) is shown apart from `superseded` and its
+  `outcome.cause` (`ignored`, `version_published`, `case_changed`, `superseded`).
+- Publish is blocked while a rule is compiling (FE-4, on the other branch).
+
+**Endpoints and operationIds used**
+
+| Call | operationId | Where |
+|---|---|---|
+| `GET /processes/{id}/proposals[?status=open]` | `listProposals` | `Resolve`, `SuggestRule` |
+| `POST /instances/{id}/proposal` | `proposeDecision` | `Resolve` (button only) |
+| `POST /instances/{id}/resolve` | `resolveInstance` (existing) | `Resolve` |
+| `POST /instances/{id}/rule-proposal` | `proposeRule` | `SuggestRule` |
+| `POST /proposals/{id}/accept`, `/reject` | `acceptProposal`, `rejectProposal` | `Resolve`, `SuggestRule` |
+| `GET /rules/{id}` | `getRule` | `SuggestRule` (the accepted rule compiling) |
+
+**If this conflicts with Carlos's branch:** prefer his markup and styling, then re-apply
+these invariants.
 
 ## Demo pair
 

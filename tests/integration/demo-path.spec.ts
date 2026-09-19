@@ -7,6 +7,10 @@
  *
  * A step waiting for one of Carlos's packages is `test.fixme('pkg n')`, and goes live in
  * the PR that lands package n (docs/frontend-handoff.md).
+ *
+ * reviewer-agent FE-1..3 (docs/reviewer-agent.md): opening a case sends no POST /proposal;
+ * a resolved case offers "Sugerir regla"; a case no rule can learn answers 409 in Spanish;
+ * a stored rule suggestion is shown, rejected with a reason, and reads `Rechazada`.
  */
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -28,6 +32,9 @@ const SCAN = 'scan_001.pdf'
 const RESOLVED = 'factura_41082.pdf'
 const NOTE = 'Pedido duplicado revisado: esta es la factura buena'
 const LEARNED = 'Cargar el maestro de proveedores actualizado'
+// The reviewer agent's amended rule, stored as it would with no LLM key (D4).
+const AMENDED = 'The invoice shares its order with another invoice whose total exceeds the order.'
+const REJECTION = 'Un pedido duplicado siempre lo mira una persona'
 const DATABASE =
   process.env.E2E_DATABASE_URL ?? 'postgresql+psycopg://trace:trace@localhost:5432/trace_e2e_test'
 
@@ -39,6 +46,8 @@ let headers: Record<string, string>
 // API responses that failed, for the error check on every screen. With no key, the
 // assistant's proposal answers 502 `llm_error`; it is not part of the path (D4).
 let failures: string[] = []
+// reviewer-agent FE-1: the assistant is an LLM call, never made just by opening a case.
+const proposalCalls: string[] = []
 const ASSISTANT = /^502 (GET|POST) .*\/(suggestion|proposal)$/
 
 test.beforeAll(async ({ browser, request }) => {
@@ -63,6 +72,11 @@ test.beforeAll(async ({ browser, request }) => {
   const erp = await request.post(`${API}/processes/${processId}/sources/erp/sync`, { headers })
   expect(erp.ok(), await erp.text()).toBe(true)
   page = await browser.newPage()
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && /\/instances\/\d+\/proposal$/.test(request.url())) {
+      proposalCalls.push(request.url())
+    }
+  })
   page.on('response', (response) => {
     if (response.url().includes('/api/') && response.status() >= 400) {
       failures.push(`${response.status()} ${response.request().method()} ${response.url()}`)
@@ -91,7 +105,7 @@ async function realAndClean(allow: string[] = []) {
 }
 
 /** Every proposal channel is an LLM call; with no key (D4) the test stores one as it would. */
-function storeProposal(kind: 'escalation' | 'source', target: number, value: string): number {
+function storeProposal(kind: 'escalation' | 'source' | 'rule', target: number, value: string): number {
   const out = execFileSync(
     'uv',
     ['run', 'python', '-m', 'tests.support.proposals', kind, String(target), value],
@@ -183,6 +197,12 @@ test('open the escalation detail', async () => {
   await page.getByRole('button', { name: RESOLVED }).click()
   await expect(page.getByRole('link', { name: 'Ver traza →' })).toBeVisible()
   await expect(page.getByRole('combobox', { name: 'Decisión' })).toBeVisible()
+  // FE-1: the assistant waits behind its button; opening the case asked it nothing.
+  await expect(page.getByRole('button', { name: 'Pedir propuesta al asistente' })).toBeVisible()
+  expect(proposalCalls).toEqual([])
+  // Only final decision types can be chosen by hand.
+  const options = page.getByRole('combobox', { name: 'Decisión' }).locator('option')
+  expect(await options.allTextContents()).not.toContain('ESCALAR')
   await realAndClean(['llm_error'])
 })
 
@@ -214,13 +234,50 @@ test('pkg 5: accept the assistant proposal', async ({ request }) => {
 test('resolve as the manager', async ({ request }) => {
   await page.getByRole('combobox', { name: 'Decisión' }).selectOption('PAGAR')
   await page.getByRole('textbox', { name: /^Motivo/ }).fill(NOTE)
-  await page.getByRole('button', { name: 'Resolver sin regla' }).click()
-  // Resolved, the case leaves the ESCALAR list.
+  await page.getByRole('button', { name: 'Resolver', exact: true }).click()
+  // Resolved, the case leaves the ESCALAR list, but stays open with the reviewer's nudge.
   await expect(page.getByRole('button', { name: RESOLVED })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Sugerir regla' })).toBeVisible()
   const instance = await instanceByName(request, RESOLVED)
   expect(instance.decision).toBe('PAGAR')
   expect(instance.decisions.at(-1)).toMatchObject({ decision: 'PAGAR', reason: NOTE })
   expect(instance.decisions.at(-1).author).not.toBe('engine')
+  expect(proposalCalls).toEqual([])
+  await realAndClean(['llm_error'])
+})
+
+test('reviewer agent: a case no rule can learn answers in Spanish', async ({ request }) => {
+  // The scan escalated MISSING_DATA and was resolved above: the gate answers 409, no model.
+  const scan = await instanceByName(request, SCAN)
+  await page.goto(`/processes/${processId}/review?i=${scan.id}`)
+  await page.getByRole('button', { name: 'Sugerir regla' }).click()
+  await expect(page.getByText('Ninguna regla puede aprender este caso')).toBeVisible()
+  await expect(page.getByText(/^Faltaba un dato obligatorio .*ninguna regla puede suplir un dato\.$/)).toBeVisible()
+  // The 409 is the answer here, not a failure.
+  failures = failures.filter((line) => !/^409 POST .*\/rule-proposal$/.test(line))
+  await realAndClean(['llm_error'])
+})
+
+test('reviewer agent: a rule suggestion is shown, then rejected with a reason', async ({ request }) => {
+  const resolved = await instanceByName(request, RESOLVED)
+  const id = storeProposal('rule', resolved.id, AMENDED)
+  // Reopening the resolved case finds its suggestion.
+  await page.goto(`/processes/${processId}/review?i=${resolved.id}`)
+  await expect(page.getByText(AMENDED)).toBeVisible()
+  await expect(page.getByRole('link', { name: /^Sustituye a la regla \d+/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sugerir regla' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Rechazar' }).click()
+  await page.getByPlaceholder('Por qué no').fill(REJECTION)
+  await page.getByRole('button', { name: 'Rechazar' }).click()
+  await expect(page.getByText('Rechazada', { exact: true })).toBeVisible()
+  await expect(page.getByText(`Motivo: ${REJECTION}`)).toBeVisible()
+  const rejected: { id: number; outcome: { reason?: string } }[] = await (
+    await request.get(`${API}/processes/${processId}/proposals?status=rejected`, { headers })
+  ).json()
+  expect(rejected.find((item) => item.id === id)?.outcome).toMatchObject({ reason: REJECTION })
+  // Rejected, the manager may ask again.
+  await expect(page.getByRole('button', { name: 'Sugerir regla' })).toBeVisible()
+  expect(proposalCalls).toEqual([])
   await realAndClean(['llm_error'])
 })
 

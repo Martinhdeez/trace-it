@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { hashKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, FileText } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import { families, keys } from '../api/queries'
@@ -10,9 +10,9 @@ import type {
   InstanceDetail,
   ProcessDetail,
   Proposal,
-  RuleIn,
+  ProposalOutcome,
+  RuleProposalPayload,
   RuleResult,
-  Suggestion,
 } from '../api/contracts'
 import { ProcessScreen } from '../components/process/ProcessScreen'
 import { Button, Field, Segmented, Select, Textarea } from '../components/shell/Controls'
@@ -72,12 +72,17 @@ export function Queue() {
     tab === REVIEW_TAB ? item.review_pending : item.decision === tab && !item.review_pending,
   )
   const selectedId = params.get('i') ? Number(params.get('i')) : undefined
-  const current = items.find((item) => item.id === selectedId) ?? items[0]
   const showAlerts = tab === ALERTS_TAB
+  // reviewer-agent FE-3 (docs/reviewer-agent.md): a resolved case leaves the list but stays
+  // open through `?i=` (after resolving, or from the Panel), so "Sugerir regla" can follow.
+  // If you are merging a newer version from Carlos, keep his UI and make sure a selected
+  // case outside the list still opens.
+  const current = items.find((item) => item.id === selectedId) ?? (selectedId ? undefined : items[0])
+  const caseId = showAlerts ? undefined : (current?.id ?? selectedId)
   const alert = openAlerts.find((item) => item.id === selectedId) ?? openAlerts[0]
   const nothing = showAlerts
     ? alerts.isSuccess && openAlerts.length === 0
-    : escalated.isSuccess && items.length === 0
+    : escalated.isSuccess && caseId === undefined
 
   return (
     <ProcessScreen
@@ -97,7 +102,7 @@ export function Queue() {
         <PageIntro
           kicker="Revisión"
           title={tabs.find((item) => item.value === tab)?.label ?? (tab.replaceAll('_', ' ') || 'Cola')}
-          description="Excepciones que el proceso no cierra. Tu decisión queda en el histórico y puede volverse una regla nueva, desde Definición."
+          description="Excepciones que el proceso no cierra. Tu decisión queda en el histórico; después, el revisor puede sugerir la regla que decida sola los casos parecidos."
         />
 
         {escalated.isError ? <ErrorNotice error={escalated.error} /> : null}
@@ -179,13 +184,14 @@ export function Queue() {
 
           {showAlerts ? (
             alert ? <AlertDetail key={alert.id} processId={processId} alert={alert} /> : null
-          ) : current && process.data ? (
+          ) : caseId !== undefined && process.data ? (
             <Resolve
-              key={current.id}
+              key={caseId}
               process={process.data}
-              instanceId={current.id}
-              name={current.name}
-              currentDecision={current.decision}
+              instanceId={caseId}
+              name={current?.name}
+              currentDecision={current?.decision}
+              onSettled={() => setParams({ tipo: tab, i: String(caseId) })}
             />
           ) : null}
         </div>
@@ -195,104 +201,98 @@ export function Queue() {
   )
 }
 
+/**
+ * reviewer-agent FE-1 (docs/reviewer-agent.md): opening a case makes no LLM call. It only
+ * lists the case's open decision proposal; the assistant runs behind "Pedir propuesta al
+ * asistente", hidden when a source was down. Only final decision types can be chosen (no
+ * ESCALAR). Once a person resolved the case, it shows `SuggestRule` instead of the form.
+ * Built on Carlos's patterns from #159; if you are merging a newer version from Carlos, keep
+ * his UI and make sure it still does: no POST /proposal when a case opens; options are
+ * clickable only while the proposal is `open`; resolving never waits on a rule suggestion.
+ */
 function Resolve({
   process,
   instanceId,
   name,
   currentDecision,
+  onSettled,
 }: {
   process: ProcessDetail
   instanceId: number
-  name: string
-  currentDecision: string | null
+  /** From the queue; a resolved case opened by `?i=` reads them from the instance. */
+  name?: string
+  currentDecision?: string | null
+  onSettled: () => void
 }) {
   const queryClient = useQueryClient()
-  const outcomes = process.decision_types.map((outcome) => outcome.name)
-  const [decision, setDecision] = useState(currentDecision ?? outcomes[0] ?? '')
+  const outcomes = process.decision_types
+    .filter((outcome) => !outcome.requires_human)
+    .map((outcome) => outcome.name)
+  const [decision, setDecision] = useState(
+    currentDecision && outcomes.includes(currentDecision) ? currentDecision : (outcomes[0] ?? ''),
+  )
   const [note, setNote] = useState('')
-  const [ruleText, setRuleText] = useState('')
-  const [ruleKind, setRuleKind] = useState<RuleIn['type']>('requirement')
   const [edited, setEdited] = useState(false)
 
   const instance = useQuery({
     queryKey: keys.instance(instanceId),
     queryFn: () => api.getInstance(instanceId),
   })
-  // The case's open escalation proposal, or a new one. The assistant is an LLM call:
-  // a 502 will not fix itself, so do not retry it.
+  const history = instance.data?.decisions ?? []
+  const engine = history.findLast((item) => item.author === 'engine')
+  // The latest decision is a person's: the case is resolved.
+  const resolved = history.length > 0 && history.at(-1)?.author !== 'engine'
+  // A source that did not answer: the assistant cannot know more than the engine.
+  const sourceDown = (engine?.reason ?? '').startsWith('SOURCE_UNAVAILABLE')
+
+  // The case's open escalation proposal, if the manager already asked for one.
   const proposal = useQuery({
     queryKey: keys.caseProposal(instanceId),
     queryFn: async () => {
       const open = await api.listProposals(process.id, 'open')
-      const current = open.find(
-        (item) => item.instance_id === instanceId && item.channel === 'escalation',
+      return (
+        open.find(
+          (item) =>
+            item.instance_id === instanceId &&
+            item.channel === 'escalation' &&
+            item.kind === 'decision',
+        ) ?? null
       )
-      if (current) return current
-      try {
-        return await api.proposeDecision(instanceId)
-      } catch (error) {
-        // An API without proposals: fall back to the plain suggestion below.
-        if (error instanceof ApiError && error.status === 404) return null
-        throw error
-      }
     },
-    retry: false,
   })
-  const suggestion = useQuery({
-    queryKey: keys.suggestion(instanceId),
-    queryFn: () => api.suggestion(instanceId),
-    enabled: proposal.data === null,
-    retry: false,
+  // The assistant is an LLM call: only on the button, and a 502 is not retried by itself.
+  const ask = useMutation({
+    mutationFn: () => api.proposeDecision(instanceId),
+    onSuccess: (created) => queryClient.setQueryData(keys.caseProposal(instanceId), created),
   })
   const payload = proposal.data?.payload as DecisionProposalPayload | undefined
   const proposalId = proposal.data?.status === 'open' ? proposal.data.id : undefined
 
   // The assistant's proposal is the starting point; the person can overwrite it.
   useEffect(() => {
-    if (edited) return
-    if (payload) {
-      setDecision(payload.proposed)
-      if (payload.proposed_rule) {
-        setRuleText(payload.proposed_rule.text)
-        setRuleKind(payload.proposed_rule.type)
-      }
-      return
-    }
-    const data = suggestion.data
-    if (!data) return
-    setDecision(data.decision)
-    setRuleText(data.proposed_rule)
-    setRuleKind(data.proposed_type)
-  }, [payload, suggestion.data, edited])
+    if (!edited && payload) setDecision(payload.proposed)
+  }, [payload, edited])
 
-  // The case is settled: asking the assistant for it again would only get a 409.
   const invalidate = () => {
-    const settled = hashKey(keys.caseProposal(instanceId))
     for (const name of [...families.decisions, ...families.rules, ...families.proposals]) {
-      void queryClient.invalidateQueries({
-        queryKey: [name],
-        predicate: (query) => query.queryHash !== settled,
-      })
+      void queryClient.invalidateQueries({ queryKey: [name] })
     }
+    // Keep the case on screen once it leaves the list: "Sugerir regla" comes next.
+    onSettled()
   }
 
   /**
    * Choosing a decision by hand, or another option than the proposed one. With an open
-   * proposal, `proposal_id` tells the backend it was not taken. Creating a rule is a second
-   * call, because the backend keeps them apart: the rule is a draft that still has to compile.
+   * proposal, `proposal_id` tells the backend it was not taken. A rule comes after, from
+   * the reviewer agent (`SuggestRule`), and resolving never waits for it.
    */
   const resolve = useMutation({
-    mutationFn: async ({ mode, chosen }: { mode: 'manual' | 'rule'; chosen?: string }) => {
-      const final = chosen ?? decision
-      await api.resolve(instanceId, {
-        decision: final,
+    mutationFn: ({ chosen }: { chosen?: string }) =>
+      api.resolve(instanceId, {
+        decision: chosen ?? decision,
         reason: note.trim() || 'Resuelta por una persona',
         proposal_id: proposalId ?? null,
-      })
-      const text = ruleText.trim()
-      if (mode !== 'rule' || !text) return null
-      return api.createRule(process.id, { text, type: ruleKind, decision: final })
-    },
+      }),
     onSuccess: invalidate,
   })
   /** Accepting resolves the case with the proposed decision; rejecting applies nothing. */
@@ -304,14 +304,13 @@ function Resolve({
     onSuccess: invalidate,
   })
   const busy = resolve.isPending || settle.isPending
-
-  const newRule = resolve.data
+  const shownDecision = currentDecision ?? instance.data?.decision
 
   return (
     <div className="space-y-3">
       <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
         <div className="flex items-baseline justify-between gap-3">
-          <p className="font-mono text-[13px]">{name}</p>
+          <p className="font-mono text-[13px]">{name ?? instance.data?.name ?? '…'}</p>
           <Link
             to={paths.instance(process.id, instanceId)}
             className="shrink-0 text-[12px] text-muted hover:text-ink"
@@ -319,9 +318,9 @@ function Resolve({
             Ver traza →
           </Link>
         </div>
-        {currentDecision ? (
+        {shownDecision ? (
           <p className="mt-1.5">
-            <StatusBadge value={currentDecision} decisionTypes={process.decision_types} />
+            <StatusBadge value={shownDecision} decisionTypes={process.decision_types} />
           </p>
         ) : null}
         <div className="mt-3">
@@ -333,159 +332,161 @@ function Resolve({
         </div>
       </div>
 
-      <Suggested
-        proposal={proposal.data ?? undefined}
-        suggestion={suggestion.data}
-        loading={proposal.isPending || (proposal.data === null && suggestion.isPending)}
-        error={proposal.error ?? suggestion.error}
-        busy={busy}
-        canReject={Boolean(note.trim())}
-        onAccept={() => settle.mutate({ accept: true })}
-        onReject={() => settle.mutate({ accept: false })}
-        onChoose={(chosen) => resolve.mutate({ mode: 'manual', chosen })}
-      />
+      {resolved && instance.data ? (
+        <SuggestRule process={process} instance={instance.data} />
+      ) : (
+        <>
+          <Suggested
+            proposal={proposal.data ?? undefined}
+            loading={proposal.isPending || ask.isPending}
+            error={proposal.error ?? ask.error}
+            busy={busy}
+            canAsk={!sourceDown}
+            canReject={Boolean(note.trim())}
+            onAsk={() => ask.mutate()}
+            onAccept={() => settle.mutate({ accept: true })}
+            onReject={() => settle.mutate({ accept: false })}
+            onChoose={(chosen) => resolve.mutate({ chosen })}
+          />
 
-      <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
-        <p className="text-[13px] font-medium">Tu decisión</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Field label="Decisión">
-            <Select
-              value={decision}
-              onChange={(event) => {
-                setEdited(true)
-                setDecision(event.target.value)
-              }}
-              className="mt-1"
-            >
-              {outcomes.map((outcome) => (
-                <option key={outcome} value={outcome}>
-                  {outcome}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Motivo" hint="Queda en el histórico junto a tu nombre.">
-            <Textarea
-              rows={1}
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="Por qué decides esto"
-              className="mt-1"
-            />
-          </Field>
-        </div>
+          <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
+            <p className="text-[13px] font-medium">Tu decisión</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field label="Decisión">
+                <Select
+                  value={decision}
+                  onChange={(event) => {
+                    setEdited(true)
+                    setDecision(event.target.value)
+                  }}
+                  className="mt-1"
+                >
+                  {outcomes.map((outcome) => (
+                    <option key={outcome} value={outcome}>
+                      {outcome}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Motivo" hint="Queda en el histórico junto a tu nombre.">
+                <Textarea
+                  rows={1}
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="Por qué decides esto"
+                  className="mt-1"
+                />
+              </Field>
+            </div>
 
-        <div className="mt-4">
-          <Field
-            label="Regla que entra con esta decisión"
-            hint="Así el proceso resuelve solo los casos parecidos que vengan después."
-          >
-            <Textarea
-              rows={2}
-              value={ruleText}
-              onChange={(event) => {
-                setEdited(true)
-                setRuleText(event.target.value)
-              }}
-              placeholder="Si el pedido de la factura no existe en el maestro, no se paga."
-              className="mt-1"
-            />
-          </Field>
-          <div className="mt-2">
-            <Segmented
-              value={ruleKind}
-              onChange={(value) => {
-                setEdited(true)
-                setRuleKind(value)
-              }}
-              options={[
-                { value: 'requirement', label: t('ruleType.requirement') },
-                { value: 'prohibition', label: t('ruleType.prohibition') },
-              ]}
-            />
-          </div>
-        </div>
+            {resolve.isError || settle.isError ? (
+              <div className="mt-3">
+                <ErrorNotice error={resolve.error ?? settle.error} />
+              </div>
+            ) : null}
+            {settle.isSuccess ? (
+              <div className="mt-3">
+                <Notice
+                  title={settle.data.status === 'accepted' ? 'Propuesta aceptada' : 'Propuesta rechazada'}
+                >
+                  {settle.data.status === 'accepted'
+                    ? 'El caso queda resuelto con la decisión propuesta.'
+                    : 'No se aplica nada. Resuelve el caso a mano.'}
+                </Notice>
+              </div>
+            ) : null}
+            {resolve.isSuccess ? (
+              <div className="mt-3">
+                <Notice title="Resuelta">La decisión queda en el histórico.</Notice>
+              </div>
+            ) : null}
 
-        {resolve.isError || settle.isError ? (
-          <div className="mt-3">
-            <ErrorNotice error={resolve.error ?? settle.error} />
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button tone="soft" onClick={() => resolve.mutate({})} disabled={busy || !decision}>
+                Resolver
+              </Button>
+            </div>
           </div>
-        ) : null}
-        {settle.isSuccess ? (
-          <div className="mt-3">
-            <Notice
-              title={settle.data.status === 'accepted' ? 'Propuesta aceptada' : 'Propuesta rechazada'}
-            >
-              {settle.data.status === 'accepted'
-                ? 'El caso queda resuelto con la decisión propuesta.'
-                : 'No se aplica nada. Resuelve el caso a mano.'}
-            </Notice>
-          </div>
-        ) : null}
-        {resolve.isSuccess ? (
-          <div className="mt-3">
-            <Notice title="Resuelta">
-              La decisión queda en el histórico.
-              {newRule ? (
-                <>
-                  {' '}
-                  La regla nueva entra como borrador:{' '}
-                  <Link to={paths.rule(process.id, newRule.id)} className="underline">
-                    compílala y actívala
-                  </Link>
-                  .
-                </>
-              ) : null}
-            </Notice>
-          </div>
-        ) : null}
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button
-            tone="soft"
-            onClick={() => resolve.mutate({ mode: 'manual' })}
-            disabled={busy || !decision}
-          >
-            Resolver sin regla
-          </Button>
-          <Button
-            tone="soft"
-            onClick={() => resolve.mutate({ mode: 'rule' })}
-            disabled={busy || !decision || !ruleText.trim()}
-          >
-            Resolver y crear la regla
-          </Button>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   )
 }
 
-/** The escalation code keeps its name visible, with its Spanish label in front of it. */
-function escalationReason(reason: string): string {
-  const code = reason.match(/^(RULE_ERROR|RULE_CONFLICT|SOURCE_UNAVAILABLE)/)?.[1]
-  return code ? `${t(`escalation.${code}`)} · ${reason}` : reason
+/** A reason's detail, "iban, total", with each symbol's Spanish label. */
+function symbolNames(detail: string): string {
+  return detail
+    .split(', ')
+    .map((name) => {
+      const label = t(`symbols.${name}`)
+      return label === `symbols.${name}` ? name : label
+    })
+    .join(', ')
 }
 
-/** What the engine said, which rules fired and, when there was one, what the reviewer thought. */
+function sentence(code: string, x = '', y = ''): string {
+  return t(`escalationWhy.${code}`).replace('{X}', x).replace('{Y}', y)
+}
+
+const RULE_FAILURE = /^(RULE_ERROR|RULE_NEEDS_DATA|RULE_COMPILE_FAILED|SOURCE_UNAVAILABLE) (\d+)/
+
+/**
+ * reviewer-agent FE-2 (docs/reviewer-agent.md): the engine's reason as Spanish sentences,
+ * one per code, from templates in `i18n/es.ts`. No LLM. Rule failures come joined by " | ".
+ */
+function explain(reason: string, fired: RuleResult[]): string[] {
+  const code = reason.match(/^[A-Z_]+/)?.[0] ?? ''
+  const detail = reason.slice(reason.indexOf(': ') + 2)
+  if (code === 'MISSING_DATA' || code === 'UNVERIFIED_DATA') return [sentence(code, symbolNames(detail))]
+  if (reason.startsWith('SOURCE_UNAVAILABLE: ')) return [sentence('SOURCE_UNAVAILABLE', detail)]
+  if (code === 'RULE_CONFLICT' || code === 'SCAN_REVIEW') return [sentence(code)]
+  if (RULE_FAILURE.test(reason)) {
+    return reason.split(' | ').map((part) => {
+      const match = part.match(RULE_FAILURE)
+      if (!match) return part
+      return match[1] === 'SOURCE_UNAVAILABLE'
+        ? sentence('SOURCE_UNAVAILABLE', part.slice(part.indexOf(': ') + 2))
+        : sentence('RULE_ERROR', match[2])
+    })
+  }
+  if (!fired.length) return [reason]
+  return fired.map((result) =>
+    sentence('rule', result.rule_summary || result.rule_text || `Regla ${result.rule_id}`, result.reason),
+  )
+}
+
+/**
+ * What the engine said, in a sentence per reason and the raw reason as a chip, and, when
+ * there was one, what the reviewer thought. Reads the engine's decision, so a resolved case
+ * still says why it escalated. reviewer-agent FE-2: if you are merging a newer version from
+ * Carlos, keep his UI and make sure it still explains with templates only (no LLM) and keeps
+ * the raw code visible.
+ */
 function WhyEscalated({ instance }: { instance: InstanceDetail }) {
-  const results = (instance.decisions.at(-1)?.results ?? []) as RuleResult[]
+  const engine = instance.decisions.findLast((item) => item.author === 'engine')
+  const reason = engine?.reason ?? instance.reason ?? ''
+  const results = (engine?.results ?? []) as RuleResult[]
   const fired = results.filter((result) => result.fires === true)
   const review = instance.reviews.at(-1)
 
   return (
     <Notice tone="warning" title="Por qué se escaló">
-      <p>{instance.reason ? escalationReason(instance.reason) : 'El motor no dejó un motivo.'}</p>
-      {fired.length ? (
-        <ul className="mt-1 list-disc space-y-0.5 pl-4">
-          {fired.map((result) => (
-            <li key={result.rule_id}>
-              {result.rule_summary || result.rule_text || `Regla ${result.rule_id}`}
-              <span className="font-mono text-[11px]"> · {result.reason}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {reason ? (
+        <>
+          <ul className="list-disc space-y-0.5 pl-4">
+            {explain(reason, fired).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          <p className="mt-1.5">
+            <span className="rounded-full bg-canvas px-2 py-1 font-mono text-[10px] text-muted ring-1 ring-line">
+              {reason}
+            </span>
+          </p>
+        </>
+      ) : (
+        <p>El motor no dejó un motivo.</p>
+      )}
       {instance.review_pending && review ? (
         <p className="mt-1">
           Revisor ({t(`reviewStatus.${review.status}`)}): {review.recommendation ?? '—'}
@@ -500,24 +501,28 @@ function WhyEscalated({ instance }: { instance: InstanceDetail }) {
  * The assistant's proposal: why, and each option with its consequence, the proposed one
  * first. Accepting the proposed one resolves the case; another option resolves with it and
  * tells the backend the proposal was not taken. Rejecting takes the reason from "Motivo".
+ * reviewer-agent FE-1: nothing is asked until "Pedir propuesta al asistente".
  */
 function Suggested({
   proposal,
-  suggestion,
   loading,
   error,
   busy,
+  canAsk,
   canReject,
+  onAsk,
   onAccept,
   onReject,
   onChoose,
 }: {
   proposal: Proposal | undefined
-  suggestion: Suggestion | undefined
   loading: boolean
   error: unknown
   busy: boolean
+  /** False when a source was down: the assistant would not know more than the engine. */
+  canAsk: boolean
   canReject: boolean
+  onAsk: () => void
   onAccept: () => void
   onReject: () => void
   onChoose: (decision: string) => void
@@ -544,7 +549,16 @@ function Suggested({
         />
       ) : error ? (
         <div className="mt-2">
-          <ErrorNotice error={error} />
+          <ErrorNotice
+            error={error}
+            action={
+              canAsk ? (
+                <Button tone="soft" onClick={onAsk}>
+                  {t('common.retry')}
+                </Button>
+              ) : undefined
+            }
+          />
           <p className="mt-2 text-[13px] text-muted">Puedes resolver el caso a mano.</p>
         </div>
       ) : payload ? (
@@ -596,21 +610,221 @@ function Suggested({
             <p className="mt-2 text-[12px] text-faint">{t(`proposalStatus.${proposal.status}`)}</p>
           ) : null}
         </>
-      ) : suggestion ? (
-        <>
-          <p className="mt-2 flex items-start gap-2 text-[13px]">
-            <StatusBadge value={suggestion.decision} className="mt-0.5 shrink-0" />
-            <span className="text-muted">{suggestion.reasoning}</span>
+      ) : canAsk ? (
+        <div className="mt-2 space-y-2">
+          <p className="text-[13px] text-muted">
+            El asistente lee el caso y propone una decisión con sus consecuencias. Decides tú.
           </p>
-          <p className="mt-2 rounded-[10px] bg-canvas px-3 py-2 text-[13px] ring-1 ring-line">
-            {suggestion.proposed_rule}
-          </p>
-        </>
+          <Button tone="soft" disabled={busy} onClick={onAsk}>
+            Pedir propuesta al asistente
+          </Button>
+        </div>
       ) : (
         <p className="mt-2 text-[13px] text-muted">
-          Sin sugerencia. Decide tú y escribe la regla que lo resuelva.
+          Una fuente no respondió: el asistente no sabría más que el motor. Vuelve a ejecutar
+          cuando responda, o decide tú.
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * reviewer-agent FE-3 (docs/reviewer-agent.md): once a person resolved the case, the
+ * reviewer agent can amend the escalation rule that fired so similar cases decide
+ * themselves next time. Asked only on "Sugerir regla"; the card follows #159's "preview,
+ * then accept" and the Definition inbox's "Rechazar needs a reason". Built on Carlos's
+ * patterns from #159; if you are merging a newer version from Carlos, keep his UI and make
+ * sure it still does: resolving never waits on this; a 409 shows the backend's Spanish
+ * `message` as is; Aceptar stages the rule in the draft and never publishes; `rejected`
+ * (the manager's no) reads apart from `superseded` with its `outcome.cause`.
+ */
+function SuggestRule({ process, instance }: { process: ProcessDetail; instance: InstanceDetail }) {
+  const queryClient = useQueryClient()
+  const [rejecting, setRejecting] = useState(false)
+  const [reason, setReason] = useState('')
+  const resolution = instance.decisions.at(-1)
+
+  // The case's latest rule suggestion (newest first), whatever its status: a settled one
+  // says how it ended.
+  const latest = useQuery({
+    queryKey: keys.caseRuleProposal(instance.id),
+    queryFn: async () =>
+      (await api.listProposals(process.id)).find(
+        (item) =>
+          item.instance_id === instance.id && item.channel === 'escalation' && item.kind === 'rule',
+      ) ?? null,
+  })
+  const suggest = useMutation({
+    mutationFn: () => api.proposeRule(instance.id),
+    onSuccess: (created) => {
+      queryClient.setQueryData(keys.caseRuleProposal(instance.id), created)
+      void queryClient.invalidateQueries({ queryKey: ['proposals'] })
+    },
+  })
+  const proposal = latest.data ?? undefined
+  const settle = useMutation({
+    mutationFn: (accept: boolean) =>
+      accept ? api.acceptProposal(proposal!.id) : api.rejectProposal(proposal!.id, reason.trim()),
+    onSuccess: (settled) => {
+      queryClient.setQueryData(keys.caseRuleProposal(instance.id), settled)
+      for (const name of [...families.proposals, ...families.rules]) {
+        void queryClient.invalidateQueries({ queryKey: [name] })
+      }
+    },
+  })
+
+  const payload = proposal?.payload as RuleProposalPayload | undefined
+  const outcome = (proposal?.outcome ?? {}) as ProposalOutcome
+  const open = proposal?.status === 'open'
+  // The new rule compiles in the background: follow it until it leaves `compiling`.
+  const rule = useQuery({
+    queryKey: keys.rule(outcome.rule_id ?? 0),
+    queryFn: () => api.getRule(outcome.rule_id!),
+    enabled: proposal?.status === 'accepted' && outcome.rule_id != null,
+    refetchInterval: (query) => (query.state.data?.status === 'compiling' ? 1_500 : false),
+  })
+  // 409: the gate's Spanish reason why no rule can learn this case. An answer, not an error.
+  const unlearnable =
+    suggest.error instanceof ApiError && suggest.error.status === 409 ? suggest.error.message : null
+  const canSuggest =
+    latest.isSuccess &&
+    !suggest.isPending &&
+    !unlearnable &&
+    (!proposal || proposal.status === 'rejected' || proposal.status === 'superseded')
+
+  return (
+    <div className="rounded-[16px] bg-surface px-4 py-3.5 ring-1 ring-line">
+      <p className="text-[13px] font-medium">¿Quieres que esto se decida solo la próxima vez?</p>
+      {resolution ? (
+        <p className="mt-1 flex items-start gap-2 text-[13px] text-muted">
+          <StatusBadge
+            value={resolution.decision}
+            decisionTypes={process.decision_types}
+            className="mt-0.5 shrink-0"
+          />
+          <span>
+            Resuelta por {resolution.author}
+            {resolution.reason ? `: ${resolution.reason}` : ''}
+          </span>
+        </p>
+      ) : null}
+
+      {latest.isError ? (
+        <div className="mt-2">
+          <ErrorNotice error={latest.error} />
+        </div>
+      ) : null}
+      {suggest.isPending ? (
+        <TerminalLoader
+          className="mt-2"
+          verbs={['leyendo tu decisión', 'buscando la regla que lo escaló', 'redactando la excepción']}
+        />
+      ) : unlearnable ? (
+        <div className="mt-2">
+          <Notice title="Ninguna regla puede aprender este caso">{unlearnable}</Notice>
+        </div>
+      ) : suggest.isError ? (
+        <div className="mt-2">
+          <ErrorNotice
+            error={suggest.error}
+            action={
+              <Button tone="soft" onClick={() => suggest.mutate()}>
+                {t('common.retry')}
+              </Button>
+            }
+          />
+        </div>
+      ) : null}
+
+      {proposal && payload ? (
+        <div
+          className={cn(
+            'mt-3 rounded-[12px] bg-canvas px-3 py-2.5 ring-1 ring-line',
+            !open && 'opacity-70',
+          )}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-[13px] font-medium leading-5 text-ink">{proposal.summary}</p>
+            <span className="shrink-0 font-mono text-[11px] text-faint">
+              {t(`proposalStatus.${proposal.status}`)}
+              {proposal.status === 'superseded' && outcome.cause
+                ? ` · ${t(`proposalCause.${outcome.cause}`)}`
+                : ''}
+            </span>
+          </div>
+          {proposal.rationale ? (
+            <p className="mt-1 text-[12px] leading-5 text-muted">{proposal.rationale}</p>
+          ) : null}
+          <p className="mt-2 text-[12px] leading-5 text-ink">{payload.text}</p>
+          <Link
+            to={paths.rule(process.id, payload.replaces)}
+            className="mt-1 inline-block text-[12px] text-muted hover:text-ink"
+          >
+            Sustituye a la regla {payload.replaces} →
+          </Link>
+
+          {open ? (
+            <>
+              {rejecting ? (
+                <Textarea
+                  rows={2}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  placeholder="Por qué no"
+                  className="mt-3"
+                />
+              ) : null}
+              {settle.isError ? (
+                <div className="mt-3">
+                  <ErrorNotice error={settle.error} />
+                </div>
+              ) : null}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  tone="soft"
+                  disabled={settle.isPending || (rejecting && !reason.trim())}
+                  onClick={() => (rejecting ? settle.mutate(false) : setRejecting(true))}
+                >
+                  Rechazar
+                </Button>
+                <Button tone="primary" disabled={settle.isPending} onClick={() => settle.mutate(true)}>
+                  {settle.isPending ? 'Guardando…' : 'Aceptar'}
+                </Button>
+              </div>
+            </>
+          ) : proposal.status === 'accepted' && outcome.rule_id != null ? (
+            <div className="mt-3">
+              <Notice title="La regla entra en el borrador">
+                <p>
+                  Regla {outcome.rule_id}
+                  {outcome.retired != null ? ` en lugar de la regla ${outcome.retired}` : ''}
+                  {rule.data ? ` · ${t(`ruleStatus.${rule.data.status}`)}` : ''}. Nada cambia
+                  hasta que publiques el borrador.
+                </p>
+                <p className="mt-1 flex flex-wrap gap-3">
+                  <Link to={paths.rule(process.id, outcome.rule_id)} className="underline">
+                    Ver la regla
+                  </Link>
+                  <Link to={`${paths.process(process.id)}?publicar=1`} className="underline">
+                    Panel → Publicar
+                  </Link>
+                </p>
+              </Notice>
+            </div>
+          ) : proposal.status === 'rejected' && outcome.reason ? (
+            <p className="mt-2 text-[12px] text-muted">Motivo: {outcome.reason}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {canSuggest ? (
+        <div className="mt-3">
+          <Button tone="primary" onClick={() => suggest.mutate()}>
+            Sugerir regla
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }
