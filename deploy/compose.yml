@@ -60,6 +60,7 @@ services:
   criminal-records:
     image: ${TRACE_BACKEND_IMAGE:?Set TRACE_BACKEND_IMAGE}
     command: [python, /processes/hiring-screening/criminal_records_erp.py, --host, 0.0.0.0, --port, "8010"]
+    ports: ["127.0.0.1:${TRACE_CRIMINAL_RECORDS_PORT:-18010}:8010"]
     restart: unless-stopped
     read_only: true
     security_opt: [no-new-privileges:true]

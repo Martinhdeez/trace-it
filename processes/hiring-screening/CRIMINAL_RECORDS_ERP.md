@@ -11,6 +11,9 @@ python3 processes/hiring-screening/criminal_records_erp.py
 ```
 
 The default address is `http://127.0.0.1:8010`. Use `--port` to choose another port.
+In production, Caddy exposes it at
+`https://gex-dashboard.hopto.org/nexia/criminal-records/`; the container port is
+published only on VPS loopback port `18010`.
 
 ## Records
 
@@ -22,6 +25,10 @@ The default address is `http://127.0.0.1:8010`. Use `--port` to choose another p
 - fields `id`, `name`, `conviction_date`, `offense` and `status`.
 
 `GET /criminal/status` is unauthenticated and reports `records` and `system`.
+
+The public prefix preserves the same endpoints, for example
+`GET /nexia/criminal-records/criminal/records?page=1`. Opening the public prefix itself
+returns the status document.
 
 The simulator has no authentication and returns every valid request consistently.
 

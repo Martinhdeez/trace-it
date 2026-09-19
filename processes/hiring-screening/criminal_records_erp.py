@@ -16,6 +16,7 @@ from xml.sax.saxutils import escape
 
 PAGE_SIZE = 10
 VERSION = "Registro Central · bridge legacy 1.4 (2009)"
+PUBLIC_PREFIX = "/nexia/criminal-records"
 
 # Synthetic records. Ana Molina also appears in the committed hiring CV corpus. The
 # remaining people do not. Name-only identity is intentionally visible as a limitation
@@ -80,13 +81,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path == "/criminal/status":
+        path = parsed.path
+        if path == PUBLIC_PREFIX or path == PUBLIC_PREFIX + "/":
+            path = "/criminal/status"
+        elif path.startswith(PUBLIC_PREFIX + "/"):
+            path = path[len(PUBLIC_PREFIX) :]
+        if path == "/criminal/status":
             self.respond(
                 200,
                 f"<status><records>{len(RECORDS)}</records><system>ONLINE</system></status>",
             )
             return
-        if parsed.path != "/criminal/records":
+        if path != "/criminal/records":
             self.respond(404, "<error><code>REG-404</code></error>")
             return
         try:

@@ -1,5 +1,7 @@
 import importlib.util
+import threading
 from pathlib import Path
+from urllib.request import urlopen
 
 SCRIPT = (
     Path(__file__).resolve().parents[3]
@@ -36,3 +38,22 @@ def test_registry_does_not_define_credentials():
     module = load_module()
     assert not hasattr(module, "USER")
     assert not hasattr(module, "PASSWORD")
+
+
+def test_public_prefix_exposes_status_and_records():
+    module = load_module()
+    server = module.ThreadingHTTPServer(("127.0.0.1", 0), module.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with urlopen(base + module.PUBLIC_PREFIX + "/", timeout=2) as response:
+            assert b"<system>ONLINE</system>" in response.read()
+        with urlopen(
+            base + module.PUBLIC_PREFIX + "/criminal/records?page=1", timeout=2
+        ) as response:
+            assert b"<name>Ana Molina</name>" in response.read()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
