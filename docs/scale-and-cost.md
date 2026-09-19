@@ -193,8 +193,9 @@ sends about `c × 2 × 60 / 11 ≈ 11 c` requests a minute: `c = 5` → 55/min, 
    concurrency is per model, so the fallback helps; a 429 on **requests per minute is per key**,
    so every model of the same key shares it and the chain only helps if it spans keys or
    providers.
-3. All models fail: `AgentError` 502; the rule leaves `compiling` as `draft` with
-   "every model failed: ..." in its report and an `llm_run` span in `error` (ADR 0018).
+3. All models fail: `AgentError` 502; the rule leaves `compiling` as `blocked` with
+   "every model failed: ..." in its report (every instance escalates with
+   `RULE_COMPILE_FAILED` until it compiles, ADR 0020) and an `llm_run` span in `error` (ADR 0018).
 4. While any rule is `compiling`, `run` and `reprocess` refuse (409): no invoice is decided
    half-way through a norm (ADR 0017).
 5. The rules already `active` keep deciding at 0 tokens; the assistant answers 502 and the

@@ -23,7 +23,7 @@ wins over any other document. Superseded plans live in `.artifacts/archive/`.
 | [0013](0013-fault-tolerant-erp-client.md) | Read the ERP only through a fault-tolerant client | accepted | Token renewal, backoff with jitter, Retry-After, client rate limiter, validation, paginated snapshot, diff between snapshots; connectors belong to the use case |
 | [0019](0019-llm-fallback-chain.md) | Move to the next model of a per-role chain when a provider fails | accepted | `fallback_models` and `timeout_seconds` per use case and role; only provider errors switch, validation retries never; `llm_run` records the chain, each failed attempt and the model that answered |
 | [0014](0014-rules-only-decision-step.md) | Combine rule findings by decision-type priority only | superseded by 0021 | Refines ADR 0001: process context feeds compilers and the assistant, never the automatic decision; a failed rule or a tie escalates |
-| [0015](0015-immutable-process-versions.md) | Snapshot the whole process as an immutable version on every activation | proposed | Decision types, symbols, description and active rules; decisions reference their version; loader writes drafts |
+| [0015](0015-immutable-process-versions.md) | Snapshot the whole process as an immutable version on every activation | accepted | Complete approved configuration snapshots; decisions reference versions and captured execution inputs; see 0022 |
 | [0016](0016-every-instance-gets-a-decision.md) | Decide every instance: a rule that cannot be evaluated escalates the case | accepted | No REVIEW state; failure or tie decides the process's `requires_human` type with the reason; export is the engine's decision; code A alone at runtime |
 | [0017](0017-autonomous-norm-normalizer.md) | Turn the client's norm into rules with an autonomous normalizer | accepted | Each norm sentence is a norm rule the client owns; the normalizer splits it into atomic checks (ordinary rules) with the norm's own tie-breaker; no human review; batch-1 golden eval as the external check |
 | [0018](0018-observability-own-audit-spans-plus-opentelemetry.md) | Trace every step as spans in our own database, and mirror them to OpenTelemetry | accepted | `events` holds hierarchical spans (the audit, with prompts, tokens and durations); the same spans go to Logfire or a local Phoenix by env; trace, journey, rule and metrics endpoints |
@@ -31,6 +31,10 @@ wins over any other document. Superseded plans live in `.artifacts/archive/`.
 | [0021](0021-optional-decision-review.md) | Review engine decisions with optional advice and human approval | accepted | Off by default; disagreements enter the human queue; failed reviews retain the engine outcome; reviewed exports respect approval |
 | [0022](0022-ocr-evidence-and-provider-tracing.md) | Preserve OCR evidence and trace each provider operation | accepted | Production demo uses OCR; immutable attached readings; model/request provenance, journal replay, sanitized provider spans and network-only usage totals |
 | [0023](0023-fal-visual-fallback-evaluation.md) | Evaluate fal.ai visual readers before selecting a production fallback | proposed | Compare Moondream and a fixed OpenRouter model; bounded opt-in queue/journal adapter only after measured evaluation |
+| [0024](0024-discover-processes-through-documents-and-conversation.md) | Build process drafts through documents and conversation before approval | accepted | Create or revise through workbook discovery and chat; review proposals, compile and backtest, then publish under the same process identity |
+| [0025](0025-scan-decision-policy.md) | Decide scans only on confirmed data, and escalate a scan the rules would reject | accepted | A scan (no native text) with a required value its readers did not confirm escalates `UNVERIFIED_DATA`; one the rules would reject escalates `SCAN_REVIEW: <rule>`; text PDFs unaffected |
+
+| [0022](0022-publish-approved-process-versions.md) | Require manager publication of complete process versions | accepted | One draft, validated approval, atomic publication and deterministic replay; replaces automatic rule activation |
 
 ## Glossary
 - **Rule finding:** the result of one rule on one instance (`fires`, `reason`).
@@ -41,7 +45,9 @@ wins over any other document. Superseded plans live in `.artifacts/archive/`.
 - **Engine decision / final decision / exported decision:** the process output; the
   manager's decision for an escalated case; the one written to the export, which is the
   engine's (ADR 0016).
-- **Process version:** an immutable snapshot of a process (ADR 0015).
+- **Process version:** an immutable, published configuration approved for future executions.
+- **Process draft:** proposed configuration awaiting validation and manager publication.
+- **Execution:** one evaluation of cases using a fixed process version and captured evidence.
 
 ## Adding an ADR
 1. Copy [`template.md`](template.md) to `NNNN-kebab-title.md` with the next free number.

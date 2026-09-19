@@ -1,7 +1,10 @@
 """Jev selects among existing textual candidates; it never supplies a visual vote."""
 
+import json
+
 import httpx
 
+from .errors import ProviderUnavailable, note_provider_failure, provider_on_cooldown
 from .journal import record_response, recorded_call
 
 URL = "https://api.typesafe.ai/v1/systemone"
@@ -20,11 +23,51 @@ class TextJudge:
 
     @property
     def configured(self):
-        return bool(self.settings.jev_api_key and self.settings.jev_model)
+        return bool(self._chain())
+
+    def _chain(self):
+        return [
+            provider
+            for provider in self.settings.text_providers
+            if (provider == "jev" and self.settings.jev_api_key and self.settings.jev_model)
+            or (
+                provider == "helmcode"
+                and self.settings.helmcode_api_key
+                and self.settings.helmcode_text_model
+            )
+        ]
+
+    def signature(self):
+        return {
+            "chain": [
+                {
+                    "provider": provider,
+                    "endpoint": URL
+                    if provider == "jev"
+                    else self.settings.helmcode_url.rstrip("/") + "/chat/completions",
+                    "model": self.settings.jev_model
+                    if provider == "jev"
+                    else self.settings.helmcode_text_model,
+                    "generation": {
+                        "temperature": 0,
+                        "max_tokens": 1500,
+                        "reasoning_effort": "none",
+                        "response_format": {"type": "json_object"},
+                    }
+                    if provider == "helmcode"
+                    else None,
+                }
+                for provider in self._chain()
+            ],
+            "instructions": INSTRUCTIONS,
+            "configured": self.configured,
+        }
 
     def select(self, readers, fields):
         questions = {}
         for name, field in fields.items():
+            if field.status == "OBSERVED":
+                continue
             values = sorted({c.value for c in field.candidates if c.value and not c.error})
             if values:
                 questions[name] = {
@@ -44,6 +87,38 @@ class TextJudge:
             },
             "questions": questions,
         }
+
+        failure = None
+        namespace = str(self.settings.data_dir)
+        for index, provider in enumerate(self._chain()):
+            model = (
+                self.settings.jev_model if provider == "jev" else self.settings.helmcode_text_model
+            )
+            if provider_on_cooldown(provider, model, namespace):
+                continue
+            try:
+                data = (
+                    self._select_jev(payload, fallback=index > 0)
+                    if provider == "jev"
+                    else self._select_helm(payload, questions, fallback=index > 0)
+                )
+                break
+            except ProviderUnavailable as exc:
+                note_provider_failure(provider, model, namespace, exc)
+                failure = exc
+                continue
+        else:
+            raise failure or ProviderUnavailable("No text judge succeeded")
+        return {
+            "role": "textual_recommendation_only",
+            "visual_vote": False,
+            "model": data.get("model", self.settings.jev_model),
+            "usage": data.get("usage", {}),
+            "answers": data["answers"],
+        }
+
+    def _select_jev(self, payload, *, fallback=False):
+        questions = payload["questions"]
 
         def call(mark_network_attempt):
             with httpx.Client(timeout=self.settings.vlm_timeout, follow_redirects=False) as client:
@@ -74,18 +149,102 @@ class TextJudge:
                     raise ValueError("Invalid Jev selection")
             return data
 
-        data = recorded_call(
+        return recorded_call(
             self.settings.data_dir / "provider-journal" / "jev",
             {"endpoint": URL, "payload": payload},
             call,
             provider="jev",
             model=self.settings.jev_model,
             operation="text_selection",
+            fallback=fallback,
         )
-        return {
-            "role": "textual_recommendation_only",
-            "visual_vote": False,
-            "model": data.get("model", self.settings.jev_model),
-            "usage": data.get("usage", {}),
-            "answers": data["answers"],
+
+    def _select_helm(self, payload, questions, *, fallback=False):
+        model = self.settings.helmcode_text_model
+        endpoint = self.settings.helmcode_url.rstrip("/") + "/chat/completions"
+        generation = {
+            "temperature": 0,
+            "max_tokens": 1500,
+            "reasoning_effort": "none",
+            "response_format": {"type": "json_object"},
         }
+        body = {
+            "model": model,
+            **generation,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": INSTRUCTIONS
+                    + " Return JSON with an answers object mapping each requested field "
+                    "to one exact candidate string or none.",
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "readers": payload["state"]["readers"],
+                            "candidates": {
+                                name: list(item["criteria"]) for name, item in questions.items()
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+        }
+
+        def validate(data):
+            answers = data.get("answers") if isinstance(data, dict) else None
+            if not isinstance(answers, dict) or set(answers) != set(questions):
+                raise ValueError("Invalid Helmcode text selections")
+            for name, value in answers.items():
+                if not isinstance(value, str) or value not in questions[name]["criteria"]:
+                    raise ValueError("Invented Helmcode candidate")
+            return {
+                "model": model,
+                "usage": data.get("usage", {}),
+                "answers": {
+                    name: {"type": "choice", "choice": choice} for name, choice in answers.items()
+                },
+            }
+
+        def call(mark_network_attempt):
+            with httpx.Client(timeout=self.settings.vlm_timeout, follow_redirects=False) as client:
+                mark_network_attempt()
+                response = client.post(
+                    endpoint,
+                    headers={"Authorization": "Bearer " + self.settings.helmcode_api_key},
+                    json=body,
+                )
+            record_response("helmcode", response.status_code)
+            if not response.is_success:
+                raise ProviderUnavailable(f"Helmcode returned HTTP {response.status_code}")
+            data = response.json()
+            record_response("helmcode", response.status_code, data)
+            choice = data["choices"][0]
+            if choice.get("finish_reason") != "stop":
+                raise ValueError("Incomplete Helmcode text response")
+            content = choice["message"]["content"]
+            if not isinstance(content, str) or len(content) > 20000:
+                raise ValueError("Invalid Helmcode text response")
+            result = json.loads(content)
+            validate(result)
+            result["usage"] = data.get("usage", {})
+            return result
+
+        data = recorded_call(
+            self.settings.data_dir / "provider-journal" / "helmcode",
+            {
+                "endpoint": endpoint,
+                "model": model,
+                "instructions": INSTRUCTIONS,
+                "payload": body["messages"][1]["content"],
+                "generation": generation,
+            },
+            call,
+            provider="helmcode",
+            model=model,
+            operation="text_selection",
+            fallback=fallback,
+        )
+        return validate(data)

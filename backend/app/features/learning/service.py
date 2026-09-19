@@ -169,6 +169,12 @@ async def approve(
 ) -> AdoptionOut:
     row = await unresolved(session, proposal_id)
     analysis = await session.get(Analysis, row.analysis_id)
+    from copy import deepcopy
+
+    from app.features.versions import configuration as version_config
+    from app.features.versions import service as versions
+
+    process = await versions.lock(session, analysis.process_id)
     # Runs and human resolutions lock instances too. Hold these through publication
     # so the conflict check cannot race a person's decision. No model runs under these locks.
     await session.scalars(
@@ -261,15 +267,26 @@ async def approve(
         )
         session.add(adopted)
         await session.flush()
-        # Full configuration at publication, with the approved rule code and guidance.
-        published = await evidence.capture(session, analysis.process_id)
-        adopted.snapshot = {
-            **adopted.snapshot,
-            "process": published["process"],
-            "rules": published["rules"],
-            "guidance": published["guidance"],
-            "agents": published["agents"],
-        }
+        # Extend only the published configuration, never an unrelated draft.
+        previous = await versions.active(session, analysis.process_id)
+        candidate = deepcopy(previous.snapshot)
+        for key in rule_ids:
+            candidate["rules"].append(version_config.artifact(await session.get(Rule, key)))
+        if row.kind == "guidance":
+            candidate["guidance"][f"norm:{adopted.id}"] = row.text
+        published = await versions.publish_snapshot(
+            session,
+            process,
+            candidate,
+            author,
+            reason,
+            {
+                "valid": True,
+                "learning_validation_id": prepared.id,
+                "inputs_hash": prepared.baseline,
+            },
+        )
+        adopted.snapshot = {**adopted.snapshot, **candidate, "version_id": published.id}
         await session.commit()
         span.set(adoption_id=adopted.id, rule_ids=rule_ids)
     return out(AdoptionOut, adopted)

@@ -426,6 +426,16 @@ async def read_process(session: AsyncSession, process_id: int) -> tuple[str, Sou
         .order_by(Source.name, Source.loaded_at.desc())
         .distinct(Source.name)
     )
+    from app.features.versions.configuration import setups as pinned_setups
+    from app.features.versions.model import ProcessDraft
+
+    draft = await session.get(ProcessDraft, process_id)
+    if draft:
+        return (
+            draft.snapshot["process"]["description"],
+            {s.name: s.rows for s in loads},
+            pinned_setups(draft.snapshot),
+        )
     setups = await use_cases.setups(session, use_case.id)
     return use_case.description, {s.name: s.rows for s in loads}, setups
 
@@ -437,5 +447,10 @@ async def compile_rule(session: AsyncSession, rule: Rule, symbols: list[Symbol])
             # returns {"fires": bool, "reason": str}
 
     against them. The result is reported, never silently accepted."""
+    from app.features.versions.model import ProcessDraft
+
+    draft = await session.get(ProcessDraft, rule.process_id)
+    if draft:
+        symbols = [Symbol(**s) for s in draft.snapshot["process"]["symbols"]]
     description, sources, setups = await read_process(session, rule.process_id)
     return await compile_text(rule, symbols, sources, description, Runs(setups))

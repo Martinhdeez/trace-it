@@ -1,3 +1,7 @@
+> Configuration publication now follows [process versions](process-versions.md).
+> Rule activation and retirement stage edits; manager-approved draft publication makes
+> them effective. Compilation no longer auto-activates rules.
+
 # API for the console
 
 The backend is the contract; this page is the map. Live and exact: `make setup`, then

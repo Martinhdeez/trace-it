@@ -20,6 +20,10 @@ def settings(tmp_path):
         vlm_url=None,
         vlm_model=None,
         vlm_api_key=None,
+        helmcode_api_key=None,
+        ocr_mode="hybrid",
+        vision_providers=("compatible", "gemini", "helmcode"),
+        text_providers=("jev", "helmcode"),
         gemini_api_key=None,
         jev_api_key=None,
     )

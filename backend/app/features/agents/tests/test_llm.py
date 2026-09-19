@@ -137,7 +137,7 @@ async def test_a_rule_whose_models_all_fail_stays_a_draft_with_the_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Through the API: the use case's chain is used and a compilation it cannot serve
-    leaves a draft, never a rule stuck in `compiling`."""
+    leaves the rule `blocked` (it escalates, ADR 0020), never stuck in `compiling`."""
     monkeypatch.setattr(llm, "resolve", lambda name: down(name))
     suffix = uuid.uuid4().hex[:8]
     definition = {
@@ -158,6 +158,17 @@ async def test_a_rule_whose_models_all_fail_stays_a_draft_with_the_error(
                 await use_cases.configure(
                     session, process["use_case_id"], role, chain_settings, "test", None
                 )
+        from app.features.versions import service as versions
+        from app.features.versions.schemas import DraftIn
+
+        async with session_factory() as session:
+            draft = await versions.get_draft(session, process["id"])
+            await versions.edit(
+                session,
+                process["id"],
+                DraftIn(expected_revision=draft.revision, refresh_agents=True),
+                "test",
+            )
         r = await api.post(
             f"/processes/{process['id']}/rules",
             json={"text": "amount > 1000", "type": "prohibition", "decision": "ESCALATE"},

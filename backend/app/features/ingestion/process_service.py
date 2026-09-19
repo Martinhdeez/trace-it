@@ -1,6 +1,8 @@
 """Persist document evidence using dev's existing files, instances and trace contracts."""
 
-from sqlalchemy import or_, select
+import hashlib
+
+from sqlalchemy import or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.common.exceptions import NotFoundError
@@ -9,6 +11,7 @@ from app.core.events import Event
 from app.features.processes.model import Process
 
 from .model import File, Instance
+from .process_extraction import reusable_evidence
 from .schemas import ExtractionResult
 
 
@@ -17,10 +20,48 @@ async def require_process(session, process_id):
         raise NotFoundError(f"Process {process_id} does not exist")
 
 
+async def existing_document(session, process_id, item, service, options):
+    """Serialize duplicate uploads, then inspect immutable or reusable evidence."""
+    from app.features.versions.service import lock
+
+    await lock(session, process_id)
+    identity = f"{process_id}\0{item['file_id']}\0{item['sha256']}".encode()
+    lock_key = int.from_bytes(hashlib.sha256(identity).digest()[:8], "big", signed=True)
+    await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
+    instance = await session.scalar(
+        select(Instance)
+        .where(
+            Instance.process_id == process_id,
+            Instance.name == item["file_id"],
+            Instance.file_hash == item["sha256"],
+        )
+        .with_for_update()
+    )
+    if instance is None:
+        return None, None
+    result = await reusable_evidence(session, instance, service, item, options)
+    return instance, result
+
+
+def stored_upload(instance, result):
+    return {
+        "instance_id": instance.id,
+        "process_id": instance.process_id,
+        "name": instance.name,
+        "file_hash": instance.file_hash,
+        "status": instance.status,
+        "created": False,
+        "extraction": result,
+        "symbols": instance.symbols,
+    }
+
+
 async def attach_document(
     session, process_id, user_id, content, result, symbols=None, context=None
 ):
-    await require_process(session, process_id)
+    from app.features.versions.service import lock
+
+    await lock(session, process_id)
     text = result.text
     await session.execute(
         insert(File)

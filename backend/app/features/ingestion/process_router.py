@@ -4,7 +4,7 @@ import logging
 import mimetypes
 import zipfile
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import quote
 from xml.etree.ElementTree import ParseError
 
@@ -86,6 +86,7 @@ async def upload_document(
     vlm: Annotated[bool | None, Form()] = None,
     jev: Annotated[bool | None, Form()] = None,
     verify_fields: Annotated[list[CriticalField] | None, Form()] = None,
+    mode: Annotated[Literal["local", "api", "hybrid"] | None, Form()] = None,
 ):
     try:
         await process_service.require_process(session, process_id)
@@ -97,12 +98,28 @@ async def upload_document(
                     raise InvalidDocumentError(
                         "Process documents must be PDF; use /v1/extractions to inspect a workbook"
                     )
+                options = ExtractOptions(
+                    mode=mode, ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or []
+                )
+                instance, stored = await process_service.existing_document(
+                    session, process_id, item, service, options
+                )
+                if stored is not None:
+                    upload = process_service.stored_upload(instance, stored)
+                    span.set(instance_id=instance.id, created=False)
+                    return upload
+                if instance is not None:
+                    upload = await reextract_document(
+                        session, instance.id, user.id, service, options
+                    )
+                    span.set(instance_id=instance.id, created=False)
+                    return upload
                 result, symbols, context = await read_document(
                     session,
                     process_id,
                     service,
                     item,
-                    ExtractOptions(ocr=ocr, vlm=vlm, jev=jev, verify_fields=verify_fields or []),
+                    options,
                 )
             except (ValueError, pymupdf.FileDataError) as exc:
                 raise InvalidDocumentError("Invalid or unsupported PDF document") from exc

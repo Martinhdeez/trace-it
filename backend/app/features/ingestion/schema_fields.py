@@ -12,6 +12,7 @@ from app.common.extraction import Candidate, Evidence, TextLine
 from app.common.normalization import clean_text, fold, invoice_date
 
 from .extraction_plan import ExtractionField
+from .ocr.errors import ProviderUnavailable, note_provider_failure, provider_on_cooldown
 from .ocr.journal import record_response, recorded_call
 from .schemas import FieldReading
 
@@ -141,7 +142,22 @@ def _reading(candidates: list[Candidate], min_confidence: float, selected_by: st
             and c.evidence.confidence >= min_confidence
         )
     ]
-    selected = reliable[0] if len(values) == 1 and not conflict and reliable else None
+
+    def visual_identity(candidate):
+        locator = candidate.evidence.locator
+        match = re.search(r"(?:^|:)visual:([^:]+):([^:]+):", locator)
+        return f"visual:{match[1]}:{match[2]}" if match else None
+
+    visual = {
+        identity.rsplit(":", 1)[-1].rsplit("/", 1)[-1].lower()
+        for candidate in valid
+        if (identity := visual_identity(candidate))
+    }
+    selected = (
+        (reliable[0] if reliable else valid[0])
+        if len(values) == 1 and not conflict and (reliable or len(visual) >= 2)
+        else None
+    )
     proposal = valid[0] if len(values) == 1 and not conflict and valid else None
     if conflict:
         verification = "ambiguous"
@@ -165,7 +181,11 @@ def _reading(candidates: list[Candidate], min_confidence: float, selected_by: st
         text=selected.raw if selected else (candidates[0].raw if candidates else None),
         selected_by=selected_by if selected else None,
         agreeing_readers=sorted(
-            {c.evidence.method for c in valid if selected and c.value == selected.value}
+            {
+                (visual_identity(c) or c.evidence.method)
+                for c in valid
+                if selected and c.value == selected.value
+            }
         ),
         confidence=selected.evidence.confidence if selected else None,
         candidates=candidates,
@@ -254,9 +274,15 @@ class SchemaFieldReader:
 
     @property
     def configured(self) -> bool:
-        return bool(
-            (self.settings.vlm_url and self.settings.vlm_model)
-            or (self.settings.gemini_api_key and self.settings.gemini_model)
+        return bool(self._chain())
+
+    def _chain(self):
+        """Use visual provider precedence but the Helmcode text model for mapping."""
+        return list(
+            dict.fromkeys(
+                (provider, self.settings.helmcode_text_model if provider == "helmcode" else model)
+                for provider, model in self.settings.visual_chain()
+            )
         )
 
     def read(
@@ -332,25 +358,23 @@ class SchemaFieldReader:
             return selection
 
         task = json.dumps({"fields": questions, "lines": transcript}, ensure_ascii=False)
-        if self.settings.vlm_url and self.settings.vlm_model:
-            provider, model = "vision", self.settings.vlm_model
-            endpoint = self.settings.vlm_url.rstrip("/") + "/chat/completions"
-            headers = (
-                {"Authorization": "Bearer " + self.settings.vlm_api_key}
-                if self.settings.vlm_api_key
-                else {}
-            )
-            body = {
-                "model": model,
-                "temperature": 0,
-                "max_tokens": 1500,
-                "messages": [
-                    {"role": "system", "content": PROMPT},
-                    {"role": "user", "content": task},
-                ],
-            }
-        else:
-            provider, model = "gemini", self.settings.gemini_model
+        namespace = str(self.settings.data_dir)
+        for index, (provider, model) in enumerate(self._chain()):
+            if provider_on_cooldown(provider, model, namespace):
+                continue
+            try:
+                return self._select_provider(
+                    provider, model, task, questions, transcript, validate, fallback=index > 0
+                )
+            except ProviderUnavailable as exc:
+                note_provider_failure(provider, model, namespace, exc)
+                continue
+        raise ProviderUnavailable("No schema provider succeeded")
+
+    def _select_provider(
+        self, provider, model, task, questions, transcript, validate, *, fallback=False
+    ):
+        if provider == "gemini":
             if not re.fullmatch(r"gemini-[a-zA-Z0-9._-]+", model):
                 raise ValueError("Invalid Gemini model")
             endpoint = (
@@ -365,18 +389,43 @@ class SchemaFieldReader:
                     "responseMimeType": "application/json",
                 },
             }
+        else:
+            endpoint = (
+                self.settings.vlm_url if provider == "compatible" else self.settings.helmcode_url
+            ).rstrip("/") + "/chat/completions"
+            token = (
+                self.settings.vlm_api_key
+                if provider == "compatible"
+                else self.settings.helmcode_api_key
+            )
+            headers = {"Authorization": "Bearer " + token} if token else {}
+            generation = {"temperature": 0, "max_tokens": 1500}
+            if provider == "helmcode":
+                generation.update(reasoning_effort="none", response_format={"type": "json_object"})
+            body = {
+                "model": model,
+                **generation,
+                "messages": [
+                    {"role": "system", "content": PROMPT},
+                    {"role": "user", "content": task},
+                ],
+            }
+        trace_provider = "vision" if provider == "compatible" else provider
 
         def call(mark_network_attempt):
             with httpx.Client(timeout=self.settings.vlm_timeout, follow_redirects=False) as client:
                 mark_network_attempt()
                 response = client.post(endpoint, headers=headers, json=body)
-            record_response(provider, response.status_code)
+            record_response(trace_provider, response.status_code)
             if not response.is_success:
                 raise RuntimeError(f"Schema provider returned HTTP {response.status_code}")
             data = response.json()
-            record_response(provider, response.status_code, data)
-            if provider == "vision":
-                content = data["choices"][0]["message"]["content"]
+            record_response(trace_provider, response.status_code, data)
+            if provider != "gemini":
+                choice = data["choices"][0]
+                if choice.get("finish_reason", "stop") != "stop":
+                    raise ValueError("Incomplete schema response")
+                content = choice["message"]["content"]
             else:
                 candidate = data["candidates"][0]
                 if candidate.get("finishReason") != "STOP":
@@ -394,11 +443,20 @@ class SchemaFieldReader:
                 "prompt": PROMPT,
                 "fields": questions,
                 "transcript": transcript,
-                "generation": 1500,
+                "generation": (
+                    body["generationConfig"]
+                    if provider == "gemini"
+                    else {
+                        key: value
+                        for key, value in body.items()
+                        if key not in {"model", "messages"}
+                    }
+                ),
             },
             call,
-            provider=provider,
+            provider=trace_provider,
             model=model,
             operation="schema_selection",
+            fallback=fallback,
         )
         return validate(result)

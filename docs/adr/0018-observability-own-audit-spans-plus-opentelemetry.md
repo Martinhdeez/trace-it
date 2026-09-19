@@ -23,6 +23,9 @@ audit must survive without any external service.
   - Pros: LLM-focused UI, prompt management.
   - Cons: Postgres + ClickHouse + Redis + S3 to run; heavy for a weekend MVP; still not
     joined with our tables.
+- **Langfuse cloud as an optional OTLP target** (2026-09-19): deferred. LLM plane only, a
+  fourth tool, needs an account, and Phoenix already shows the same locally. How to add it:
+  `.artifacts/backlog/2026-09-19-langfuse-export.md`.
 - **Arize Phoenix only.**
   - Pros: one container, OTLP in, good LLM views.
   - Cons: a live monitor, not an audit store; same join problem.

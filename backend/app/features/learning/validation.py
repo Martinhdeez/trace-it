@@ -6,7 +6,7 @@ import json
 
 from app.features.agents import compiler, decision_reviewer, llm, normalizer, sandbox
 from app.features.decisions.engine import Outcomes, decide
-from app.features.ingestion.symbols import flatten_symbols
+from app.features.ingestion.symbols import flatten_symbols, scan
 from app.features.learning.evidence import cases
 from app.features.processes.model import DecisionType, Symbol
 from app.features.rules.model import ENFORCED, Rule
@@ -56,6 +56,7 @@ def impact(snapshot: dict, added: list[dict]) -> dict:
         {s["name"]: s["rows"] for s in snapshot["sources"]},
         population,
         sandbox.run_dataset,
+        {i["id"]: u for i in selected if (u := scan(i["symbols"])) is not None},
     )
     pending = {
         r["decision_id"]

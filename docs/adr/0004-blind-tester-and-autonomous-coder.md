@@ -4,6 +4,9 @@ status: accepted
 
 # Verify generated rule code against a blind tester, and activate it by impact
 
+Automatic adoption is superseded by [ADR 0022](0022-publish-approved-process-versions.md).
+Compilation and normalization remain in use.
+
 ## Context
 Rule code is written by an LLM (ADR 0003). A single model can misread the rule, write a
 bug, or write tests that confirm its own bug. Nobody on the team can review every
@@ -70,8 +73,14 @@ implementation only served as a test oracle, at the price of a second full compi
    and a decision taken by a person that it would change still blocks it.
 7. **Compilation on save**: `POST /processes/{id}/rules` stores the rule as `compiling`
    and returns at once; a FastAPI background task compiles it with its own session and it
-   ends `active`, `blocked` or `draft`. An error (LLM down, still malformed after repairs)
-   leaves a draft with `report.error` and a `compile_rule` event; app startup re-queues
+   ends `active`, `blocked` or `draft`. An error (every LLM down, tokens run out, still
+   malformed after repairs) leaves the rule `blocked` with `report.error` and an error
+   `compile_rule` span with `rule_status: blocked`: every instance escalates with
+   `RULE_COMPILE_FAILED <id>: <error>` (ADR 0016, 0020) until `POST /rules/{id}/compile`
+   succeeds. Before (2026-09-19), it left a draft the engine skipped, so the older rules
+   decided without it and could pay an invoice the new norm forbids. Only a compilation on
+   save is blocked this way: a manual recompile that errors leaves a draft or blocked rule
+   as it was, and hand-written rules never compile. App startup re-queues
    any rule a restart left in `compiling` (best effort: with the database down the API
    still starts, and they wait for the next start or a recompile). The manager never presses "compile".
 8. Models are `provider:model` strings; any PydanticAI provider works, and
@@ -84,7 +93,8 @@ implementation only served as a test oracle, at the price of a second full compi
 - A rule that needs data costs a queue of escalations until someone adds the symbol or
   source: loud on purpose, since the alternative is paying invoices the rule would stop.
 - A `blocked` rule that recompiles goes through the impact gate, but the decisions it
-  escalated itself (`RULE_NEEDS_DATA <id>`) do not count towards the share: undoing them
+  escalated itself (`RULE_NEEDS_DATA <id>` or `RULE_COMPILE_FAILED <id>`) do not count
+  towards the share: undoing them
   is the point of the recompile. Contradicting a person still blocks it.
 - The invoice pack runs its tester on `helmcode:deepseek-v4-flash`, the coder's family,
   against point 8: `helmcode:qwen3.6` took about 30 s per rule, deepseek about 3 s. We
@@ -114,7 +124,9 @@ implementation only served as a test oracle, at the price of a second full compi
   the background and activates; NeedsData blocks the rule, the next invoice escalates with
   `RULE_NEEDS_DATA`, and a recompile activates it unless a person decided one of the
   invoices it escalated; startup resumes a rule left
-  `compiling`. `processes/tests/test_api.py`: LLM down leaves a draft with `report.error`.
+  `compiling`; every model down blocks the saved rule, the next invoice escalates with
+  `RULE_COMPILE_FAILED` and a recompile activates it. `processes/tests/test_api.py` and
+  `agents/tests/test_llm.py`: LLM down leaves the rule `blocked` with `report.error`.
 - `make eval-compiler` runs the loop with real models on the 16 invoice rules and scores
   the code against the hand-written reference on the 471 golden instances, and the
   reference against the tester's tests.

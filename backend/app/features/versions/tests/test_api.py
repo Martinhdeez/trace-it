@@ -1,0 +1,375 @@
+"""Publication and replay across real database transactions and sandbox executions."""
+
+import asyncio
+import uuid
+
+from app.core.database import session_factory
+from app.features.decisions.tests.test_api import client, stored
+from app.features.ingestion.extraction_plan import load_extraction_plan
+from app.features.ingestion.model import File, Instance
+from app.features.processes.model import Process, Symbol
+from app.features.rules.model import Rule
+from app.features.rules.service import rule_hash
+from app.features.sources.model import Source
+from app.features.versions import configuration
+
+CODE = """def evaluate(instance, sources, others):
+    duplicate = any(o.get("order") == instance.get("order") for o in others)
+    paid = any(r["order"] == instance.get("order") for r in sources.get("paid", []))
+    return {"fires": duplicate or paid, "reason": "DUPLICATE_OR_PAID" if duplicate or paid else ""}
+"""
+TYPES = [
+    {"name": "PAY", "priority": 0, "is_default": True},
+    {"name": "CHECK", "priority": 1, "requires_human": True},
+    {"name": "REJECT", "priority": 2},
+]
+
+
+async def seed(api):
+    suffix = uuid.uuid4().hex
+    user = (
+        await api.post(
+            "/users", json={"name": "Manager", "email": f"{suffix}@x.test", "role": "manager"}
+        )
+    ).json()
+    headers = {"X-User-Id": str(user["id"])}
+    definition = {
+        "name": suffix,
+        "decision_types": TYPES,
+        "symbols": [{"name": "order", "type": "text"}],
+        "rules": [],
+    }
+    result = await api.post("/processes/definition", json=definition)
+    assert result.status_code == 200, result.text
+    pid = result.json()["process"]["id"]
+    async with session_factory() as session:
+        rule = Rule(
+            process_id=pid,
+            text="Check duplicate or paid orders",
+            type="prohibition",
+            decision="CHECK",
+            code=CODE,
+            hash=rule_hash("Check duplicate or paid orders", CODE),
+            tests=[],
+            report={"valid": True},
+            status="draft",
+        )
+        session.add(rule)
+        await session.flush()
+        rid = rule.id
+        for name, order in [("a", "A"), ("b", "B")]:
+            digest = uuid.uuid4().hex
+            session.add(File(hash=digest, name=name, content=b"pdf", text=""))
+            await session.flush()
+            session.add(
+                Instance(
+                    process_id=pid, file_hash=digest, name=name, symbols=stored({"order": order})
+                )
+            )
+        session.add(Source(process_id=pid, name="paid", origin="test", rows=[{"order": "B"}]))
+        await session.commit()
+    draft = (await api.get(f"/processes/{pid}/draft", headers=headers)).json()
+    result = await api.put(
+        f"/processes/{pid}/draft",
+        headers=headers,
+        json={"expected_revision": draft["revision"], "rule_ids": [rid]},
+    )
+    assert result.status_code == 200, result.text
+    return pid, headers, rid, definition
+
+
+async def validate(api, pid, headers):
+    result = await api.post(f"/processes/{pid}/draft/validate", headers=headers)
+    assert result.status_code == 200, result.text
+    return result.json()
+
+
+async def publish(api, pid, headers):
+    draft = await validate(api, pid, headers)
+    assert draft["validation"]["valid"], draft
+    result = await api.post(
+        f"/processes/{pid}/draft/publish",
+        headers=headers,
+        json={
+            "revision": draft["revision"],
+            "validation_hash": draft["validation"]["hash"],
+            "reason": "Reviewed impact",
+        },
+    )
+    assert result.status_code == 201, result.text
+    return result.json()
+
+
+async def test_initial_approval_replay_and_rollback():
+    async with client() as api:
+        pid, headers, rid, _ = await seed(api)
+        assert (await api.post(f"/processes/{pid}/run")).status_code == 409
+        first = await publish(api, pid, headers)
+        assert first["validation"]["valid"] and first["validation"]["inputs_hash"]
+        assert (await api.post(f"/processes/{pid}/run")).json()["decided"] == 2
+        cases = (await api.get(f"/processes/{pid}/instances")).json()
+        original = (await api.get(f"/instances/{cases[0]['id']}")).json()["decisions"][0]
+        assert original["version_id"] == first["id"]
+        # New evidence and new rule configuration cannot change a historical replay.
+        async with session_factory() as session:
+            session.add(
+                Source(process_id=pid, name="paid", origin="changed", rows=[{"order": "A"}])
+            )
+            row = await session.get(Rule, rid)
+            row.code = (
+                "def evaluate(instance, sources, others):\n"
+                '    return {"fires": True, "reason": "changed"}'
+            )
+            await session.commit()
+        result = await api.post(f"/decisions/{original['id']}/replay", headers=headers)
+        assert result.json()["matches"], result.text
+        # Stage retirement; old version remains in force until approval.
+        await api.put(f"/processes/{pid}/draft", headers=headers, json={"rule_ids": []})
+        assert (await api.get(f"/processes/{pid}")).json()["active_version_id"] == first["id"]
+        second = await publish(api, pid, headers)
+        await api.put(
+            f"/processes/{pid}/draft", headers=headers, json={"restore_version_id": first["id"]}
+        )
+        third = await publish(api, pid, headers)
+        assert third["number"] == 3 and third["parent_id"] == second["id"]
+        assert third["snapshot"] == first["snapshot"]
+        assert (await api.get(f"/instances/{cases[0]['id']}")).json()["decisions"] == [original]
+
+
+async def test_extraction_plan_uses_published_symbols_and_preserves_hints():
+    async with client() as api:
+        pid, headers, _, _ = await seed(api)
+        await publish(api, pid, headers)
+        async with session_factory() as session:
+            symbol = await session.get(Symbol, (pid, "order"))
+            symbol.extraction = {"labels": ["Purchase order"], "source": "document"}
+            await session.commit()
+            workspace = await configuration.workspace(session, pid)
+            assert workspace["process"]["symbols"][0]["extraction"]["labels"] == ["Purchase order"]
+
+        async with session_factory() as session:
+            cached_process = await session.get(Process, pid)
+            original = await load_extraction_plan(session, pid)
+            assert original.fields[0].labels == []
+            draft = await api.put(
+                f"/processes/{pid}/draft",
+                headers=headers,
+                json={
+                    "symbols": [
+                        {
+                            "name": "order",
+                            "type": "text",
+                            "extraction": {"labels": ["Purchase order"]},
+                        },
+                        {
+                            "name": "expires_on",
+                            "type": "date",
+                            "extraction": {"labels": ["Valid until"]},
+                        },
+                    ]
+                },
+            )
+            assert draft.status_code == 200, draft.text
+            assert (await load_extraction_plan(session, pid)).fingerprint == original.fingerprint
+            published = await publish(api, pid, headers)
+            revised = await load_extraction_plan(session, pid)
+            assert cached_process.active_version_id != published["id"]
+            assert [field.name for field in revised.fields] == ["expires_on", "order"]
+            assert revised.fields[0].labels == ["Valid until"]
+            assert revised.fields[1].labels == ["Purchase order"]
+            assert revised.field_fingerprint != original.field_fingerprint
+            assert published["snapshot"]["process"]["symbols"][0]["extraction"]["labels"] == [
+                "Purchase order"
+            ]
+
+
+async def test_stale_evidence_and_revision_refuse_publication():
+    async with client() as api:
+        pid, headers, _, _ = await seed(api)
+        draft = await validate(api, pid, headers)
+        body = {
+            "revision": draft["revision"],
+            "validation_hash": draft["validation"]["hash"],
+            "reason": "Approved",
+        }
+        async with session_factory() as session:
+            session.add(Source(process_id=pid, name="paid", origin="new", rows=[]))
+            await session.commit()
+        assert (
+            await api.post(f"/processes/{pid}/draft/publish", headers=headers, json=body)
+        ).status_code == 409
+        changed = await api.put(
+            f"/processes/{pid}/draft",
+            headers=headers,
+            json={"expected_revision": draft["revision"], "description": "Changed"},
+        )
+        assert changed.status_code == 200
+        assert (
+            await api.post(f"/processes/{pid}/draft/publish", headers=headers, json=body)
+        ).status_code == 409
+        await publish(api, pid, headers)
+
+
+async def test_historical_queue_resolution_and_pack_reload():
+    async with client() as api:
+        pid, headers, _, definition = await seed(api)
+        first = await publish(api, pid, headers)
+        await api.post(f"/processes/{pid}/run")
+        [case] = (await api.get(f"/processes/{pid}/queue")).json()
+        definition["decision_types"] = [
+            TYPES[0],
+            {"name": "NEW_CHECK", "priority": 1, "requires_human": True},
+        ]
+        loaded = await api.post("/processes/definition", json=definition)
+        assert loaded.status_code == 200, loaded.text
+        assert (await api.get(f"/processes/{pid}")).json()["active_version_id"] == first["id"]
+        await publish(api, pid, headers)
+        assert (await api.get(f"/processes/{pid}/queue")).json()[0]["id"] == case["id"]
+        response = await api.post(
+            f"/instances/{case['id']}/resolve",
+            headers=headers,
+            json={"decision": "REJECT", "reason": "Reviewed original evidence"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["decisions"][-1]["version_id"] == first["id"]
+
+
+async def test_invalid_rules_and_manager_gate():
+    async with client() as api:
+        pid, headers, rid, _ = await seed(api)
+        assert (await api.post(f"/processes/{pid}/draft/validate")).status_code == 422
+        async with session_factory() as session:
+            rule = await session.get(Rule, rid)
+            rule.report = {"valid": False}
+            await session.commit()
+        draft = (await api.get(f"/processes/{pid}/draft", headers=headers)).json()
+        await api.put(
+            f"/processes/{pid}/draft",
+            headers=headers,
+            json={"expected_revision": draft["revision"], "rule_ids": [rid]},
+        )
+        assert not (await validate(api, pid, headers))["validation"]["valid"]
+
+
+async def test_concurrent_publish_once():
+    async with client() as api:
+        pid, headers, _, _ = await seed(api)
+        draft = await validate(api, pid, headers)
+        body = {
+            "revision": draft["revision"],
+            "validation_hash": draft["validation"]["hash"],
+            "reason": "Reviewed",
+        }
+        replies = await asyncio.gather(
+            *(
+                api.post(f"/processes/{pid}/draft/publish", headers=headers, json=body)
+                for _ in range(2)
+            )
+        )
+        assert sorted(r.status_code for r in replies) == [201, 404]
+        assert len((await api.get(f"/processes/{pid}/versions")).json()) == 1
+
+
+async def test_publication_waits_for_a_batch_and_rejects_its_stale_preview(monkeypatch):
+    import threading
+
+    from app.features.agents import sandbox
+
+    entered, release = threading.Event(), threading.Event()
+    original_runner = sandbox.run_dataset
+
+    def paused(*args):
+        entered.set()
+        assert release.wait(10), "test did not release execution"
+        return original_runner(*args)
+
+    async with client() as api:
+        pid, headers, _, _ = await seed(api)
+        first = await publish(api, pid, headers)
+        await api.put(f"/processes/{pid}/draft", headers=headers, json={"rule_ids": []})
+        draft = await validate(api, pid, headers)
+        monkeypatch.setattr(sandbox, "run_dataset", paused)
+        running = asyncio.create_task(api.post(f"/processes/{pid}/run"))
+        try:
+            assert await asyncio.to_thread(entered.wait, 5)
+            approving = asyncio.create_task(
+                api.post(
+                    f"/processes/{pid}/draft/publish",
+                    headers=headers,
+                    json={
+                        "revision": draft["revision"],
+                        "validation_hash": draft["validation"]["hash"],
+                        "reason": "Reviewed",
+                    },
+                )
+            )
+            await asyncio.sleep(0)
+        finally:
+            release.set()
+        assert (await running).status_code == 200
+        assert (await approving).status_code == 409
+        for case in (await api.get(f"/processes/{pid}/instances")).json():
+            decisions = (await api.get(f"/instances/{case['id']}")).json()["decisions"]
+            assert {d["version_id"] for d in decisions} == {first["id"]}
+
+
+async def test_human_conflict_blocks_publication_and_operator_cannot_approve():
+    async with client() as api:
+        pid, headers, _, _ = await seed(api)
+        await publish(api, pid, headers)
+        await api.post(f"/processes/{pid}/run")
+        [case] = (await api.get(f"/processes/{pid}/queue")).json()
+        await api.post(
+            f"/instances/{case['id']}/resolve",
+            headers=headers,
+            json={"decision": "REJECT", "reason": "Confirmed paid"},
+        )
+        await api.put(f"/processes/{pid}/draft", headers=headers, json={"rule_ids": []})
+        draft = await validate(api, pid, headers)
+        assert not draft["validation"]["valid"]
+        assert draft["validation"]["conflicts"][0]["instance_id"] == case["id"]
+        user = (
+            await api.post(
+                "/users",
+                json={
+                    "name": "Operator",
+                    "email": f"{uuid.uuid4().hex}@x.test",
+                    "role": "operator",
+                },
+            )
+        ).json()
+        response = await api.post(
+            f"/processes/{pid}/draft/publish",
+            headers={"X-User-Id": str(user["id"])},
+            json={
+                "revision": draft["revision"],
+                "validation_hash": draft["validation"]["hash"],
+                "reason": "Approve",
+            },
+        )
+        assert response.status_code == 403
+
+
+async def test_new_duplicate_and_changed_symbols_do_not_change_replay():
+    async with client() as api:
+        pid, headers, _, _ = await seed(api)
+        await publish(api, pid, headers)
+        await api.post(f"/processes/{pid}/run")
+        cases = (await api.get(f"/processes/{pid}/instances")).json()
+        first = (await api.get(f"/instances/{cases[0]['id']}")).json()["decisions"][0]
+        async with session_factory() as session:
+            original = await session.get(Instance, cases[0]["id"])
+            copy = Instance(
+                process_id=pid,
+                file_hash=original.file_hash,
+                name="copy",
+                symbols=stored({"order": "A"}),
+            )
+            session.add(copy)
+            original.symbols = stored({"order": "B"})
+            await session.commit()
+        response = await api.post(f"/decisions/{first['id']}/replay", headers=headers)
+        assert response.json()["matches"], response.text
+        result = (await api.post(f"/processes/{pid}/reprocess?dry_run=true")).json()
+        assert result["changes"][0]["before"] == "PAY"
+        assert result["changes"][0]["after"] == "CHECK"

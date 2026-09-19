@@ -23,9 +23,11 @@ The existing health and error contracts remain intact.
 No schema migration is introduced. New uploads create `PENDING` instances. Processes
 declaring the invoice-payment symbol schema receive stored document values and provenance;
 generic processes keep `symbols=None`. Uncertain identifiers remain null so the process's
-rules determine escalation. Re-upload preserves existing symbols and decisions.
-Explicit re-extraction updates only pending instances, under the same row lock used by
+rules determine escalation. Re-upload reuses unchanged pending evidence and refreshes
+stale pending evidence; decided instances retain their original symbols and document.
+Explicit re-extraction updates only stale pending instances, under the same row lock used by
 the decision run. Process retrieval reads PostgreSQL independently of the local cache.
+See [cache dependencies and refresh behavior](cache-and-quality.md).
 
 `process_extraction.py` connects the reader to declared symbols and the latest source
 snapshots. `sources/workbook.py` loads supplier/order snapshots from the existing Excel

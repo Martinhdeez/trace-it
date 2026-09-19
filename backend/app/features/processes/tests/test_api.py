@@ -59,12 +59,13 @@ async def test_process_rule_flow(monkeypatch: pytest.MonkeyPatch) -> None:
         )
         assert r.status_code == 201, r.text
         rule = r.json()
-        # Saved as `compiling`; the background compilation fails (no LLM) and leaves a
-        # draft with the error, never a rule stuck in `compiling`.
+        # Saved as `compiling`; the background compilation fails (no LLM) and leaves it
+        # a draft with the error; published configuration remains unchanged.
         assert rule["status"] == "compiling"
         rule = (await api.get(f"/rules/{rule['id']}")).json()
         assert rule["status"] == "draft"
-        assert rule["report"] == {"valid": False, "error": "CompilationError: no LLM in tests"}
+        assert rule["report"]["valid"] is False
+        assert rule["report"]["error"] == "CompilationError: no LLM in tests"
 
         r = await api.post(f"/rules/{rule['id']}/compile")
         assert r.status_code == 502, r.text

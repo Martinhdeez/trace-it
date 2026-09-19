@@ -45,10 +45,14 @@ the shared event schema and OpenTelemetry export.
 3. Source mismatches select field names for at most one extra extraction. Expected
    master values are never supplied to the readers. Store both extraction IDs,
    candidates, coordinates, options, model manifests and source snapshot IDs.
-4. Only initial attachment or explicit pending re-extraction changes the reading
-   attached to an instance. Duplicate uploads remain audit events, but
-   `GET /instances/{id}/document` excludes their non-applied extractions. Decided
-   instances cannot be re-extracted. Original events and decisions remain intact.
+4. Initial attachment and a stale pending-instance refresh apply readings to an
+   instance. Upload and re-extraction check the request, sources and symbol schema;
+   unchanged evidence is reused without another extraction event. A pending refresh
+   appends `extract_document` and updates symbols together. Decided duplicates reuse
+   their applied evidence; explicit re-extraction returns 409. The document endpoint
+   excludes legacy non-applied duplicate extractions.
+   Original events and decisions remain intact. See the
+   [cache and refresh contract](../ingestion/cache-and-quality.md).
 5. `make demo` uses the production workbook/PDF, ERP sync, run and export APIs.
    It keeps extraction evidence and uses the same decision export policy as the
    application, including optional human review. It does not write test symbols
@@ -89,11 +93,13 @@ the shared event schema and OpenTelemetry export.
 ## Consequences
 
 - The instance trace now connects the PDF to local readers, remote requests or
-  replay, stored readings, symbols and decisions. The evidence API remains stable
-  after a duplicate upload, even when it requested different extraction options.
-- Pipeline `invoice-v2.1.5+xlsx-v1.3` invalidates older extraction-cache entries so
-  changed provider selection/provenance cannot reuse mislabeled results. It does
-  not change the field-reading acceptance policy. Historical v2.1.4 corpus results
+  replay, stored readings, symbols and decisions. Decided evidence remains stable
+  after a duplicate upload, even when it requests different extraction options;
+  stale pending evidence refreshes together with its symbols.
+- Pipeline `invoice-v2.2.0+xlsx-v1.3` fingerprints extraction dependencies and local
+  reader inputs separately, so policy changes reuse compatible OCR transcripts
+  while changed models or preprocessing trigger new readings. It retains the
+  field-reading acceptance policy. Historical v2.1.4 corpus results
   in `docs/ingestion/focused-verification.md` remain historical measurements.
 - No new schema migration, hosted observability dependency or model key is needed.
   Journal responses from older text-only generic visual calls remain readable.

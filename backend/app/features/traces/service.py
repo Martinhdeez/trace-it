@@ -7,7 +7,7 @@ import statistics
 from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import String, case, cast, func, or_, select
+from sqlalchemy import Numeric, String, case, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONPATH
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -50,7 +50,13 @@ from app.features.traces.schemas import (
     TokenStats,
 )
 
-FAILURES = ("MISSING_DATA", "RULE_ERROR", "RULE_NEEDS_DATA", "RULE_CONFLICT")
+FAILURES = (
+    "MISSING_DATA",
+    "RULE_ERROR",
+    "RULE_NEEDS_DATA",
+    "RULE_COMPILE_FAILED",
+    "RULE_CONFLICT",
+)
 LIFECYCLE = ("save_rule", "compile_rule", "activate_rule", "retire_rule", "impact_check")
 
 # Every span name, in exactly one monitoring plane. `test_planes.py` fails when the code
@@ -74,6 +80,7 @@ PLANES: dict[str, Plane] = {
     "upload_workbook": _INGESTION,
     "load_workbook": _INGESTION,
     "sync_source": _INGESTION,
+    "discover_source": _INGESTION,
     # Agents writing the rules' code, and what defines and gates it.
     "load_use_case": _AGENTS,
     "load_definition": _AGENTS,
@@ -82,12 +89,16 @@ PLANES: dict[str, Plane] = {
     "save_rule": _AGENTS,
     "norm": _AGENTS,
     "normalize_norm": _AGENTS,
+    "discover_process": _AGENTS,
+    "compile_process_draft": _AGENTS,
+    "publish_process_draft": _AGENTS,
     "compile_rules": _AGENTS,
     "compile_rule": _AGENTS,
     "coder_attempt": _AGENTS,
     "run_tests": _AGENTS,
     "impact_check": _AGENTS,
     "activate_rule": _AGENTS,
+    "publish_process_version": _AGENTS,
     "retire_rule": _AGENTS,
     "llm_run": _AGENTS,
     "demo_llm_down": _AGENTS,
@@ -379,6 +390,18 @@ async def _providers(session: AsyncSession, where: list) -> list[ProviderStats]:
     operation = Event.data["operation"].astext
     network = Event.data["network_attempted"].as_boolean().is_(True)
     replay = Event.data["outcome"].astext == "replay"
+    blocked = Event.data["outcome"].astext == "blocked_uncertain"
+    known = Event.data["cost_status"].astext == "known"
+    included = Event.data["cost_status"].astext == "included"
+    unpriced = or_(
+        Event.data["cost_status"].astext.is_(None),
+        Event.data["cost_status"].astext.not_in(("known", "included")),
+    )
+    latency = func.coalesce(Event.data["network_latency_ms"].as_integer(), Event.duration_ms)
+
+    def network_sum(key):
+        return func.coalesce(func.sum(Event.data[key].as_integer()).filter(network), 0)
+
     rows = await session.execute(
         select(
             provider,
@@ -388,8 +411,22 @@ async def _providers(session: AsyncSession, where: list) -> list[ProviderStats]:
             func.count().filter(network),
             func.count().filter(replay),
             _ERRORS,
-            func.coalesce(func.sum(Event.data["input_tokens"].as_integer()).filter(network), 0),
-            func.coalesce(func.sum(Event.data["output_tokens"].as_integer()).filter(network), 0),
+            network_sum("input_tokens"),
+            network_sum("output_tokens"),
+            func.count().filter(blocked),
+            func.count().filter(network, Event.data["fallback"].as_boolean().is_(True)),
+            network_sum("total_tokens"),
+            network_sum("cached_tokens"),
+            network_sum("reasoning_tokens"),
+            func.coalesce(func.sum(latency).filter(network), 0),
+            func.percentile_cont(0.5).within_group(latency).filter(network),
+            func.percentile_cont(0.95).within_group(latency).filter(network),
+            func.coalesce(
+                func.sum(cast(Event.data["cost_usd"].astext, Numeric)).filter(network), 0
+            ),
+            func.count().filter(network, known),
+            func.count().filter(network, included),
+            func.count().filter(network, unpriced),
         )
         .where(*where, Event.step == "provider_call")
         .group_by(provider, model, operation)
@@ -406,8 +443,42 @@ async def _providers(session: AsyncSession, where: list) -> list[ProviderStats]:
             errors=e,
             input_tokens=tokens_in,
             output_tokens=tokens_out,
+            blocked=b,
+            fallbacks=f,
+            total_tokens=total,
+            cached_tokens=cached,
+            reasoning_tokens=reasoning,
+            network_latency_ms=latency_ms,
+            network_p50_ms=p50,
+            network_p95_ms=p95,
+            known_cost_usd=float(cost),
+            priced_requests=priced,
+            included_requests=included_count,
+            unpriced_requests=unpriced,
         )
-        for p, m, o, c, n, replays, e, tokens_in, tokens_out in rows
+        for (
+            p,
+            m,
+            o,
+            c,
+            n,
+            replays,
+            e,
+            tokens_in,
+            tokens_out,
+            b,
+            f,
+            total,
+            cached,
+            reasoning,
+            latency_ms,
+            p50,
+            p95,
+            cost,
+            priced,
+            included_count,
+            unpriced,
+        ) in rows
     ]
 
 

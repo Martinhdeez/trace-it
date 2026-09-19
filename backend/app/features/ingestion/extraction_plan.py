@@ -9,9 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.agents.compiler import read_keys
-from app.features.processes.model import Symbol
+from app.features.processes.model import Process, Symbol
 from app.features.processes.schemas import SymbolExtraction
 from app.features.rules.model import ENFORCED, Rule
+from app.features.versions.model import ProcessVersion
 
 
 class ExtractionField(BaseModel):
@@ -105,20 +106,55 @@ def _analyze_snapshot(content_hash: str, snapshot_json: str) -> str:
 
 
 async def load_extraction_plan(session: AsyncSession, process_id: int) -> ExtractionPlan:
-    """Read columns, avoiding stale ORM instances retained by a long-lived session."""
-    symbol_rows = (
-        await session.execute(
-            select(
-                Symbol.name,
-                Symbol.type,
-                Symbol.description,
-                Symbol.required,
-                Symbol.extraction,
+    """Use the published contract, or live tables before the first publication."""
+    # Query scalar columns so an ORM Process already loaded in this session cannot
+    # hide a newly published active_version_id.
+    active_version_id = await session.scalar(
+        select(Process.active_version_id).where(Process.id == process_id)
+    )
+    if active_version_id is not None:
+        published = await session.scalar(
+            select(ProcessVersion.snapshot).where(
+                ProcessVersion.id == active_version_id,
+                ProcessVersion.process_id == process_id,
             )
-            .where(Symbol.process_id == process_id)
-            .order_by(Symbol.name)
         )
-    ).all()
+        symbol_rows = [
+            (
+                row["name"],
+                row["type"],
+                row.get("description", ""),
+                row.get("required", False),
+                row.get("extraction"),
+            )
+            for row in sorted(published["process"]["symbols"], key=lambda row: row["name"])
+        ]
+        rule_rows = [
+            (row["id"], row.get("hash"), row["status"], row.get("code"))
+            for row in sorted(published["rules"], key=lambda row: row["id"])
+            if row["status"] in ENFORCED
+        ]
+    else:
+        symbol_rows = (
+            await session.execute(
+                select(
+                    Symbol.name,
+                    Symbol.type,
+                    Symbol.description,
+                    Symbol.required,
+                    Symbol.extraction,
+                )
+                .where(Symbol.process_id == process_id)
+                .order_by(Symbol.name)
+            )
+        ).all()
+        rule_rows = (
+            await session.execute(
+                select(Rule.id, Rule.hash, Rule.status, Rule.code)
+                .where(Rule.process_id == process_id, Rule.status.in_(ENFORCED))
+                .order_by(Rule.id)
+            )
+        ).all()
     fields = []
     for name, type_, description, required, extraction_data in symbol_rows:
         metadata = SymbolExtraction.model_validate(extraction_data) if extraction_data else None
@@ -133,13 +169,6 @@ async def load_extraction_plan(session: AsyncSession, process_id: int) -> Extrac
             )
         )
 
-    rule_rows = (
-        await session.execute(
-            select(Rule.id, Rule.hash, Rule.status, Rule.code)
-            .where(Rule.process_id == process_id, Rule.status.in_(ENFORCED))
-            .order_by(Rule.id)
-        )
-    ).all()
     snapshot_json = _canonical_json(
         {
             "process_id": process_id,

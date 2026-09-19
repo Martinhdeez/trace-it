@@ -114,7 +114,9 @@ async def seed(process_id: int, rules: dict[str, tuple[str, str]]) -> None:
                     report={"valid": True},
                 )
             )
-        await session.commit()
+        from tests.support.rows import publish_fixture
+
+        await publish_fixture(session, process_id)
 
 
 async def create_process(
@@ -294,7 +296,9 @@ async def test_a_priority_tie_at_runtime_escalates(fake_sandbox: None) -> None:
                 ),
             )
             session.add(both)
-            await session.commit()
+            from tests.support.rows import publish_fixture
+
+            await publish_fixture(session, process_id)
             both_id = both.id
 
         r = await api.post(f"/processes/{process_id}/run")
@@ -321,7 +325,9 @@ async def test_a_required_symbol_missing_escalates(fake_sandbox: None) -> None:
             session.add(File(hash=digest, name="scan.pdf", content=b"%PDF"))
             scan = Instance(process_id=process_id, file_hash=digest, name="scan.pdf", symbols={})
             session.add(scan)
-            await session.commit()
+            from tests.support.rows import publish_fixture
+
+            await publish_fixture(session, process_id)
             scan_id = scan.id
 
         r = await api.post(f"/processes/{process_id}/run")
@@ -332,15 +338,44 @@ async def test_a_required_symbol_missing_escalates(fake_sandbox: None) -> None:
         assert detail["decisions"][0]["reason"] == "MISSING_DATA: nif"
 
 
+async def test_a_scan_the_rules_would_reject_escalates(fake_sandbox: None) -> None:
+    """ADR 0025: a scanned copy of an already paid invoice escalates; its text twin does not."""
+    async with client() as api:
+        process_id, _ = await create_process(api, "operator")
+        async with session_factory() as session:
+            digest = uuid.uuid4().hex
+            session.add(File(hash=digest, name="scan_paid.pdf", content=b"%PDF"))
+            values = INVOICES["FA-1016_papelería.pdf"]
+            symbols = {k: {"value": v, "origin": "scan:r1"} for k, v in values.items()}
+            scan = Instance(
+                process_id=process_id, file_hash=digest, name="scan_paid.pdf", symbols=symbols
+            )
+            session.add(scan)
+            from tests.support.rows import publish_fixture
+
+            await publish_fixture(session, process_id)
+            scan_id = scan.id
+
+        r = await api.post(f"/processes/{process_id}/run")
+        assert r.json()["by_decision"] == {"PAGAR": 1, "NO_PAGAR": 1, "ESCALAR": 2}
+        detail = (await api.get(f"/instances/{scan_id}")).json()
+        [decision] = detail["decisions"]
+        assert (decision["decision"], decision["reason"]) == (
+            "ESCALAR",
+            "SCAN_REVIEW: order_already_paid",
+        )
+        [event] = [e for e in detail["events"] if e["step"] == "decision"]
+        assert event["data"]["reason"] == "SCAN_REVIEW: order_already_paid"
+
+
 @pytest.mark.parametrize(
     ("status", "message"),
     [("compiling", "rules are still compiling"), ("retired", "has no active rules")],
 )
-async def test_a_run_is_refused_until_the_rules_are_ready(
+async def test_draft_rule_status_does_not_stop_published_execution(
     fake_sandbox: None, status: str, message: str
 ) -> None:
-    """A run while the norm's rules compile, or with none enforced, would pay every
-    instance by default: it is refused and nothing is decided."""
+    """Authoring status changes cannot alter the already approved execution rules."""
     async with client() as api:
         process_id, _ = await create_process(api, "operator")
         async with session_factory() as session:
@@ -351,10 +386,9 @@ async def test_a_run_is_refused_until_the_rules_are_ready(
 
         for action in ("run", "reprocess"):
             r = await api.post(f"/processes/{process_id}/{action}")
-            assert r.status_code == 409, r.text
-            assert message in r.json()["message"]
+            assert r.status_code == 200, r.text
         r = await api.get(f"/processes/{process_id}/instances", params={"status": "PENDING"})
-        assert len(r.json()) == len(INVOICES)
+        assert len(r.json()) == 1
 
 
 def test_flat_symbols_are_refused_on_write() -> None:
@@ -484,7 +518,7 @@ async def test_what_a_console_reads(fake_sandbox: None) -> None:
         steps = [e["step"] for e in (await api.get(f"/processes/{process_id}/events")).json()]
         # The run is a span with one child per rule; each decision is a point inside it.
         run = ["run_process"] + ["evaluate_rule"] * 2 + ["decision"] * 3
-        assert steps == ["resolution", *run, "load_definition"]
+        assert steps == ["resolution", *run, "publish_process_version", "load_definition"]
         r = await api.get(f"/processes/{process_id}/events", params={"step": "resolution"})
         [event] = r.json()
         assert event["instance_id"] == escalated["id"]

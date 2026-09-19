@@ -130,6 +130,18 @@ class ProviderStats(BaseModel):
     errors: int
     input_tokens: int
     output_tokens: int
+    blocked: int = 0
+    fallbacks: int = 0
+    total_tokens: int = 0
+    cached_tokens: int = 0
+    reasoning_tokens: int = 0
+    network_latency_ms: int = 0
+    network_p50_ms: float | None = None
+    network_p95_ms: float | None = None
+    known_cost_usd: float = 0
+    priced_requests: int = 0
+    included_requests: int = 0
+    unpriced_requests: int = 0
 
 
 class ProcessMetrics(BaseModel):

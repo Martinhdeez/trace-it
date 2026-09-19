@@ -1,0 +1,164 @@
+{
+  "name": "Invoice payment - frozen 2026-09-19",
+  "use_case": "Invoice payment",
+  "decision_types": [
+    {
+      "name": "ESCALAR",
+      "priority": 3,
+      "requires_human": true
+    },
+    {
+      "name": "NO_PAGAR",
+      "priority": 2
+    },
+    {
+      "name": "PAGAR",
+      "priority": 1,
+      "is_default": true
+    }
+  ],
+  "symbols": [
+    {
+      "name": "file_id",
+      "type": "text",
+      "description": "Exact name of the PDF (NFC)."
+    },
+    {
+      "name": "issuer_nif",
+      "type": "text",
+      "description": "NIF/CIF of the issuing supplier. Never the customer's (A58231074, Banco Miralmar).",
+      "required": true
+    },
+    {
+      "name": "issuer_name",
+      "type": "text",
+      "description": "Name of the issuer as printed. Trace only; no rule decides with it."
+    },
+    {
+      "name": "iban",
+      "type": "text",
+      "description": "Payment IBAN printed on the invoice.",
+      "required": true
+    },
+    {
+      "name": "invoice_number",
+      "type": "text",
+      "description": "Invoice number as printed (FA-5077, 2026/0811-B, F26-0233)."
+    },
+    {
+      "name": "date",
+      "type": "text",
+      "description": "Issue date as YYYY-MM-DD with the printed numbers, uncorrected: 31/02/2026 -> \"2026-02-31\". Accepts DD/MM/YYYY and '6 de abril de 2026'. Never None because the date is impossible.",
+      "required": true
+    },
+    {
+      "name": "purchase_order",
+      "type": "text",
+      "description": "Purchase order reference (PO-YYYY-NNNN).",
+      "required": true
+    },
+    {
+      "name": "base",
+      "type": "number",
+      "description": "Taxable base / Subtotal.",
+      "required": true
+    },
+    {
+      "name": "vat_rate",
+      "type": "number",
+      "description": "Printed VAT percentage (21 in 'IVA (21%)').",
+      "required": true
+    },
+    {
+      "name": "vat_amount",
+      "type": "number",
+      "description": "Printed VAT amount.",
+      "required": true
+    },
+    {
+      "name": "total",
+      "type": "number",
+      "description": "Printed total (TOTAL, IMPORTE TOTAL, TOTAL A PAGAR, Total factura). Not Subtotal nor 'Suma y sigue'.",
+      "required": true
+    },
+    {
+      "name": "free_text",
+      "type": "text",
+      "description": "Text that is not a header, a line item or totals (notes, notices, terms). Always stored. No rule reads it: it only feeds the embedded-instructions warning in the trace."
+    }
+  ],
+  "rules": [
+    {
+      "text": "The invoice's issuer_nif, normalised (uppercase, without spaces, hyphens or dots), equals the nif of at least one row in suppliers.",
+      "type": "requirement",
+      "decision": "NO_PAGAR",
+      "code": "rules/n1-1.py"
+    },
+    {
+      "text": "The invoice's iban, normalised (uppercase, without spaces), equals the iban of the suppliers row whose nif equals the invoice's normalised issuer_nif.",
+      "type": "requirement",
+      "decision": "NO_PAGAR",
+      "code": "rules/n1-2.py"
+    },
+    {
+      "text": "The invoice's purchase_order, normalised (uppercase, without spaces), equals the purchase_order of at least one row in orders.",
+      "type": "requirement",
+      "decision": "NO_PAGAR",
+      "code": "rules/n2-1.py"
+    },
+    {
+      "text": "The orders row whose purchase_order equals the invoice's normalised purchase_order has supplier_id equal to the id of the suppliers row whose nif equals the invoice's normalised issuer_nif.",
+      "type": "requirement",
+      "decision": "NO_PAGAR",
+      "code": "rules/n2-2.py"
+    },
+    {
+      "text": "The invoice's total matches (±0.01 EUR) the total_amount of the orders row whose purchase_order equals the invoice's normalised purchase_order.",
+      "type": "requirement",
+      "decision": "NO_PAGAR",
+      "code": "rules/n2-3.py"
+    },
+    {
+      "text": "The invoice's vat_amount matches (±0.01 EUR) base * vat_rate / 100, computed with Decimal and ROUND_HALF_UP.",
+      "type": "requirement",
+      "decision": "NO_PAGAR",
+      "code": "rules/n3-1.py"
+    },
+    {
+      "text": "The invoice's total matches (±0.01 EUR) base + vat_amount.",
+      "type": "requirement",
+      "decision": "NO_PAGAR",
+      "code": "rules/n3-2.py"
+    },
+    {
+      "text": "The invoice's date is a valid calendar date (a real YYYY-MM-DD date; e.g. 2026-02-31 is invalid).",
+      "type": "requirement",
+      "decision": "NO_PAGAR",
+      "code": "rules/n4-1.py"
+    },
+    {
+      "text": "The invoice's date is not later than parameters.cut_off_date.",
+      "type": "requirement",
+      "decision": "NO_PAGAR",
+      "code": "rules/n4-2.py"
+    },
+    {
+      "text": "The erp row whose purchase_order equals the invoice's normalised purchase_order has status PENDIENTE.",
+      "type": "requirement",
+      "decision": "NO_PAGAR",
+      "code": "rules/n5-1.py"
+    },
+    {
+      "text": "The erp row whose purchase_order equals the invoice's normalised purchase_order does not have status PAGADA (the order has not already been paid).",
+      "type": "prohibition",
+      "decision": "NO_PAGAR",
+      "code": "rules/n5-2.py"
+    },
+    {
+      "text": "No other instance in others carries the same normalised purchase_order as this invoice.",
+      "type": "prohibition",
+      "decision": "ESCALAR",
+      "code": "rules/n5-3.py"
+    }
+  ]
+}

@@ -6,11 +6,12 @@ same verdict, so a past decision can be replayed from its stored symbols.
 Every instance gets a decision. When a required symbol is missing, or a rule cannot be
 trusted (its code failed, or two decision types tie), the verdict is the process's
 escalation type with the reason: a person looks at it, and the default is never produced
-while a rule is unevaluated.
+while a rule is unevaluated. A scan escalates too when its readers did not confirm a required
+symbol, or when the rules would reject it (ADR 0025).
 """
 
 import hashlib
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -79,10 +80,14 @@ def _run_rule(
     run_dataset: RunDataset,
 ) -> list[RuleResult]:
     """One rule over every instance. A whole-batch failure is that error for every one."""
-    needs_data = (rule.report or {}).get("needs_data")
+    report = rule.report or {}
+    needs_data = report.get("needs_data")
     if not rule.code and needs_data:
         missing = ", ".join(needs_data.get("missing") or []) or "data"
         reason = f"RULE_NEEDS_DATA {rule.id}: missing {missing}"
+        return [RuleResult(rule.id, rule.hash, None, reason)] * len(instances)
+    if not rule.code and report.get("error"):  # its compilation failed (ADR 0020)
+        reason = f"RULE_COMPILE_FAILED {rule.id}: {report['error'][:200]}"
         return [RuleResult(rule.id, rule.hash, None, reason)] * len(instances)
     try:
         if not rule.code:
@@ -115,16 +120,25 @@ def _combine(
     outcomes: Outcomes,
     rules_hash: str,
     missing: list[str],
+    scan: Collection[str] | None = None,
 ) -> Verdict:
     """A required symbol missing -> escalate, whatever the rules answered. No rule fires ->
     the default. Several fire -> the highest priority. A rule that could not be evaluated,
-    or a tie between types -> escalate with the reason."""
+    or a tie between types -> escalate with the reason.
+
+    `scan` is None for a document with a text layer; for a scan, the symbols its readers did
+    not confirm. A required one among them -> escalate, whatever the rules answered. A scan
+    the rules would reject -> escalate: a mismatch on OCR data may be a misread (ADR 0025)."""
 
     def verdict(decision: str, reason: str) -> Verdict:
         return Verdict(decision, reason, results, rules_hash)
 
     if missing:
         return verdict(outcomes.escalate, f"MISSING_DATA: {', '.join(missing)}")
+
+    unconfirmed = [s for s in outcomes.required if s in (scan or ())]
+    if unconfirmed:
+        return verdict(outcomes.escalate, f"UNVERIFIED_DATA: {', '.join(unconfirmed)}")
 
     failures = [r.reason for r in results if r.fires is None]
     if failures:
@@ -141,7 +155,12 @@ def _combine(
         tie = f"RULE_CONFLICT: {', '.join(decisions)} share priority {highest}"
         return verdict(outcomes.escalate, tie)
     # The rule's own reason code; its text stays on the rule, joined by `rule_id`.
-    return verdict(decisions[0], " | ".join(r.reason or rule.text for rule, r in winners))
+    reason = " | ".join(r.reason or rule.text for rule, r in winners)
+    # ponytail: always the escalation type; a process setting (`scan_rejection_decision`)
+    # when a process wants another outcome for rejected scans.
+    if scan is not None and decisions[0] not in (outcomes.default, outcomes.escalate):
+        return verdict(outcomes.escalate, f"SCAN_REVIEW: {reason}")
+    return verdict(decisions[0], reason)
 
 
 def decide(
@@ -151,14 +170,24 @@ def decide(
     sources: Sources,
     population: list[DatasetEntry],
     run_dataset: RunDataset,
+    scans: Mapping[int, Collection[str]] | None = None,
 ) -> list[Verdict]:
     """Apply every rule to every instance. Each rule's code runs once, over all the instances
-    together; the shared sources and population cross to the sandbox once per rule."""
+    together; the shared sources and population cross to the sandbox once per rule.
+    `scans`: the instances read from a scan, not a text layer, each with the symbols its
+    readers did not confirm."""
     if not instances:
         return []
     by_rule = [_run_rule(rule, instances, sources, population, run_dataset) for rule in rules]
     rules_hash = hash_rules(rules)
     return [
-        _combine(rules, [r[k] for r in by_rule], outcomes, rules_hash, _missing(outcomes, values))
-        for k, (_, values) in enumerate(instances)
+        _combine(
+            rules,
+            [r[k] for r in by_rule],
+            outcomes,
+            rules_hash,
+            _missing(outcomes, values),
+            (scans or {}).get(key),
+        )
+        for k, (key, values) in enumerate(instances)
     ]

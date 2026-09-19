@@ -1,4 +1,4 @@
-"""The plan reflects the live symbol and enforced-rule definition."""
+"""The plan follows published configuration, or live bootstrap inputs."""
 
 import pytest
 from pydantic import ValidationError
@@ -25,10 +25,86 @@ class _Session:
         self.symbols = symbols
         self.rules = rules
         self.calls = 0
+        self.active_version_id = None
+        self.published = None
+
+    async def scalar(self, statement):
+        if "processes.active_version_id" in str(statement):
+            return self.active_version_id
+        return self.published
 
     async def execute(self, _statement):
         self.calls += 1
         return _Rows(self.symbols if self.calls % 2 else self.rules)
+
+
+async def test_published_plan_ignores_unpublished_inputs_and_tracks_new_version() -> None:
+    session = _Session([("live", "text", "", False, None)], [])
+    session.active_version_id = 10
+    session.published = {
+        "process": {
+            "symbols": [
+                {
+                    "name": "approved",
+                    "type": "date",
+                    "description": "Approved date",
+                    "required": True,
+                    "extraction": {"labels": ["Valid until"], "source": "document"},
+                }
+            ]
+        },
+        "rules": [],
+    }
+    first = await load_extraction_plan(session, 42)
+    assert [field.name for field in first.fields] == ["approved"]
+    assert first.fields[0].labels == ["Valid until"]
+    session.symbols = [("draft_only", "number", "", False, None)]
+    assert (await load_extraction_plan(session, 42)).fingerprint == first.fingerprint
+    assert session.calls == 0
+
+    # Simulate a later committed publication while retaining the same session.
+    session.active_version_id = 11
+    session.published = {
+        **session.published,
+        "process": {
+            "symbols": [
+                {
+                    "name": "approved",
+                    "type": "date",
+                    "extraction": {"labels": ["Expires on"], "source": "document"},
+                },
+                {"name": "draft_only", "type": "number"},
+            ]
+        },
+    }
+    second = await load_extraction_plan(session, 42)
+    assert second.field_fingerprint != first.field_fingerprint
+    assert [field.name for field in second.fields] == ["approved", "draft_only"]
+    assert second.fields[0].labels == ["Expires on"]
+
+
+async def test_published_rule_code_invalidates_analysis_even_with_same_rule_hash() -> None:
+    session = _Session([], [])
+    session.active_version_id = 20
+    session.published = {
+        "process": {"symbols": [{"name": "approved", "type": "text"}]},
+        "rules": [
+            {
+                "id": 3,
+                "hash": "unchanged",
+                "status": "active",
+                "code": "def evaluate(i, s, o):\n    return i['approved']",
+            }
+        ],
+    }
+    first = await load_extraction_plan(session, 9)
+    session.published["rules"][0]["code"] = "def evaluate(i, s, o):\n    return i['new_key']"
+    second = await load_extraction_plan(session, 9)
+    assert first.field_fingerprint == second.field_fingerprint
+    assert first.rule_fingerprint != second.rule_fingerprint
+    assert second.warnings == [
+        {"code": "SCHEMA_UNDECLARED_SYMBOL", "rule_id": 3, "symbol": "new_key"}
+    ]
 
 
 async def test_plan_reads_current_symbols_and_rule_dependencies() -> None:

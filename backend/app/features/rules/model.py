@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -9,7 +9,8 @@ from app.core.database import Base, created_at
 
 RULE_TYPES = ("requirement", "prohibition")
 # compiling: its code is being written in the background. blocked: it needs data the process
-# does not have, so it is enforced by escalating every instance (ADR 0004, 0016).
+# does not have, or its compilation failed, so it is enforced by escalating every instance
+# (ADR 0004, 0016, 0020).
 RULE_STATUSES = ("compiling", "draft", "active", "blocked", "retired")
 ENFORCED = ("active", "blocked")  # the statuses the engine runs
 
@@ -36,9 +37,6 @@ class Rule(Base):
 
     __tablename__ = "rules"
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["process_id", "decision"], ["decision_types.process_id", "decision_types.name"]
-        ),
         CheckConstraint(f"type in {RULE_TYPES}", name="type"),
         CheckConstraint(f"status in {RULE_STATUSES}", name="status"),
     )

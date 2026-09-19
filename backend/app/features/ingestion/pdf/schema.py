@@ -74,7 +74,7 @@ def extract_schema_pdf(content, options, settings, ocr, vlm, field_reader, field
                         warnings.append({"code": "OCR_EMPTY", "page": number, "stage": reader})
                 except Exception as exc:
                     failure("OCR_ERROR", number, exc)
-        elif needs_ocr:
+        elif needs_ocr and options.mode != "api":
             warnings.append({"code": "OCR_DISABLED", "page": number})
         reports.append(report)
 
@@ -94,20 +94,28 @@ def extract_schema_pdf(content, options, settings, ocr, vlm, field_reader, field
             if not report["ocr_needed"] or not (unresolved or needs_visual_text):
                 continue
             try:
-                metrics["vlm_calls"] += 1
+                params = {
+                    "fields": [field.model_dump(mode="json") for field in targets],
+                }
                 with events.span("vision", page=page["number"], adapter="schema") as span:
-                    generated = vlm.transcribe(
-                        image(page),
-                        page["number"],
-                        page["size"],
-                        fields=[field.model_dump(mode="json") for field in targets],
+                    if options.mode == "api":
+                        generated_readers = vlm.transcribe_readers(
+                            image(page), page["number"], page["size"], **params
+                        )
+                    else:
+                        generated_readers = {
+                            "schema_visual": vlm.transcribe(
+                                image(page), page["number"], page["size"], **params
+                            )
+                        }
+                    span.set(readers=len(generated_readers))
+                metrics["vlm_calls"] += len(generated_readers)
+                for reader, generated in generated_readers.items():
+                    lines.extend(
+                        line.model_copy(update={"id": reader + ":" + line.id}) for line in generated
                     )
-                    span.set(lines=len(generated))
-                lines.extend(
-                    line.model_copy(update={"id": "schema_visual:" + line.id}) for line in generated
-                )
                 readings, _ = read_schema_fields(lines, targets, settings.ocr_min_confidence)
-                if generated:
+                if any(generated_readers.values()):
                     report["method"] += "+vlm"
             except Exception as exc:
                 failure("VLM_ERROR", page["number"], exc)

@@ -136,7 +136,7 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
         "ingest_document",
     }
     assert (ingestion["files"], ingestion["pages"], ingestion["ocr_calls"]) == (1, 2, 1)
-    assert ingestion["providers"] == [
+    expected_providers = [
         {
             "provider": "gemini",
             "model": provider_model,
@@ -149,6 +149,9 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
             "output_tokens": 4,
         }
     ]
+    assert [
+        {key: row[key] for key in expected_providers[0]} for row in ingestion["providers"]
+    ] == expected_providers
     assert (
         next(p for p in ingestion_everywhere["providers"] if p["model"] == provider_model)
         == (ingestion["providers"][0])
@@ -172,6 +175,7 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
     }
     assert {s["step"] for s in agents["steps"]} == {
         "load_definition",
+        "publish_process_version",
         "compile_rule",
         "coder_attempt",
         "llm_run",

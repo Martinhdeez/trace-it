@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: setup compile activate demo erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down check down reset-db
+.PHONY: setup compile activate load-frozen demo erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 DEMO_ARGS ?=
@@ -14,15 +14,24 @@ setup:
 compile:  # needs LLM keys in .env
 	$(LOAD) --compile
 
-activate:  # put into the process every rule whose code is already validated
-	$(LOAD) --activate
+activate:  # MANAGER_ID=<id>: explicitly approve the validated pack draft
+	test -n "$(MANAGER_ID)"
+	$(LOAD) --activate --manager-id $(MANAGER_ID)
+
+# MANAGER_ID=<id>: the rule set compiled from Norma_Pagos_v3 and frozen for delivery, as its
+# own process (`Invoice payment - frozen 2026-09-19`), loaded and published with no LLM. The
+# first load only makes sure the use case exists; its hand-written rules stay unpublished.
+FROZEN = ../processes/invoice-payment/frozen/2026-09-19/invoice-payment.json
+load-frozen:
+	test -n "$(MANAGER_ID)"
+	cd backend && uv run python -m app.cli load ../processes/invoice-payment.json
+	cd backend && uv run python -m app.cli load $(FROZEN) --activate --manager-id $(MANAGER_ID)
 
 # The whole process over the challenge corpus -> output/outcomes.jsonl. Needs `make erp`
 # running in another terminal, `make setup` and downloaded OCR weights.
 demo:
 	test -f .env || cp .env.example .env
 	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
-	$(LOAD) --activate
 	uv run --project backend --locked --env-file .env python tools/demo_run.py $(DEMO_ARGS)
 
 erp:

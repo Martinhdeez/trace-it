@@ -25,7 +25,7 @@ from app.features.ingestion.model import File, Instance
 from app.features.rules import service as rules
 from app.features.rules.model import Rule
 from tests.support.fakes import dataset_runner
-from tests.support.models import per_role
+from tests.support.models import down, per_role
 
 # A rule nobody has activated yet: it escalates any invoice from this supplier. It stays
 # out of RULES_V3 so `seed` does not seed it as active.
@@ -39,6 +39,8 @@ RULES = {
 @pytest.fixture(autouse=True)
 def fake_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sandbox, "run_dataset", dataset_runner(RULES))
+    monkeypatch.setattr(sandbox, "check", lambda code: None)
+    monkeypatch.setattr(compiler, "read_keys", lambda code: (set(), set()))
 
 
 async def create_draft(process_id: int) -> int:
@@ -88,6 +90,12 @@ async def test_impact_is_visible_before_activating() -> None:
         assert (await api.get(f"/processes/{process_id}/findings")).json() == []
 
 
+async def publish(api, process_id, headers):
+    from app.features.versions.tests.test_api import publish as approve
+
+    return await approve(api, process_id, headers)
+
+
 async def test_activating_records_findings_and_leaves_the_past_alone() -> None:
     async with client() as api:
         process_id, headers = await prepare(api)
@@ -96,12 +104,13 @@ async def test_activating_records_findings_and_leaves_the_past_alone() -> None:
         r = await api.post(f"/rules/{rule_id}/activate", headers=headers)
         assert r.status_code == 200, r.text
 
+        await publish(api, process_id, headers)
         findings = (await api.get(f"/processes/{process_id}/findings")).json()
-        assert [f["detail"].split(":")[0] for f in findings] == [
+        assert [f["detail"].split(":")[1].strip() for f in findings] == [
             "PAGAR -> ESCALAR",
             "NO_PAGAR -> ESCALAR",
         ]
-        assert {f["rule_id"] for f in findings} == {rule_id}
+        assert {f["rule_id"] for f in findings} == {None}
 
         # The decision itself is untouched: the finding is a notice, not a correction.
         instances = (await api.get(f"/processes/{process_id}/instances")).json()
@@ -130,8 +139,12 @@ async def test_a_human_decision_blocks_the_rule() -> None:
         assert [c["name"] for c in r.json()["changes"]] == ["FA-1016_papelería.pdf"]
 
         r = await api.post(f"/rules/{rule_id}/activate", headers=headers)
-        assert r.status_code == 409, r.text
-        assert "factura_1217.pdf" in r.json()["message"]
+        assert r.status_code == 200, r.text
+        report = (
+            await api.post(f"/processes/{process_id}/draft/validate", headers=headers)
+        ).json()["validation"]
+        assert not report["valid"]
+        assert report["conflicts"][0]["name"] == "factura_1217.pdf"
         assert (await api.get(f"/rules/{rule_id}")).json()["status"] == "draft"
         assert (await api.get(f"/processes/{process_id}/findings")).json() == []
 
@@ -150,8 +163,9 @@ async def test_retiring_is_checked_like_activating() -> None:
 
         r = await api.post(f"/rules/{already_paid['id']}/retire", headers=headers)
         assert r.status_code == 200, r.text
+        await publish(api, process_id, headers)
         findings = (await api.get(f"/processes/{process_id}/findings")).json()
-        assert findings[0]["detail"].startswith("NO_PAGAR -> PAGAR")
+        assert "NO_PAGAR -> PAGAR" in findings[0]["detail"]
 
 
 async def test_an_escalated_case_gives_no_finding() -> None:
@@ -168,6 +182,7 @@ async def test_an_escalated_case_gives_no_finding() -> None:
         ]
 
         await api.post(f"/rules/{iban['id']}/retire", headers=headers)
+        await publish(api, process_id, headers)
         assert (await api.get(f"/processes/{process_id}/findings")).json() == []
 
 
@@ -205,19 +220,14 @@ async def compile_draft(
     return r.json()
 
 
-async def test_a_valid_rule_that_changes_nothing_activates_itself(
+async def test_a_valid_rule_that_changes_nothing_still_needs_approval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(sandbox, "run_dataset", dataset_runner(QUIET))
     async with client() as api:
         rule = await compile_draft(api, monkeypatch, QUIET_RULE)
-    assert rule["status"] == "active"
-    assert rule["report"]["activation"] == {
-        "auto": True,
-        "why": "changes 0/3 past decisions (limit 5%)",
-        "changed": 0,
-        "decided": 3,
-    }
+    assert rule["status"] == "draft"
+    assert rule["report"]["activation"] == {"auto": False, "why": "Manager publication required"}
 
 
 async def test_a_rule_that_changes_too_much_waits_for_a_person(
@@ -228,7 +238,7 @@ async def test_a_rule_that_changes_too_much_waits_for_a_person(
     assert rule["status"] == "draft"
     assert rule["report"]["valid"] is True
     assert rule["report"]["activation"]["auto"] is False
-    assert rule["report"]["activation"]["changed"] == 2
+    assert rule["report"]["activation"]["why"] == "Manager publication required"
 
 
 async def save(api: AsyncClient, process_id: int, text: str) -> dict:
@@ -242,7 +252,7 @@ async def save(api: AsyncClient, process_id: int, text: str) -> dict:
     return (await api.get(f"/rules/{r.json()['id']}")).json()
 
 
-async def test_a_saved_rule_compiles_itself_and_activates(
+async def test_a_saved_rule_compiles_and_waits_for_approval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(sandbox, "run_dataset", dataset_runner(QUIET))
@@ -250,11 +260,29 @@ async def test_a_saved_rule_compiles_itself_and_activates(
     async with client() as api:
         process_id, _ = await prepare(api)
         rule = await save(api, process_id, QUIET_RULE)
-    assert rule["status"] == "active" and rule["code"] == QUIET_RULE
+    assert rule["status"] == "draft" and rule["code"] == QUIET_RULE
+
+
+async def decide_a_clean_invoice(api: AsyncClient, process_id: int) -> tuple[dict, dict]:
+    """Add an invoice the v3 rules would pay and run: the instance and its decision."""
+    async with session_factory() as session:
+        digest = uuid.uuid4().hex
+        session.add(File(hash=digest, name="late.pdf", content=b"%PDF", text=""))
+        symbols = stored(INVOICES["factura_1217.pdf"])  # a clean invoice
+        session.add(
+            Instance(process_id=process_id, file_hash=digest, name="late.pdf", symbols=symbols)
+        )
+        await session.commit()
+    r = await api.post(f"/processes/{process_id}/run")
+    assert r.json() == {"decided": 1, "by_decision": {"PAGAR": 1}}
+    instances = (await api.get(f"/processes/{process_id}/instances")).json()
+    late = next(i for i in instances if i["name"] == "late.pdf")
+    [decision] = (await api.get(f"/instances/{late['id']}")).json()["decisions"]
+    return late, decision
 
 
 @pytest.mark.parametrize("person_decided", [False, True])
-async def test_a_rule_that_needs_data_escalates_every_instance(
+async def test_a_rule_that_needs_data_stays_out_of_execution(
     monkeypatch: pytest.MonkeyPatch, person_decided: bool
 ) -> None:
     needs_data = {
@@ -267,25 +295,12 @@ async def test_a_rule_that_needs_data_escalates_every_instance(
         process_id, headers = await prepare(api)
         rule = await save(api, process_id, "Escalate late deliveries")
 
-        # Enforced although it would change every past decision: failing closed needs no
-        # person's approval.
-        assert rule["status"] == "blocked" and rule["code"] is None
+        # Missing-data proposals require manager review and never enter execution.
+        assert rule["status"] == "draft" and rule["code"] is None
         assert rule["report"]["needs_data"]["missing"] == ["symbol: delivery_date"]
 
-        async with session_factory() as session:
-            digest = uuid.uuid4().hex
-            session.add(File(hash=digest, name="late.pdf", content=b"%PDF", text=""))
-            symbols = stored(INVOICES["factura_1217.pdf"])  # a clean invoice
-            session.add(
-                Instance(process_id=process_id, file_hash=digest, name="late.pdf", symbols=symbols)
-            )
-            await session.commit()
-        r = await api.post(f"/processes/{process_id}/run")
-        assert r.json() == {"decided": 1, "by_decision": {"ESCALAR": 1}}
-        instances = (await api.get(f"/processes/{process_id}/instances")).json()
-        late = next(i for i in instances if i["name"] == "late.pdf")
-        [decision] = (await api.get(f"/instances/{late['id']}")).json()["decisions"]
-        assert decision["reason"] == f"RULE_NEEDS_DATA {rule['id']}: missing symbol: delivery_date"
+        late, decision = await decide_a_clean_invoice(api, process_id)
+        assert decision["reason"] is None
 
         if person_decided:
             r = await api.post(
@@ -295,8 +310,7 @@ async def test_a_rule_that_needs_data_escalates_every_instance(
             )
             assert r.status_code == 200, r.text
 
-        # Once the process has the data, a recompile makes it an ordinary rule. Undoing its
-        # own escalations does not count as impact; contradicting a person still blocks.
+        # A successful recompile still waits for explicit process publication.
         monkeypatch.setattr(sandbox, "run_dataset", dataset_runner(QUIET))
         monkeypatch.setattr(compiler, "compile_rule", compiled(QUIET_RULE))
         r = await api.post(f"/rules/{rule['id']}/compile")
@@ -304,12 +318,38 @@ async def test_a_rule_that_needs_data_escalates_every_instance(
         rule = r.json()
         assert rule["code"] == QUIET_RULE and rule["report"]["valid"] is True
         activation = rule["report"]["activation"]
-        if person_decided:
-            assert rule["status"] == "draft"
-            assert activation["why"] == "1 decisions taken by a person would change"
-        else:
-            assert rule["status"] == "active"
-            assert activation["unblocked"] == 1 and activation["changed"] == 0
+        assert rule["status"] == "draft"
+        assert activation["auto"] is False
+
+
+async def test_failed_draft_compilation_does_not_change_published_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Provider failure is recorded on the draft and never changes approved execution."""
+    monkeypatch.setattr(llm, "resolve", lambda name: down(str(name)))
+    async with client() as api:
+        process_id, _ = await prepare(api)
+        rule = await save(api, process_id, "Escalate late deliveries")
+        assert rule["status"] == "draft" and rule["code"] is None
+        assert "503" in rule["report"]["error"]
+
+        r = await api.get(f"/processes/{process_id}/events", params={"step": "compile_rule"})
+        [span] = r.json()
+        assert span["status"] == "error" and span["data"]["rule_status"] == "draft"
+
+        # The failed draft is not part of the published norm.
+        _, decision = await decide_a_clean_invoice(api, process_id)
+        assert decision["decision"] == "PAGAR"
+        assert decision["reason"] is None
+
+        monkeypatch.setattr(sandbox, "run_dataset", dataset_runner(QUIET))
+        monkeypatch.setattr(compiler, "compile_rule", compiled(QUIET_RULE))
+        r = await api.post(f"/rules/{rule['id']}/compile")
+        assert r.status_code == 200, r.text
+        rule = r.json()
+        assert rule["status"] == "draft" and rule["code"] == QUIET_RULE
+        activation = rule["report"]["activation"]
+        assert activation["auto"] is False
 
 
 async def test_startup_resumes_rules_left_compiling(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -330,4 +370,4 @@ async def test_startup_resumes_rules_left_compiling(monkeypatch: pytest.MonkeyPa
 
         await asyncio.gather(*await rules.resume_compilations())
 
-        assert (await api.get(f"/rules/{rule.id}")).json()["status"] == "active"
+        assert (await api.get(f"/rules/{rule.id}")).json()["status"] == "draft"

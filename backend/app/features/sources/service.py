@@ -225,6 +225,9 @@ async def sync(
         origin = f"{name}:{started.isoformat(timespec='seconds')}|{connector.base_url}"
         digest = rows_hash(rows)
         source = Source(process_id=process_id, name=name, origin=origin, rows=rows)
+        from app.features.versions.service import lock
+
+        await lock(session, process_id)
         session.add(source)
         await session.flush()
         diff = await diff_latest(session, process_id, name, config.key)

@@ -7,7 +7,7 @@ status: accepted
 ## Context
 Every agent (normalizer, tester, compiler, assistant) runs on one model per use case and
 role (ADR 0011). When that provider fails (5xx, 429 after the SDK's own retries, a timeout,
-a refused connection) the run fails closed: the rule stays a draft with the error, the
+a refused connection) the run fails closed: the rule is `blocked` with the error (ADR 0020), the
 assistant answers 502 (ADR 0006). Nothing wrong is decided, but a norm that arrives during
 an outage is not compiled until someone retries. The jury scores resilience and wants to
 see a provider failure handled. The Helmcode key serves several flat-rate models
@@ -41,7 +41,8 @@ see a provider failure handled. The Helmcode key serves several flat-rate models
   provider failure of the run, including those before a model answered) and `model`, the
   one that answered.
 - All models fail: `AgentError` 502 "every model failed: m1: ...; m2: ...", and the
-  existing fail-closed path applies (the rule ends `draft` with that error).
+  existing fail-closed path applies (the rule ends `blocked` with that error and every
+  instance escalates with `RULE_COMPILE_FAILED`, ADR 0020; `draft` before 2026-09-19).
 - Invoice use case: every role starts on `deepseek-v4-flash`; compiler and normalizer fall
   back to `glm5.3` then `qwen3.6`, the tester to `qwen3.6` then `glm5.3` (a different
   family from the compiler's first fallback, ADR 0004). Timeouts: 180 s compiler and
@@ -67,7 +68,7 @@ see a provider failure handled. The Helmcode key serves several flat-rate models
 - Tests (`agents/tests/test_llm.py`, scripted `FunctionModel`s): primary 503 -> the fallback
   answers and the span shows both; a `ModelRetry` stays on the primary; every model
   failing is a 502 naming both; a primary answer ending `length` -> the fallback answers;
-  through the API, a rule whose chain all fails ends `draft` with that error.
+  through the API, a rule whose chain all fails ends `blocked` with that error.
 - The assistant on the invoice use case's settings answered one real suggestion through
   Helmcode: `deepseek-v4-flash`, 6.3 s, 2.2k / 0.8k tokens, 1 validator retry.
 - Each fallback model answered a structured output through Helmcode (one call each):
