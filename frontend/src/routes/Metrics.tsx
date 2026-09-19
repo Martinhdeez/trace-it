@@ -1,555 +1,613 @@
 import { useState, type ReactNode } from 'react'
-import { useParams } from 'react-router'
+import { useParams, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown } from 'lucide-react'
+import { ChevronRight, RefreshCw, X, Clock3, Coins, DollarSign } from 'lucide-react'
 import { api } from '../api/client'
-import type { AgentsMetrics, ExecutionMetrics, IngestionMetrics, Plane } from '../api/contracts'
+import type { Plane, UsageGroup, UsageTotals, UsageBreakdown } from '../api/contracts'
 import { keys } from '../api/queries'
-import { MetricCells } from '../components/process/PlaneDashboards'
+import { UsageFlow } from '../components/metrics/UsageFlow'
+import { demoBreakdown, HARDCODED_METRICS } from '../components/metrics/demo'
+import { UsageActivity } from '../components/metrics/UsageActivity'
+import { UsageTimeline } from '../components/metrics/UsageTimeline'
+import {
+  colors,
+  dateTime,
+  duration,
+  formatted,
+  groupName,
+  label,
+  measures,
+  moduleName,
+  number,
+  planes,
+  value,
+  type Measure,
+} from '../components/metrics/usage'
 import { ProcessScreen } from '../components/process/ProcessScreen'
-import { DataTable } from '../components/shell/DataTable'
+import { Button, SegmentedRail, SEGMENT_ITEM } from '../components/shell/Controls'
 import { Empty, ErrorNotice } from '../components/shell/Notice'
+import { getLocale, t } from '../i18n'
 import { cn } from '../lib/cn'
-import { formatEuro, formatMs, humanize } from '../lib/format'
 import { paths } from '../lib/paths'
 
-type Step = IngestionMetrics['steps'][number]
-type Provider = IngestionMetrics['providers'][number]
+const windows: Record<string, number> = { day: 86400000, week: 7 * 86400000, month: 30 * 86400000 }
 
-/** The sketch's "parts": lectura, the agent roles, and the engine that spends nothing. */
-type Group = 'lectura' | 'reglas' | 'asistente' | 'motor'
-
-const GROUP_COLOR: Record<Group, string> = {
-  lectura: 'var(--color-ocr)',
-  reglas: 'var(--color-escalar)',
-  asistente: 'var(--color-faint)',
-  motor: 'var(--color-pagar)',
-}
-const GROUP_LABEL: Record<Group, string> = {
-  lectura: 'Lectura',
-  reglas: 'Reglas',
-  asistente: 'Asistente',
-  motor: 'Motor',
-}
-
-type Part = {
-  id: string
-  name: string
-  note: string
-  group: Group
-  /** Reglas rows shade the same orange; index deepens it. */
-  shade: number
-  tokens: number
-  knownCost: number
-  unpriced: number
-  p95: number | null
-}
-
-const ROLE_META: Record<string, { name: string; note: string; group: Group; steps?: string[] }> = {
-  compiler: { name: 'Código de las reglas', note: 'el compilador escribe el Python', group: 'reglas', steps: ['coder_attempt'] },
-  tester: { name: 'Tests de las reglas', note: 'el tester no ve el código', group: 'reglas', steps: ['run_tests'] },
-  normalizer: { name: 'Normalizador', note: 'ordena la norma antes de compilar', group: 'reglas', steps: ['normalize_norm'] },
-  assistant: { name: 'Consejos', note: 'el asistente, solo si lo pides', group: 'asistente', steps: ['suggest_escalation', 'propose_decision', 'suggest_rule'] },
-  reviewer: { name: 'Revisor', note: 'una segunda lectura de la regla', group: 'reglas' },
-  reviewer_agent: { name: 'Revisor', note: 'una segunda lectura de la regla', group: 'reglas' },
-  decision_reviewer: { name: 'Revisión de decisiones', note: 'relee lo decidido', group: 'reglas', steps: ['review_decision'] },
-  discovery: { name: 'Descubrimiento', note: 'redacta el proceso contigo', group: 'asistente', steps: ['discover_process', 'discuss_process', 'revise_process_draft'] },
-  learner: { name: 'Aprendizaje', note: 'propone normas desde casos pasados', group: 'reglas', steps: ['learn_norms'] },
-}
-
-const number = (value: number | null | undefined) =>
-  value == null ? '—' : value.toLocaleString('es-ES')
-const ms = (value: number | null | undefined) => (value == null ? '—' : formatMs(value))
-const compact = (value: number) => (value >= 1000 ? `${Math.round(value / 1000)}k` : String(value))
-const spent = (row: { input_tokens: number; output_tokens: number }) => row.input_tokens + row.output_tokens
-
-/** A known price, the count of unpriced calls, or nothing — never an invented $ 0. */
-const cost = (known: number, unpriced: number) =>
-  known > 0 ? `${formatEuro(known, 4)} USD` : unpriced > 0 ? 'sin precio' : '—'
-
-const step = (steps: Step[] | undefined, name: string) => steps?.find((item) => item.step === name)
-const p95of = (steps: Step[] | undefined, names: string[] = []) => {
-  const values = names
-    .map((name) => step(steps, name)?.p95_ms)
-    .filter((value): value is number => value != null)
-  return values.length ? Math.max(...values) : null
-}
-
-function usePlane<P extends Plane>(processId: number, plane: P) {
-  return useQuery({
-    queryKey: keys.planeMetrics(processId, plane),
-    queryFn: () => api.planeMetrics(processId, plane),
-    refetchInterval: 10_000,
-  })
-}
-
-/**
- * The metrics page: where the money and the time go, part by part. Reading and writing
- * rules spend tokens once; deciding never does — the planes are shown side by side,
- * never mixed into one total (docs/observability-dashboards.md).
- */
 export function Metrics() {
   const processId = Number(useParams().processId)
+  // The URL preserves drill-down on reload and supports browser back/forward.
+  const [params, setParams] = useSearchParams()
+  const hardcoded = params.has('hardcoded') ? params.get('hardcoded') === 'true' : HARDCODED_METRICS
+  const planeParam = params.get('plane')
+  const plane = planes.includes(planeParam as Plane) ? (planeParam as Plane) : undefined
+  const module = plane ? (params.get('module') ?? undefined) : undefined
+  const measureParam = params.get('measure')
+  const measure: Measure = measures.includes(measureParam as Measure)
+    ? (measureParam as Measure)
+    : 'cost'
+  const requestedPeriod = params.get('period') ?? 'thisMonth'
+  const period =
+    Object.hasOwn(windows, requestedPeriod) || requestedPeriod === 'all'
+      ? requestedPeriod
+      : 'thisMonth'
+  const [snapshot, setSnapshot] = useState(() => new Date().toISOString())
+  const validDate = (key: string) => {
+    const raw = params.get(key)
+    return raw && Number.isFinite(Date.parse(raw)) ? new Date(raw).toISOString() : undefined
+  }
+  const until = validDate('until') ?? snapshot
+  const monthStart = new Date(until)
+  monthStart.setDate(1)
+  monthStart.setHours(0, 0, 0, 0)
+  const requestedSince = validDate('since')
+  const since =
+    requestedSince && requestedSince < until
+      ? requestedSince
+      : period === 'thisMonth'
+        ? monthStart.toISOString()
+        : windows[period]
+          ? new Date(Date.parse(until) - windows[period]).toISOString()
+          : undefined
+  const requestedOffset = Number(params.get('offset'))
+  const offset = Number.isSafeInteger(requestedOffset) ? Math.max(0, requestedOffset) : 0
+  const through = params.has('through_id') ? Number(params.get('through_id')) : undefined
+  const through_id =
+    through !== undefined && Number.isSafeInteger(through) && through >= 0 ? through : undefined
+  const filters = { plane, module, since, until, offset, through_id }
+  const usage = useQuery({
+    queryKey: ['usage-breakdown', hardcoded, processId, filters],
+    queryFn: () =>
+      hardcoded ? demoBreakdown(processId, filters) : api.usageBreakdown(processId, filters),
+  })
   const process = useQuery({
     queryKey: keys.process(processId),
     queryFn: () => api.getProcess(processId),
   })
-  const ingestion = usePlane(processId, 'ingestion')
-  const agents = usePlane(processId, 'agents')
-  const execution = usePlane(processId, 'execution')
-  const error = ingestion.error ?? agents.error ?? execution.error ?? process.error
-
-  const parts = buildParts(ingestion.data, agents.data, execution.data)
-  const llmTokens = parts.reduce((sum, part) => sum + part.tokens, 0)
-  const readTokens = parts.find((part) => part.id === 'lectura')?.tokens ?? 0
-  const knownCost =
-    (ingestion.data?.providers ?? []).reduce((sum, item) => sum + item.known_cost_usd, 0) +
-    (agents.data?.total.known_cost_usd ?? 0)
-  const decided = execution.data?.instances_decided ?? 0
-  const decision = step(execution.data?.steps, 'decision')
+  const data = usage.data
+  const level = !plane ? 'plane' : !module ? 'module' : 'model'
+  const groups = [...(data?.groups ?? [])].sort(
+    (a, b) => value(b, measure) - value(a, measure) || a.key.localeCompare(b.key),
+  )
+  const title = module ? moduleName(module) : plane ? t(`planes.${plane}`) : label('overview')
+  function navigate(changes: Record<string, string | undefined>, replace = false) {
+    const next = new URLSearchParams(params)
+    next.delete('offset')
+    if (!Object.hasOwn(changes, 'through_id') && data)
+      next.set('through_id', String(data.through_id))
+    for (const [key, val] of Object.entries(changes)) {
+      if (val === undefined) next.delete(key)
+      else next.set(key, val)
+    }
+    // Freeze the snapshot so navigating backwards and pagination retain the same sample.
+    if (!next.has('until')) next.set('until', until)
+    setParams(next, { replace })
+  }
+  function drill(row: UsageGroup) {
+    navigate(!plane ? { plane: row.plane, module: undefined } : { module: row.module ?? row.key })
+  }
+  function refresh() {
+    const now = new Date().toISOString()
+    setSnapshot(now)
+    navigate({ until: now, since: undefined, through_id: undefined }, true)
+  }
 
   return (
     <ProcessScreen
       processId={processId}
       crumbs={[
-        { label: 'Procesos', to: paths.processes },
+        { label: t('nav.processes'), to: paths.processes },
         { label: process.data?.name ?? '…', to: paths.process(processId) },
-        { label: 'Métricas' },
+        { label: label('title') },
       ]}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
-        <div className="max-w-5xl">
-          <header className="mb-4">
-            <h1 className="text-[20px] font-medium tracking-[-0.03em]">Métricas</h1>
-            <p className="mt-1 text-[12.5px] text-muted">
-              Dónde se va el dinero y el tiempo, parte a parte. Leer y escribir reglas no se mezclan con decidir.
-            </p>
-          </header>
-
-          {error ? <div className="mb-4"><ErrorNotice error={error} /></div> : null}
-
-          <MetricCells
-            cells={[
-              {
-                label: 'Coste conocido',
-                value: knownCost > 0 ? `${formatEuro(knownCost, 2)} USD` : '—',
-                note: 'solo lo que tiene tarifa',
-              },
-              {
-                label: 'Tokens',
-                value: ingestion.data || agents.data ? number(llmTokens) : '—',
-                note: '0 al decidir · el motor no llama a un modelo',
-              },
-              {
-                label: 'Decidir un caso',
-                value: ms(decision?.p50_ms),
-                note:
-                  decided > 0
-                    ? `p50 · ${number(decided)} casos${execution.data?.instances_per_second ? ` · ${execution.data.instances_per_second.toLocaleString('es-ES', { maximumFractionDigits: 1 })} /s` : ''}`
-                    : 'todavía sin casos',
-              },
-            ]}
-          />
-
-          <div className="grid items-start gap-10 lg:grid-cols-[1.15fr_0.85fr]">
-            <section>
-              <h2 className="text-[15px] font-medium tracking-[-0.02em]">Gasto por parte</h2>
-              <p className="mt-0.5 text-[12.5px] text-muted">Tokens. Leer y escribir reglas no se mezclan con decidir.</p>
-              <div className="mt-3 rounded-[16px] bg-well p-4 ring-1 ring-line">
-                <TokenChart parts={parts} />
-                <div className="mt-1 flex justify-between text-[11px] text-muted">
-                  {parts.map((part) => (
-                    <span key={part.id} className="min-w-0 flex-1 px-1 text-center">
-                      <b className="block truncate font-medium text-ink">{part.name.split(' ')[0]}</b>
-                      {GROUP_LABEL[part.group].toLowerCase()}
-                    </span>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-12 pt-5 sm:px-6">
+        <div className="max-w-6xl">
+          <header className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-medium tracking-tight">{label('title')}</h1>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div role="group" aria-label={label('dataSource')}>
+                <SegmentedRail value={String(hardcoded)}>
+                  {[false, true].map((example) => (
+                    <button
+                      key={String(example)}
+                      data-active={hardcoded === example || undefined}
+                      aria-pressed={hardcoded === example}
+                      onClick={() =>
+                        navigate({
+                          hardcoded: String(example),
+                          plane: undefined,
+                          module: undefined,
+                          through_id: undefined,
+                          since: undefined,
+                          until: snapshot,
+                        })
+                      }
+                      className={cn(
+                        SEGMENT_ITEM,
+                        hardcoded === example ? 'text-ink' : 'text-muted hover:text-ink',
+                      )}
+                    >
+                      {label(example ? 'exampleData' : 'realData')}
+                    </button>
                   ))}
-                </div>
+                </SegmentedRail>
               </div>
-            </section>
-
-            <section>
-              <h2 className="text-[15px] font-medium tracking-[-0.02em]">Qué ha gastado cada uno</h2>
-              <ul>
-                {parts.map((part) => (
-                  <li key={part.id} className="flex items-center gap-3 border-b border-hairline py-3 last:border-0">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13.5px] font-medium tracking-[-0.01em]">{part.name}</p>
-                      <p className="mt-0.5 truncate text-[12px] text-muted">{part.note}</p>
-                    </div>
-                    <span className="shrink-0 font-mono text-[13px] tabular-nums">{number(part.tokens)}</span>
-                    <span className="flex w-[86px] shrink-0 items-center justify-end gap-1.5 text-[11px] text-muted">
-                      <i
-                        className="inline-block h-2 w-2 rounded-full"
-                        style={{ background: GROUP_COLOR[part.group], opacity: part.shade }}
-                      />
-                      {GROUP_LABEL[part.group]}
-                    </span>
-                  </li>
+              <select
+                aria-label={label('period')}
+                value={period}
+                onChange={(e) => {
+                  const now = new Date().toISOString()
+                  setSnapshot(now)
+                  navigate({
+                    period: e.target.value,
+                    since: undefined,
+                    until: now,
+                    through_id: undefined,
+                  })
+                }}
+                className="rounded-lg bg-canvas px-3 py-2 text-xs ring-1 ring-line"
+              >
+                {['thisMonth', 'day', 'week', 'month', 'all'].map((key) => (
+                  <option key={key} value={key}>
+                    {label(key)}
+                  </option>
                 ))}
-              </ul>
-            </section>
-          </div>
-
-          {llmTokens > 0 ? (
-            <p className="mb-5 mt-2 max-w-3xl text-[12px] text-muted">
-              {number(llmTokens)} tokens: {number(readTokens)} en lectura (
-              {Math.round((readTokens / llmTokens) * 100)} %) y {number(llmTokens - readTokens)} en las
-              reglas ({Math.round(((llmTokens - readTokens) / llmTokens) * 100)} %). Decidir{' '}
-              {number(decided)} casos: 0 tokens. Lo que no tiene tarifa se muestra «sin precio», nunca
-              un $ 0 inventado.
+              </select>
+              <Button aria-label={label('refresh')} onClick={refresh} disabled={usage.isFetching}>
+                <RefreshCw
+                  size={14}
+                  className={usage.isFetching ? 'animate-spin motion-reduce:animate-none' : ''}
+                />
+              </Button>
+            </div>
+          </header>
+          {hardcoded && (
+            <p className="mt-3 text-xs text-escalar" role="status">
+              {label('demoNotice')}
+            </p>
+          )}
+          <nav
+            aria-label={label('overview')}
+            className="mb-5 mt-6 flex flex-wrap items-center gap-2 text-[13px]"
+          >
+            <button
+              onClick={() => navigate({ plane: undefined, module: undefined })}
+              aria-current={!plane ? 'page' : undefined}
+              className={cn('rounded py-1 hover:underline', plane ? 'text-muted' : 'font-medium')}
+            >
+              {label('overview')}
+            </button>
+            {plane && (
+              <>
+                <ChevronRight size={13} className="text-faint" />
+                <button
+                  onClick={() => navigate({ module: undefined })}
+                  aria-current={!module ? 'page' : undefined}
+                  className={cn(
+                    'rounded py-1 hover:underline',
+                    module ? 'text-muted' : 'font-medium',
+                  )}
+                >
+                  {t(`planes.${plane}`)}
+                </button>
+              </>
+            )}
+            {module && (
+              <>
+                <ChevronRight size={13} className="text-faint" />
+                <span aria-current="page" className="font-medium">
+                  {moduleName(module)}
+                </span>
+              </>
+            )}
+          </nav>
+          {requestedSince === since && since && (
+            <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
+              <span>
+                {label('selectedPeriod')}: {dateTime(since!)} – {dateTime(until)}
+              </span>
+              <Button
+                aria-label={label('clearPeriod')}
+                onClick={() => navigate({ since: undefined, until: snapshot })}
+              >
+                <X size={12} />
+                {label('clearPeriod')}
+              </Button>
+            </div>
+          )}
+          {process.isError && <ErrorNotice error={process.error} />}
+          {usage.isError ? (
+            <ErrorNotice
+              error={usage.error}
+              action={<Button onClick={() => void usage.refetch()}>{t('common.retry')}</Button>}
+            />
+          ) : usage.isPending ? (
+            <p role="status" className="py-10 text-sm text-muted">
+              {t('common.loading')}
             </p>
           ) : (
-            <div className="mb-5 mt-2" />
+            data && (
+              <>
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                  {plane ? <h2 className="text-base font-medium">{title}</h2> : <span />}
+                  <div role="group" aria-label={label('distribution')}>
+                    <SegmentedRail value={measure}>
+                      {measures.map((m) => (
+                        <button
+                          key={m}
+                          data-active={measure === m || undefined}
+                          aria-pressed={measure === m}
+                          onClick={() => navigate({ measure: m }, true)}
+                          className={cn(
+                            SEGMENT_ITEM,
+                            measure === m ? 'text-ink' : 'text-muted hover:text-ink',
+                          )}
+                        >
+                          {label(m)}
+                        </button>
+                      ))}
+                    </SegmentedRail>
+                  </div>
+                </div>
+                {!plane && (
+                  <UsageFlow
+                    key={`${hardcoded}-${since}-${until}`}
+                    data={data}
+                    measure={measure}
+                    hardcoded={hardcoded}
+                    onDrill={(nextPlane, nextModule) =>
+                      navigate({ plane: nextPlane, module: nextModule })
+                    }
+                  />
+                )}
+                <SecondaryMetrics collapsed={!plane}>
+                  {!plane ? (
+                    <div className="grid gap-3 md:grid-cols-3">
+                      {planes.map((p) => {
+                        const row = data.groups.find((group) => group.plane === p)!
+                        return (
+                          <button
+                            key={p}
+                            onClick={() => drill(row)}
+                            className="group flex flex-col items-stretch rounded-xl border border-line p-4 text-left hover:bg-canvas"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <h2 className="flex items-center gap-2 font-medium">
+                                <i
+                                  className="h-2 w-2 rounded-full"
+                                  style={{ background: colors[p] }}
+                                />
+                                {t(`planes.${p}`)}
+                              </h2>
+                              <ChevronRight size={15} className="text-faint group-hover:text-ink" />
+                            </div>
+                            <div className="mt-4 flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-xs text-muted">{label(measure)}</p>
+                                <p className="mt-1 text-[22px] font-medium tabular-nums tracking-tight">
+                                  {formatted(row, measure)}
+                                </p>
+                              </div>
+                              <MiniTrend data={data} plane={p} measure={measure} />
+                            </div>
+                            <dl className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                              {measures
+                                .filter((m) => m !== measure)
+                                .map((m) => (
+                                  <div key={m}>
+                                    <dt className="text-muted">{label(m)}</dt>
+                                    <dd className="mt-1 tabular-nums">{formatted(row, m)}</dd>
+                                  </div>
+                                ))}
+                            </dl>
+                            {row.unpriced_requests > 0 && (
+                              <p className="mt-3 text-xs text-escalar">
+                                {number(row.unpriced_requests)} {label('unknown')}
+                              </p>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    data.totals && <Summary totals={data.totals} />
+                  )}
+                  <div className="mt-5">
+                    {data.groups.every((row) => !row.spans) ? (
+                      <Empty>{label('noActivity')}</Empty>
+                    ) : (
+                      <>
+                        <div className="grid gap-8 rounded-2xl border border-line p-4 sm:p-5 lg:grid-cols-[0.85fr_1.15fr]">
+                          <section aria-label={label('distribution')}>
+                            <h2 className="text-[15px] font-medium">{label('distribution')}</h2>
+
+                            <div className="mt-5 max-h-[360px] space-y-4 overflow-y-auto pr-2">
+                              {groups.map((row) => {
+                                const max = Math.max(...groups.map((g) => value(g, measure)), 1e-10)
+                                const sum = groups.reduce((n, g) => n + value(g, measure), 0)
+                                const content = (
+                                  <>
+                                    <div className="mb-1.5 flex items-start justify-between gap-3 text-xs">
+                                      <span className="flex min-w-0 items-start gap-1.5 break-words font-medium">
+                                        {groupName(row, level)}
+                                        {!module && (
+                                          <ChevronRight
+                                            size={13}
+                                            className="mt-0.5 shrink-0 text-faint"
+                                          />
+                                        )}
+                                      </span>
+                                      <span className="shrink-0 text-right tabular-nums">
+                                        {formatted(row, measure)}
+                                        <small className="ml-2 text-muted">
+                                          {sum > 0
+                                            ? `${((value(row, measure) / sum) * 100).toLocaleString(getLocale(), { maximumFractionDigits: 1 })}%`
+                                            : ''}
+                                        </small>
+                                      </span>
+                                    </div>
+                                    <div className="h-3 overflow-hidden rounded-full bg-well">
+                                      <div
+                                        className="h-full rounded-full"
+                                        style={{
+                                          width: `${(value(row, measure) / max) * 100}%`,
+                                          background: colors[row.plane],
+                                        }}
+                                      />
+                                    </div>
+                                  </>
+                                )
+                                return module ? (
+                                  <div key={row.key}>{content}</div>
+                                ) : (
+                                  <button
+                                    key={row.key}
+                                    onClick={() => drill(row)}
+                                    className="block w-full rounded text-left"
+                                  >
+                                    {content}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </section>
+                          <UsageTimeline
+                            key={`${plane}-${module}-${since}-${until}-${measure}`}
+                            data={data}
+                            measure={measure}
+                            onInterval={(start, end) => navigate({ since: start, until: end })}
+                          />
+                        </div>
+                        <details className="mt-5 rounded-xl border border-line">
+                          <summary className="cursor-pointer px-4 py-3 text-[13px] font-medium">
+                            {label('breakdown')}{' '}
+                            <span className="ml-2 text-muted">{groups.length}</span>
+                          </summary>
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[800px] text-left text-xs tabular-nums">
+                              <thead className="border-b border-hairline bg-canvas text-muted">
+                                <tr>
+                                  {[
+                                    label(level === 'plane' ? 'area' : level),
+                                    label('cost'),
+                                    label('input'),
+                                    label('output'),
+                                    label('cached'),
+                                    label('time'),
+                                    label('latency'),
+                                    label('operations'),
+                                  ].map((name) => (
+                                    <th key={name} className="px-3 py-3 font-medium">
+                                      {name}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {groups.map((row) => (
+                                  <tr
+                                    key={row.key}
+                                    className="border-b border-hairline last:border-0"
+                                  >
+                                    <td className="max-w-56 px-3 py-3">
+                                      {module ? (
+                                        <span className="break-words">{groupName(row, level)}</span>
+                                      ) : (
+                                        <button
+                                          onClick={() => drill(row)}
+                                          className="flex items-center gap-2 text-left font-medium hover:underline"
+                                        >
+                                          {groupName(row, level)}
+                                          <ChevronRight size={13} className="shrink-0 text-faint" />
+                                        </button>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      {formatted(row, 'cost')}
+                                      {row.unpriced_requests > 0 && (
+                                        <span className="mt-1 block text-[11px] text-escalar">
+                                          {number(row.unpriced_requests)} {label('unknown')}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-3">{number(row.input_tokens)}</td>
+                                    <td className="px-3 py-3">{number(row.output_tokens)}</td>
+                                    <td className="px-3 py-3">{number(row.cached_tokens)}</td>
+                                    <td className="px-3 py-3">{formatted(row, 'time')}</td>
+                                    <td className="whitespace-nowrap px-3 py-3">
+                                      {duration(row.p50_ms)} / {duration(row.p95_ms)}
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      {number(row.spans)}
+                                      {row.errors > 0 && (
+                                        <span className="block text-nopagar">
+                                          {row.errors} {label('errors')}
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                        <details className="mt-3 text-xs text-muted">
+                          <summary className="cursor-pointer">{label('methodology')}</summary>
+                          <div className="mt-2 max-w-3xl space-y-2">
+                            <p>{label(hardcoded ? 'demoNotice' : 'costNote')}</p>
+                            <p>{label('inputNote')}</p>
+                            <p>{label('timeNote')}</p>
+                            <p>{label('evolutionHint')}</p>
+                            {plane === 'execution' && <p>{label('engineNote')}</p>}
+                          </div>
+                        </details>
+                        {module && (
+                          <UsageActivity
+                            key={`${hardcoded}-${plane}-${module}-${since}-${until}`}
+                            data={data}
+                            hardcoded={hardcoded}
+                            onPage={(next) => navigate({ offset: String(next) })}
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                </SecondaryMetrics>
+                <p className="mt-7 text-[11px] text-muted">
+                  {label('updated')} {dateTime(data.until)}
+                </p>
+              </>
+            )
           )}
-
-          <PartsTable parts={parts} />
-
-          <CostGate ingestion={ingestion.data} agents={agents.data} execution={execution.data} />
-          <TimeGate ingestion={ingestion.data} agents={agents.data} execution={execution.data} />
         </div>
       </div>
     </ProcessScreen>
   )
 }
 
-function buildParts(
-  ingestion: IngestionMetrics | undefined,
-  agents: AgentsMetrics | undefined,
-  execution: ExecutionMetrics | undefined,
-): Part[] {
-  const providers = ingestion?.providers ?? []
-  const parts: Part[] = [
-    {
-      id: 'lectura',
-      name: 'OCR y visión',
-      note: ingestion
-        ? `${number(ingestion.files)} documentos · ${number(ingestion.ocr_calls + ingestion.vision_calls)} lecturas`
-        : 'leer los documentos, una vez',
-      group: 'lectura',
-      shade: 1,
-      tokens: providers.reduce((sum, item) => sum + spent(item), 0),
-      knownCost: providers.reduce((sum, item) => sum + item.known_cost_usd, 0),
-      unpriced: providers.reduce((sum, item) => sum + item.unpriced_requests, 0),
-      p95: providers.reduce<number | null>(
-        (max, item) => (item.network_p95_ms != null && (max == null || item.network_p95_ms > max) ? item.network_p95_ms : max),
-        null,
-      ),
-    },
-  ]
-
-  const shades = [1, 0.75, 0.55, 0.45]
-  const roles = [...(agents?.by_role ?? [])].sort((a, b) => spent(b) - spent(a))
-  roles.forEach((role, index) => {
-    const meta = ROLE_META[role.key ?? ''] ?? {
-      name: humanize(role.key ?? 'agente'),
-      note: 'agente del proceso',
-      group: 'reglas' as Group,
-    }
-    parts.push({
-      id: `role-${role.key ?? index}`,
-      name: meta.name,
-      note: meta.note,
-      group: meta.group,
-      shade: meta.group === 'reglas' ? shades[Math.min(index, shades.length - 1)] : 1,
-      tokens: spent(role),
-      knownCost: role.known_cost_usd,
-      unpriced: role.unpriced_requests,
-      p95: p95of(agents?.steps, meta.steps),
-    })
-  })
-
-  parts.push({
-    id: 'decidir',
-    name: 'Decidir',
-    note: execution
-      ? `${number(execution.instances_decided)} casos · el motor nunca llama a un modelo`
-      : 'el motor nunca llama a un modelo',
-    group: 'motor',
-    shade: 1,
-    tokens: 0,
-    knownCost: 0,
-    unpriced: 0,
-    p95: step(execution?.steps, 'decision')?.p95_ms ?? null,
-  })
-  return parts
+function SecondaryMetrics({ collapsed, children }: { collapsed: boolean; children: ReactNode }) {
+  return collapsed ? (
+    <details className="mt-6">
+      <summary className="cursor-pointer border-b border-line pb-3 text-sm font-medium">
+        {label('secondary')}
+      </summary>
+      <div className="pt-5">{children}</div>
+    </details>
+  ) : (
+    <>{children}</>
+  )
 }
 
-/** Vertical bars, one per part: height is its tokens, the engine is a line at zero. */
-function TokenChart({ parts }: { parts: Part[] }) {
-  const TOP = 18
-  const BASE = 168
-  const LEFT = 48
-  const RIGHT = 620
-  const max = Math.max(1, ...parts.map((part) => part.tokens))
-  const span = (RIGHT - LEFT) / Math.max(1, parts.length)
-  const barW = Math.min(70, span * 0.58)
-  const grid = [TOP, TOP + (BASE - TOP) / 4, TOP + (BASE - TOP) / 2, TOP + ((BASE - TOP) * 3) / 4, BASE]
-
+function Summary({ totals }: { totals: UsageTotals }) {
+  const icons = { cost: DollarSign, tokens: Coins, time: Clock3 }
+  const tokens = totals.input_tokens + totals.output_tokens
   return (
-    <svg viewBox="0 0 640 200" className="block h-[190px] w-full" aria-hidden="true">
-      {grid.map((y) => (
-        <line key={y} x1={LEFT} y1={y} x2={RIGHT} y2={y} stroke="var(--color-hairline)" />
-      ))}
-      <text x={8} y={TOP + 4} fontSize={11} fill="var(--color-muted)">
-        {compact(max)}
-      </text>
-      <text x={8} y={(TOP + BASE) / 2 + 4} fontSize={11} fill="var(--color-muted)">
-        {compact(Math.round(max / 2))}
-      </text>
-      <text x={14} y={BASE + 4} fontSize={11} fill="var(--color-muted)">
-        0
-      </text>
-      {parts.map((part, index) => {
-        const height = part.tokens > 0 ? Math.max(2, (part.tokens / max) * (BASE - TOP)) : 2
-        const x = LEFT + span * index + (span - barW) / 2
-        const color = GROUP_COLOR[part.group]
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {measures.map((m) => {
+        const Icon = icons[m]
         return (
-          <g key={part.id}>
-            <rect
-              x={x}
-              y={BASE - height}
-              width={barW}
-              height={height}
-              rx={part.tokens > 0 ? 4 : 1}
-              fill={color}
-              opacity={part.shade}
-            />
-            <text
-              x={x + barW / 2}
-              y={BASE - height - 6}
-              textAnchor="middle"
-              fontSize={12}
-              fontWeight={600}
-              fill={part.tokens > 0 ? 'var(--color-ink)' : 'var(--color-pagar)'}
-            >
-              {compact(part.tokens)}
-            </text>
-          </g>
+          <div key={m} className="rounded-xl border border-line p-4">
+            <p className="flex items-center gap-2 text-xs text-muted">
+              <Icon size={14} />
+              {label(m)}
+            </p>
+            <p className="mt-2 text-[24px] font-medium tabular-nums tracking-tight">
+              {formatted(totals, m)}
+            </p>
+            {m === 'cost' && totals.unpriced_requests > 0 && (
+              <p className="mt-2 text-[11px] text-escalar">
+                {number(totals.unpriced_requests)} {label('unknown')}
+              </p>
+            )}
+            {m === 'tokens' && tokens > 0 && (
+              <div
+                className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-well"
+                role="img"
+                aria-label={`${label('input')}: ${number(totals.input_tokens)}, ${label('output')}: ${number(totals.output_tokens)}`}
+              >
+                <span
+                  className="bg-escalar"
+                  style={{ width: `${(totals.input_tokens / tokens) * 100}%` }}
+                  title={`${label('input')}: ${number(totals.input_tokens)}`}
+                />
+                <span
+                  className="bg-pagar"
+                  style={{ width: `${(totals.output_tokens / tokens) * 100}%` }}
+                  title={`${label('output')}: ${number(totals.output_tokens)}`}
+                />
+              </div>
+            )}
+          </div>
         )
       })}
-    </svg>
-  )
-}
-
-/** One row per part: share of the tokens, what it cost if it has a price, and its p95. */
-function PartsTable({ parts }: { parts: Part[] }) {
-  const max = Math.max(1, ...parts.map((part) => part.tokens))
-  return (
-    <DataTable
-      rows={parts}
-      columns={[
-        {
-          key: 'part',
-          header: 'parte',
-          width: '34%',
-          render: (part) => (
-            <span>
-              <span className="text-[13px] font-medium">{part.name}</span>{' '}
-              <span className="text-[12px] text-muted">{part.note}</span>
-            </span>
-          ),
-        },
-        {
-          key: 'share',
-          header: 'reparto',
-          width: '22%',
-          render: (part) => (
-            <span className="flex h-2 max-w-[160px] overflow-hidden rounded-full bg-well">
-              <span
-                className="block h-full"
-                style={{ width: `${Math.max(1, (part.tokens / max) * 100)}%`, background: GROUP_COLOR[part.group], opacity: part.shade }}
-              />
-            </span>
-          ),
-        },
-        {
-          key: 'tokens',
-          header: 'tokens',
-          render: (part) => <span className="font-mono text-[12px] tabular-nums">{number(part.tokens)}</span>,
-        },
-        {
-          key: 'cost',
-          header: 'coste',
-          render: (part) =>
-            part.group === 'motor' ? (
-              <span className="font-mono text-[12px] tabular-nums text-pagar">0 USD</span>
-            ) : (
-              <span className="font-mono text-[12px] tabular-nums">{cost(part.knownCost, part.unpriced)}</span>
-            ),
-        },
-        {
-          key: 'p95',
-          header: 'p95',
-          render: (part) => <span className="font-mono text-[12px] tabular-nums">{ms(part.p95)}</span>,
-        },
-      ]}
-    />
-  )
-}
-
-/** A row that opens: the detail stays behind one click, like the sketch's gates. */
-function Gate({
-  title,
-  desc,
-  children,
-}: {
-  title: string
-  desc: string
-  children: ReactNode
-}) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="mt-3 overflow-hidden rounded-[16px] bg-surface ring-1 ring-line">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left"
-      >
-        <span className="min-w-0">
-          <span className="text-[13.5px] font-medium">{title}</span>
-          <span className="ml-2 text-[12.5px] text-muted">{desc}</span>
-        </span>
-        <ChevronDown size={16} strokeWidth={1.6} className={cn('shrink-0 text-faint transition-transform', open && 'rotate-180')} />
-      </button>
-      {open ? <div className="border-t border-hairline p-3">{children}</div> : null}
     </div>
   )
 }
 
-/** Who charged what: every reading provider and every agent model, and the engine at zero. */
-function CostGate({
-  ingestion,
-  agents,
-  execution,
+function MiniTrend({
+  data,
+  plane,
+  measure,
 }: {
-  ingestion: IngestionMetrics | undefined
-  agents: AgentsMetrics | undefined
-  execution: ExecutionMetrics | undefined
+  data: UsageBreakdown
+  plane: Plane
+  measure: Measure
 }) {
-  const rows = [
-    ...(ingestion?.providers ?? []).map((item: Provider, index) => ({
-      id: `p-${index}`,
-      parte: `${item.provider ?? '—'} · ${item.model ?? '—'}`,
-      detalle: `${item.operation ?? 'lectura'} · ${number(item.network_requests)} llamadas · ${number(spent(item))} tokens`,
-      coste: cost(item.known_cost_usd, item.unpriced_requests),
-    })),
-    ...(agents?.by_model ?? []).map((item, index) => ({
-      id: `m-${index}`,
-      parte: String(item.key ?? '—'),
-      detalle: `${number(item.calls)} llamadas · ${number(spent(item))} tokens`,
-      coste: cost(item.known_cost_usd, item.unpriced_requests),
-    })),
-    {
-      id: 'motor',
-      parte: 'Motor',
-      detalle: `${number(execution?.instances_decided)} decisiones`,
-      coste: '0 USD',
-    },
-  ]
-  return (
-    <Gate title="Coste por parte" desc="quién cobró qué — y el motor en cero">
-      {rows.length > 1 ? (
-        <DataTable
-          framed={false}
-          rows={rows}
-          columns={[
-            { key: 'parte', header: 'parte', render: (row) => <span className="text-[13px] font-medium">{row.parte}</span> },
-            { key: 'detalle', header: 'trabajo', render: (row) => <span className="text-[12px] text-muted">{row.detalle}</span> },
-            { key: 'coste', header: 'coste', render: (row) => <span className="font-mono text-[12px] tabular-nums">{row.coste}</span> },
-          ]}
-        />
-      ) : (
-        <Empty>Todavía no hay llamadas con coste.</Empty>
-      )}
-    </Gate>
+  const interval = data.bucket_seconds * 1000
+  const end = Math.floor((Date.parse(data.until) - 1) / interval) * interval
+  const start =
+    Math.floor(Date.parse(data.since ?? data.series[0]?.started_at ?? data.until) / interval) *
+    interval
+  const buckets = new Map(
+    data.series
+      .filter((row) => row.plane === plane)
+      .map((row) => [Date.parse(row.started_at), value(row, measure)]),
   )
-}
-
-const CLOCKS: { group: string; names: [string, string][] }[] = [
-  {
-    group: 'Lectura',
-    names: [
-      ['native_text', 'Texto nativo'],
-      ['ocr', 'OCR'],
-      ['vision', 'Visión'],
-      ['ingest_document', 'Leer un documento'],
-    ],
-  },
-  {
-    group: 'Reglas',
-    names: [
-      ['normalize_norm', 'Normalizar la norma'],
-      ['coder_attempt', 'Escribir el código'],
-      ['run_tests', 'Tests de la regla'],
-      ['compile_rule', 'Compilar una regla'],
-      ['suggest_escalation', 'Consejos del asistente'],
-    ],
-  },
-  {
-    group: 'Motor',
-    names: [
-      ['evaluate_rule', 'Evaluar una regla'],
-      ['decision', 'Decidir un caso'],
-      ['run_process', 'El lote completo'],
-    ],
-  },
-]
-
-/** Three clocks that never add up: read, write the rules, decide — p50 and p95 each. */
-function TimeGate({
-  ingestion,
-  agents,
-  execution,
-}: {
-  ingestion: IngestionMetrics | undefined
-  agents: AgentsMetrics | undefined
-  execution: ExecutionMetrics | undefined
-}) {
-  const steps: Record<string, Step[] | undefined> = {
-    Lectura: ingestion?.steps,
-    Reglas: agents?.steps,
-    Motor: execution?.steps,
-  }
-  const rows = CLOCKS.flatMap(({ group, names }) =>
-    names
-      .map(([key, label]) => ({ group, key, label, stats: step(steps[group], key) }))
-      .filter((row): row is typeof row & { stats: Step } => row.stats != null)
-      .map((row) => ({
-        id: row.key,
-        nucleo: row.label,
-        grupo: row.group,
-        veces: row.stats.count,
-        p50: row.stats.p50_ms,
-        p95: row.stats.p95_ms,
-      })),
+  const values = Array.from(
+    { length: Math.max(1, Math.round((end - start) / interval) + 1) },
+    (_, i) => buckets.get(start + i * interval) ?? 0,
   )
+  const max = Math.max(...values, 1e-10)
+  const points = values
+    .map(
+      (v, i) =>
+        `${2 + (values.length === 1 ? 44 : (i / (values.length - 1)) * 88)},${34 - (v / max) * 30}`,
+    )
+    .join(' ')
   return (
-    <Gate title="Tiempo por núcleo" desc="tres relojes que no se suman: leer, escribir reglas, decidir">
-      {rows.length ? (
-        <DataTable
-          framed={false}
-          rows={rows}
-          columns={[
-            {
-              key: 'nucleo',
-              header: 'núcleo',
-              render: (row) => (
-                <span>
-                  <span className="text-[13px] font-medium">{row.nucleo}</span>{' '}
-                  <span className="text-[12px] text-muted">{row.grupo.toLowerCase()}</span>
-                </span>
-              ),
-            },
-            { key: 'veces', header: 'veces', render: (row) => <span className="font-mono text-[12px] tabular-nums">{number(row.veces)}</span> },
-            { key: 'p50', header: 'p50', render: (row) => <span className="font-mono text-[12px] tabular-nums">{ms(row.p50)}</span> },
-            { key: 'p95', header: 'p95', render: (row) => <span className="font-mono text-[12px] tabular-nums">{ms(row.p95)}</span> },
-          ]}
-        />
-      ) : (
-        <Empty>Sin medidas todavía: ni lecturas, ni compilaciones, ni decisiones.</Empty>
-      )}
-    </Gate>
+    <svg width="92" height="38" viewBox="0 0 92 38" className="shrink-0" aria-hidden="true">
+      <polyline
+        points={
+          values.length === 1
+            ? `2,${34 - (values[0] / max) * 30} 90,${34 - (values[0] / max) * 30}`
+            : points
+        }
+        fill="none"
+        stroke={colors[plane]}
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }

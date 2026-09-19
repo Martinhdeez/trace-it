@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from app.features.decisions.schemas import DecisionOut
 
@@ -365,3 +365,67 @@ class PlaneHealth(BaseModel):
     error_rate: float | None
     p95_ms: Ms
     reason: str | None  # why it is not ok
+
+
+class UsageTotals(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    spans: int = 0
+    errors: int = 0
+    requests: int = 0
+    replays: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_tokens: int = 0
+    known_cost_usd: float = 0
+    unpriced_requests: int = 0
+    timed_spans: int = 0
+    self_ms: float = 0  # cumulative duration minus the union of direct child intervals
+    p50_ms: Ms = None  # inclusive operation latency; never added across groups
+    p95_ms: Ms = None
+
+
+class UsageGroup(UsageTotals):
+    key: str
+    plane: Plane
+    module: str | None = None
+    model: str | None = None
+    provider: str | None = None
+
+
+class UsageBucket(UsageTotals):
+    started_at: datetime
+    plane: Plane  # overview series stay separate, one per plane
+
+
+class UsageActivity(UsageTotals):
+    id: int
+    span_id: str
+    trace_id: str
+    step: str
+    status: str
+    started_at: datetime
+    duration_ms: int | None
+    model: str | None
+    provider: str | None
+    cost_status: str | None
+    rule_id: int | None
+    instance_id: int | None
+
+
+class UsageBreakdown(BaseModel):
+    process_id: int
+    through_id: int  # freeze the event set, including when older operations finish later
+    plane: Plane | None
+    module: str | None
+    since: datetime | None
+    until: datetime
+    bucket_seconds: int
+    totals: UsageTotals | None  # no mixed total at the overview level
+    groups: list[UsageGroup]  # planes -> modules -> models/providers
+    flow: list[UsageGroup]  # full plane/module/provider/model paths for the Sankey
+    series: list[UsageBucket]
+    activity: list[UsageActivity]  # a module's operations, newest first
+    activity_total: int
+    offset: int
+    limit: int

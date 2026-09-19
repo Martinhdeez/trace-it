@@ -1,0 +1,76 @@
+/* Presentation only. All component colours, fonts and shapes come from console tokens. */
+.walkthrough-frame {
+  height: clamp(440px, calc(100dvh - 255px), 740px);
+}
+.walkthrough-app {
+  height: calc(100% - 36px);
+}
+.walkthrough-app > div {
+  height: 100%;
+}
+.walkthrough-app nav,
+.walkthrough-app button,
+.walkthrough-app textarea {
+  cursor: default;
+}
+.walkthrough-app [data-demo-pressed] {
+  transform: scale(0.97);
+}
+.walkthrough-app button {
+  transition: transform 130ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.walkthrough-review > li {
+  animation: walkthrough-reveal 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.walkthrough-review > li:nth-child(2) {
+  animation-delay: 45ms;
+}
+.walkthrough-review > li:nth-child(3) {
+  animation-delay: 90ms;
+}
+.walkthrough-review .text-pagar {
+  animation: walkthrough-reveal 180ms ease-out both;
+}
+.walkthrough-app[data-playing='false'] * {
+  animation-play-state: paused;
+}
+@keyframes walkthrough-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 1023px) {
+  .walkthrough-app > div > .hidden.sm\:flex {
+    display: none;
+  }
+  .walkthrough-app > div > div:last-of-type {
+    padding-left: 8px;
+  }
+  .walkthrough-frame {
+    height: clamp(470px, calc(100dvh - 265px), 650px);
+  }
+  .walkthrough-trace-content > aside {
+    height: 100%;
+    overflow-y: auto;
+  }
+  .walkthrough-app [data-demo='trace'] {
+    flex: 1;
+  }
+  .walkthrough-trace-content > aside > div:first-child {
+    flex-shrink: 0;
+  }
+  .walkthrough-app [data-demo='execution'] > section {
+    max-height: 135px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .walkthrough-review > li,
+  .walkthrough-review .text-pagar {
+    animation: none;
+  }
+}

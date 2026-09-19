@@ -313,9 +313,7 @@ async def message(session, draft_id, body, user):
         plan.name = data["plan"].get("name", "")
     before_plan = data["plan"]
     data["plan"] = plan.model_dump()
-    data["messages"].append(
-        {"role": "assistant", "text": plan.summary, "trace_id": span.trace_id}
-    )
+    data["messages"].append({"role": "assistant", "text": plan.summary, "trace_id": span.trace_id})
     edited = plan_changed(before_plan, data["plan"])
     if edited:
         invalidate(data)

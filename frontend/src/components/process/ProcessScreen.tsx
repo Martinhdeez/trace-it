@@ -6,7 +6,7 @@ import { keys } from '../../api/queries'
 import { ArrowLeft } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { paths } from '../../lib/paths'
-import { PROCESS_TABS, processTabFromPath } from '../../lib/processTabs'
+import { PROCESS_TABS, processTabFromPath, type ProcessTabId } from '../../lib/processTabs'
 import { CountChip } from '../shell/Controls'
 import { ErrorNotice } from '../shell/Notice'
 import { Topbar, type Crumb } from '../shell/Topbar'
@@ -15,25 +15,27 @@ export function ProcessScreen({
   processId,
   crumbs,
   actions,
+  activeTab,
   children,
 }: {
   processId: number
   crumbs: Crumb[]
   actions?: ReactNode
+  activeTab?: ProcessTabId
   children: ReactNode
 }) {
   return (
     <>
       <Topbar crumbs={crumbs} actions={actions} />
-      <ProcessTabs processId={processId} />
+      <ProcessTabs processId={processId} activeTab={activeTab} />
       {children}
     </>
   )
 }
 
-export function ProcessTabs({ processId }: { processId: number }) {
+export function ProcessTabs({ processId, activeTab }: { processId: number; activeTab?: ProcessTabId }) {
   const location = useLocation()
-  const current = processTabFromPath(location.pathname, processId)
+  const current = activeTab ?? processTabFromPath(location.pathname, processId)
 
   const process = useQuery({
     queryKey: keys.process(processId),

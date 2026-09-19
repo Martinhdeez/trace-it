@@ -560,40 +560,7 @@ export function ProcessDraftChat({
                   key={`${index}:${message.text}`}
                   className={cn('flex', message.role === 'user' ? 'justify-end' : 'justify-start')}
                 >
-                  <div
-                    className={cn(
-                      'max-w-[88%] rounded-[16px] px-4 py-3 ring-1',
-                      message.role === 'user'
-                        ? 'bg-ink text-on-ink ring-ink'
-                        : 'bg-surface text-ink ring-line',
-                    )}
-                  >
-                    {message.role === 'assistant' ? (
-                      <Markdown>{message.text}</Markdown>
-                    ) : (
-                      <p className="whitespace-pre-line text-[13px] leading-6">{message.text}</p>
-                    )}
-                    {message.evidence?.length ? (
-                      <p
-                        className={cn(
-                          'mt-2 font-mono text-[10px]',
-                          message.role === 'user' ? 'text-white/55' : 'text-faint',
-                        )}
-                      >
-                        {message.evidence.join(' · ')}
-                      </p>
-                    ) : null}
-                    {message.questions?.length ? (
-                      <ul className="mt-3 space-y-1 border-t border-current/10 pt-2 text-[12px]">
-                        {message.questions.map((question) => (
-                          <li key={question}>{question}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {message.role === 'assistant' && message.trace_id ? (
-                      <ThinkingTrace traceId={message.trace_id} />
-                    ) : null}
-                  </div>
+                  <ProcessDraftMessage message={message} />
                 </li>
               ))}
             </ol>
@@ -756,48 +723,15 @@ export function ProcessDraftChat({
                 ) : null}
               </div>
               <ul className="space-y-2">
-                {items.map((item) => {
-                  const disposition = current.reviews[item.key]
-                  return (
-                    <li key={item.key} className="rounded-[14px] bg-surface px-3.5 py-3 ring-1 ring-line">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-[13px] font-medium text-ink">{item.title}</p>
-                          <p className="mt-1 text-[12px] leading-5 text-muted">{item.description}</p>
-                          {item.detail ? <p className="mt-1 font-mono text-[10px] text-faint">{item.detail}</p> : null}
-                          {item.evidence.length ? (
-                            <p className="mt-1 text-[10px] text-faint">{evidenceText(item.evidence)}</p>
-                          ) : null}
-                        </div>
-                        {disposition === 'accepted' ? (
-                          <span className="shrink-0 text-[11px] text-pagar">Aprobada</span>
-                        ) : disposition === 'rejected' ? (
-                          <span className="shrink-0 text-[11px] text-nopagar">Rechazada</span>
-                        ) : (
-                          <div className="flex shrink-0 gap-1">
-                            <Button
-                              tone="ghost"
-                              className="px-2"
-                              aria-label={`Rechazar ${item.title}`}
-                              disabled={review.isPending}
-                              onClick={() => review.mutate({ keys: [item.key], disposition: 'rejected' })}
-                            >
-                              <X size={11} />
-                            </Button>
-                            <Button
-                              className="px-2"
-                              aria-label={`Aprobar ${item.title}`}
-                              disabled={review.isPending}
-                              onClick={() => review.mutate({ keys: [item.key], disposition: 'accepted' })}
-                            >
-                              <Check size={11} />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </li>
-                  )
-                })}
+                {items.map((item) => (
+                  <ProcessDraftReviewItem
+                    key={item.key}
+                    item={item}
+                    disposition={current.reviews[item.key]}
+                    reviewing={review.isPending}
+                    onReview={(disposition) => review.mutate({ keys: [item.key], disposition })}
+                  />
+                ))}
               </ul>
             </section>
           ) : null}
@@ -850,7 +784,7 @@ export function ProcessDraftChat({
           ) : null}
 
           {preview ? (
-            <PreviewCard
+            <ProcessDraftPreview
               processId={processId}
               preview={preview}
               publishing={publish.isPending}
@@ -987,7 +921,7 @@ function ProcessProposalCard({ proposal }: { proposal: Proposal }) {
   )
 }
 
-function PreviewCard({
+export function ProcessDraftPreview({
   processId,
   preview,
   publishing,
@@ -1057,5 +991,98 @@ function PreviewCard({
         </p>
       </div>
     </NestedCard>
+  )
+}
+
+/** The same conversation message in the editor and the animated product walkthrough. */
+export function ProcessDraftMessage({ message }: { message: DiscoveryMessage }) {
+  return (
+    <div
+      className={cn(
+        'max-w-[88%] rounded-[16px] px-4 py-3 ring-1',
+        message.role === 'user' ? 'bg-ink text-on-ink ring-ink' : 'bg-surface text-ink ring-line',
+      )}
+    >
+      {message.role === 'assistant' ? (
+        <Markdown>{message.text}</Markdown>
+      ) : (
+        <p className="whitespace-pre-line text-[13px] leading-6">{message.text}</p>
+      )}
+      {message.evidence?.length ? (
+        <p
+          className={cn(
+            'mt-2 font-mono text-[10px]',
+            message.role === 'user' ? 'text-white/55' : 'text-faint',
+          )}
+        >
+          {message.evidence.join(' · ')}
+        </p>
+      ) : null}
+      {message.questions?.length ? (
+        <ul className="mt-3 space-y-1 border-t border-current/10 pt-2 text-[12px]">
+          {message.questions.map((question) => (
+            <li key={question}>{question}</li>
+          ))}
+        </ul>
+      ) : null}
+      {message.role === 'assistant' && message.trace_id ? (
+        <ThinkingTrace traceId={message.trace_id} />
+      ) : null}
+    </div>
+  )
+}
+
+/** Shared review row. Approving a demo row cannot invoke the editor's mutations. */
+export function ProcessDraftReviewItem({
+  item,
+  disposition,
+  reviewing,
+  onReview,
+}: {
+  item: ReviewItem
+  disposition?: string
+  reviewing: boolean
+  onReview: (disposition: 'accepted' | 'rejected') => void
+}) {
+  return (
+    <li className="rounded-[14px] bg-surface px-3.5 py-3 ring-1 ring-line">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium text-ink">{item.title}</p>
+          <p className="mt-1 text-[12px] leading-5 text-muted">{item.description}</p>
+          {item.detail ? (
+            <p className="mt-1 font-mono text-[10px] text-faint">{item.detail}</p>
+          ) : null}
+          {item.evidence.length ? (
+            <p className="mt-1 text-[10px] text-faint">{evidenceText(item.evidence)}</p>
+          ) : null}
+        </div>
+        {disposition === 'accepted' ? (
+          <span className="shrink-0 text-[11px] text-pagar">Aprobada</span>
+        ) : disposition === 'rejected' ? (
+          <span className="shrink-0 text-[11px] text-nopagar">Rechazada</span>
+        ) : (
+          <div className="flex shrink-0 gap-1">
+            <Button
+              tone="ghost"
+              className="px-2"
+              aria-label={`Rechazar ${item.title}`}
+              disabled={reviewing}
+              onClick={() => onReview('rejected')}
+            >
+              <X size={11} />
+            </Button>
+            <Button
+              className="px-2"
+              aria-label={`Aprobar ${item.title}`}
+              disabled={reviewing}
+              onClick={() => onReview('accepted')}
+            >
+              <Check size={11} />
+            </Button>
+          </div>
+        )}
+      </div>
+    </li>
   )
 }

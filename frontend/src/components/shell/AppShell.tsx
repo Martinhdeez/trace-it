@@ -7,23 +7,26 @@ import { paths } from '../../lib/paths'
 import { t } from '../../i18n'
 import { CommandPalette } from './CommandPalette'
 import { Sidebar } from './Sidebar'
+import { TraceMark } from './TraceMark'
 
 const drawerEase = [0.32, 0.72, 0, 1] as const
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, preview }: { children: ReactNode; preview?: { processId: number } }) {
+  const interactive = !preview
   const { setPaletteOpen, navOpen, setNavOpen, sidebarCollapsed, toggleSidebar } = useAppState()
   return (
-    <div className="flex h-dvh flex-col bg-canvas sm:flex-row">
+    <div className={`flex flex-col bg-canvas sm:flex-row ${interactive ? 'h-dvh' : 'h-full'}`}>
       <div className="hidden sm:flex">
-        <Sidebar collapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />
+        <Sidebar activeProcessId={preview?.processId} collapsed={interactive ? sidebarCollapsed : false} onToggleCollapse={toggleSidebar} />
       </div>
       <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:hidden">
         <div className="flex min-w-0 items-center gap-3">
           <button aria-label={t('nav.menu')} onClick={() => setNavOpen(true)}>
             <Menu size={18} strokeWidth={1.75} />
           </button>
-          <Link to={paths.processes} className="truncate text-sm font-medium">
-            trace<span className="text-faint">[.]</span>it · {t('nav.processes')}
+          <Link to={paths.processes} className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+            <TraceMark className="h-6 w-6" />
+            <span className="truncate">trace<span className="text-faint">[.]</span>it · {t('nav.processes')}</span>
           </Link>
         </div>
         <div className="flex shrink-0 items-center gap-4">
@@ -40,8 +43,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </div>
       </div>
-      <AnimatePresence>{navOpen ? <MobileNav onClose={() => setNavOpen(false)} /> : null}</AnimatePresence>
-      <CommandPalette />
+      <AnimatePresence>{interactive && navOpen ? <MobileNav onClose={() => setNavOpen(false)} /> : null}</AnimatePresence>
+      {interactive ? <CommandPalette /> : null}
     </div>
   )
 }
