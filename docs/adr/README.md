@@ -11,7 +11,7 @@ wins over any other document. Superseded plans live in `.artifacts/archive/`.
 | [0001](0001-configurable-decision-process.md) | Build a configurable decision process with reviewed learning | accepted | Reusable decision system; invoices are the first configured process; managers approve every rule change |
 | [0002](0002-deterministic-engine-llm-never-decides.md) | Decide with a deterministic engine; the LLM never decides at runtime | accepted | All active rules run as code, combined by decision-type priority; LLMs only compile, extract, explain and propose |
 | [0003](0003-rules-compiled-to-python-by-agents.md) | Compile each rule's text to free Python code with agents | accepted | No closed DSL; one contract `evaluate(instance, sources, others) -> {fires, reason}`; the decision comes from the approved rule |
-| [0004](0004-dual-blind-compilation-with-cross-tests.md) | Verify generated code with two blind compilers and cross-tests | accepted | A and B write code + tests blind; all tests on both codes; agreement on history; the check is at compile time, and code A alone runs |
+| [0004](0004-blind-tester-and-autonomous-coder.md) | Verify generated rule code against a blind tester, and activate it by impact | accepted | Tester writes tests from the text only; coder iterates against them and may dispute a test; NeedsData instead of invented fields; auto-activation when impact on history is small |
 | [0005](0005-in-house-sandbox-for-rule-code.md) | Run rule code in an in-house sandbox | accepted | AST allowlist, restricted builtins/imports, separate process with timeouts and rlimits, one subprocess per rule over the whole dataset |
 | [0006](0006-pydanticai-agent-framework.md) | Build every agent on PydanticAI | accepted | Typed output, output validators with bounded retries, one run entry point that traces cost; models per role from settings; scripted models in tests |
 | [0007](0007-declarative-process-packs.md) | Keep all domain knowledge in declarative process packs | accepted | `<name>.json` holds decision types, symbols, rules (with optional hand-written code), users; `<name>/sources.json` the connectors; idempotent loader |
@@ -56,7 +56,7 @@ Five decisions that best explain the system to the jury:
 1. **Deterministic engine with compiled rules** (0002 + 0003 + 0014): no LLM in the
    decision path, findings combined by decision-type priority only, zero tokens per
    decision, every decision replayable.
-2. **Dual blind compilation** (0004): how we trust LLM-written code without reading it.
+2. **Blind tester and autonomous coder** (0004): how we trust LLM-written code without reading it.
 3. **Process packs** (0007): the invoice challenge is configuration, not code; a second
    pack runs on the same code.
 4. **Immutable history and export semantics** (0008 + 0016): rule and process changes are

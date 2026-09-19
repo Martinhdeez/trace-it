@@ -75,7 +75,8 @@ Without Docker for the backend (faster loop): `docker compose up db -d`, then in
 |---|---|
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` | LLM providers. Only `make compile`, `make eval-compiler` and the assistant need them |
 | `TRACE_ERP_USER`, `TRACE_ERP_PASSWORD`, `TRACE_ERP_URL` | The ERP connector, named in `processes/invoice-payment/sources.json`. Docker sets the URL to `host.docker.internal:8009` |
-| `TRACE_COMPILER_A_MODEL`, `TRACE_COMPILER_B_MODEL`, `TRACE_ASSISTANT_MODEL` | One model per agent role, `provider:model`. Defaults in `app/core/config.py`; A and B must differ (ADR 0004) |
+| `TRACE_COMPILER_MODEL`, `TRACE_TESTER_MODEL`, `TRACE_ASSISTANT_MODEL` | One model per agent role, `provider:model` (any PydanticAI provider, or `helmcode:<model>` with `HELMCODE_API_KEY`). Defaults in `app/core/config.py`; tester and compiler should differ (ADR 0004) |
+| `TRACE_AUTO_ACTIVATE_MAX_CHANGE` | Share of past decisions a compiled rule may change and still activate by itself (default 0.05) |
 | `TRACE_DATABASE_URL` | Set by Docker; the Makefile overrides it for tests |
 
 ## Database and migrations
