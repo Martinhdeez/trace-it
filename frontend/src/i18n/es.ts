@@ -36,6 +36,19 @@ export const es = {
   queue: {
     review: 'Revisión del revisor',
   },
+  escalation: {
+    RULE_ERROR: 'Error en la regla',
+    RULE_CONFLICT: 'Reglas en conflicto',
+    SOURCE_UNAVAILABLE: 'Fuente no disponible',
+  },
+  ruleType: {
+    requirement: 'Requisito',
+    prohibition: 'Prohibición',
+  },
+  reviewStatus: {
+    completed: 'Completada',
+    failed: 'Fallida',
+  },
   roles: {
     manager: 'Responsable',
     operator: 'Operador',

@@ -27,6 +27,19 @@ export type ExtractionSettings = Schemas['ExtractionSettings']
 export type DecisionReview = Schemas['DecisionReviewConfig']
 export type RunSummary = Schemas['RunSummary']
 export type InstanceOut = Schemas['InstanceOut']
+export type InstanceDetail = Schemas['InstanceDetail']
+export type DecisionOut = Schemas['DecisionOut']
+export type RuleResult = Schemas['RuleResultOut']
+export type ReviewOut = Schemas['DecisionReviewOut']
+export type InstanceEvent = Schemas['EventOut']
+/** What the assistant proposes for an instance waiting on a person. */
+export type Suggestion = Schemas['Suggestion']
+export type ResolveIn = Schemas['ResolveIn']
+export type RuleIn = Schemas['RuleIn']
+export type RuleDetailOut = Schemas['RuleDetail']
+
+/** One agreed symbol inside `InstanceDetail.symbols`: the value and where it came from. */
+export type SymbolReading = { value: string | number | boolean | null; origin?: string }
 
 /** Server-side filters of the instance list. */
 export type InstanceFilters = { status?: string; decision?: string; q?: string }
@@ -276,15 +289,6 @@ export type TraceEvent = {
   creado: string
 }
 
-export type InstanceDetail = Instance & {
-  fichero_hash: string
-  /** `{name: {valor, origen}}`, or null while nobody has extracted them. */
-  simbolos: Record<string, SymbolValue> | null
-  /** Append-only history, oldest first. */
-  decisiones: DecisionRecord[]
-  eventos: TraceEvent[]
-}
-
 export type FindingKind = 'pagada_indebidamente' | 'no_pagada_debiendo' | (string & {})
 
 /** A past decision a later rule says was wrong. A notice, never a correction (P14). */
@@ -295,19 +299,6 @@ export type Finding = {
   tipo: FindingKind
   detalle: string | null
   creado: string
-}
-
-/** What the assistant proposes for an instance waiting on a person (3.4). */
-export type Suggestion = {
-  decision: string
-  razonamiento: string
-  regla_propuesta: string
-  tipo_propuesto: RuleKind
-}
-
-export type Resolution = {
-  decision: string
-  motivo: string
 }
 
 export type DocumentEvidence = {
@@ -353,7 +344,7 @@ export interface ApiClient {
   listNormRules(processId: number): Promise<NormRule[]>
   normalizeNorm(processId: number, text: string): Promise<NormResult>
   getRule(id: number): Promise<RuleDetail>
-  createRule(processId: number, body: RuleInput): Promise<RuleDetail>
+  createRule(processId: number, body: RuleIn): Promise<RuleDetailOut>
   compileRule(id: number): Promise<RuleDetail>
   /** What activating, or retiring, this rule would change. Does not change anything. */
   ruleImpact(id: number): Promise<Impact>
@@ -379,7 +370,7 @@ export interface ApiClient {
   /** Everything waiting for a person, including cases the reviewer disagreed with. */
   queue(processId: number): Promise<InstanceOut[]>
   suggestion(instanceId: number): Promise<Suggestion>
-  resolve(instanceId: number, body: Resolution): Promise<InstanceDetail>
+  resolve(instanceId: number, body: ResolveIn): Promise<InstanceDetail>
 
   listFindings(processId: number): Promise<Finding[]>
   exportOutcomes(processId: number): Promise<string>

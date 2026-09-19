@@ -1,6 +1,9 @@
 import type {
   ApiClient,
   DocumentUpload,
+  InstanceDetail,
+  RuleDetailOut,
+  Suggestion,
   DraftIn,
   ExecutionMetrics,
   ExecutionOut,
@@ -16,7 +19,6 @@ import type {
   VersionDraft,
   VersionOut,
   DocumentEvidence,
-  Instance,
   InstanceOut,
   NormResult,
   NormRule,
@@ -25,10 +27,8 @@ import type {
   ProcessDetail,
   ProcessInput,
   ProcessSymbol,
-  Resolution,
   Rule,
   RuleDetail,
-  RuleInput,
   RuleState,
   User,
 } from './contracts'
@@ -53,7 +53,6 @@ type RawRule = {
   activated_at: string | null
 }
 type RawRuleDetail = RawRule & { code: string | null; tests: Record<string, unknown>[] | null }
-type RawInstance = { id: number; name: string; status: string; decision: string | null }
 type RawUseCase = { id: number; name: string; description: string }
 type RawAgentConfig = {
   id: number
@@ -146,18 +145,6 @@ const ruleDetail = (raw: RawRuleDetail): RuleDetail => ({
   codigo_b: null,
   tests_a: (raw.tests ?? []) as RuleDetail['tests_a'],
   tests_b: null,
-})
-
-const instance = (raw: RawInstance): Instance => ({
-  id: raw.id,
-  nombre: raw.name,
-  estado:
-    raw.status === 'DECIDED'
-      ? 'DECIDIDA'
-      : raw.status === 'REVIEW'
-        ? 'REVISION'
-        : 'PENDIENTE',
-  decision: raw.decision,
 })
 
 const normRule = (raw: {
@@ -296,14 +283,7 @@ export const liveClient: ApiClient = {
     return result
   },
   getRule: async (id) => ruleDetail(await get<RawRuleDetail>(`/rules/${id}`)),
-  createRule: async (processId, body: RuleInput) =>
-    ruleDetail(
-      await post<RawRuleDetail>(`/processes/${processId}/rules`, {
-        text: body.texto,
-        type: body.tipo === 'requisito' ? 'requirement' : 'prohibition',
-        decision: body.decision,
-      }),
-    ),
+  createRule: (processId, body) => post<RuleDetailOut>(`/processes/${processId}/rules`, body),
   compileRule: async (id) => ruleDetail(await post<RawRuleDetail>(`/rules/${id}/compile`)),
   ruleImpact: async (id) => {
     const raw = await get<{
@@ -340,96 +320,12 @@ export const liveClient: ApiClient = {
   run: (processId) => post<RunSummary>(`/processes/${processId}/run`),
   listInstances: (processId, filters) =>
     get<InstanceOut[]>(`/processes/${processId}/instances${query({ ...filters })}`),
-  getInstance: async (id) => {
-    const raw = await get<{
-      id: number
-      name: string
-      status: string
-      decision: string | null
-      file_hash: string
-      symbols: Record<string, unknown> | null
-      decisions: {
-        id: number
-        decision: string
-        author: string
-        reason: string | null
-        results: { rule_id: number; hash: string | null; fires: boolean | null; reason: string }[]
-        rules_hash: string
-        created_at: string
-      }[]
-      events: { step: string; data: Record<string, unknown> | null; latency_ms: number | null; created_at: string }[]
-    }>(`/instances/${id}`)
-    const symbols =
-      raw.symbols == null
-        ? null
-        : Object.fromEntries(
-            Object.entries(raw.symbols).map(([name, value]) => {
-              if (value && typeof value === 'object' && !Array.isArray(value)) {
-                const item = value as Record<string, unknown>
-                return [
-                  name,
-                  {
-                    valor: item.value ?? item.valor ?? null,
-                    origen:
-                      typeof (item.origin ?? item.origen) === 'string'
-                        ? String(item.origin ?? item.origen)
-                        : undefined,
-                  },
-                ]
-              }
-              return [name, { valor: value as string | number | boolean | null }]
-            }),
-          )
-    return {
-      ...instance(raw),
-      fichero_hash: raw.file_hash,
-      simbolos: symbols,
-      decisiones: raw.decisions.map((item) => ({
-        id: item.id,
-        decision: item.decision,
-        autor: item.author === 'engine' ? 'motor' : item.author,
-        motivo: item.reason,
-        resultados: item.results.map((result) => ({
-          regla_id: result.rule_id,
-          hash: result.hash,
-          salta: result.fires,
-          motivo: result.reason,
-        })),
-        reglas_hash: item.rules_hash,
-        creada: item.created_at,
-      })),
-      eventos: raw.events.map((item) => ({
-        paso: item.step,
-        datos: item.data,
-        latencia_ms: item.latency_ms,
-        creado: item.created_at,
-      })),
-    }
-  },
+  getInstance: (id) => get<InstanceDetail>(`/instances/${id}`),
   getDocument: (instanceId) =>
     get<DocumentEvidence>(`/instances/${instanceId}/document`),
   queue: (processId) => get<InstanceOut[]>(`/processes/${processId}/queue`),
-  suggestion: async (instanceId) => {
-    const raw = await get<{
-      decision: string
-      reasoning: string
-      proposed_rule: string
-      proposed_type: 'requirement' | 'prohibition'
-    }>(`/instances/${instanceId}/suggestion`)
-    return {
-      decision: raw.decision,
-      razonamiento: raw.reasoning,
-      regla_propuesta: raw.proposed_rule,
-      tipo_propuesto: raw.proposed_type === 'requirement' ? 'requisito' : 'prohibicion',
-    }
-  },
-  resolve: async (instanceId, body: Resolution) => {
-    await post(`/instances/${instanceId}/resolve`, {
-      decision: body.decision,
-      reason: body.motivo,
-    })
-    return liveClient.getInstance(instanceId)
-  },
+  suggestion: (instanceId) => get<Suggestion>(`/instances/${instanceId}/suggestion`),
+  resolve: (instanceId, body) => post<InstanceDetail>(`/instances/${instanceId}/resolve`, body),
 
   listFindings: async (processId) => {
     const raw = await get<

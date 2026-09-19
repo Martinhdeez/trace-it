@@ -29,6 +29,7 @@ import { cn } from '../lib/cn'
 import { definitionTabFromPath, type DefinitionTabId } from '../lib/definitionTabs'
 import { formatRunDate } from '../lib/format'
 import { paths } from '../lib/paths'
+import { toRuleIn } from '../lib/rules'
 
 type Attachment = FilePreview & { file: File }
 
@@ -137,7 +138,7 @@ export function Definition() {
   )
 
   const create = useMutation({
-    mutationFn: (body: RuleInput) => api.createRule(processId, body),
+    mutationFn: (body: RuleInput) => api.createRule(processId, toRuleIn(body)),
     onSuccess: (rule) => {
       void queryClient.invalidateQueries({ queryKey: ['rules'] })
       navigate(paths.rule(processId, rule.id))
@@ -426,7 +427,7 @@ function RulesPane({
   }, [adding])
 
   const create = useMutation({
-    mutationFn: (body: RuleInput) => api.createRule(processId, body),
+    mutationFn: (body: RuleInput) => api.createRule(processId, toRuleIn(body)),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['rules'] })
       setText('')

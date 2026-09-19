@@ -12,26 +12,21 @@ import type {
   Finding,
   Impact,
   Instance,
-  InstanceDetail,
   LlmConfig,
   Process,
   ProcessDefinition,
   ProcessDetail,
   ProcessInput,
   ProcessSymbol,
-  Resolution,
   RuleDetail,
   RuleInput,
   RuleOutcome,
   RuleState,
-  Suggestion,
-  SymbolValue,
-  TraceEvent,
   User,
 } from './contracts'
 import { ApiError } from './http'
 import { classifiedInvoices } from '../data/invoices.generated'
-import { extractedDocuments, imageOnlyFiles } from '../data/documents.generated'
+import { imageOnlyFiles } from '../data/documents.generated'
 import {
   LLM_ROLES,
   invoiceOutcomes,
@@ -195,12 +190,6 @@ const instances: Row[] = classifiedInvoices.map((invoice, index) => {
   return { instance, reason, latencyMs: invoice.latencyMs, decisions }
 })
 
-function row(id: number): Row {
-  const found = instances.find((item) => item.instance.id === id)
-  if (!found) throw new ApiError(404, 'not_found', `No hay instancia ${id}`)
-  return found
-}
-
 function ofProcess(processId: number): Row[] {
   return processId === 1 ? instances : []
 }
@@ -209,67 +198,6 @@ function processById(id: number): ProcessDetail {
   const process = processes.find((item) => item.id === id)
   if (!process) throw new ApiError(404, 'not_found', `No hay proceso ${id}`)
   return process
-}
-
-function symbolsOf(name: string): Record<string, SymbolValue> {
-  const doc = extractedDocuments[name]
-  if (!doc) return {}
-  const origin = `${name} · texto`
-  return {
-    nif_emisor: { valor: doc.nif, origen: origin },
-    iban: { valor: doc.iban, origen: origin },
-    numero_factura: { valor: doc.invoiceNumber, origen: origin },
-    pedido: { valor: doc.pedido, origen: origin },
-    base: { valor: doc.base, origen: origin },
-    tipo_iva: { valor: Math.round(doc.ivaRate * 100), origen: origin },
-    cuota_iva: { valor: doc.ivaAmount, origen: origin },
-    total: { valor: doc.total, origen: origin },
-    fecha: { valor: doc.date, origen: origin },
-  }
-}
-
-function eventsOf(item: Row): TraceEvent[] {
-  const scanned = imageOnly.has(item.instance.nombre)
-  const events: TraceEvent[] = [
-    {
-      paso: 'ingesta',
-      datos: { fichero: item.instance.nombre, hash: hash(item.instance.nombre) },
-      latencia_ms: 4,
-      creado: NOW,
-    },
-    {
-      paso: 'extraccion',
-      datos: {
-        fuente: scanned ? 'vision · render 300 dpi' : 'pdftotext',
-        simbolos: Object.keys(symbolsOf(item.instance.nombre)).length,
-        ...(scanned
-          ? { input_tokens: 2140, output_tokens: 96 }
-          : { input_tokens: 0, output_tokens: 0 }),
-      },
-      latencia_ms: scanned ? 1840 : 180,
-      creado: NOW,
-    },
-  ]
-  if (item.instance.estado === 'REVISION') {
-    events.push({
-      paso: 'revision',
-      datos: { motivo: 'LECTURA_NO_FIABLE', detalle: 'extractor_1 ≠ extractor_2' },
-      latencia_ms: item.latencyMs,
-      creado: NOW,
-    })
-    return events
-  }
-  events.push({
-    paso: 'decision',
-    datos: {
-      decision: item.instance.decision,
-      reglas_hash: hash('norma-v3'),
-      reglas: rules.filter((rule) => rule.estado === 'activa').length,
-    },
-    latencia_ms: item.latencyMs,
-    creado: NOW,
-  })
-  return events
 }
 
 const findings: Finding[] = []
@@ -375,6 +303,33 @@ function currentUser(): User {
 
 let session = 1
 
+async function addRule(processId: number, body: RuleInput): Promise<StoredRule> {
+  const process = processById(processId)
+  if (!process.tipos_decision.some((outcome) => outcome.nombre === body.decision)) {
+    throw new ApiError(409, 'conflict', `${body.decision} no es un tipo de decisión del proceso`)
+  }
+  const rule: StoredRule = {
+    id: nextRuleId++,
+    proceso_id: processId,
+    texto: body.texto,
+    tipo: body.tipo,
+    decision: body.decision,
+    estado: 'borrador',
+    hash: null,
+    informe: null,
+    creada: new Date().toISOString(),
+    activada: null,
+    codigo_a: null,
+    codigo_b: null,
+    tests_a: null,
+    tests_b: null,
+    reason: 'ANOMALIA',
+  }
+  rules.push(rule)
+  return wait(rule, 200)
+
+}
+
 // --- Client -----------------------------------------------------------------
 
 export const mockClient: ApiClient = {
@@ -427,7 +382,7 @@ export const mockClient: ApiClient = {
     // Loading the same file twice must not duplicate rules: they are keyed by text.
     const texts = new Set(rules.filter((r) => r.proceso_id === process.id).map((r) => r.texto))
     const newRules = (body.reglas ?? []).filter((rule) => !texts.has(rule.texto))
-    for (const rule of newRules) await mockClient.createRule(process.id, rule)
+    for (const rule of newRules) await addRule(process.id, rule)
 
     const emails = new Set(users.map((item) => item.email))
     const newUsers = (body.usuarios ?? []).filter((item) => !emails.has(item.email))
@@ -483,7 +438,7 @@ export const mockClient: ApiClient = {
       .filter(Boolean)
     const created = []
     for (const [index, line] of lines.entries()) {
-      const rule = await mockClient.createRule(processId, {
+      const rule = await addRule(processId, {
         texto: line,
         tipo: 'requisito',
         decision: processById(processId).tipos_decision.find((item) => !item.por_defecto)
@@ -510,31 +465,7 @@ export const mockClient: ApiClient = {
 
   getRule: async (id) => wait(ruleById(id)),
 
-  createRule: async (processId, body: RuleInput) => {
-    const process = processById(processId)
-    if (!process.tipos_decision.some((outcome) => outcome.nombre === body.decision)) {
-      throw new ApiError(409, 'conflict', `${body.decision} no es un tipo de decisión del proceso`)
-    }
-    const rule: StoredRule = {
-      id: nextRuleId++,
-      proceso_id: processId,
-      texto: body.texto,
-      tipo: body.tipo,
-      decision: body.decision,
-      estado: 'borrador',
-      hash: null,
-      informe: null,
-      creada: new Date().toISOString(),
-      activada: null,
-      codigo_a: null,
-      codigo_b: null,
-      tests_a: null,
-      tests_b: null,
-      reason: 'ANOMALIA',
-    }
-    rules.push(rule)
-    return wait(rule, 200)
-  },
+  createRule: noMock,
 
   compileRule: async (id) => {
     const rule = ruleById(id)
@@ -624,76 +555,14 @@ export const mockClient: ApiClient = {
   run: noMock,
   listInstances: noMock,
 
-  getInstance: async (id) => {
-    const item = row(id)
-    const detail: InstanceDetail = {
-      ...item.instance,
-      fichero_hash: hash(item.instance.nombre),
-      simbolos: symbolsOf(item.instance.nombre),
-      decisiones: item.decisions,
-      eventos: eventsOf(item),
-    }
-    return wait(detail)
-  },
+  getInstance: noMock,
 
   getDocument: () => wait(null),
 
   queue: noMock,
 
-  suggestion: async (instanceId) => {
-    const item = row(instanceId)
-    const proposals: Record<string, Suggestion> = {
-      IMPORTE_DISTINTO: {
-        decision: 'NO_PAGAR',
-        razonamiento:
-          'El total de la factura no coincide con el importe del pedido. El propio documento demuestra la diferencia, así que no hace falta información externa.',
-        regla_propuesta:
-          'Si el total de la factura difiere del importe del pedido en más de 0,01 €, no se paga.',
-        tipo_propuesto: 'prohibicion',
-      },
-      PEDIDO_DUPLICADO: {
-        decision: 'NO_PAGAR',
-        razonamiento:
-          'Otra instancia del proceso cita el mismo pedido. Pagar las dos duplicaría el importe, y el ERP solo tiene un asiento.',
-        regla_propuesta:
-          'Si otra instancia del proceso cita el mismo pedido, solo se paga la primera por fecha.',
-        tipo_propuesto: 'prohibicion',
-      },
-      LECTURA_NO_FIABLE: {
-        decision: 'ESCALAR',
-        razonamiento:
-          'Las dos extracciones no coinciden en un campo obligatorio. Decidir con un dato sin verificar rompe la norma 6.',
-        regla_propuesta:
-          'Si los dos extractores no coinciden en un campo obligatorio, la factura se escala.',
-        tipo_propuesto: 'requisito',
-      },
-    }
-    const suggestion = proposals[item.reason] ?? {
-      decision: 'ESCALAR',
-      razonamiento: `Anomalía ${item.reason || 'sin motivo'}. Sin regla que la cubra, la norma manda escalar antes que pagar.`,
-      regla_propuesta: `Si se detecta ${item.reason || 'esta anomalía'}, la instancia se escala con ese motivo.`,
-      tipo_propuesto: 'requisito' as const,
-    }
-    return wait(suggestion, 700)
-  },
-
-  resolve: async (instanceId, body: Resolution) => {
-    const item = row(instanceId)
-    const previous = item.decisions.at(-1)
-    item.decisions.push({
-      id: item.decisions.length + 1,
-      decision: body.decision,
-      motivo: body.motivo,
-      autor: currentUser().name,
-      reglas_hash: previous?.reglas_hash ?? '',
-      resultados: [],
-      creada: new Date().toISOString(),
-    })
-    item.instance.estado = 'DECIDIDA'
-    item.instance.decision = body.decision
-    item.reason = body.motivo
-    return mockClient.getInstance(instanceId)
-  },
+  suggestion: noMock,
+  resolve: noMock,
 
   listFindings: (processId) => wait(processId === 1 ? [...findings] : []),
 
