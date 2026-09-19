@@ -390,6 +390,7 @@ export function ProcessDraftChat({
     return (
       <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6', className)}>
         {error ? <ErrorNotice error={error} /> : null}
+        {openProposals.data?.length ? <PendingProposals proposals={openProposals.data} /> : null}
         <EmptyState
           icon={MessageSquareText}
           title={processId == null ? 'Crea el proceso hablando' : 'Revisa el proceso hablando'}
@@ -586,21 +587,7 @@ export function ProcessDraftChat({
             </p>
           ) : null}
 
-          {openProposals.data?.length ? (
-            <section className="space-y-2">
-              <div>
-                <h2 className="text-[15px] font-medium text-ink">Propuestas pendientes</h2>
-                <p className="text-[11px] text-faint">
-                  También puedes resolver aquí propuestas del chat y del aprendizaje.
-                </p>
-              </div>
-              <ul className="space-y-2">
-                {openProposals.data.map((proposal) => (
-                  <ProcessProposalCard key={proposal.id} proposal={proposal} />
-                ))}
-              </ul>
-            </section>
-          ) : null}
+          {openProposals.data?.length ? <PendingProposals proposals={openProposals.data} /> : null}
 
           {processId != null && blockedByVersionDraft ? (
             <Notice
@@ -788,6 +775,24 @@ export function ProcessDraftChat({
         </div>
       </aside>
     </div>
+  )
+}
+
+function PendingProposals({ proposals }: { proposals: Proposal[] }) {
+  return (
+    <section className="mb-5 space-y-2">
+      <div>
+        <h2 className="text-[15px] font-medium text-ink">Propuestas pendientes</h2>
+        <p className="text-[11px] text-faint">
+          También puedes resolver aquí propuestas del chat y del aprendizaje.
+        </p>
+      </div>
+      <ul className="space-y-2">
+        {proposals.map((proposal) => (
+          <ProcessProposalCard key={proposal.id} proposal={proposal} />
+        ))}
+      </ul>
+    </section>
   )
 }
 
