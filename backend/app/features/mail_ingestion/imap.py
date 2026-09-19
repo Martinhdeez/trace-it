@@ -9,6 +9,7 @@ import re
 import ssl
 from email import policy
 from email.header import decode_header, make_header
+from email.message import Message
 from email.parser import BytesHeaderParser
 
 from .documents import RejectedDocument, validate_pdf
@@ -103,7 +104,22 @@ def candidates(tree, prefix=""):
         attributes.update(
             {str(params[i]).lower(): params[i + 1] for i in range(0, len(params) - 1, 2)}
         )
-    name = str(attributes.get("filename") or attributes.get("name") or "attachment.pdf")
+    header = Message()
+    # RFC 2231 parameters/continuations preserve international attachment names.
+    parameters = {
+        key: str(value)
+        for key, value in attributes.items()
+        if re.fullmatch(r"(filename|name)(\*[0-9]+)?\*?", key)
+    }
+    header.add_header(
+        "Content-Disposition",
+        "attachment",
+        **{
+            key.replace("name", "filename", 1) if key.startswith("name") else key: value
+            for key, value in parameters.items()
+        },
+    )
+    name = str(header.get_filename() or "attachment.pdf")
     with contextlib.suppress(ValueError, LookupError):
         name = str(make_header(decode_header(name)))
     if kind == "application/octet-stream" and not name.lower().endswith(".pdf"):

@@ -161,3 +161,18 @@ def test_discovery_uses_bounded_numeric_ranges(local_mail):
         through, uids = mailbox.discover(5)
     assert through == 24 and uids == list(range(5, 25))
     assert "UID SEARCH UID 5:24" in server.commands
+
+
+def test_international_filename_parameters_are_preserved():
+    tree = [
+        "APPLICATION",
+        "OCTET-STREAM",
+        None,
+        None,
+        None,
+        "BASE64",
+        12,
+        None,
+        ["ATTACHMENT", ["filename*", "utf-8''factura%20caf%C3%A9.pdf"]],
+    ]
+    assert candidates(tree)[0]["original_name"] == "factura café.pdf"
