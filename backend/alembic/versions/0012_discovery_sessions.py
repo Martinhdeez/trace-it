@@ -1,7 +1,7 @@
 """Persistent discovery drafts and append-only revisions.
 
-Revision ID: 0011
-Revises: 0010
+Revision ID: 0012
+Revises: 0011
 """
 
 import sqlalchemy as sa
@@ -9,15 +9,15 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision = "0011"
-down_revision = "0010"
+revision = "0012"
+down_revision = "0011"
 branch_labels = None
 depends_on = None
 
 
 def upgrade():
     op.create_table(
-        "process_drafts",
+        "discovery_sessions",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("process_id", sa.Integer(), sa.ForeignKey("processes.id")),
         sa.Column("use_case_id", sa.Integer(), sa.ForeignKey("use_cases.id")),
@@ -28,8 +28,10 @@ def upgrade():
         ),
     )
     op.create_table(
-        "draft_revisions",
-        sa.Column("draft_id", sa.Integer(), sa.ForeignKey("process_drafts.id"), primary_key=True),
+        "discovery_revisions",
+        sa.Column(
+            "draft_id", sa.Integer(), sa.ForeignKey("discovery_sessions.id"), primary_key=True
+        ),
         sa.Column("number", sa.Integer(), primary_key=True),
         sa.Column("author_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("data", postgresql.JSONB(), nullable=False),
@@ -40,5 +42,5 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_table("draft_revisions")
-    op.drop_table("process_drafts")
+    op.drop_table("discovery_revisions")
+    op.drop_table("discovery_sessions")

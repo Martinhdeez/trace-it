@@ -12,23 +12,23 @@ from app.features.processes.draft_schemas import (
     ReviewIn,
     RevisionIn,
 )
-from app.features.processes.model import DraftRevision, ProcessDraft
+from app.features.processes.model import DiscoveryRevision, DiscoverySession
 from app.features.users.dependencies import CurrentUser
 
 router = APIRouter(prefix="/process-drafts", tags=["process discovery"])
 
 
-@router.get("", operation_id="listProcessDrafts")
+@router.get("", operation_id="listDiscoverySessions")
 async def list_drafts(session: Session, user: CurrentUser) -> list[dict]:
     drafts.manager(user)
     rows = await session.execute(
-        select(ProcessDraft, DraftRevision)
+        select(DiscoverySession, DiscoveryRevision)
         .join(
-            DraftRevision,
-            (DraftRevision.draft_id == ProcessDraft.id)
-            & (DraftRevision.number == ProcessDraft.revision),
+            DiscoveryRevision,
+            (DiscoveryRevision.draft_id == DiscoverySession.id)
+            & (DiscoveryRevision.number == DiscoverySession.revision),
         )
-        .order_by(ProcessDraft.id.desc())
+        .order_by(DiscoverySession.id.desc())
     )
     return [
         {
@@ -42,25 +42,25 @@ async def list_drafts(session: Session, user: CurrentUser) -> list[dict]:
     ]
 
 
-@router.post("", operation_id="startProcessDraft", status_code=201)
+@router.post("", operation_id="startDiscoverySession", status_code=201)
 async def start(body: DraftStart, session: Session, user: CurrentUser) -> DraftOut:
     return await drafts.start(session, body, user)
 
 
-@router.get("/{draft_id}", operation_id="getProcessDraft")
+@router.get("/{draft_id}", operation_id="getDiscoverySession")
 async def get(draft_id: int, session: Session, user: CurrentUser) -> DraftOut:
     drafts.manager(user)
     return await drafts.output(session, draft_id)
 
 
-@router.get("/{draft_id}/revisions", operation_id="getProcessDraftHistory")
+@router.get("/{draft_id}/revisions", operation_id="getDiscoverySessionHistory")
 async def history(draft_id: int, session: Session, user: CurrentUser) -> list[dict]:
     drafts.manager(user)
     await drafts.read(session, draft_id)
     rows = await session.scalars(
-        select(DraftRevision)
-        .where(DraftRevision.draft_id == draft_id)
-        .order_by(DraftRevision.number)
+        select(DiscoveryRevision)
+        .where(DiscoveryRevision.draft_id == draft_id)
+        .order_by(DiscoveryRevision.number)
     )
     return [
         {
@@ -78,7 +78,7 @@ async def history(draft_id: int, session: Session, user: CurrentUser) -> list[di
     ]
 
 
-@router.post("/{draft_id}/messages", operation_id="messageProcessDraft")
+@router.post("/{draft_id}/messages", operation_id="messageDiscoverySession")
 async def message(draft_id: int, body: MessageIn, session: Session, user: CurrentUser) -> DraftOut:
     return await drafts.message(session, draft_id, body, user)
 
@@ -113,11 +113,11 @@ async def review(draft_id: int, body: ReviewIn, session: Session, user: CurrentU
     return await drafts.review(session, draft_id, body, user)
 
 
-@router.post("/{draft_id}/prepare", operation_id="prepareProcessDraft")
+@router.post("/{draft_id}/prepare", operation_id="prepareDiscoverySession")
 async def prepare(draft_id: int, body: RevisionIn, session: Session, user: CurrentUser) -> DraftOut:
     return await drafts.prepare(session, draft_id, body.revision, user)
 
 
-@router.post("/{draft_id}/publish", operation_id="publishProcessDraft")
+@router.post("/{draft_id}/publish", operation_id="publishDiscoverySession")
 async def publish(draft_id: int, body: RevisionIn, session: Session, user: CurrentUser) -> DraftOut:
     return await drafts.publish(session, draft_id, body.revision, user)

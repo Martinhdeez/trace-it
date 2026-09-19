@@ -481,3 +481,95 @@ async def test_runtime_error_cannot_satisfy_an_escalation_example():
     large = next(e for e in result["examples"] if e["name"] == "large")
     assert large["actual"] == "REVIEW"
     assert not large["passed"] and not result["valid"]
+
+
+async def test_discovery_publishes_versions_and_captured_execution(api, monkeypatch):
+    from app.features.versions.model import ProcessVersion
+
+    initial = await post(api, await prepare_new(api, monkeypatch), "publish")
+    pid = initial["published_process_id"]
+    process = (await api.get(f"/processes/{pid}")).json()
+    version_id = process["active_version_id"]
+    assert version_id is not None
+    decision_id = await add_decision(pid)
+    async with session_factory() as session:
+        decision = await session.get(Decision, decision_id)
+        instance = await session.get(Instance, decision.instance_id)
+        instance.status = "PENDING"
+        await session.commit()
+        iid = instance.id
+    response = await api.post(f"/processes/{pid}/run")
+    assert response.status_code == 200, response.text
+    async with session_factory() as session:
+        decision = await session.scalar(
+            select(Decision).where(Decision.instance_id == iid).order_by(Decision.id.desc())
+        )
+        assert decision.version_id == version_id and decision.execution_id is not None
+        replay_id = decision.id
+        version = await session.get(ProcessVersion, version_id)
+        assert version.validation["examples"]
+    replay = await api.post(f"/decisions/{replay_id}/replay")
+    assert replay.status_code == 200 and replay.json()["matches"]
+
+
+@pytest.mark.parametrize("failure", ["runtime", "pending_review"])
+async def test_discovery_preview_rejects_historical_errors_and_pending_reviews(
+    api, monkeypatch, failure
+):
+    from app.features.decisions.model import DecisionReview
+
+    initial = await post(api, await prepare_new(api, monkeypatch), "publish")
+    pid = initial["published_process_id"]
+    decision_id = await add_decision(pid)
+    if failure == "pending_review":
+        async with session_factory() as session:
+            session.add(
+                DecisionReview(
+                    decision_id=decision_id,
+                    status="completed",
+                    recommendation="REVIEW",
+                    reasoning="Needs investigation",
+                    evidence=[],
+                    requires_human=True,
+                    snapshot={},
+                )
+            )
+            await session.commit()
+    proposal = plan(initial["plan"]["name"], threshold=40)
+    responses = scripts(proposal, threshold=40)
+    if failure == "runtime":
+        code = responses["compiler"][0]["code"]
+        responses["compiler"][0]["code"] = code.replace(
+            "    fires =",
+            "    if instance['amount'] == 50:\n"
+            "        raise ValueError('historical failure')\n    fires =",
+        )
+    monkeypatch.setattr(llm, "model_for", per_role(responses))
+    draft = (await api.post("/process-drafts", json={"process_id": pid})).json()
+    draft = await post(api, draft, "messages", message="Lower the threshold to 40")
+    draft = await post(api, await accept(api, draft), "prepare")
+    assert not draft["preview"]["valid"]
+    key = "errors" if failure == "runtime" else "conflicts"
+    assert len(draft["preview"]["impact"][key]) == 1
+    result = await api.post(
+        f"/process-drafts/{draft['id']}/publish", json={"revision": draft["revision"]}
+    )
+    assert result.status_code == 409
+
+
+async def test_discovery_does_not_overwrite_a_process_draft(api, monkeypatch):
+    initial = await post(api, await prepare_new(api, monkeypatch), "publish")
+    pid = initial["published_process_id"]
+    draft = (await api.post("/process-drafts", json={"process_id": pid})).json()
+    proposal = plan(initial["plan"]["name"])
+    monkeypatch.setattr(llm, "model_for", per_role(scripts(proposal)))
+    draft = await post(api, draft, "messages", message="Keep the same policy")
+    draft = await post(api, await accept(api, draft), "prepare")
+    staged = await api.put(f"/processes/{pid}/draft", json={"description": "An unrelated edit"})
+    assert staged.status_code == 200
+    result = await api.post(
+        f"/process-drafts/{draft['id']}/publish", json={"revision": draft["revision"]}
+    )
+    assert result.status_code == 409
+    unchanged = (await api.get(f"/processes/{pid}/draft")).json()
+    assert unchanged == staged.json()

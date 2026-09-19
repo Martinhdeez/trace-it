@@ -15,6 +15,9 @@ class Process(Base):
     __tablename__ = "processes"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    active_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("process_versions.id", use_alter=True, name="fk_processes_active_version_id")
+    )
     name: Mapped[str] = mapped_column(String, unique=True)
     use_case_id: Mapped[int] = mapped_column(ForeignKey("use_cases.id"), index=True)
     decision_review: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -48,8 +51,8 @@ class DecisionType(Base):
     requires_human: Mapped[bool] = mapped_column(default=False, server_default=false())
 
 
-class ProcessDraft(Base):
-    __tablename__ = "process_drafts"
+class DiscoverySession(Base):
+    __tablename__ = "discovery_sessions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     process_id: Mapped[int | None] = mapped_column(ForeignKey("processes.id"))
@@ -59,12 +62,12 @@ class ProcessDraft(Base):
     created_at: Mapped[created_at]
 
 
-class DraftRevision(Base):
+class DiscoveryRevision(Base):
     """Append-only proposal, materials and user answers at a revision."""
 
-    __tablename__ = "draft_revisions"
+    __tablename__ = "discovery_revisions"
 
-    draft_id: Mapped[int] = mapped_column(ForeignKey("process_drafts.id"), primary_key=True)
+    draft_id: Mapped[int] = mapped_column(ForeignKey("discovery_sessions.id"), primary_key=True)
     number: Mapped[int] = mapped_column(primary_key=True)
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     data: Mapped[dict[str, Any]] = mapped_column(JSONB)

@@ -103,3 +103,12 @@ This implementation is backend-only, as requested; no frontend is included.
 ## Related
 
 ADR 0001, 0003, 0004, 0007, 0008, 0013, 0015, 0016, 0017; [domain glossary](../../CONTEXT.md).
+
+## Integration with process versions
+
+Discovery sessions and their append-only revisions live in `discovery_sessions` and
+`discovery_revisions`, introduced after versioning by migration 0012. A session is the
+conversation and evidence record, not a second editable runtime version. Publication
+uses the shared versions module and validates proposed source rows with the same
+historical-error and human-review guards. Existing version drafts must be finished
+before discovery can publish; they are never silently overwritten.

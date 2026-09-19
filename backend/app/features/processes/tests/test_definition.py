@@ -108,6 +108,13 @@ async def test_from_disk_rules_arrive_with_their_code_and_activate() -> None:
             assert detail.report["origin"] == "hand-written"
             await rules.activate(session, rule.id)
 
+        from app.features.versions import service as versions
+
+        draft = await versions.validate(session, process_id)
+        assert draft.validation["valid"], draft.validation
+        await versions.publish(
+            session, process_id, draft.revision, draft.validation["hash"], "manager", "Reviewed"
+        )
         active = await rules.list_all(session, process_id, "active")
 
     assert len(active) == len(data.rules) == 16

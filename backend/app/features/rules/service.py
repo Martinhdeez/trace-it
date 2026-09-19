@@ -1,10 +1,9 @@
 import asyncio
 import hashlib
 import logging
-from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,13 +13,9 @@ from app.core.config import settings
 from app.core.database import session_factory
 from app.features.agents import compiler
 from app.features.decisions import audit
-from app.features.decisions.model import Decision, Finding
-from app.features.processes.model import DecisionType, Process, Symbol
-from app.features.processes.service import get as get_process
-from app.features.processes.service import lock as lock_process
+from app.features.processes.model import Symbol
 from app.features.rules.model import ENFORCED, NormRule, Rule
 from app.features.rules.schemas import CheckOut, NormRuleOut, RuleDetail, RuleIn, RuleOut
-from app.features.use_cases import service as use_cases
 
 logger = logging.getLogger(__name__)
 
@@ -86,11 +81,29 @@ async def get(session: AsyncSession, rule_id: int) -> RuleDetail:
 
 
 async def create(session: AsyncSession, process_id: int, data: RuleIn) -> RuleDetail:
-    await get_process(session, process_id)
-    if not await session.get(DecisionType, (process_id, data.decision)):
-        raise ConflictError(f"{data.decision!r} is not a decision type of this process")
+    from copy import deepcopy
+
+    from app.features.versions import configuration as config
+    from app.features.versions import service as versions
+    from app.features.versions.model import ProcessDraft
+
+    await versions.lock(session, process_id)
+    draft = await session.get(ProcessDraft, process_id, populate_existing=True)
+    version = await versions.active(session, process_id, required=False)
+    snapshot = deepcopy(
+        draft.snapshot
+        if draft
+        else version.snapshot
+        if version
+        else await config.workspace(session, process_id)
+    )
+    if data.decision not in {t["name"] for t in snapshot["process"]["decision_types"]}:
+        raise ConflictError(f"{data.decision!r} is not a decision type of this draft")
     rule = Rule(process_id=process_id, status="compiling", **data.model_dump())
     session.add(rule)
+    await session.flush()
+    snapshot["rules"].append(config.artifact(rule))
+    await versions.stage(session, process_id, snapshot, "rule author")
     await session.commit()
     return _detail(rule)
 
@@ -98,7 +111,7 @@ async def create(session: AsyncSession, process_id: int, data: RuleIn) -> RuleDe
 async def compile_rule(session: AsyncSession, rule_id: int, author: str = AUTO) -> RuleDetail:
     """Compile (or recompile) a draft or blocked rule and wait for the result."""
     rule = await _rule(session, rule_id)
-    if rule.status not in ("draft", "blocked"):
+    if rule.status not in ("draft", "blocked", "retired"):
         raise ConflictError(f"Only a draft or blocked rule can be compiled (it is {rule.status})")
     return await _compile(session, rule, author)
 
@@ -111,72 +124,77 @@ def _kept(rule: Rule, report: dict[str, Any]) -> dict[str, Any]:
 
 async def _compile(session: AsyncSession, rule: Rule, author: str = AUTO) -> RuleDetail:
     links = {"rule_id": rule.id, "process_id": rule.process_id, "norm_rule_id": rule.norm_rule_id}
-    before = rule.status
-    with events.span("compile_rule", author=author, before=before, **links) as span:
+    with events.span("compile_rule", author=author, before=rule.status, **links) as span:
         try:
             detail = await _compile_traced(session, rule)
-        except Exception as e:
-            if before == "compiling" and await _block_failed(session, links["rule_id"], e):
-                span.set(rule_status="blocked", valid=False)
+        except Exception:
+            span.set(rule_status="draft", valid=False)
             raise
         span.set(rule_status=detail.status, valid=bool((detail.report or {}).get("valid")))
         return detail
 
 
-async def _block_failed(session: AsyncSession, rule_id: int, error: Exception) -> bool:
-    """Fail closed: a saved rule whose compilation errored (LLM down, tokens out, output still
-    malformed) is enforced as `blocked`, so every instance escalates with the error instead
-    of the older rules deciding without it (ADR 0016, 0020). A recompile lifts it."""
-    await session.rollback()
-    rule = await _rule(session, rule_id)
-    if rule.status != "compiling":  # it got past compiling before failing
-        return False
-    why = "its compilation failed: every instance escalates until it compiles"
-    error_text = f"{type(error).__name__}: {error}"
-    rule.report = _kept(
-        rule, {"valid": False, "error": error_text, "activation": {"auto": True, "why": why}}
-    )
-    rule.status = "blocked"
-    rule.activated_at = datetime.now(UTC)
-    await session.commit()
-    return True
-
-
 async def _compile_traced(session: AsyncSession, rule: Rule) -> RuleDetail:
+    from copy import deepcopy
+
+    from app.features.versions import configuration as version_config
+    from app.features.versions import service as versions
+    from app.features.versions.model import ProcessDraft
+
+    draft = await session.get(ProcessDraft, rule.process_id, populate_existing=True)
+    context_hash = (
+        version_config.digest({k: draft.snapshot[k] for k in ("process", "agents")})
+        if draft
+        else None
+    )
     symbols = list(
         await session.scalars(select(Symbol).where(Symbol.process_id == rule.process_id))
     )
     result = await compiler.compile_rule(session, rule, symbols)
-    await lock_process(session, rule.process_id)
+    await versions.lock(session, rule.process_id)
+    current = await session.get(ProcessDraft, rule.process_id, populate_existing=True)
+    current_hash = (
+        version_config.digest({k: current.snapshot[k] for k in ("process", "agents")})
+        if current
+        else None
+    )
+    if current_hash != context_hash:
+        raise ConflictError("Draft configuration changed during compilation; compile again")
     rule.code, rule.tests = result.code, result.tests
     rule.hash = rule_hash(rule.text, rule.code) if rule.code else None
-    if "needs_data" in result.report:
-        # Fail closed: a rule the process cannot evaluate escalates every instance, whatever
-        # its impact. It has no verdict on the past, so it records no audit findings.
-        why = "needs data the process does not have: every instance escalates"
-        rule.report = _kept(rule, {**result.report, "activation": {"auto": True, "why": why}})
-        rule.status = "blocked"
-        rule.activated_at = datetime.now(UTC)
-        await session.commit()
-        return _detail(rule)
-    was_blocked = rule.status == "blocked"
     rule.status, rule.activated_at = "draft", None
-    activation = await _auto_activation(session, rule, result, was_blocked)
-    rule.report = _kept(rule, {**result.report, "activation": activation})
+    rule.report = _kept(
+        rule,
+        {**result.report, "activation": {"auto": False, "why": "Manager publication required"}},
+    )
+    # Refresh this artifact in the one draft, invalidating any previous preview.
+    draft = await session.get(ProcessDraft, rule.process_id, populate_existing=True)
+    if draft and any(r["id"] == rule.id for r in draft.snapshot["rules"]):
+        snapshot = deepcopy(draft.snapshot)
+        snapshot["rules"] = [
+            version_config.artifact(rule) if r["id"] == rule.id else r for r in snapshot["rules"]
+        ]
+        await versions.stage(session, rule.process_id, snapshot, "compiler")
     await session.commit()
-    if rule.report["activation"]["auto"]:
-        return await activate(session, rule.id)
     return _detail(rule)
 
 
 async def compile_in_background(rule_id: int) -> None:
     """Compile a rule saved as `compiling`, with its own session. Whatever happens, the rule
-    leaves `compiling`: a failure leaves it `blocked` with the error in its report."""
+    leaves `compiling`: a failure leaves a draft with the error in its report."""
     async with session_factory() as session:
         try:
             await _compile(session, await _rule(session, rule_id))
-        except Exception:  # noqa: BLE001 - LLM down, malformed answers, anything
+        except Exception as e:  # noqa: BLE001 - LLM down, malformed answers, anything
             logger.exception("Compiling rule %s failed", rule_id)
+            await session.rollback()
+            rule = await _rule(session, rule_id)
+            if rule.status != "compiling":  # it got past compiling before failing
+                return
+            error = f"{type(e).__name__}: {e}"
+            rule.status = "draft"
+            rule.report = _kept(rule, {"valid": False, "error": error})
+            await session.commit()
 
 
 async def compile_all_in_background(rule_ids: list[int], parent: events.Span | None = None) -> None:
@@ -215,73 +233,6 @@ async def resume_compilations() -> list[asyncio.Task]:
     return tasks
 
 
-async def _own_escalations(session: AsyncSession, rule: Rule, impact: audit.Impact) -> set[int]:
-    """The changed decisions this rule itself escalated while blocked. Undoing them is the
-    point of recompiling it, not an effect on history to weigh."""
-    ids = [c.decision_id for c in impact.changes]
-    own = or_(
-        Decision.reason.contains(f"RULE_NEEDS_DATA {rule.id}:"),
-        Decision.reason.contains(f"RULE_COMPILE_FAILED {rule.id}:"),
-    )
-    query = select(Decision.id).where(Decision.id.in_(ids), own)
-    return set(await session.scalars(query)) if ids else set()
-
-
-async def _auto_activation(
-    session: AsyncSession, rule: Rule, result: compiler.Compilation, was_blocked: bool = False
-) -> dict[str, Any]:
-    """Whether a freshly compiled rule may enter the process without a person: its code
-    passed the tester's tests, it contradicts no decision a person took and it changes at
-    most `auto_activate_max_change` of the decisions already taken (ADR 0004)."""
-    if not result.report["valid"]:
-        return {"auto": False, "why": "not valid"}
-    with events.span("impact_check") as span:
-        activation = await _impact_gate(session, rule, was_blocked)
-        span.set(**activation)
-        return activation
-
-
-async def _impact_gate(session: AsyncSession, rule: Rule, was_blocked: bool) -> dict[str, Any]:
-    impact = await audit.check(session, rule.process_id, await audit.proposal_with(session, rule))
-    unblocked = await _own_escalations(session, rule, impact) if was_blocked else set()
-    changed = len(impact.changes) - len(unblocked) + len(impact.conflicts)
-    total = impact.unchanged + changed
-    share = changed / total if total else 0.0
-    process = await session.get(Process, rule.process_id)
-    compiler_setup = (await use_cases.setups(session, process.use_case_id)).get("compiler")
-    default = settings.auto_activate_max_change
-    limit = compiler_setup.limit("auto_activate_max_change", default) if compiler_setup else default
-    why = (
-        f"{len(impact.conflicts)} decisions taken by a person would change"
-        if impact.conflicts
-        else f"changes {changed}/{total} past decisions (limit {limit:.0%})"
-    )
-    return {
-        "auto": not impact.conflicts and share <= limit,
-        "why": why,
-        "changed": changed,
-        "decided": total,
-        **({"unblocked": len(unblocked)} if was_blocked else {}),
-    }
-
-
-async def _apply(session: AsyncSession, rule: Rule, proposed: list[Rule]) -> list[Finding]:
-    """Check a rule change against every decision already taken, then adopt it.
-
-    The past is never rewritten. What the change says about it is recorded as findings for
-    the manager to act on outside this system. A change that would contradict a decision a
-    person took is refused until they resolve it (ADR 0008).
-    """
-    impact = await audit.check(session, rule.process_id, proposed)
-    if impact.conflicts:
-        contradicted = ", ".join(c.name for c in impact.conflicts[:5])
-        raise ConflictError(
-            f"{len(impact.conflicts)} decisions taken by a person would change: "
-            f"{contradicted}. Resolve them before applying this rule"
-        )
-    return await audit.record_findings(session, rule.process_id, impact, rule)
-
-
 async def impact(session: AsyncSession, rule_id: int) -> audit.Impact:
     """What activating (or retiring) this rule would do, without doing it."""
     rule = await _rule(session, rule_id)
@@ -297,49 +248,54 @@ async def impact(session: AsyncSession, rule_id: int) -> audit.Impact:
         return result
 
 
-def _status_span(step: str, rule: Rule, author: str):
-    """A change of a rule's status: who, from which status, and the rule's version (hash)."""
-    return events.span(
-        step,
-        rule_id=rule.id,
-        process_id=rule.process_id,
-        norm_rule_id=rule.norm_rule_id,
-        author=author,
-        before=rule.status,
-        rule_hash=rule.hash,
+async def _stage_rule(session, rule_id: int, author: str, include: bool) -> RuleDetail:
+    from copy import deepcopy
+
+    from app.features.versions import configuration as config
+    from app.features.versions import service as versions
+    from app.features.versions.model import ProcessDraft
+
+    rule = await _rule(session, rule_id)
+    if include and (not rule.code or not (rule.report or {}).get("valid")):
+        raise ConflictError("Rule is not compiled or has unresolved discrepancies")
+    await versions.lock(session, rule.process_id)
+    draft = await session.get(ProcessDraft, rule.process_id, populate_existing=True)
+    version = await versions.active(session, rule.process_id, required=False)
+    snapshot = deepcopy(
+        draft.snapshot
+        if draft
+        else version.snapshot
+        if version
+        else await config.workspace(session, rule.process_id)
     )
+    snapshot["rules"] = [r for r in snapshot["rules"] if r["id"] != rule.id]
+    if include:
+        snapshot["rules"].append(config.artifact(rule))
+        snapshot["rules"].sort(key=lambda r: r["id"])
+    await versions.stage(session, rule.process_id, snapshot, author)
+    await session.commit()
+    return _detail(rule)
 
 
 async def activate(session: AsyncSession, rule_id: int, author: str = AUTO) -> RuleDetail:
-    """A rule only enters the process when its validation found no discrepancy. `author`:
-    the person who activated it, or `auto` when its compilation did (ADR 0004)."""
-    rule = await _rule(session, rule_id)
-    await lock_process(session, rule.process_id)
-    with _status_span("activate_rule", rule, author) as span:
-        if rule.status != "draft":
-            raise ConflictError(f"Only a draft rule can be activated (it is {rule.status})")
-        if not (rule.report or {}).get("valid"):
-            raise ConflictError("The rule has unresolved discrepancies or is not compiled")
-        findings = await _apply(session, rule, await audit.proposal_with(session, rule))
-        rule.status = "active"
-        rule.activated_at = datetime.now(UTC)
-        await session.commit()
-        span.set(after=rule.status, findings=len(findings))
-    return _detail(rule)
+    """Include a rule in the draft; validation and publication are explicit operations."""
+    with events.span(
+        "activate_rule",
+        process_id=(await _rule(session, rule_id)).process_id,
+        rule_id=rule_id,
+        author=author,
+        draft_only=True,
+    ):
+        return await _stage_rule(session, rule_id, author, True)
 
 
 async def retire(session: AsyncSession, rule_id: int, author: str) -> RuleDetail:
-    """Retiring a rule can change a past decision just as adding one can, so it goes
-    through the same check."""
-    rule = await _rule(session, rule_id)
-    await lock_process(session, rule.process_id)
-    with _status_span("retire_rule", rule, author) as span:
-        if rule.status not in ENFORCED:
-            raise ConflictError(
-                f"Only an active or blocked rule can be retired (it is {rule.status})"
-            )
-        findings = await _apply(session, rule, await audit.proposal_without(session, rule))
-        rule.status = "retired"
-        await session.commit()
-        span.set(after=rule.status, findings=len(findings))
-    return _detail(rule)
+    """Remove a rule from the draft without changing the published configuration."""
+    with events.span(
+        "retire_rule",
+        process_id=(await _rule(session, rule_id)).process_id,
+        rule_id=rule_id,
+        author=author,
+        draft_only=True,
+    ):
+        return await _stage_rule(session, rule_id, author, False)

@@ -3,8 +3,6 @@
 import asyncio
 import copy
 import hashlib
-import json
-from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -12,7 +10,6 @@ from sqlalchemy.dialects.postgresql import insert
 from app.common.exceptions import ConflictError, NotFoundError, PermissionDeniedError
 from app.core import events
 from app.features.agents import discovery
-from app.features.decisions import audit
 from app.features.decisions import service as decisions
 from app.features.ingestion.model import File
 from app.features.processes import draft_compilation as compilation
@@ -25,7 +22,13 @@ from app.features.processes.draft_schemas import (
     RuleProposal,
     SourceProposal,
 )
-from app.features.processes.model import DecisionType, DraftRevision, Process, ProcessDraft, Symbol
+from app.features.processes.model import (
+    DecisionType,
+    DiscoveryRevision,
+    DiscoverySession,
+    Process,
+    Symbol,
+)
 from app.features.rules.model import NormRule, Rule
 from app.features.sources import discovery as workbooks
 from app.features.sources import service as sources
@@ -33,6 +36,10 @@ from app.features.sources.http_connector import HttpConnector, SourcesFile, Sync
 from app.features.sources.model import Source
 from app.features.use_cases import service as use_cases
 from app.features.use_cases.model import AgentConfig, UseCase
+from app.features.versions import configuration as config
+from app.features.versions import execution
+from app.features.versions import service as versions
+from app.features.versions.model import ProcessDraft
 
 
 def manager(user):
@@ -42,8 +49,8 @@ def manager(user):
 
 async def read(session, draft_id, revision=None, *, lock=False):
     query = (
-        select(ProcessDraft)
-        .where(ProcessDraft.id == draft_id)
+        select(DiscoverySession)
+        .where(DiscoverySession.id == draft_id)
         .execution_options(populate_existing=True)
     )
     draft = await session.scalar(query.with_for_update() if lock else query)
@@ -51,7 +58,7 @@ async def read(session, draft_id, revision=None, *, lock=False):
         raise NotFoundError(f"Draft {draft_id} does not exist")
     if revision is not None and (draft.revision != revision or draft.published_process_id):
         raise ConflictError("Draft changed or was published; reload before continuing")
-    stored = await session.get(DraftRevision, (draft.id, draft.revision))
+    stored = await session.get(DiscoveryRevision, (draft.id, draft.revision))
     return draft, copy.deepcopy(stored.data)
 
 
@@ -92,7 +99,7 @@ async def save(session, draft_id, revision, data, user, step):
     draft, _ = await read(session, draft_id, revision, lock=True)
     draft.revision += 1
     session.add(
-        DraftRevision(draft_id=draft.id, number=draft.revision, author_id=user.id, data=data)
+        DiscoveryRevision(draft_id=draft.id, number=draft.revision, author_id=user.id, data=data)
     )
     events.record(
         session,
@@ -108,26 +115,24 @@ async def fingerprint(session, process_id):
     if process_id is None:
         return None
     process = await service.get(session, process_id)
-    rules = await decisions.active_rules(session, process_id)
-    instances = await decisions.instances_of(session, process_id)
-    latest = await decisions.latest_decisions(session, instances)
     state = {
         "process": process.model_dump(),
-        "rules": [(r.id, r.hash, r.text, r.decision, r.status) for r in rules],
-        "sources": [s.id for s in await sources.current_loads(session, process_id)],
-        "instances": [
-            (i.id, i.symbols, latest[i.id].id if i.id in latest else None) for i in instances
-        ],
+        "inputs": await execution.capture(session, process_id),
     }
-    return hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
+    return config.digest(state)
 
 
 async def start(session, body: DraftStart, user):
     manager(user)
     plan = DraftPlan(name=body.name)
     snapshots, base_references = {}, []
+    base = None
     if body.process_id is not None:
+        await versions.lock(session, body.process_id)
+        if await session.get(ProcessDraft, body.process_id):
+            raise ConflictError("Publish or discard the existing process draft before discovery")
         current = await service.get(session, body.process_id)
+        base = copy.deepcopy((await versions.active(session, body.process_id)).snapshot)
         body.use_case_id = current.use_case_id
         plan = DraftPlan(**current.model_dump(exclude={"id", "use_case_id"}))
         for rule in await decisions.active_rules(session, body.process_id):
@@ -160,7 +165,7 @@ async def start(session, body: DraftStart, user):
             )
     if body.use_case_id and await session.get(UseCase, body.use_case_id) is None:
         raise NotFoundError("Use case does not exist")
-    draft = ProcessDraft(process_id=body.process_id, use_case_id=body.use_case_id, revision=1)
+    draft = DiscoverySession(process_id=body.process_id, use_case_id=body.use_case_id, revision=1)
     session.add(draft)
     await session.flush()
     data = {
@@ -170,10 +175,11 @@ async def start(session, body: DraftStart, user):
         "documents": {},
         "snapshots": snapshots,
         "base_references": base_references,
+        "base_configuration": base,
         "preview": None,
         "base_fingerprint": await fingerprint(session, body.process_id),
     }
-    session.add(DraftRevision(draft_id=draft.id, number=1, author_id=user.id, data=data))
+    session.add(DiscoveryRevision(draft_id=draft.id, number=1, author_id=user.id, data=data))
     await session.commit()
     return await output(session, draft.id)
 
@@ -269,6 +275,10 @@ async def check_base(session, draft, data, plan):
             "The process, sources or decisions changed; start a fresh draft to review their impact"
         )
     if draft.process_id:
+        if await session.get(ProcessDraft, draft.process_id, populate_existing=True):
+            raise ConflictError(
+                "A process draft was created; finish it before discovery publication"
+            )
         if await session.scalar(
             select(Rule.id)
             .where(Rule.process_id == draft.process_id, Rule.status == "compiling")
@@ -302,23 +312,22 @@ async def prepare(session, draft_id, revision, user):
     with events.span("compile_process_draft", draft_id=draft_id, author=user.name):
         compiled = await compilation.compile_plan(plan, tables, setups)
         data["preview"] = await compilation.preview(
-            session, draft.process_id, plan, tables, compiled
+            session, draft.process_id, plan, tables, compiled, data["base_configuration"]
         )
     return await save(session, draft_id, revision, data, user, "preview_process_draft")
 
 
 async def publish(session, draft_id, revision, user):
     manager(user)
+    draft, _ = await read(session, draft_id, revision)
+    if draft.process_id:
+        await versions.lock(session, draft.process_id)
     draft, data = await read(session, draft_id, revision, lock=True)
     plan = DraftPlan.model_validate(data["plan"])
     compilation.ready(plan, data["reviews"])
     if not (data.get("preview") or {}).get("valid"):
         raise ConflictError(
             "Compile and pass the acceptance examples and backtest before publishing"
-        )
-    if draft.process_id:
-        await session.scalar(
-            select(Process).where(Process.id == draft.process_id).with_for_update()
         )
     await check_base(session, draft, data, plan)
     tables = workbooks.materialize(plan, data)
@@ -353,9 +362,7 @@ async def publish(session, draft_id, revision, user):
         )
         session.add_all(Symbol(process_id=process.id, **s.model_dump()) for s in plan.symbols)
         await session.flush()
-    old = await decisions.active_rules(session, process.id)
-    for rule in old:
-        rule.status = "retired"
+    old = await decisions.active_rules(session, process.id) if draft.process_id else []
     published = []
     norms = {}
     for number, proposal in enumerate(plan.rules, 1):
@@ -373,8 +380,7 @@ async def publish(session, draft_id, revision, user):
             code=item["code"],
             tests=item["tests"],
             hash=item["hash"],
-            status="active",
-            activated_at=datetime.now(UTC),
+            status="draft",
             report={
                 **item["report"],
                 "discovery": {
@@ -388,13 +394,31 @@ async def publish(session, draft_id, revision, user):
         session.add(rule)
         published.append(rule)
     await session.flush()
-    if draft.process_id:
-        impact = await audit.check(session, process.id, published, tables)
-        if impact.conflicts:
-            raise ConflictError(
-                "Resolve the backtest's conflicts with manager decisions before publishing"
-            )
-        await audit.record_findings(session, process.id, impact, published[0])
+    base = data["base_configuration"] or await config.workspace(session, process.id)
+    snapshot = compilation.candidate(plan, data["preview"]["compilations"], base)
+    snapshot["rules"] = [config.artifact(rule) for rule in published]
+    impact = await versions.inspect(
+        session,
+        snapshot,
+        await execution.capture(session, process.id),
+        tables=tables,
+    )
+    if not impact["valid"]:
+        raise ConflictError("The candidate failed version validation; prepare and review again")
+    version = await versions.publish_snapshot(
+        session,
+        process,
+        snapshot,
+        user.name,
+        f"Approved discovery {draft.id} revision {revision}",
+        {
+            **impact,
+            "discovery_id": draft.id,
+            "revision": revision,
+            "examples": data["preview"]["examples"],
+        },
+    )
+    data["published_version_id"] = version.id
     # Empty snapshots retire source names omitted from the proposal without deleting history.
     previous_names = {s.name for s in await sources.current_loads(session, process.id)}
     session.add_all(
@@ -411,7 +435,7 @@ async def publish(session, draft_id, revision, user):
     draft.published_process_id = process.id
     draft.revision += 1
     session.add(
-        DraftRevision(draft_id=draft.id, number=draft.revision, author_id=user.id, data=data)
+        DiscoveryRevision(draft_id=draft.id, number=draft.revision, author_id=user.id, data=data)
     )
     events.record(
         session,

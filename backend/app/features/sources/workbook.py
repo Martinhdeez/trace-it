@@ -7,7 +7,6 @@ from app.core import events
 from app.features.ingestion.errors import InvalidDocumentError
 from app.features.ingestion.model import File
 from app.features.ingestion.process_extraction import payment_context
-from app.features.processes.service import lock as lock_process
 
 from .model import Source
 
@@ -65,7 +64,9 @@ def workbook_sources(result):
 
 
 async def load_workbook(session, process_id, user_id, result, content, cut_off_date=None):
-    await lock_process(session, process_id)
+    from app.features.versions.service import lock
+
+    await lock(session, process_id)
     _, context = await payment_context(session, process_id)
     if context is None:
         raise ConflictError("This workbook adapter requires the invoice-payment symbol schema")

@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Snapshot the whole process as an immutable version on every activation
@@ -47,9 +47,10 @@ records which priorities it used.
 
 ## Consequences
 - Replaying a past decision uses its own version, not the current configuration.
-- **Known gap:** the loader still uses `session.merge` on decision types and symbols and
-  assigns the description directly; there is no process version table yet. Until this is
-  implemented, change those fields only through a fresh setup.
+- Implemented through complete published snapshots and captured execution inputs in ADR
+  0022. Legacy authoring tables no longer determine a published process's runtime behavior.
+- Existing decisions retain unknown historical configuration rather than receiving a
+  fabricated migration version. Replay is available for new captured engine executions.
 - Listing versions and activating an older one in the UI (F9) builds on this.
 
 ## Evidence

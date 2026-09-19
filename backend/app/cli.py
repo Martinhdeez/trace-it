@@ -1,7 +1,7 @@
 """Command line: `uv run python -m app.cli load ../processes/invoice-payment.json`.
 
-`--compile` writes the code of the draft rules with the agents; `--activate` puts into the
-process every draft whose code is already validated. A rule that arrives with its code
+`--compile` writes draft rule code with agents; `--activate --manager-id <id>` explicitly
+approves and publishes the complete validated draft. A rule that arrives with its code
 written needs no compiler, so `--activate` alone is enough to run without any model.
 
 A pack with `<pack>/use-case.json` loads its use case first: the domain description and
@@ -36,7 +36,7 @@ from app.features.sources import service as sources
 from app.features.use_cases import service as use_cases
 
 
-async def load(file: Path, compile_: bool, activate: bool) -> None:
+async def load(file: Path, compile_: bool, activate: bool, manager_id: int | None = None) -> None:
     try:
         Definition.model_validate_json(file.read_text(encoding="utf-8"))
     except ValidationError as e:
@@ -63,19 +63,30 @@ async def load(file: Path, compile_: bool, activate: bool) -> None:
                     status = f"error: {str(e).splitlines()[0][:150]}"
                 print(f"  rule {rule.id} ({rule.decision}): {status} · {rule.text[:70]}")
         if activate:
-            activated = 0
-            for rule in await rules.list_all(session, p.id, "draft"):
-                if not (rule.report or {}).get("valid"):
-                    print(f"  rule {rule.id}: no validated code, still a draft")
-                    continue
-                try:
-                    await rules.activate(session, rule.id, author="cli")
-                    activated += 1
-                except Exception as e:  # a rule that contradicts a person must not stop the rest
-                    await session.rollback()
-                    print(f"  rule {rule.id}: {str(e).splitlines()[0][:150]}")
-            active = await rules.list_all(session, p.id, "active")
-            print(f"  {activated} rules activated, {len(active)} active in the process")
+            from app.features.users.model import User
+            from app.features.versions import service as versions
+
+            manager = await session.get(User, manager_id) if manager_id else None
+            if manager is None or manager.role != "manager":
+                raise ConflictError("--activate requires --manager-id identifying a manager")
+            from app.features.versions.model import ProcessDraft
+
+            if await session.get(ProcessDraft, p.id) is None:
+                print("The pack already matches the published version")
+                return
+            draft = await versions.validate(session, p.id)
+            print(json.dumps(draft.validation, indent=2))
+            if not draft.validation["valid"]:
+                raise ConflictError("The draft failed validation; nothing was published")
+            version = await versions.publish(
+                session,
+                p.id,
+                draft.revision,
+                draft.validation["hash"],
+                manager.name,
+                "Explicit CLI --activate approval",
+            )
+            print(f"Published process version {version.number}")
     await engine.dispose()
 
 
@@ -150,8 +161,11 @@ def main() -> None:
     command.add_argument("file", type=Path)
     command.add_argument("--compile", action="store_true", help="Compile the draft rules")
     command.add_argument(
-        "--activate", action="store_true", help="Activate every draft whose code is validated"
+        "--activate",
+        action="store_true",
+        help="Approve and publish the complete validated process draft",
     )
+    command.add_argument("--manager-id", type=int, help="Manager approving --activate")
     command = commands.add_parser("sources", help="Snapshots of the sources of truth")
     actions = command.add_subparsers(dest="action", required=True)
     action = actions.add_parser("sync", help="Download an HTTP source into a new snapshot")
@@ -166,7 +180,7 @@ def main() -> None:
     command.add_argument("--files", type=Path, required=True, help="Folder with the batch's PDFs")
     args = parser.parse_args()
     if args.command == "load":
-        asyncio.run(load(args.file, args.compile, args.activate))
+        asyncio.run(load(args.file, args.compile, args.activate, args.manager_id))
     elif args.command == "sources":
         asyncio.run(sync_source(args.file, args.source))
     elif args.command == "export":

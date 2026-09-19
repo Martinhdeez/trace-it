@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 
 
 class DecisionOut(BaseModel):
+    version_id: int | None = None
+    execution_id: int | None = None
     id: int
     decision: str
     author: str  # "engine" or the person's name

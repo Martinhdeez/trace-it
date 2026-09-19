@@ -87,6 +87,9 @@ class FakeSession:
     def __init__(self) -> None:
         self.added: list = []
 
+    async def get(self, model, key):
+        return None
+
     def add(self, obj: object) -> None:
         self.added.append(obj)
 

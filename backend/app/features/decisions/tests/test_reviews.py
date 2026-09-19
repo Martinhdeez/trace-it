@@ -10,7 +10,6 @@ from app.features.agents import llm, sandbox
 from app.features.decisions import service
 from app.features.decisions.tests.test_api import (
     FAKE_SANDBOX,
-    INVOICE_PROCESS,
     NAMES,
     client,
     create_process,
@@ -35,13 +34,13 @@ def fake_sandbox(monkeypatch):
 
 
 async def configure(api, process_id, config):
-    process = (await api.get(f"/processes/{process_id}")).json()
-    response = await api.post(
-        "/processes/definition",
-        json={"name": process["name"], **INVOICE_PROCESS, "decision_review": config},
-    )
-    assert response.status_code == 200, response.text
-    assert response.json()["process"]["decision_review"] == config
+    from app.features.processes.model import Process
+    from tests.support.rows import publish_fixture
+
+    async with session_factory() as session:
+        process = await session.get(Process, process_id)
+        process.decision_review = config
+        await publish_fixture(session, process_id)
 
 
 async def details(api, process_id):

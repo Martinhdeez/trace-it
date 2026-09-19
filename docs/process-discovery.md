@@ -2,7 +2,10 @@
 
 The backend accepts workbooks and a conversation to propose sources and rules. Every
 operation below requires a manager's `X-User-Id`. Discovery never creates live rules;
-publication follows review, compilation, acceptance examples and the existing backtest.
+publication follows review, compilation, acceptance examples and version validation.
+Discovery conversations use separate storage from the single editable process version draft.
+Finish an existing version draft before starting discovery; a draft created later blocks
+discovery publication rather than being overwritten.
 
 ## Start or resume
 
@@ -62,13 +65,13 @@ or tester during compilation.
 
 `POST /process-drafts/{id}/prepare` with the current revision normalizes confirmed rules,
 compiles and tests them in the existing sandbox, evaluates the fixed examples, and runs
-the existing historical backtest against the proposed source rows. It requires all
+version validation against the proposed source rows. It requires all
 proposals accepted, no outstanding questions, valid outcomes, rules and examples.
 The returned preview includes interpretations, test reports, example results, source row
 counts, the active rules being replaced, changed past outcomes and conflicts with manager
 decisions. An unexpected rule execution error cannot pass an example merely because
 the expected outcome is escalation. A failed test or a
-manager conflict prevents publication. Provider failure returns an error and preserves
+manager conflict, pending reviewer disagreement, or historical execution error prevents publication. Provider failure returns an error and preserves
 the previous draft. Calls are synchronous and may take several minutes.
 
 ## Publish
@@ -76,7 +79,9 @@ the previous draft. Calls are synchronous and may take several minutes.
 `POST /process-drafts/{id}/publish` with the preview's revision is the manager's explicit
 approval. For an existing process, it preserves the ID, inserts the compiled rules and
 source snapshots, retires the previous active rules, and records audit findings. This is
-one transaction. Previous decisions, rules, source snapshots and uploaded files remain.
+one transaction through the shared version publication function, including a new immutable
+process version and active-version pointer. Previous decisions, rule artifacts, source
+snapshots and uploaded files remain.
 For a new process, its initial configuration and rules become available together.
 
 The draft records which rules were published and retired. It cannot be published twice.

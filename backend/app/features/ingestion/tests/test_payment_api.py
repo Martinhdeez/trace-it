@@ -97,7 +97,7 @@ async def payment_api(settings):
             ],
         )
         session.add(erp)
-        await session.commit()
+        await rows.publish_fixture(session, process.id)
         process_id, user_id, erp_id = process.id, user.id, erp.id
     service = ExtractionService(settings, NoOCR(), NoVLM())
     app.dependency_overrides[current_service] = lambda: service
@@ -153,6 +153,7 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
     assert source_rows["data"][0]["purchase_order"] == "PO-2026-0703"
     process_events = (await client.get(f"/processes/{process_id}/events")).json()
     assert {event["step"] for event in process_events} == {
+        "publish_process_version",
         "upload_workbook",
         "load_workbook",
         "upload_document",
@@ -320,7 +321,7 @@ async def test_same_source_rows_reuse_evidence_but_changed_schema_refreshes(paym
     async with session_factory() as session:
         symbol = await session.get(Symbol, (process_id, "total"))
         symbol.description = "Changed extraction contract"
-        await session.commit()
+        await rows.publish_fixture(session, process_id)
     refreshed = await client.post(endpoint, files={"file": ("stable.pdf", content)})
     assert refreshed.status_code == 201, refreshed.text
     assert refreshed.json()["extraction"]["id"] != first["extraction"]["id"]
@@ -338,7 +339,7 @@ async def test_same_source_rows_reuse_evidence_but_changed_schema_refreshes(paym
     assert [event.step for event in events] == ["ingest_document", "extract_document"]
     async with session_factory() as session:
         await session.delete(await session.get(Symbol, (process_id, "iban")))
-        await session.commit()
+        await rows.publish_fixture(session, process_id)
     generic = await client.post(f"/instances/{first['instance_id']}/extract", json={})
     assert generic.status_code == 200, generic.text
     assert generic.json()["symbols"] is None

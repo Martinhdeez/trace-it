@@ -121,6 +121,9 @@ async def test_decide_resolve_and_export_through_the_api() -> None:
             r = await api.post(f"/rules/{rule['id']}/activate", headers=manager)
             assert r.status_code == 200, r.text
 
+        from app.features.versions.tests.test_api import publish
+
+        await publish(api, process_id, manager)
         r = await api.post(f"/processes/{process_id}/run")
         assert r.status_code == 200, r.text
         assert r.json()["by_decision"] == dict(Counter(expected.values()))

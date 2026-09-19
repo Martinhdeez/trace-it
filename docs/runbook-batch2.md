@@ -1,3 +1,8 @@
+> Configuration changes now require manager publication as described in
+> [process versions](process-versions.md). Compilation and the rule activation endpoints
+> prepare a draft; validate and publish it before running this rehearsal. Existing
+> published rules keep running if a draft compilation fails.
+
 # Runbook: batch 2, ERP update and norm v4 (Saturday 18:00)
 
 What arrives: 40 invoice PDFs, an ERP update (`erp_export_lote2.csv` for

@@ -14,15 +14,15 @@ setup:
 compile:  # needs LLM keys in .env
 	$(LOAD) --compile
 
-activate:  # put into the process every rule whose code is already validated
-	$(LOAD) --activate
+activate:  # MANAGER_ID=<id>: explicitly approve the validated pack draft
+	test -n "$(MANAGER_ID)"
+	$(LOAD) --activate --manager-id $(MANAGER_ID)
 
 # The whole process over the challenge corpus -> output/outcomes.jsonl. Needs `make erp`
 # running in another terminal, `make setup` and downloaded OCR weights.
 demo:
 	test -f .env || cp .env.example .env
 	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
-	$(LOAD) --activate
 	uv run --project backend --locked --env-file .env python tools/demo_run.py $(DEMO_ARGS)
 
 erp:

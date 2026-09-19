@@ -1,18 +1,19 @@
 """Compile reviewed rules without activating them; reuse the engine and historical audit."""
 
 import asyncio
-from dataclasses import asdict
 
 from app.common.exceptions import ConflictError
 from app.features.agents import compiler, normalizer, sandbox
 from app.features.agents.llm import Setup
-from app.features.decisions import audit
 from app.features.decisions import service as decisions
 from app.features.decisions.engine import Outcomes, decide
 from app.features.processes.draft_schemas import DraftPlan
 from app.features.processes.model import DecisionType, Symbol
 from app.features.rules.model import Rule
 from app.features.rules.service import rule_hash
+from app.features.versions import configuration as config
+from app.features.versions import execution
+from app.features.versions import service as versions
 
 
 def proposals(plan: DraftPlan) -> list[str]:
@@ -51,9 +52,22 @@ def compiled_rules(compilations: list[dict]) -> list[Rule]:
             code=r["code"],
             hash=r["hash"],
             report=r["report"],
+            tests=r.get("tests", []),
+            status="active",
         )
         for i, r in enumerate(compilations)
     ]
+
+
+def candidate(plan: DraftPlan, compilations: list[dict], base: dict) -> dict:
+    from copy import deepcopy
+
+    snapshot = deepcopy(base)
+    snapshot["rules"] = [config.artifact(r) for r in compiled_rules(compilations)]
+    snapshot["process"].update(
+        plan.model_dump(include={"name", "description", "decision_types", "symbols"})
+    )
+    return snapshot
 
 
 async def compile_plan(plan: DraftPlan, tables: dict, setups: dict) -> list[dict]:
@@ -102,7 +116,12 @@ async def compile_plan(plan: DraftPlan, tables: dict, setups: dict) -> list[dict
 
 
 async def preview(
-    session, process_id: int | None, plan: DraftPlan, tables: dict, compilations: list[dict]
+    session,
+    process_id: int | None,
+    plan: DraftPlan,
+    tables: dict,
+    compilations: list[dict],
+    base: dict | None = None,
 ) -> dict:
     rules = compiled_rules(compilations)
     types = plan.decision_types
@@ -139,15 +158,20 @@ async def preview(
                 ),
             }
         )
-    impact = (
-        asdict(await audit.check(session, process_id, rules, tables))
-        if process_id
-        else {"unchanged": 0, "changes": [], "conflicts": []}
-    )
+    impact = {"valid": True, "unchanged": 0, "changes": [], "conflicts": [], "errors": []}
+    if process_id:
+        if base is None:
+            base = (await versions.active(session, process_id)).snapshot
+        impact = await versions.inspect(
+            session,
+            candidate(plan, compilations, base),
+            await execution.capture(session, process_id),
+            tables=tables,
+        )
     return {
         "valid": all(r["report"].get("valid") for r in compilations)
         and all(e["passed"] for e in results)
-        and not impact["conflicts"],
+        and impact["valid"],
         "compilations": compilations,
         "examples": results,
         "impact": impact,
