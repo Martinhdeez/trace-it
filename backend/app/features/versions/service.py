@@ -449,13 +449,23 @@ async def inspect(session, snapshot: dict, inputs: dict, *, tables: dict | None 
     }
 
 
-async def validate(session, process_id: int) -> ProcessDraft:
+async def validate(session, process_id: int, author: str | None = None) -> ProcessDraft:
     process = await lock(session, process_id)
     draft = await get_draft(session, process_id)
     if draft.base_version_id != process.active_version_id:
         raise ConflictError("The active version changed; rebase the draft before validation")
     inputs = await execution.capture(session, process_id)
-    report = await inspect(session, draft.snapshot, inputs)
+    # The replay's `evaluate_rule` spans hang under this one, never under a real run.
+    with events.span("validate_process_draft", process_id=process_id, author=author) as span:
+        report = await inspect(session, draft.snapshot, inputs)
+        span.set(
+            revision=draft.revision,
+            valid=report["valid"],
+            **{k: len(report.get(k, [])) for k in ("changes", "conflicts", "errors")},
+        )
+        if not report["valid"]:
+            span.status = "error"
+            span.data["error"] = report.get("error") or "validation found conflicts or errors"
     draft.validation = {
         **report,
         "inputs_hash": config.digest(inputs),
@@ -550,18 +560,26 @@ async def publish(
     process = await lock(session, process_id)
     draft = await get_draft(session, process_id)
     validation = draft.validation or {}
+    refused = None
     if (
         draft.revision != revision
         or validation.get("hash") != validation_hash
         or not validation.get("valid")
     ):
-        raise ConflictError("Approve the latest successful validation of this exact draft revision")
-    if (
+        refused = "Approve the latest successful validation of this exact draft revision"
+    elif (
         process.active_version_id != draft.base_version_id
         or validation["snapshot_hash"] != config.digest(draft.snapshot)
         or validation["inputs_hash"] != config.digest(await execution.capture(session, process_id))
     ):
-        raise ConflictError("Configuration or execution evidence changed; validate again")
+        refused = "Configuration or execution evidence changed; validate again"
+    if refused:  # a refused publication is an `error` span: who tried, on which revision
+        with events.span(
+            "publish_process_version", process_id=process_id, author=author, revision=revision
+        ) as span:
+            span.status = "error"
+            span.data["error"] = refused
+        raise ConflictError(refused)
     row = await publish_snapshot(session, process, draft.snapshot, author, reason, validation)
     await session.delete(draft)
     await session.commit()

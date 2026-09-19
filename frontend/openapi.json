@@ -7352,6 +7352,22 @@
               ],
               "title": "Status"
             }
+          },
+          {
+            "name": "instance_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instance Id"
+            }
           }
         ],
         "responses": {
@@ -7648,6 +7664,22 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "name": "instance_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instance Id"
             }
           },
           {
@@ -12981,6 +13013,19 @@
             "type": "array",
             "title": "Sources Read",
             "default": []
+          },
+          "pending": {
+            "$ref": "#/components/schemas/Pending"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -12993,7 +13038,9 @@
           "symbols",
           "decisions",
           "exported_decision",
-          "spans"
+          "spans",
+          "pending",
+          "version"
         ],
         "title": "InstanceTrace",
         "description": "The journey of one instance: its file, how it was read, its symbols, every decision\nwith each rule's answer, what people did, and what the export writes for it."
@@ -13958,6 +14005,71 @@
           "advertised_size"
         ],
         "title": "PartIn"
+      },
+      "Pending": {
+        "properties": {
+          "waiting_for_person": {
+            "type": "boolean",
+            "title": "Waiting For Person"
+          },
+          "review_pending": {
+            "type": "boolean",
+            "title": "Review Pending"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/PendingItem"
+            },
+            "type": "array",
+            "title": "Proposals"
+          },
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/PendingItem"
+            },
+            "type": "array",
+            "title": "Alerts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "waiting_for_person",
+          "review_pending",
+          "proposals",
+          "alerts"
+        ],
+        "title": "Pending",
+        "description": "What this instance still waits for: a person, or a manager settling its proposals and\nalerts (`GET /processes/{id}/proposals?instance_id=`, `/alerts?instance_id=`)."
+      },
+      "PendingItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "examples": [
+              "decision",
+              "rule",
+              "source_sync",
+              "rule_change"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "created_at"
+        ],
+        "title": "PendingItem"
       },
       "Plane": {
         "type": "string",
@@ -17661,6 +17773,36 @@
           "created_at"
         ],
         "title": "VersionOut"
+      },
+      "VersionRef": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "author": {
+            "type": "string",
+            "title": "Author"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "number",
+          "author",
+          "created_at"
+        ],
+        "title": "VersionRef",
+        "description": "The published process version that took the latest decision."
       },
       "WorkbookUpload": {
         "properties": {
