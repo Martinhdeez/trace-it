@@ -573,7 +573,7 @@ export interface paths {
         put?: never;
         /**
          * Decide every pending instance with the active rules
-         * @description Syncs the process's live sources first; a source that fails is down for this run and listed in `down_sources` (ADR 0028).
+         * @description Syncs the process's live sources first; a source that fails is down for this run and listed in `down_sources`, as is a source a rule reads that was never loaded (ADR 0028).
          */
         post: operations["runProcess"];
         delete?: never;
