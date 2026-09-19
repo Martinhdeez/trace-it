@@ -28,7 +28,7 @@ import { ErrorNotice, Notice } from '../components/shell/Notice'
 import { NestedCard } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { paths } from '../lib/paths'
-import type { ExecutionMetrics, NormRule, ProcessDetail, ProcessMetrics, ProcessSummary, Rule } from '../api/contracts'
+import type { UploadProgress, ExecutionMetrics, NormRule, ProcessDetail, ProcessMetrics, ProcessSummary, Rule } from '../api/contracts'
 import { t } from '../i18n'
 import { formatEuro, formatMs } from '../lib/format'
 import { decisionTone, type DecisionTone } from '../lib/process'
@@ -48,6 +48,7 @@ export function Process() {
   const [runPanelOpen, setRunPanelOpen] = useState(false)
   const [queue, setQueue] = useState<QueuedFile[]>([])
   const [runs, setRuns] = useState<SessionRun[]>([])
+  const [progress, setProgress] = useState<UploadProgress | null>(null)
   const [published, setPublished] = useState<number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const publishOpen = searchParams.get('publicar') === '1'
@@ -102,11 +103,11 @@ export function Process() {
   const run = useMutation({
     mutationFn: () => api.run(processId),
     onSuccess: (data) => {
-      const split = Object.entries(data.por_decision)
+      const split = Object.entries(data.by_decision)
         .map(([name, value]) => `${value} ${name.replaceAll('_', ' ')}`)
         .join(', ')
       setRuns((current) => [
-        { finishedAt: new Date(), decided: data.decididas, split },
+        { finishedAt: new Date(), decided: data.decided, split },
         ...current,
       ])
       void queryClient.invalidateQueries()
@@ -114,10 +115,13 @@ export function Process() {
   })
 
   const upload = useMutation({
-    mutationFn: (incoming: File[]) => api.uploadFiles(processId, incoming),
+    mutationFn: (incoming: File[]) => {
+      setProgress(null)
+      return api.uploadFiles(processId, incoming, setProgress)
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: keys.instances(processId) })
-      void queryClient.invalidateQueries({ queryKey: keys.files(processId) })
+      void queryClient.invalidateQueries({ queryKey: keys.summary(processId) })
     },
   })
 
@@ -226,6 +230,8 @@ export function Process() {
             rulesCount={active}
             startBlocked={startBlocked}
             error={runFailure(upload.error ?? run.error)}
+            progress={progress}
+            result={run.data}
             onFiles={addToQueue}
             onRemove={removeFromQueue}
             onStart={() => void startRun()}

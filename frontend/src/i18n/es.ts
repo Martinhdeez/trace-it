@@ -28,6 +28,11 @@ export const es = {
     PENDING: 'Pendiente',
     DECIDED: 'Decidida',
   },
+  sourceStatus: {
+    ok: 'Al día',
+    down: 'Caída',
+    none: 'Sin sincronizar',
+  },
   roles: {
     manager: 'Responsable',
     operator: 'Operador',
