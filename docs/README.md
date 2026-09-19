@@ -17,7 +17,7 @@ Start with the [root README](../README.md) for what the system does, then:
 | [ingestion/README.md](ingestion/README.md) | Document ingestion: PDF, OCR, workbook |
 | [ingestion/setup.md](ingestion/setup.md) | Reproduce OCR: prerequisites, pinned downloads, provider keys and complete API commands |
 | [../processes/README.md](../processes/README.md) | Format of a process pack |
-| [../tools/README.md](../tools/README.md) | The demo stand-ins that run the whole corpus |
+| [../tools/README.md](../tools/README.md) | Production API demo with OCR, plus historical comparison tools |
 | [../backend/tests/golden/README.md](../backend/tests/golden/README.md) | The golden outcomes for batch 1 |
 
 Superseded plans and analyses are archived under [`.artifacts/`](../.artifacts/). They are

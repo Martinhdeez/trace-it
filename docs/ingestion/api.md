@@ -61,8 +61,10 @@ their business vocabulary is not guessed. Missing readings never create a REVIEW
 Re-uploading the same process,
 filename and content preserves the instance and any existing downstream decisions.
 
-`GET /instances/{instance_id}/document` retrieves the latest extraction from PostgreSQL
-events independently of the local cache. The process upload calls the
+`GET /instances/{instance_id}/document` retrieves the latest attached extraction from
+PostgreSQL events independently of the local cache. Duplicate upload attempts remain
+in the audit, but their unused readings cannot replace the evidence behind stored
+symbols or decisions. The process upload calls the
 `extract_for_payment(service, item, options, sources)` adapter, which checks the
 invoice-payment `suppliers`, `orders` and `erp` snapshots and requests at most one
 additional extraction for discrepancies not already reread. It returns both result
@@ -107,6 +109,33 @@ After source changes, explicitly re-extract affected pending documents before ru
 them. The decision engine always uses the current active rules and current snapshots.
 Previously decided instances and their exports are never changed by re-uploading.
 No `tools/` module or evaluation script participates in this application flow.
+
+## Tracing readers and provider usage
+
+The contract is recorded in [ADR 0022](../adr/0022-ocr-evidence-and-provider-tracing.md).
+Use `GET /instances/{id}/trace` for the document journey. An upload contains
+`extraction` and its `native_text`, `ocr`, `vision`, `text_judge` and `focused_read`
+children as applicable. Remote readers add a `provider_call` child with provider,
+model, operation, request fingerprint, duration, outcome and reported tokens.
+The parent identifies the page and, for a crop, the field and reader.
+
+`GET /traces?process_id=7&name=provider_call` lists these operations. A complete
+journal replay has `journal_hit=true`, `outcome=replay` and
+`network_attempted=false`; an uncertain prior delivery has
+`outcome=blocked_uncertain` and is not automatically resubmitted. Errors retain
+their exception class and a safe description without provider bodies or secrets.
+`GET /traces/{trace_id}` reconstructs the hierarchy.
+
+An extraction-cache hit has no reader/provider children: its extraction span links
+`cached_from_extraction_id` to the previous result, and its `*_calls_this_request`
+counters are zero. The original extraction metrics remain historical metadata.
+
+`GET /processes/{id}/metrics` includes a separate `providers` list, grouped by
+provider, model and operation. `attempts` includes journal reads; `network_requests`
+counts outbound attempts, `replays` counts complete saved responses and `errors`
+counts failed or blocked operations. Input/output token totals exclude replay.
+Unavailable token counts cannot establish zero actual cost; these counters are
+reported usage, not a billing statement. Existing agent `llm` totals are unchanged.
 
 ## Batches and errors
 

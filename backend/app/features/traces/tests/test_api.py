@@ -3,6 +3,7 @@ setup as `decisions/tests/test_api.py`: seeded instances and rules, the sandbox 
 
 import pytest
 
+from app.core import events
 from app.core.database import session_factory
 from app.features.agents import sandbox
 from app.features.decisions.tests.test_api import FAKE_SANDBOX, client, create_process
@@ -66,6 +67,7 @@ async def test_run_journey_and_metrics(fake_sandbox: None) -> None:
         assert by_step["evaluate_rule"]["count"] == 2 and by_step["run_process"]["errors"] == 0
         assert metrics["decisions_by_outcome"] == {"PAGAR": 1, "NO_PAGAR": 2, "ESCALAR": 1}
         assert metrics["escalated"] == 0 and metrics["pending"] == 1
+        assert metrics["providers"] == []
         assert set(metrics["failures"].values()) == {0}
 
 
@@ -101,3 +103,58 @@ async def test_reprocess_and_a_refused_run_are_spans(fake_sandbox: None) -> None
         metrics = (await api.get(f"/processes/{process_id}/metrics")).json()
         [run] = [s for s in metrics["steps"] if s["step"] == "run_process"]
         assert run["count"] == 2 and run["errors"] == 1 and metrics["runs"] == 1
+
+
+async def test_provider_metrics_separate_network_usage_from_journal_replay() -> None:
+    async with client() as api:
+        process_id, _ = await create_process(api, "manager")
+        common = {
+            "process_id": process_id,
+            "provider": "gemini",
+            "model": "gemini-test",
+            "operation": "image_transcription",
+        }
+        with events.span("provider_call", **common) as span:
+            span.set(network_attempted=True, outcome="success", input_tokens=12, output_tokens=4)
+        with events.span("provider_call", **common) as span:
+            span.set(
+                network_attempted=False,
+                journal_hit=True,
+                outcome="replay",
+                input_tokens=12,
+                output_tokens=4,
+            )
+        with events.span("provider_call", **common) as span:
+            span.status = "error"
+            span.set(network_attempted=False, journal_hit=True, outcome="blocked_uncertain")
+        with events.span("provider_call", **{**common, "provider": "vision"}) as span:
+            span.set(network_attempted=True, outcome="success", input_tokens=3, output_tokens=1)
+
+        response = await api.get(f"/processes/{process_id}/metrics")
+        assert response.status_code == 200, response.text
+        metrics = response.json()
+        assert metrics["llm"] == []
+        assert metrics["providers"] == [
+            {
+                "provider": "gemini",
+                "model": "gemini-test",
+                "operation": "image_transcription",
+                "attempts": 3,
+                "network_requests": 1,
+                "replays": 1,
+                "errors": 1,
+                "input_tokens": 12,
+                "output_tokens": 4,
+            },
+            {
+                "provider": "vision",
+                "model": "gemini-test",
+                "operation": "image_transcription",
+                "attempts": 1,
+                "network_requests": 1,
+                "replays": 0,
+                "errors": 0,
+                "input_tokens": 3,
+                "output_tokens": 1,
+            },
+        ]

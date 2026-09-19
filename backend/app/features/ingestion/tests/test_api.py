@@ -71,9 +71,33 @@ def test_upload_cache_identity_and_get(settings):
         assert second["cache_hit"] is True
         assert second["file_id"] == "another.pdf"
         assert second["id"] != data["id"]
+        assert second["data"]["provenance"]["cached_from_extraction_id"] == data["id"]
         assert second["metrics"]["ocr_calls_this_request"] == 0
         assert client.get("/v1/extractions/" + data["id"]).json()["file_id"] == "á.pdf"
         assert client.get("/v1/extractions/not-found").status_code == 404
+
+
+def test_extraction_trace_links_cached_evidence_without_new_reader_calls(settings, monkeypatch):
+    from app.core import events
+
+    written = []
+    monkeypatch.setattr(events, "_write", written.extend)
+    service = ExtractionService(settings, NoOCR(), NoVLM())
+    content = pdf_bytes(VALID)
+    options = ExtractOptions(ocr=False, vlm=False, jev=False)
+    first = service.extract(service.ingest(io.BytesIO(content), "invoice.pdf"), options)
+    second = service.extract(service.ingest(io.BytesIO(content), "invoice.pdf"), options)
+    spans = [row for row in written if row["step"] == "extraction"]
+    assert [row["data"]["extraction_id"] for row in spans] == [first.id, second.id]
+    replay = spans[1]["data"]
+    assert replay["cache_hit"] is True
+    assert replay["cached_from_extraction_id"] == first.id
+    assert replay["options"] == options.model_dump()
+    assert replay["pipeline_version"] == second.pipeline_version
+    assert replay["ocr_calls_this_request"] == replay["vlm_calls_this_request"] == 0
+    assert replay["jev_calls_this_request"] == 0
+    assert not any(row["step"] == "provider_call" for row in written)
+    assert "cached_from_extraction_id" not in first.data["provenance"]
 
 
 def test_bad_uploads(settings):

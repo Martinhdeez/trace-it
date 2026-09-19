@@ -32,6 +32,9 @@ runs, so duplicate checks see the full batch. A scan is sent to production OCR;
 provider failures appear in the upload's extraction warnings and can leave
 fields unresolved. For reproducible counts, use a fresh process/database:
 uploading an already decided invoice does not rewrite its symbols or decision.
+`detail.json` records the exported result's decision author and reason. Its
+`engine_rules_that_fired` describes the engine decision, even when a later reviewed
+human resolution is exported. `rules_that_fired` belongs to the exported decision.
 The driver compares the filename and SHA-256 with existing instances. A matching
 `DECIDED` instance is reused without another OCR call; a matching `PENDING`
 instance is re-extracted through `POST /instances/{id}/extract`. Each selected
@@ -39,8 +42,8 @@ PDF gets a line in `output/extractions.jsonl`. Reused decided lines contain
 `reused: true` and the stored symbols, without a new extraction response.
 If a selected file matches an older version of a filename that has since been
 replaced, the demo stops: the API exports the newest instance of that name.
-Use a fresh process to evaluate that historical batch. Output files are staged
-together and replace the previous artifacts only after the entire run succeeds.
+Use a fresh process to evaluate that historical batch. Artifacts are staged
+until the run succeeds, then each output file is replaced.
 For a custom process with optional decision review enabled, pending human approval
 blocks export with HTTP 409. Complete that review and rerun the driver; exported
 results and detail then follow the approved human resolution. `--local-only`

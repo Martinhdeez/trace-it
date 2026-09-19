@@ -145,8 +145,9 @@ and `jev=false` explicitly disable them, even when keys exist.
 An alternative image service can be configured with `TRACEPAY_VLM_URL`,
 `TRACEPAY_VLM_MODEL` and optionally `TRACEPAY_VLM_API_KEY`. The URL is the API
 base, typically ending in `/v1`; the adapter appends `/chat/completions` and sends
-an image. A configured URL takes precedence over Gemini; leave all three unset
-to reproduce the Gemini run. This path has no automatic fallback to Gemini.
+an image. A complete URL/model pair takes precedence over Gemini; leave all three
+unset to reproduce the Gemini run. Partial generic settings permit configured
+Gemini. A failure of a fully configured generic server does not retry through Gemini.
 
 Keys stay in the ignored `.env`. Changing `.env` requires recreating the Docker
 backend (`docker compose up -d --force-recreate backend`) or restarting a local

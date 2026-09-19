@@ -39,7 +39,10 @@ async def test_authenticate_discovers_invoice_process_and_sends_user_header():
 
 
 @pytest.mark.parametrize("local_only", [False, True])
-async def test_demo_loads_sources_then_ocr_uploads_and_exports_engine_result(tmp_path, local_only):
+@pytest.mark.parametrize("reviewed", [False, True])
+async def test_demo_loads_sources_then_ocr_uploads_and_exports_result(
+    tmp_path, local_only, reviewed
+):
     book = tmp_path / "master.xlsx"
     invoice = tmp_path / "scan.pdf"
     book.write_bytes(b"xlsx content")
@@ -79,7 +82,8 @@ async def test_demo_loads_sources_then_ocr_uploads_and_exports_engine_result(tmp
         if request.url.path == "/processes/7/run":
             return httpx.Response(200, json={"decided": 1})
         if request.url.path == "/processes/7/export":
-            return httpx.Response(200, text='{"file_id":"scan.pdf","result":"PAGAR"}\n')
+            decision = "ESCALAR" if reviewed else "PAGAR"
+            return httpx.Response(200, text=json.dumps({"file_id": "scan.pdf", "result": decision}))
         if request.url.path == "/instances/11":
             return httpx.Response(
                 200,
@@ -87,14 +91,19 @@ async def test_demo_loads_sources_then_ocr_uploads_and_exports_engine_result(tmp
                     "symbols": {"total": {"value": "1802.90"}},
                     "decisions": [
                         {
+                            "id": 1,
+                            "decision": "PAGAR",
                             "author": "engine",
                             "results": [{"fires": True, "reason": "Matched order"}],
                         },
                         {
+                            "id": 2,
+                            "decision": "ESCALAR",
                             "author": "human",
-                            "results": [{"fires": True, "reason": "Later annotation"}],
+                            "results": [],
                         },
                     ],
+                    "reviews": [{"decision_id": 1}] if reviewed else [],
                 },
             )
         raise AssertionError(request.url.path)
@@ -123,11 +132,12 @@ async def test_demo_loads_sources_then_ocr_uploads_and_exports_engine_result(tmp
     )
     assert json.loads((output / "outcomes.jsonl").read_text()) == {
         "file_id": invoice.name,
-        "result": "PAGAR",
+        "result": "ESCALAR" if reviewed else "PAGAR",
     }
-    assert json.loads((output / "detail.json").read_text())[0]["rules_that_fired"] == [
-        "Matched order"
-    ]
+    detail = json.loads((output / "detail.json").read_text())[0]
+    assert detail["rules_that_fired"] == ([] if reviewed else ["Matched order"])
+    assert detail["decision_author"] == ("human" if reviewed else "engine")
+    assert detail["engine_rules_that_fired"] == ["Matched order"]
 
 
 async def test_demo_reextracts_pending_reupload_but_preserves_decided_instance(tmp_path):
@@ -180,7 +190,14 @@ async def test_demo_reextracts_pending_reupload_but_preserves_decided_instance(t
                     "file_hash": hashlib.sha256(b"content").hexdigest(),
                     "status": "PENDING" if path.endswith("/11") else "DECIDED",
                     "symbols": {},
-                    "decisions": [{"author": "engine", "results": []}],
+                    "decisions": [
+                        {
+                            "id": 1,
+                            "decision": "PAGAR" if path.endswith("/11") else "ESCALAR",
+                            "author": "engine",
+                            "results": [],
+                        }
+                    ],
                 },
             )
         raise AssertionError(path)
@@ -341,6 +358,7 @@ async def test_reviewed_human_resolution_supplies_detail_for_exported_outcome(tm
         "result": "NO_PAGAR",
     }
     detail = json.loads((tmp_path / "out/detail.json").read_text())
-    assert detail == [
-        {"file_id": "invoice.pdf", "result": "NO_PAGAR", "rules_that_fired": [], "symbols": {}}
-    ]
+    assert detail[0]["result"] == "NO_PAGAR"
+    assert detail[0]["decision_author"] == "operator"
+    assert detail[0]["rules_that_fired"] == []
+    assert detail[0]["engine_rules_that_fired"] == ["Order matched"]

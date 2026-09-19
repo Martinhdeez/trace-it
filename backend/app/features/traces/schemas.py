@@ -113,6 +113,20 @@ class LlmStats(BaseModel):
     output_tokens: int
 
 
+class ProviderStats(BaseModel):
+    """Provider journal activity; tokens count only attempted network requests."""
+
+    provider: str | None
+    model: str | None
+    operation: str | None
+    attempts: int  # provider_call spans, including journal replays and blocked calls
+    network_requests: int
+    replays: int  # completed journal reads; blocked uncertain reads remain errors
+    errors: int
+    input_tokens: int
+    output_tokens: int
+
+
 class ProcessMetrics(BaseModel):
     since: datetime | None
     runs: int  # completed runs; refused ones are `run_process` errors in `steps`
@@ -120,6 +134,7 @@ class ProcessMetrics(BaseModel):
     instances_per_second: float | None
     steps: list[StepStats]  # every step type: rule compilations, LLM runs, rules, syncs...
     llm: list[LlmStats]  # by model and role
+    providers: list[ProviderStats]  # by provider, model and operation
     decisions_by_outcome: dict[str, int] = Field(examples=[{"PAGAR": 433, "ESCALAR": 31}])
     # Decisions that escalated because a required symbol was missing, a rule failed, needed
     # data or tied.

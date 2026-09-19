@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import NotFoundError
 from app.core.events import Event
+from app.features.agents import decision_reviewer
 from app.features.decisions import service as decisions
 from app.features.decisions.model import ENGINE, Decision
 from app.features.decisions.schemas import DecisionOut
@@ -21,6 +22,7 @@ from app.features.traces.schemas import (
     InstanceTrace,
     LlmStats,
     ProcessMetrics,
+    ProviderStats,
     RuleResultOut,
     RuleRuntime,
     RuleTrace,
@@ -112,7 +114,18 @@ async def instance_trace(session: AsyncSession, instance_id: int) -> InstanceTra
         )
         rows += list(await session.scalars(exports))
     engine = [d for d in history if d.author == ENGINE]
-    exported = (engine or history or [None])[-1]
+    automatic = engine[-1] if engine else None
+    human = next((d for d in reversed(history) if d.author != ENGINE), None)
+    exported = automatic or human
+    if automatic:
+        review = (await decision_reviewer.for_decisions(session, [automatic])).get(automatic.id)
+        if review:
+            if human and human.id > automatic.id:
+                exported = human
+            elif review.requires_human:
+                exported = None
+    if instance.status == "PENDING":
+        exported = None
     return InstanceTrace(
         id=instance.id,
         process_id=instance.process_id,
@@ -251,6 +264,28 @@ async def metrics(session: AsyncSession, process_id: int, since: datetime | None
         .order_by(model, role)
     )
 
+    provider = Event.data["provider"].astext
+    provider_model = Event.data["model"].astext
+    operation = Event.data["operation"].astext
+    network = Event.data["network_attempted"].as_boolean().is_(True)
+    replay = Event.data["outcome"].astext == "replay"
+    providers = await session.execute(
+        select(
+            provider,
+            provider_model,
+            operation,
+            func.count(),
+            func.count().filter(network),
+            func.count().filter(replay),
+            errors,
+            func.coalesce(func.sum(Event.data["input_tokens"].as_integer()).filter(network), 0),
+            func.coalesce(func.sum(Event.data["output_tokens"].as_integer()).filter(network), 0),
+        )
+        .where(*spans, Event.step == "provider_call")
+        .group_by(provider, provider_model, operation)
+        .order_by(provider, provider_model, operation)
+    )
+
     decided = [Instance.process_id == process_id]
     if since is not None:
         decided.append(Decision.created_at >= since)
@@ -291,6 +326,20 @@ async def metrics(session: AsyncSession, process_id: int, since: datetime | None
                 output_tokens=tokens_out,
             )
             for m, r, c, e, retries, tokens_in, tokens_out in llm
+        ],
+        providers=[
+            ProviderStats(
+                provider=p,
+                model=m,
+                operation=o,
+                attempts=c,
+                network_requests=n,
+                replays=replays,
+                errors=e,
+                input_tokens=tokens_in,
+                output_tokens=tokens_out,
+            )
+            for p, m, o, c, n, replays, e, tokens_in, tokens_out in providers
         ],
         decisions_by_outcome=dict(by_outcome.all()),
         failures=dict(zip(FAILURES, failures, strict=True)),
