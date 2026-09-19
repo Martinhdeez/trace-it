@@ -35,7 +35,7 @@ export function BatchRunPanel({
   const collect = !running && !uploading && !finished
 
   return (
-    <section className="overflow-hidden rounded-[16px] bg-white shadow-[0_16px_50px_rgba(19,19,19,0.12)] ring-1 ring-black/[0.06]">
+    <section className="overflow-hidden rounded-[16px] bg-surface shadow-pop ring-1 ring-line">
       <header className="flex items-start justify-between gap-4 border-b border-hairline px-5 py-4">
         <div>
           <div className="flex items-center gap-2">
@@ -130,7 +130,7 @@ function Collect({
         onDrop={drop}
         className={cn(
           'flex min-h-[140px] w-full flex-col items-center justify-center gap-2 rounded-[12px] px-4 py-8 text-center ring-1 ring-dashed transition-colors',
-          over ? 'bg-white ring-ink/30' : 'bg-canvas ring-black/[0.08] hover:bg-white',
+          over ? 'bg-surface ring-ink/30' : 'bg-canvas ring-line hover:bg-surface',
         )}
       >
         <Upload size={18} strokeWidth={1.5} className="text-faint" />
@@ -180,7 +180,7 @@ function Collect({
           type="button"
           disabled={blocked}
           onClick={onStart}
-          className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-[12px] font-medium text-white hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-[12px] font-medium text-on-ink hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Play size={12} strokeWidth={2} />
           {queue.length ? `Ejecutar ${queue.length}` : 'Ejecutar'}
@@ -224,7 +224,7 @@ function Progress({
           <span>PROGRESO</span>
           <span>{progress}%</span>
         </div>
-        <div className="mb-5 h-px overflow-hidden bg-black/[0.06]">
+        <div className="mb-5 h-px overflow-hidden bg-rule">
           <motion.div
             className="h-full origin-left bg-pagar"
             initial={false}
@@ -292,7 +292,7 @@ function Progress({
                       ? 'bg-pagar text-white ring-pagar'
                       : active
                         ? 'text-ink ring-ink/40'
-                        : 'text-faint ring-black/[0.08]',
+                        : 'text-faint ring-line',
                   )}
                 >
                   {done ? (

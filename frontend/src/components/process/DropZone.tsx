@@ -42,7 +42,7 @@ export function DropZone({
         onDrop={drop}
         className={cn(
           'flex w-full items-center gap-3 rounded-[12px] px-3 py-3 text-left ring-1 transition-colors',
-          over ? 'bg-white ring-focus' : 'bg-well ring-black/[0.04] hover:bg-white/70',
+          over ? 'bg-surface ring-focus' : 'bg-well ring-line hover:bg-surface/70',
           disabled && 'cursor-not-allowed opacity-60',
         )}
       >

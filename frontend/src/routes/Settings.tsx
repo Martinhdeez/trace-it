@@ -2,12 +2,13 @@ import { useSyncExternalStore } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, apiTrace, mode } from '../api/client'
 import { keys } from '../api/queries'
-import { Button, Input } from '../components/shell/Controls'
+import { Button, Input, Segmented } from '../components/shell/Controls'
 import { Empty, ErrorNotice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
 import { Topbar } from '../components/shell/Topbar'
 import { NestedCard, PageIntro } from '../components/shell/Well'
 import { useSession } from '../state/session'
+import { useTheme, type Theme } from '../state/theme'
 
 export function Settings() {
   const { user, use, signOut } = useSession()
@@ -33,6 +34,8 @@ export function Settings() {
         />
 
         <div className="max-w-2xl space-y-3">
+          <Appearance />
+
           <NestedCard
             label="usuario"
             action={
@@ -57,7 +60,7 @@ export function Settings() {
                       onClick={() => use(candidate)}
                       className={
                         candidate.id === user?.id
-                          ? 'flex w-full items-center justify-between rounded-[10px] bg-well px-3 py-2 text-left ring-1 ring-black/[0.05]'
+                          ? 'flex w-full items-center justify-between rounded-[10px] bg-well px-3 py-2 text-left ring-1 ring-line'
                           : 'flex w-full items-center justify-between rounded-[10px] px-3 py-2 text-left hover:bg-canvas'
                       }
                     >
@@ -112,6 +115,28 @@ export function Settings() {
         </div>
       </div>
     </>
+  )
+}
+
+function Appearance() {
+  const { theme, setTheme } = useTheme()
+
+  return (
+    <NestedCard label="apariencia">
+      <div className="space-y-3 px-3.5 py-3">
+        <p className="text-[12px] text-muted">
+          Claro por defecto. Oscuro se guarda en este navegador.
+        </p>
+        <Segmented<Theme>
+          value={theme}
+          onChange={setTheme}
+          options={[
+            { value: 'light', label: 'Claro' },
+            { value: 'dark', label: 'Oscuro' },
+          ]}
+        />
+      </div>
+    </NestedCard>
   )
 }
 

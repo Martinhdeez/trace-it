@@ -96,7 +96,7 @@ export function Instances() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Nombre del archivo…"
-                className="bg-white"
+                className="bg-surface"
               />
               <FilterMenu
                 value={filter}
@@ -154,7 +154,7 @@ function FilterMenu({
         aria-expanded={open}
         aria-haspopup="listbox"
         onClick={() => setOpen((next) => !next)}
-        className="flex w-full items-center justify-between gap-2 rounded-full bg-white px-3 py-1.5 text-left ring-1 ring-black/[0.06]"
+        className="flex w-full items-center justify-between gap-2 rounded-full bg-surface px-3 py-1.5 text-left ring-1 ring-line"
       >
         <span className="truncate font-mono text-[11px] text-ink">{current}</span>
         <ChevronDown
@@ -169,7 +169,7 @@ function FilterMenu({
       {open ? (
         <ul
           role="listbox"
-          className="absolute z-20 mt-1 w-full origin-top rounded-[12px] bg-white p-1 shadow-[0_8px_24px_rgba(19,19,19,0.08)] ring-1 ring-black/[0.06]"
+          className="absolute z-20 mt-1 w-full origin-top rounded-[12px] bg-surface p-1 shadow-float ring-1 ring-line"
         >
           {options.map((option) => (
             <li key={option.value}>

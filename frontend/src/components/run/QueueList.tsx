@@ -26,7 +26,7 @@ export function QueueList({
         </span>
       </div>
       {header ? <div className="px-1 pb-2">{header}</div> : null}
-      <ul className="min-h-0 flex-1 overflow-y-auto rounded-[16px] bg-white p-1 ring-1 ring-black/[0.04]">
+      <ul className="min-h-0 flex-1 overflow-y-auto rounded-[16px] bg-surface p-1 ring-1 ring-line">
         {items.map((item) => (
           <li key={item.id}>
             <button

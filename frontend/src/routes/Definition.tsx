@@ -230,7 +230,7 @@ export function Definition() {
               <ol className="space-y-6">
                 {turns.map((turn) => (
                   <li key={turn.id} className="space-y-3">
-                    <div className="rounded-[16px] bg-white px-4 py-3 ring-1 ring-black/[0.06]">
+                    <div className="rounded-[16px] bg-surface px-4 py-3 ring-1 ring-line">
                       <p className="text-[13px] leading-6 text-ink">{turn.prompt}</p>
                       {turn.files.length ? (
                         <ul className="mt-2 flex flex-wrap gap-2">
@@ -312,8 +312,8 @@ export function Definition() {
                   className={cn(
                     'rounded-full px-3 py-1.5 text-left text-[12px] ring-1',
                     draft === chip
-                      ? 'bg-white text-ink shadow-[0_1px_2px_rgba(19,19,19,0.06)] ring-black/[0.10]'
-                      : 'bg-canvas text-ink/75 ring-black/[0.06] hover:bg-white hover:text-ink',
+                      ? 'bg-surface text-ink shadow-lift ring-line'
+                      : 'bg-canvas text-ink/75 ring-line hover:bg-surface hover:text-ink',
                   )}
                 >
                   {chip}
@@ -844,7 +844,7 @@ function VersionChip({
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((next) => !next)}
-        className="inline-flex items-center gap-1 rounded-full bg-canvas px-2.5 py-1 font-mono text-[11px] text-ink ring-1 ring-black/[0.06] hover:bg-white"
+        className="inline-flex items-center gap-1 rounded-full bg-canvas px-2.5 py-1 font-mono text-[11px] text-ink ring-1 ring-line hover:bg-surface"
       >
         {label}
         <ChevronDown
@@ -856,7 +856,7 @@ function VersionChip({
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 z-20 mt-1 w-56 origin-top-right rounded-[12px] bg-white p-1 shadow-[0_8px_24px_rgba(19,19,19,0.08)] ring-1 ring-black/[0.06]"
+          className="absolute right-0 z-20 mt-1 w-56 origin-top-right rounded-[12px] bg-surface p-1 shadow-float ring-1 ring-line"
         >
           <div className="px-2.5 py-2">
             <p className="font-mono text-[12px] text-ink">{label} · en vigor</p>
@@ -919,7 +919,7 @@ function ProposalCard({
   const canApply = proposal.kind !== 'source_note'
 
   return (
-    <li className="rounded-[16px] bg-white px-4 py-3 ring-1 ring-black/[0.06]">
+    <li className="rounded-[16px] bg-surface px-4 py-3 ring-1 ring-line">
       <div className="flex items-start justify-between gap-3">
         <p className="font-mono text-[11px] tracking-[0.12em] text-faint">{label}</p>
         {applied ? (
@@ -1030,8 +1030,8 @@ function Composer({
       <div
         ref={box}
         className={cn(
-          'rounded-[16px] bg-white p-2 ring-1 transition-colors',
-          over ? 'ring-focus' : 'ring-black/[0.06]',
+          'rounded-[16px] bg-surface p-2 ring-1 transition-colors',
+          over ? 'ring-focus' : 'ring-line',
         )}
         onDragOver={(event) => {
           event.preventDefault()

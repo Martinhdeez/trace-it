@@ -26,8 +26,8 @@ export function Overlay({
     <div
       className={
         align === 'right'
-          ? 'fixed inset-0 z-50 flex justify-end bg-ink/20 p-3'
-          : 'fixed inset-0 z-50 grid place-items-center bg-ink/20 p-4'
+          ? 'fixed inset-0 z-50 flex justify-end bg-scrim p-3'
+          : 'fixed inset-0 z-50 grid place-items-center bg-scrim p-4'
       }
       onClick={onClose}
     >
