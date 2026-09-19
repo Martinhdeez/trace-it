@@ -39,6 +39,7 @@ export function CommandPalette() {
 
   const hits = useMemo(() => {
     const list: Hit[] = [
+      { id: 'docs', label: 'Docs', hint: 'cinco decisiones', to: paths.docs() },
       { id: 'processes', label: 'Procesos', hint: 'todos', to: paths.processes },
       { id: 'new', label: 'Nuevo proceso', hint: 'crear o importar', to: paths.newProcess },
       { id: 'settings', label: 'Ajustes del espacio', hint: 'usuario y modelos', to: paths.settings },

@@ -4,6 +4,7 @@ import { ErrorNotice } from './components/shell/Notice'
 import { Inbox } from './routes/Inbox'
 import { Instances } from './routes/Instances'
 import { Landing } from './routes/Landing'
+import { Docs } from './routes/Docs'
 import { NewProcess } from './routes/NewProcess'
 import { Process } from './routes/Process'
 import { Processes } from './routes/Processes'
@@ -21,6 +22,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/docs" element={<Docs />} />
+      <Route path="/docs/:slug" element={<Docs />} />
       <Route path="/login" element={<Navigate to={paths.processes} replace />} />
       <Route element={<Console />}>
         <Route path="/processes" element={<Processes />} />
