@@ -1,7 +1,7 @@
 # ERP integration: analysis of Mateo's work and the live-source contract
 
 Date: 2026-09-19. Author: Claude, for Martín. Scope: read-only analysis of Mateo's
-(mateo19182) ERP/source work on `origin/dev`, `feat/process-chat` (PR #69, open) and
+(mateo19182) ERP/source work on `origin/dev`, `feat/process-chat` (PR #69, merged into `dev` as d960eda during this work) and
 `feat/resilience-sources`, against the product owner's decisions of 2026-09-19 (ADR 0028).
 Nothing in Mateo's code was changed; changes his code would need are proposals (last section).
 

@@ -774,8 +774,13 @@ async def health(session: AsyncSession) -> list[PlaneHealth]:
             status, reason = "degraded", f"{errors}/{spans} spans failed"
         elif p95 is not None and limit is not None and p95 > limit:
             status, reason = "degraded", f"p95 {p95:.0f} ms over {limit} ms"
-        elif p == Plane.ingestion and (down := await sources.down_sources(session, since)):
-            status, reason = "degraded", f"sources down: {', '.join(down)}"  # ADR 0028
+        # A known outage needs no sample size (ADR 0028).
+        if (
+            status == "ok"
+            and p == Plane.ingestion
+            and (down := await sources.down_sources(session, since))
+        ):
+            status, reason = "degraded", f"sources down: {', '.join(down)}"
         out.append(
             PlaneHealth(
                 plane=p,
