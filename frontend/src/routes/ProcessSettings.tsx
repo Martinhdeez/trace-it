@@ -7,7 +7,6 @@ import { ProcessScreen } from '../components/process/ProcessScreen'
 import { MailSettings } from '../components/process/MailSettings'
 import { Segmented } from '../components/shell/Controls'
 import { Empty } from '../components/shell/Notice'
-import { SettingsSection } from '../components/shell/SettingsSection'
 import { paths } from '../lib/paths'
 import { useSession } from '../state/session'
 
@@ -44,26 +43,14 @@ export function ProcessSettings() {
               { value: 'modelos', label: 'Modelos' },
             ]}
           />
-          <div className="mt-2 divide-y divide-rule">
-            {tab === 'correo' ? (
-              <SettingsSection
-                title="Correo"
-                description="El buzón que alimenta el proceso y los últimos correos con el destino de cada PDF."
-              >
-                <MailSettings processId={processId} />
-              </SettingsSection>
-            ) : null}
+          <div className="mt-4">
+            {tab === 'correo' ? <MailSettings processId={processId} /> : null}
             {tab === 'modelos' ? (
-              <SettingsSection
-                title="Modelos y ejecución"
-                description="Presets y esfuerzo de los agentes. Los cambios se aplican al publicar."
-              >
-                {isManager ? (
-                  <ProcessExecutionSettings processId={processId} />
-                ) : (
-                  <Empty>Solo los managers pueden tocar los modelos.</Empty>
-                )}
-              </SettingsSection>
+              isManager ? (
+                <ProcessExecutionSettings processId={processId} />
+              ) : (
+                <Empty>Solo los managers pueden tocar los modelos.</Empty>
+              )
             ) : null}
           </div>
         </div>

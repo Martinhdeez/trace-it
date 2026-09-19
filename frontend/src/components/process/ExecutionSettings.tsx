@@ -53,7 +53,6 @@ function SettingsForm({ processId, initial }: { processId: number; initial: Exec
   } })
   const busy = save.isPending
   return <div className="space-y-4">
-    <p className="text-sm text-muted">Presets fill editable settings. Model choices are retained unless the deployment supplies a preset model mapping. Changes take effect after publication.</p>
     <p className="text-sm">Current configuration: <strong>{value.preset.replaceAll('_', ' ')}</strong></p>
     <fieldset disabled={busy} className="space-y-4">
       <div className="flex gap-2">
