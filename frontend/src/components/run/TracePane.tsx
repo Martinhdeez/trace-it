@@ -24,6 +24,7 @@ export function TracePane({
   instance: InstanceDetail | undefined
   trace: InstanceTrace | undefined
 }) {
+  const [document, setDocument] = useState<{ instanceId: number; symbol?: string } | null>(null)
   if (!instance) {
     return (
       <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col px-5 py-4 text-[13px] text-muted">
@@ -52,7 +53,10 @@ export function TracePane({
 
   return (
     <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-6 pb-4">
-      <DocumentHeader instance={instance} trace={trace} />
+      <DocumentHeader instance={instance} onOpen={() => setDocument({ instanceId: instance.id })} />
+      {document?.instanceId === instance.id ? (
+        <DocumentPopup instance={instance} trace={trace} initialSymbol={document.symbol} onClose={() => setDocument(null)} />
+      ) : null}
 
       <div className="mx-auto w-full max-w-[820px] rounded-[16px] bg-surface px-6 py-6 ring-1 ring-line">
         <div className="flex items-start gap-4">
@@ -142,7 +146,19 @@ export function TracePane({
             {symbols.map(([name, symbol]) => (
               <li key={name} className="px-3 py-1.5">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-mono text-[11px] text-muted">{symbolLabel(name)}</span>
+                  {symbol.origin?.match(/^(document|scan):/) ? (
+                    <button
+                      type="button"
+                      aria-label={`View ${name} in original PDF`}
+                      onClick={() => setDocument({ instanceId: instance.id, symbol: name })}
+                      className="inline-flex min-w-0 items-center gap-1.5 text-left font-mono text-[11px] text-ocr underline decoration-ocr/30 underline-offset-4 hover:decoration-ocr"
+                    >
+                      <FileSearch size={12} className="shrink-0" />
+                      <span className="break-all">{symbolLabel(name)}</span>
+                    </button>
+                  ) : (
+                    <span className="font-mono text-[11px] text-muted">{symbolLabel(name)}</span>
+                  )}
                   <span className="truncate font-mono text-[12px] text-ink">
                     {symbol.value === null || symbol.value === undefined
                       ? '—'
@@ -186,14 +202,7 @@ export function TracePane({
   )
 }
 
-function DocumentHeader({
-  instance,
-  trace,
-}: {
-  instance: InstanceDetail
-  trace: InstanceTrace | undefined
-}) {
-  const [open, setOpen] = useState(false)
+function DocumentHeader({ instance, onOpen }: { instance: InstanceDetail; onOpen: () => void }) {
   return (
     <div className="mx-auto flex w-full max-w-[820px] items-center justify-between gap-3 py-3">
       <div className="min-w-0">
@@ -202,13 +211,12 @@ function DocumentHeader({
       </div>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={onOpen}
         className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-ink px-3 text-[12px] font-medium text-on-ink hover:bg-ink/90"
       >
         <FileSearch size={13} strokeWidth={1.7} />
         Abrir documento
       </button>
-      {open ? <DocumentPopup instance={instance} trace={trace} onClose={() => setOpen(false)} /> : null}
     </div>
   )
 }

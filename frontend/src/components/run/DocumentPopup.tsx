@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { InstanceDetail, InstanceTrace, SpanNode } from '../../api/contracts'
@@ -13,11 +14,14 @@ export function DocumentPopup({
   instance,
   trace,
   onClose,
+  initialSymbol,
 }: {
   instance: InstanceDetail
   trace: InstanceTrace | undefined
   onClose: () => void
+  initialSymbol?: string
 }) {
+  const [showInfo, setShowInfo] = useState(false)
   // Same key as the pane's, so this reads the cache.
   const document = useQuery({
     queryKey: keys.document(instance.id),
@@ -29,13 +33,22 @@ export function DocumentPopup({
 
   return (
     <Overlay onClose={onClose} size="xl">
-      <div className="flex h-full min-h-0 overflow-hidden rounded-[20px] bg-surface shadow-pop ring-1 ring-line">
+      <div role="dialog" aria-modal="true" aria-label="Original document" className="flex h-full min-h-0 flex-col overflow-hidden rounded-[20px] bg-surface shadow-pop ring-1 ring-line md:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <header className="flex shrink-0 items-center justify-between gap-3 border-b border-hairline px-4 py-3">
             <div className="min-w-0">
               <p className="text-[11px] text-muted">Documento</p>
               <h2 className="truncate font-mono text-[13px]">{instance.name}</h2>
             </div>
+            <button
+              type="button"
+              aria-expanded={showInfo}
+              aria-controls="document-info"
+              onClick={() => setShowInfo((value) => !value)}
+              className="ml-auto shrink-0 rounded-full px-3 py-1 text-[12px] text-muted ring-1 ring-line hover:bg-canvas"
+            >
+              Info
+            </button>
             <button
               type="button"
               onClick={onClose}
@@ -45,10 +58,10 @@ export function DocumentPopup({
               <X size={14} strokeWidth={1.75} />
             </button>
           </header>
-          <DocumentPane instanceId={instance.id} name={instance.name} embedded />
+          <DocumentPane instanceId={instance.id} name={instance.name} embedded initialSymbol={initialSymbol} />
         </div>
 
-        <aside className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-hairline px-4 py-4">
+        {showInfo ? <aside id="document-info" aria-label="Document information" className="max-h-[35%] shrink-0 overflow-y-auto border-t border-hairline px-4 py-4 md:max-h-none md:w-[220px] md:border-t-0 md:border-l">
           <Section title="Info">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[12px] text-muted">Resultado</span>
@@ -115,7 +128,7 @@ export function DocumentPopup({
               </ul>
             ) : null}
           </Section>
-        </aside>
+        </aside> : null}
       </div>
     </Overlay>
   )

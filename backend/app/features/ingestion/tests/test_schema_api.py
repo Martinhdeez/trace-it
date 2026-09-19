@@ -135,6 +135,11 @@ async def test_new_definition_fields_are_used_without_restarting_and_history_is_
     assert fresh["extraction"]["cache_hit"] is True
     assert fresh["symbols"]["expires_on"]["value"] == "2027-04-21"
     assert fresh["symbols"]["renewed"]["value"] is False
+    locations = (await client.get(f"/instances/{instance_id}/document/locations")).json()
+    assert locations["extraction_id"] == fresh["extraction"]["id"]
+    assert locations["symbol_fields"]["expires_on"] == "expires_on"
+    assert locations["fields"]["expires_on"][0]["raw"] == "21/04/2027"
+    assert locations["fields"]["expires_on"][0]["boxes"]
     assert fresh["extraction"]["data"]["extraction_plan"]["fingerprint"] == after["fingerprint"]
     assert service.get_result(original["extraction"]["id"])["fields"].keys() == {"holder"}
     async with session_factory() as session:

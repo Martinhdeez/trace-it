@@ -869,6 +869,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/{instance_id}/document/locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document Locations */
+        get: operations["getDocumentLocations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/instances/{instance_id}/document/pages/{page_number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document Page */
+        get: operations["getDocumentPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances/{instance_id}/extract": {
         parameters: {
             query?: never;
@@ -2337,6 +2371,25 @@ export interface components {
             /** Published Process Id */
             published_process_id: number | null;
         };
+        /** DocumentLocations */
+        DocumentLocations: {
+            /** Extraction Id */
+            extraction_id: string;
+            /** Sha256 */
+            sha256: string;
+            /** Pages */
+            pages: {
+                [key: string]: unknown;
+            }[];
+            /** Fields */
+            fields: {
+                [key: string]: components["schemas"]["ReadingLocation"][];
+            };
+            /** Symbol Fields */
+            symbol_fields?: {
+                [key: string]: string;
+            };
+        };
         /** DocumentUpload */
         DocumentUpload: {
             /** Instance Id */
@@ -3493,6 +3546,29 @@ export interface components {
             validation_hash: string;
             /** Reason */
             reason: string;
+        };
+        /** ReadingLocation */
+        ReadingLocation: {
+            /** Candidate */
+            candidate: number;
+            /** Page */
+            page: number | null;
+            /** Raw */
+            raw: string;
+            /** Value */
+            value: string | null;
+            /** Method */
+            method: string;
+            /** Locator */
+            locator: string;
+            /**
+             * Precision
+             * @default unavailable
+             * @enum {string}
+             */
+            precision: "text" | "ocr" | "region" | "page" | "unavailable";
+            /** Boxes */
+            boxes?: number[][];
         };
         /** RejectIn */
         RejectIn: {
@@ -6326,6 +6402,71 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ExtractionResult"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getDocumentLocations: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                instance_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentLocations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getDocumentPage: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                instance_id: number;
+                page_number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

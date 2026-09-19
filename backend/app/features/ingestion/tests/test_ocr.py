@@ -109,7 +109,7 @@ def test_real_local_ocr(settings):
         page = doc.new_page()
         page.insert_image(page.rect, stream=raster)
         scanned = doc.tobytes()
-    fields, _, warnings, _, metrics = extract_pdf(
+    fields, data, warnings, _, metrics = extract_pdf(
         scanned,
         ExtractOptions(),
         settings,
@@ -121,6 +121,23 @@ def test_real_local_ocr(settings):
     assert fields["purchase_order_ref"].value == "PO-2026-0703"
     candidate = fields["purchase_order_ref"].candidates[0]
     assert 0 <= candidate.evidence.bbox[0] < candidate.evidence.bbox[2] <= 595
+    assert any(line.get("spans") for line in data["lines"] if line["method"] == "ocr")
+
+    from app.features.ingestion.pdf.locations import locate_document
+    from app.features.ingestion.schemas import ExtractionResult, FieldReading
+
+    result = ExtractionResult(
+        id="scan",
+        file_id="scan.pdf",
+        sha256="test",
+        kind="invoice",
+        pipeline_version="test",
+        fields={"reference": FieldReading(candidates=[candidate])},
+        data=data,
+    )
+    location = locate_document(scanned, result).fields["reference"][0]
+    assert location.precision == "ocr"
+    assert location.boxes[0][2] - location.boxes[0][0] < 0.5
 
 
 @pytest.mark.ocr

@@ -3085,6 +3085,124 @@
         }
       }
     },
+    "/instances/{instance_id}/document/locations": {
+      "get": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Get Document Locations",
+        "operationId": "getDocumentLocations",
+        "parameters": [
+          {
+            "name": "instance_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Instance Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentLocations"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/instances/{instance_id}/document/pages/{page_number}": {
+      "get": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Get Document Page",
+        "operationId": "getDocumentPage",
+        "parameters": [
+          {
+            "name": "instance_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Instance Id"
+            }
+          },
+          {
+            "name": "page_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Page Number"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/instances/{instance_id}/extract": {
       "post": {
         "tags": [
@@ -7755,6 +7873,51 @@
         ],
         "title": "DiscoverySessionSummary"
       },
+      "DocumentLocations": {
+        "properties": {
+          "extraction_id": {
+            "type": "string",
+            "title": "Extraction Id"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "pages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Pages"
+          },
+          "fields": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/ReadingLocation"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Fields"
+          },
+          "symbol_fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Symbol Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "extraction_id",
+          "sha256",
+          "pages",
+          "fields"
+        ],
+        "title": "DocumentLocations"
+      },
       "DocumentUpload": {
         "properties": {
           "instance_id": {
@@ -10759,6 +10922,80 @@
           "reason"
         ],
         "title": "PublishIn"
+      },
+      "ReadingLocation": {
+        "properties": {
+          "candidate": {
+            "type": "integer",
+            "title": "Candidate"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "raw": {
+            "type": "string",
+            "title": "Raw"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "locator": {
+            "type": "string",
+            "title": "Locator"
+          },
+          "precision": {
+            "type": "string",
+            "enum": [
+              "text",
+              "ocr",
+              "region",
+              "page",
+              "unavailable"
+            ],
+            "title": "Precision",
+            "default": "unavailable"
+          },
+          "boxes": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Boxes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidate",
+          "page",
+          "raw",
+          "value",
+          "method",
+          "locator"
+        ],
+        "title": "ReadingLocation"
       },
       "RejectIn": {
         "properties": {

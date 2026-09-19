@@ -23,6 +23,7 @@ from app.features.users.dependencies import CurrentUser
 from . import process_service
 from .errors import InvalidDocumentError
 from .extraction_plan import ExtractionPlan, ExtractionPlanOut, load_extraction_plan
+from .pdf.locations import DocumentLocations, locate_document, render_page
 from .process_extraction import read_document, reextract_document
 from .runtime import current_service
 from .schemas import CriticalField, ExtractionResult, ExtractOptions
@@ -153,6 +154,46 @@ async def upload_document(
 )
 async def get_document(instance_id: int, session: Session, user: CurrentUser):
     return await process_service.document_result(session, instance_id)
+
+
+@router.get(
+    "/instances/{instance_id}/document/locations",
+    response_model=DocumentLocations,
+    operation_id="getDocumentLocations",
+)
+async def get_document_locations(
+    instance_id: int, session: Session, user: CurrentUser, service: Service
+):
+    from .payment_verification import PAYMENT_FIELDS
+
+    event = await process_service.document_event(session, instance_id)
+    result = ExtractionResult.model_validate(event.data["extraction"])
+    _, content = await process_service.document_content(session, instance_id)
+    locations = await run_in_threadpool(
+        locate_document, content, result, service.ocr, service.settings
+    )
+    locations.symbol_fields = {name: name for name in result.fields}
+    # Use the saved adapter, never the process's current (possibly changed) schema.
+    if event.data.get("adapter", "").startswith("invoice-payment"):
+        locations.symbol_fields.update(
+            {symbol: field for symbol, field in PAYMENT_FIELDS.items() if field in result.fields}
+        )
+    return locations
+
+
+@router.get(
+    "/instances/{instance_id}/document/pages/{page_number}",
+    response_class=Response,
+    operation_id="getDocumentPage",
+)
+async def get_document_page(
+    instance_id: int, page_number: int, session: Session, user: CurrentUser
+):
+    _, content = await process_service.document_content(session, instance_id)
+    image = await run_in_threadpool(render_page, content, page_number)
+    return Response(
+        image, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"}
+    )
 
 
 @router.post(

@@ -143,6 +143,10 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
     assert fed["supplier_tax_id"] == "issuer_nif" and fed["payment_iban"] == "iban"
     assert fed["issued_on"] == "date" and fed["gross_amount"] == "total"
     assert fed["currency"] is None  # read, but no symbol of this process takes it
+    locations = (await client.get(f"/instances/{instance_id}/document/locations")).json()
+    assert locations["symbol_fields"]["total"] == "gross_amount"
+    assert locations["symbol_fields"]["issuer_nif"] == "supplier_tax_id"
+    assert locations["fields"]["gross_amount"][0]["boxes"]
     trace = (await client.get(f"/instances/{instance_id}")).json()["events"]
     assert trace[0]["data"]["source_ids"]["erp"] == erp_id
     original = await client.get(f"/instances/{instance_id}/file")

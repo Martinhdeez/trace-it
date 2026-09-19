@@ -139,6 +139,28 @@ export type RuleReport = {
   needs_data?: { by?: string; missing?: string[]; explanation?: string }
 }
 
+export type ReadingLocation = {
+  candidate: number
+  page: number | null
+  raw: string
+  value: string | null
+  method: string
+  locator: string
+  precision: 'text' | 'ocr' | 'region' | 'page' | 'unavailable'
+  boxes: number[][]
+}
+
+export type DocumentLocations = {
+  extraction_id: string
+  sha256: string
+  pages: { number: number; width: number; height: number }[]
+  fields: Record<string, ReadingLocation[]>
+  symbol_fields: Record<string, string>
+}
+
+/** The stored reading of a document (`GET /instances/{id}/document`). */
+export type DocumentEvidence = ExtractionResult
+
 export type DiscoverySession = Schemas['DiscoveryDraftOut']
 export type DiscoverySessionSummary = Schemas['DiscoverySessionSummary']
 /** One entry of `DiscoverySession.messages`. */
