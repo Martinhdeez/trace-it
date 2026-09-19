@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 class RuleIn(BaseModel):
     text: str
+    summary: str | None = None  # one plain line for the console; `text` is what compiles
     type: Literal["requirement", "prohibition"]
     decision: str  # must be one of the process's decision types
 
@@ -15,6 +16,7 @@ class RuleOut(BaseModel):
     process_id: int
     norm_rule_id: int | None  # the sentence of the client's norm it checks, if any
     text: str
+    summary: str | None
     type: str
     decision: str
     status: str
@@ -32,6 +34,7 @@ class RuleDetail(RuleOut):
 class CheckOut(BaseModel):
     id: int
     text: str
+    summary: str | None
     decision: str
     status: str
 

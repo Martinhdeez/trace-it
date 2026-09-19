@@ -45,6 +45,7 @@ class Rule(Base):
     process_id: Mapped[int] = mapped_column(ForeignKey("processes.id"))
     norm_rule_id: Mapped[int | None] = mapped_column(ForeignKey("norm_rules.id"))
     text: Mapped[str]
+    summary: Mapped[str | None]  # one plain line for a list; `text` is what compiles
     type: Mapped[str]
     decision: Mapped[str]  # outcome produced when the rule fires
     code: Mapped[str | None]  # defines evaluate(instance, sources, others)

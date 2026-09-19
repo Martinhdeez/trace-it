@@ -40,6 +40,7 @@ class Check(BaseModel):
     """One checkable condition of a norm sentence: becomes one `Rule`."""
 
     text: str  # English, precise, naming symbols and source columns
+    summary: str = ""  # the same check in one plain line for a non-technical reader
     type: Literal["requirement", "prohibition"]
     decision: str
     # explicit: the norm names the outcome of this failure (`quote` holds those words);
@@ -276,7 +277,12 @@ async def normalize_norm(session: AsyncSession, process_id: int, norm: str) -> N
         await session.flush()
         checks = []
         for check in sentence.checks:
-            data = RuleIn(text=check.text, type=check.type, decision=check.decision)
+            data = RuleIn(
+                text=check.text,
+                summary=check.summary or None,
+                type=check.type,
+                decision=check.decision,
+            )
             rule = await session.get(Rule, (await rules.create(session, process_id, data)).id)
             rule.norm_rule_id = norm_rule.id
             reading = {

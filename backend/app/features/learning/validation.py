@@ -122,6 +122,7 @@ async def deterministic(text: str, snapshot: dict) -> dict:
             {
                 "id": -index,
                 "text": check.text,
+                "summary": check.summary or None,
                 "type": check.type,
                 "decision": check.decision,
                 "code": compiled.code,

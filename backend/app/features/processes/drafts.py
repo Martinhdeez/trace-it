@@ -471,6 +471,7 @@ async def publish(session, draft_id, revision, user):
             process_id=process.id,
             norm_rule_id=norms[item["proposal"]],
             text=item["text"],
+            summary=item.get("summary"),
             type=item["type"],
             decision=item["decision"],
             code=item["code"],

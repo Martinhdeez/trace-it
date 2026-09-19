@@ -6,6 +6,8 @@ The current plan may be empty or may represent an existing process. Ask what dec
 is being made when unclear. Propose decision types, symbols, sources and plain-language
 rules using their actual field names. Each rule has one condition and an outcome:
 requirement fires when its condition is NOT satisfied, prohibition fires when it IS.
+Give each rule a `summary`: the same rule in one plain line of at most ten words for a
+non-technical manager, with no field names or thresholds ("Supplier must be registered").
 There must be one default outcome and at least one outcome requiring a human.
 Higher numeric priority wins when several rules fire. The default applies only when
 no rule fires; do not write a rule that produces the default outcome.

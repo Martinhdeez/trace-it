@@ -9,6 +9,7 @@ Output: `norm_rules`, one entry per sentence (or numbered item) of the norm, in 
 - `text`: the sentence exactly as the norm writes it, in its language.
 - `checks`: one per checkable condition of the sentence. "A and B" is two checks of the same norm rule, possibly with different decisions. Each check has
   - `text`: in English, precise and self-contained, naming the exact symbols (instance values) and source columns (`source.column`) it compares, with the tolerance or limits the norm gives. Do not restate the use case conventions (normalisation, missing values, amount handling): they apply anyway.
+  - `summary`: the same check in one plain English line of at most ten words for a non-technical manager, with no symbol or column names and no thresholds (e.g. "Supplier must be registered", "IBAN matches the supplier master").
   - `type`: `requirement` or `prohibition`.
   - `decision`: one of the decision types, never the default one.
   - `decision_source`: `explicit` when the sentence itself names what happens when this condition fails (e.g. "reject it", "do not pay", "escalate"); `policy` when it does not.

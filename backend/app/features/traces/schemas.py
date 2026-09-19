@@ -46,6 +46,7 @@ class RuleResultOut(BaseModel):
     fires: bool | None  # None: the rule could not be evaluated
     reason: str
     rule_text: str | None
+    rule_summary: str | None
     norm_rule_id: int | None
 
 
