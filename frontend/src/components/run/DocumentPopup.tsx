@@ -1,6 +1,8 @@
 import { X } from 'lucide-react'
-import type { InstanceDetail, InstanceEvent } from '../../api/contracts'
-import { extractedDocuments } from '../../data/documents.generated'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../../api/client'
+import type { InstanceDetail, InstanceTrace, SpanNode } from '../../api/contracts'
+import { keys } from '../../api/queries'
 import { formatMs } from '../../lib/format'
 import { label } from '../../lib/status'
 import { Overlay } from '../shell/Overlay'
@@ -9,13 +11,20 @@ import { DocumentPane } from './DocumentPane'
 
 export function DocumentPopup({
   instance,
+  trace,
   onClose,
 }: {
   instance: InstanceDetail
+  trace: InstanceTrace | undefined
   onClose: () => void
 }) {
-  const doc = extractedDocuments[instance.name]
-  const cost = processingCost(instance.events)
+  // Same key as the pane's, so this reads the cache.
+  const document = useQuery({
+    queryKey: keys.document(instance.id),
+    queryFn: () => api.getDocument(instance.id),
+  })
+  const cost = processingCost(trace?.spans ?? [])
+  const file = trace?.file
   const current = label(instance)
 
   return (
@@ -46,12 +55,14 @@ export function DocumentPopup({
               <StatusBadge value={current} />
             </div>
             <Row label="hash" value={instance.file_hash.slice(0, 12)} mono />
-            {doc ? (
+            {document.data ? (
               <>
-                <Row label="origen" value={doc.inputKind} />
-                <Row label="página" value={doc.page} />
-                <Row label="tamaño" value={`${doc.sizeKb} KB`} />
+                <Row label="origen" value={document.data.pipeline_version} />
+                <Row label="páginas" value={String(document.data.pages?.length ?? '—')} />
               </>
+            ) : null}
+            {file ? (
+              <Row label="tamaño" value={`${Math.round(file.size_bytes / 1024)} KB`} />
             ) : null}
             <Row
               label="símbolos"
@@ -136,19 +147,21 @@ function Row({
   )
 }
 
-function processingCost(events: InstanceEvent[]) {
-  let totalMs = 0
+/** Time is the root spans'; tokens and money are what the provider calls reported. */
+function processingCost(spans: SpanNode[]) {
+  const totalMs = spans.reduce((sum, span) => sum + (span.duration_ms ?? 0), 0)
   let input = 0
   let output = 0
   let usd = 0
-  for (const event of events) {
-    totalMs += event.duration_ms ?? 0
-    const data = event.data
-    if (!data) continue
-    input += asNumber(data.input_tokens)
-    output += asNumber(data.output_tokens)
-    usd += asNumber(data.cost)
+  const visit = (span: SpanNode) => {
+    if (span.step === 'provider_call' && span.data) {
+      input += asNumber(span.data.input_tokens)
+      output += asNumber(span.data.output_tokens)
+      usd += asNumber(span.data.cost_usd)
+    }
+    span.children.forEach(visit)
   }
+  spans.forEach(visit)
   return { totalMs, input, output, usd }
 }
 

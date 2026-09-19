@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { AlertTriangle, CheckCircle2, ChevronDown, FileSearch, XCircle } from 'lucide-react'
-import type { InstanceDetail, Rule, RuleResult, SymbolReading } from '../../api/contracts'
+import type { InstanceDetail, InstanceTrace, SpanNode, SymbolReading } from '../../api/contracts'
 import { formatMs } from '../../lib/format'
 import { cn } from '../../lib/cn'
 import { t } from '../../i18n'
 import { label, tone } from '../../lib/status'
 import { JsonHighlight } from '../../lib/jsonHighlight'
+import { symbolLabel } from '../../lib/symbols'
 import { StatusBadge } from '../shell/StatusBadge'
 import { DocumentPopup } from './DocumentPopup'
 
@@ -18,10 +19,10 @@ const ease = [0.23, 1, 0.32, 1] as const
  */
 export function TracePane({
   instance,
-  rules,
+  trace,
 }: {
   instance: InstanceDetail | undefined
-  rules: Rule[]
+  trace: InstanceTrace | undefined
 }) {
   if (!instance) {
     return (
@@ -37,7 +38,8 @@ export function TracePane({
       ? t(`instanceStatus.${instance.status}`)
       : current.replaceAll('_', ' ')
   const latest = instance.decisions.at(-1)
-  const results = (latest?.results ?? []) as RuleResult[]
+  // The trace carries each result with its rule's text.
+  const results = trace?.decisions.at(-1)?.rule_results ?? []
   const symbols = Object.entries(instance.symbols ?? {}) as [string, SymbolReading][]
   const fired = results.filter((result) => result.fires === true).length
   const errors = results.filter((result) => result.fires === null).length
@@ -47,12 +49,10 @@ export function TracePane({
       : current === 'NO_PAGAR' || current === 'RECHAZAR'
         ? XCircle
         : AlertTriangle
-  const ruleText = (outcome: RuleResult) =>
-    outcome.rule_text ?? rules.find((rule) => rule.id === outcome.rule_id)?.texto ?? `Regla ${outcome.rule_id}`
 
   return (
     <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-6 pb-4">
-      <DocumentHeader instance={instance} />
+      <DocumentHeader instance={instance} trace={trace} />
 
       <div className="mx-auto w-full max-w-[820px] rounded-[16px] bg-surface px-6 py-6 ring-1 ring-line">
         <div className="flex items-start gap-4">
@@ -104,7 +104,7 @@ export function TracePane({
             {results.map((outcome) => (
               <li key={outcome.rule_id} className="px-3 py-2">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[12px] text-ink">{ruleText(outcome)}</span>
+                  <span className="text-[12px] text-ink">{outcome.rule_text ?? `Regla ${outcome.rule_id}`}</span>
                   <span
                     className={cn(
                       'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px]',
@@ -142,7 +142,7 @@ export function TracePane({
             {symbols.map(([name, symbol]) => (
               <li key={name} className="px-3 py-1.5">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-mono text-[11px] text-muted">{name}</span>
+                  <span className="font-mono text-[11px] text-muted">{symbolLabel(name)}</span>
                   <span className="truncate font-mono text-[12px] text-ink">
                     {symbol.value === null || symbol.value === undefined
                       ? '—'
@@ -156,26 +156,10 @@ export function TracePane({
         )}
         </Block>
 
-        <Block title={`traza · ${instance.events.length} pasos`}>
-        <ol className="divide-y divide-hairline">
-          {instance.events.map((event, index) => (
-            <li key={`${event.step}-${index}`} className="px-3 py-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="font-mono text-[11px] text-ink">{event.step}</span>
-                <span className="font-mono text-[10.5px] text-faint">
-                  {event.duration_ms == null ? '—' : formatMs(event.duration_ms)}
-                </span>
-              </div>
-              {event.data ? (
-                <p className="break-words text-[11.5px] text-muted">
-                  {Object.entries(event.data)
-                    .map(([key, value]) => `${key} ${String(value)}`)
-                    .join(' · ')}
-                </p>
-              ) : null}
-            </li>
+        <Block title={`traza · ${trace?.spans.length ?? 0} pasos`}>
+          {(trace?.spans ?? []).map((span) => (
+            <SpanBlock key={span.span_id} span={span} />
           ))}
-        </ol>
         </Block>
 
         {instance.decisions.length > 1 ? (
@@ -195,14 +179,20 @@ export function TracePane({
         ) : null}
 
         <Block title="línea de la exportación">
-          <JsonHighlight value={{ file_id: instance.name, result: instance.decision }} />
+          <JsonHighlight value={{ file_id: instance.name, result: trace?.exported_decision ?? null }} />
         </Block>
       </div>
     </aside>
   )
 }
 
-function DocumentHeader({ instance }: { instance: InstanceDetail }) {
+function DocumentHeader({
+  instance,
+  trace,
+}: {
+  instance: InstanceDetail
+  trace: InstanceTrace | undefined
+}) {
   const [open, setOpen] = useState(false)
   return (
     <div className="mx-auto flex w-full max-w-[820px] items-center justify-between gap-3 py-3">
@@ -218,8 +208,27 @@ function DocumentHeader({ instance }: { instance: InstanceDetail }) {
         <FileSearch size={13} strokeWidth={1.7} />
         Abrir documento
       </button>
-      {open ? <DocumentPopup instance={instance} onClose={() => setOpen(false)} /> : null}
+      {open ? <DocumentPopup instance={instance} trace={trace} onClose={() => setOpen(false)} /> : null}
     </div>
+  )
+}
+
+/** One span and, one level down each, the spans it started. */
+function SpanBlock({ span }: { span: SpanNode }) {
+  const duration = span.duration_ms == null ? '—' : formatMs(span.duration_ms)
+  return (
+    <Block title={`${span.step} · ${span.status} · ${duration}`}>
+      {span.data ? (
+        <p className="break-words px-3 py-2 text-[11.5px] text-muted">
+          {Object.entries(span.data)
+            .map(([key, value]) => `${key} ${typeof value === 'object' ? JSON.stringify(value) : String(value)}`)
+            .join(' · ')}
+        </p>
+      ) : null}
+      {span.children.map((child) => (
+        <SpanBlock key={child.span_id} span={child} />
+      ))}
+    </Block>
   )
 }
 
