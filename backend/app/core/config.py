@@ -33,8 +33,10 @@ class Settings(BaseSettings):
     compile_concurrency: int = 5
     # `GET /health/planes`: over the last `health_window_minutes`, a plane is `down` from
     # this error rate, `degraded` from the lower one or when its p95 span duration passes
-    # its limit (`TRACE_HEALTH_P95_MS='{"agents": 90000}'`).
+    # its limit (`TRACE_HEALTH_P95_MS='{"agents": 90000}'`). Below `health_min_spans` spans
+    # in the window a plane is `ok` ("not enough data"): one failed span out of one is noise.
     health_window_minutes: int = 15
+    health_min_spans: int = 5
     health_degraded_error_rate: float = 0.05
     health_down_error_rate: float = 0.5
     health_p95_ms: dict[str, int] = {"ingestion": 10_000, "agents": 60_000, "execution": 5_000}

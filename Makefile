@@ -1,5 +1,5 @@
 # trace-it: quick start. See docs/team-guide.md.
-.PHONY: setup ocr-models ocr-check compile activate load-frozen demo erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down check down reset-db
+.PHONY: setup ocr-models ocr-check compile activate load-frozen demo trace-decision erp erp-sync backup export-batch check-outcomes test test-db test-e2e eval-compiler eval-norm demo-llm-down check down reset-db
 
 LOAD = docker compose exec -T backend python -m app.cli load /processes/invoice-payment.json
 DEMO_ARGS ?=
@@ -41,9 +41,16 @@ demo:
 	test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
 	uv run --project backend --locked --env-file .env python tools/demo_run.py $(DEMO_ARGS)
 
-erp:
+# FILE=<file_id> [PROCESS=<id>]: follow one invoice through the running API, as text: state,
+# decisions (author, reason, process version, rules hash), evidence, latency, errors, retries
+# and pending work (tools/trace_decision.py). Uses BACKEND_PORT like `make setup`.
+trace-decision:
+	test -n "$(FILE)"
+	python3 tools/trace_decision.py "$(FILE)" $(if $(PROCESS),--process $(PROCESS))
+
+erp:  # ERP_PORT=<port> if 8009 is taken; start `make setup` with the same ERP_PORT
 	test -f .context/500-sombras-de-alberto/alberto_erp.py || git submodule update --init .context/500-sombras-de-alberto
-	cd .context/500-sombras-de-alberto && python3 alberto_erp.py
+	cd .context/500-sombras-de-alberto && python3 alberto_erp.py --puerto $${ERP_PORT:-8009}
 
 erp-sync:  # needs `make erp` running; writes a new erp snapshot (docs/sources-http.md)
 	cd backend && uv run python -m app.cli sources sync ../processes/invoice-payment.json
@@ -66,7 +73,7 @@ check-outcomes:  # OUT=<file> FILES=<folder of PDFs>: one line per file, valid r
 	cd backend && uv run python -m app.cli check-outcomes $(abspath $(OUT)) --files $(abspath $(FILES))
 
 # Tests use their own database (recreated each run), never the one `make setup` fills.
-TEST_DB_URL ?= postgresql+psycopg://trace:trace@localhost:5432/trace_test
+TEST_DB_URL ?= postgresql+psycopg://trace:trace@localhost:$${DB_PORT:-5432}/trace_test
 PREPARE_DB = cd backend && TRACE_DATABASE_URL=$(TEST_DB_URL) uv run python -m tests.support.prepare_db
 PYTEST = cd backend && TRACE_DATABASE_URL=$(TEST_DB_URL) uv run pytest -rs
 
@@ -93,6 +100,7 @@ demo-llm-down:  # real LLMs: the primary model's provider is unreachable, a fall
 
 check:
 	cd backend && uv run ruff check . && uv run ruff format --check .
+	cd tools && uv run --project ../backend ruff check . && uv run --project ../backend ruff format --check .
 	$(MAKE) test test-e2e
 
 down:

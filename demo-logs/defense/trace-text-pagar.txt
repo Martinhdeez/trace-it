@@ -1,0 +1,47 @@
+== 2026-01-08_P001.pdf  (instance 1, process 1 'Invoice payment')
+state: DECIDED   exported result: PAGAR
+file: sha256 12a5e1eff429, 1904 bytes, read 2026-09-19T10:03:29.436666Z
+
+-- Decisions (oldest first; history is append-only)
+#1 2026-09-19T10:05:12  PAGAR  by engine
+   reason: -
+   process version: v1 (published by Martín: Explicit CLI --activate approval; content 8503b6fc8d22)   rules hash: cf741d48f1e4
+   no rule fired: default decision (16 rules evaluated)
+
+-- Evidence: symbols and their origin
+   base            2489.99                                  document:2eff8dc5b1594e518df6de32ce65746e
+   date            2026-01-08                               document:2eff8dc5b1594e518df6de32ce65746e
+   file_id         2026-01-08_P001.pdf                      document:2eff8dc5b1594e518df6de32ce65746e
+   free_text       [Page 1; reader=native; document cont... document:2eff8dc5b1594e518df6de32ce65746e
+   iban            ES2100491500051234567890                 document:2eff8dc5b1594e518df6de32ce65746e
+   invoice_number  2026/11604                               document:2eff8dc5b1594e518df6de32ce65746e
+   issuer_name     None                                     document:2eff8dc5b1594e518df6de32ce65746e
+   issuer_nif      B46102331                                document:2eff8dc5b1594e518df6de32ce65746e
+   purchase_order  PO-2026-0096                             document:2eff8dc5b1594e518df6de32ce65746e
+   total           3012.89                                  document:2eff8dc5b1594e518df6de32ce65746e
+   vat_amount      522.90                                   document:2eff8dc5b1594e518df6de32ce65746e
+   vat_rate        21                                       document:2eff8dc5b1594e518df6de32ce65746e
+
+-- Latency per step (spans of this instance, ADR 0018)
+   upload_document          ok    152 ms
+     store_file             ok    0 ms
+     extraction             ok    18 ms
+       native_text          ok    7 ms
+     ingest_document        ok    14 ms
+   reextract_document       ok    137 ms
+   run_process              ok    1237 ms  (batch: 500 instances, 16 rules)
+     decision               ok    -  -> PAGAR
+   export_outcomes          ok    27 ms
+
+-- Errors and retries
+   extraction 2eff8dc5b159: 0 OCR, 0 vision, 0 judge calls; warnings 0 
+   rules [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]: no LLM compilation (hand-written or loaded from a pack)
+   rule runtime errors across their runs: 0
+   erp sync 2026-09-19T10:03:41 (ok): 31 requests, 3 retries, 0 timeouts, 5480 ms
+   no error span on this instance
+
+-- Pending work
+   not escalated (latest decision by engine)
+   no stale-decision alert on this instance (ADR 0026)
+   process: 28 escalated, 0 pending, 1 open alerts; decisions {'ESCALAR': 28, 'PAGAR': 436, 'NO_PAGAR': 36}
+   planes now: ingestion ok, agents ok, execution ok
