@@ -1,0 +1,1098 @@
+[
+  {
+    "id": 17,
+    "process_id": 2,
+    "norm_rule_id": 1,
+    "text": "The invoice's `issuer_nif` (normalised) must appear as `suppliers.nif` (normalised) in the suppliers master.",
+    "type": "requirement",
+    "decision": "NO_PAGAR",
+    "status": "active",
+    "hash": "0f3d4ae8e3c179f2fc20c1f492da09c6cc4534f0dfe7355184e409c9ab174d7d",
+    "report": {
+      "norm": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "policies": [
+          "Pagar solo si se cumplen las condiciones: la frase fija la condición de pago, no el resultado de su incumplimiento."
+        ],
+        "norm_rule": "Pagar solo si el NIF esta en el maestro y el IBAN de la factura coincide con el maestro.",
+        "kind_reason": "The data is present and the NIF is absent from the master, which clearly breaks the payment condition.",
+        "interpretation": "I read 'el NIF esta en el maestro' as the invoice's issuer_nif matching a suppliers.nif row after normalisation; the sentence names no outcome for this failure, so it is a policy check.",
+        "decision_source": "policy"
+      },
+      "tests": [
+        {
+          "got": "does not fire",
+          "name": "issuer_nif_exact_match_in_suppliers",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (Issuer NIF B99999999 is not in the suppliers master)",
+          "name": "issuer_nif_absent_from_suppliers_master",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "issuer_nif_matches_after_normalising_both_sides",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "issuer_nif_matches_only_after_removing_dots_and_lowercase",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "empty_issuer_nif_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "missing_issuer_nif_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "issuer_nif_matches_a_later_supplier_row",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (Issuer NIF B30455813 is not in the suppliers master)",
+          "name": "issuer_nif_differs_from_all_suppliers_by_one_character",
+          "passed": true,
+          "expected": true
+        }
+      ],
+      "valid": true,
+      "reviews": [],
+      "attempts": 1,
+      "activation": {
+        "why": "changes 0/0 past decisions (limit 100%)",
+        "auto": true,
+        "changed": 0,
+        "decided": 0
+      },
+      "discrepancies": []
+    },
+    "created_at": "2026-09-19T07:25:05.309088Z",
+    "activated_at": "2026-09-19T07:25:28.960944Z"
+  },
+  {
+    "id": 18,
+    "process_id": 2,
+    "norm_rule_id": 1,
+    "text": "The invoice's `iban` (normalised) must equal the `suppliers.iban` (normalised) of the supplier whose `suppliers.nif` (normalised) equals the invoice's `issuer_nif` (normalised).",
+    "type": "requirement",
+    "decision": "NO_PAGAR",
+    "status": "active",
+    "hash": "398ce6ff3b64231619db75e20a5ce141a0909cd41b15728aef8643695d850086",
+    "report": {
+      "norm": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "policies": [
+          "Pagar solo si se cumplen las condiciones: la frase fija la condición de pago, no el resultado de su incumplimiento."
+        ],
+        "norm_rule": "Pagar solo si el NIF esta en el maestro y el IBAN de la factura coincide con el maestro.",
+        "kind_reason": "The invoice IBAN is present and differs from the master's IBAN for that supplier, a clear breach of the payment condition.",
+        "interpretation": "I read 'el IBAN de la factura coincide con el maestro' as comparing the invoice iban with the suppliers.iban of the matched supplier row; no outcome is named, so it is a policy check.",
+        "decision_source": "policy"
+      },
+      "tests": [
+        {
+          "got": "does not fire",
+          "name": "iban matches supplier iban for matching nif",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (IBAN ES0000000000000000000000 is not the supplier's)",
+          "name": "iban differs from supplier iban for matching nif",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "nif normalisation lowercase and hyphens still matches",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "iban normalisation spaces and lowercase still matches",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "no supplier row with matching nif does not fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "empty issuer_nif does not fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "empty iban does not fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "correct supplier selected among several by nif",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (IBAN ES2100491500051234567890 is not the supplier's)",
+          "name": "matching nif but iban belongs to another supplier fires",
+          "passed": true,
+          "expected": true
+        }
+      ],
+      "valid": true,
+      "reviews": [],
+      "attempts": 1,
+      "activation": {
+        "why": "changes 0/0 past decisions (limit 100%)",
+        "auto": true,
+        "changed": 0,
+        "decided": 0
+      },
+      "discrepancies": []
+    },
+    "created_at": "2026-09-19T07:25:11.754915Z",
+    "activated_at": "2026-09-19T07:25:27.452501Z"
+  },
+  {
+    "id": 19,
+    "process_id": 2,
+    "norm_rule_id": 2,
+    "text": "The invoice's `purchase_order` (normalised) must exist as `orders.purchase_order` (normalised).",
+    "type": "requirement",
+    "decision": "NO_PAGAR",
+    "status": "active",
+    "hash": "8c644c4a18e37de48236e94412e27d91d3e5319e5c87ce00484f0522010d8b0e",
+    "report": {
+      "norm": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "policies": [],
+        "norm_rule": "El pedido debe existir, pertenecer al proveedor y el importe de la factura debe ser igual al del pedido (tolerancia 0,01 EUR).",
+        "kind_reason": "The order reference is present but no matching order row exists, which clearly breaks the condition.",
+        "interpretation": "I read 'el pedido debe existir' as the invoice purchase_order matching an orders row; no outcome is named, so it is a policy check.",
+        "decision_source": "policy"
+      },
+      "tests": [
+        {
+          "got": "fires (PURCHASE_ORDER_NOT_FOUND)",
+          "name": "Fires when purchase_order not found in orders",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "Does not fire when purchase_order exists exactly",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "Does not fire when purchase_order matches after normalising case",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "Does not fire when purchase_order matches after normalising spaces",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "Does not fire when instance purchase_order is empty string",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "Does not fire when instance purchase_order is None",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "Does not fire when instance purchase_order is missing",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (PURCHASE_ORDER_NOT_FOUND)",
+          "name": "Fires when orders source is empty",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "Does not fire when orders row purchase_order matches after normalising spaces and case",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (PURCHASE_ORDER_NOT_FOUND)",
+          "name": "Fires when orders row purchase_order is None",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "Does not fire when instance purchase_order is whitespace only (normalises to empty)",
+          "passed": true,
+          "expected": false
+        }
+      ],
+      "valid": true,
+      "reviews": [],
+      "attempts": 1,
+      "activation": {
+        "why": "changes 0/0 past decisions (limit 100%)",
+        "auto": true,
+        "changed": 0,
+        "decided": 0
+      },
+      "discrepancies": []
+    },
+    "created_at": "2026-09-19T07:25:11.764672Z",
+    "activated_at": "2026-09-19T07:25:41.291732Z"
+  },
+  {
+    "id": 20,
+    "process_id": 2,
+    "norm_rule_id": 2,
+    "text": "The order found for the invoice's `purchase_order` must belong to the supplier: `orders.supplier_id` must equal the `suppliers.id` of the supplier whose `suppliers.nif` (normalised) equals the invoice's `issuer_nif` (normalised).",
+    "type": "requirement",
+    "decision": "NO_PAGAR",
+    "status": "active",
+    "hash": "6c1e050598deec43939396a62dc37f0ff8841bb4f735c42c5b972f216da08337",
+    "report": {
+      "norm": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "policies": [],
+        "norm_rule": "El pedido debe existir, pertenecer al proveedor y el importe de la factura debe ser igual al del pedido (tolerancia 0,01 EUR).",
+        "kind_reason": "The order exists and its supplier_id differs from the invoice issuer's supplier, a clear breach of the condition.",
+        "interpretation": "I read 'pertenecer al proveedor' as the order's supplier_id matching the supplier identified by the invoice's issuer_nif; no outcome is named, so it is a policy check.",
+        "decision_source": "policy"
+      },
+      "tests": [
+        {
+          "got": "fires (Order PO20260002 belongs to supplier P003, not to P001)",
+          "name": "order_belongs_to_other_supplier_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "order_belongs_to_same_supplier_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "nif_normalised_with_spaces_hyphens_dots_and_case_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (Order PO20260002 belongs to supplier P002, not to P001)",
+          "name": "nif_normalised_matches_but_order_supplier_differs_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "purchase_order_normalised_with_spaces_and_case_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "no_order_row_for_purchase_order_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "no_supplier_row_for_issuer_nif_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "empty_issuer_nif_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "empty_purchase_order_does_not_fire",
+          "passed": true,
+          "expected": false
+        }
+      ],
+      "valid": true,
+      "reviews": [],
+      "attempts": 1,
+      "activation": {
+        "why": "changes 0/0 past decisions (limit 100%)",
+        "auto": true,
+        "changed": 0,
+        "decided": 0
+      },
+      "discrepancies": []
+    },
+    "created_at": "2026-09-19T07:25:11.772066Z",
+    "activated_at": "2026-09-19T07:25:29.043734Z"
+  },
+  {
+    "id": 21,
+    "process_id": 2,
+    "norm_rule_id": 2,
+    "text": "The invoice's `total` must match the order's `orders.total_amount` within ±0.01 EUR (abs(cents(total) - cents(total_amount)) <= 1).",
+    "type": "requirement",
+    "decision": "NO_PAGAR",
+    "status": "active",
+    "hash": "ba9561a63ed5c1cb18f14365e5b4d3fdd32752df36c4ba7062f2b5c3e6f38cdd",
+    "report": {
+      "norm": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "policies": [],
+        "norm_rule": "El pedido debe existir, pertenecer al proveedor y el importe de la factura debe ser igual al del pedido (tolerancia 0,01 EUR).",
+        "kind_reason": "Both amounts are present and differ beyond the tolerance, a clear breach of the condition.",
+        "interpretation": "I read 'el importe de la factura debe ser igual al del pedido' as the invoice total compared with orders.total_amount with the stated 0.01 EUR tolerance; no outcome is named, so it is a policy check.",
+        "decision_source": "policy"
+      },
+      "tests": [
+        {
+          "got": "does not fire",
+          "name": "total_matches_order_exactly",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "total_within_one_cent_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (Total 9221.77 != order 9221.75)",
+          "name": "total_two_cents_off_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "purchase_order_normalised_before_lookup",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "order_not_found_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "total_as_text_matches",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "total_empty_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "order_total_amount_empty_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (Total 9221.755 != order 9221.74)",
+          "name": "rounding_half_up_makes_two_cents_off_fire",
+          "passed": true,
+          "expected": true
+        }
+      ],
+      "valid": true,
+      "reviews": [],
+      "attempts": 1,
+      "activation": {
+        "why": "changes 0/0 past decisions (limit 100%)",
+        "auto": true,
+        "changed": 0,
+        "decided": 0
+      },
+      "discrepancies": []
+    },
+    "created_at": "2026-09-19T07:25:11.778866Z",
+    "activated_at": "2026-09-19T07:25:35.844635Z"
+  },
+  {
+    "id": 22,
+    "process_id": 2,
+    "norm_rule_id": 3,
+    "text": "The invoice's `vat_amount` must match `base` * `vat_rate` / 100 within ±0.01 EUR (abs(cents(vat_amount) - cents(base * vat_rate / 100)) <= 1).",
+    "type": "requirement",
+    "decision": "NO_PAGAR",
+    "status": "active",
+    "hash": "66d797c1630f2b3d8b192ca58ca963d29041d558c124dcab41d68a3a80488ddd",
+    "report": {
+      "norm": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "policies": [],
+        "norm_rule": "El IVA debe estar bien calculado y el total debe ser base + IVA, con la misma tolerancia de 0,01 EUR.",
+        "kind_reason": "Base, rate and VAT amount are present and the VAT is miscalculated, a clear breach of the condition.",
+        "interpretation": "I read 'el IVA debe estar bien calculado' as vat_amount equalling base times vat_rate (a percentage) with the 0.01 EUR tolerance; no outcome is named, so it is a policy check.",
+        "decision_source": "policy"
+      },
+      "tests": [
+        {
+          "got": "does not fire",
+          "name": "exact_match_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "one_cent_high_within_tolerance_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "one_cent_low_within_tolerance_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (VAT_AMOUNT_MISMATCH)",
+          "name": "two_cents_high_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "fires (VAT_AMOUNT_MISMATCH)",
+          "name": "two_cents_low_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "text_amounts_exact_match_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "rounding_half_up_expected_vat_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "zero_rate_zero_vat_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (VAT_AMOUNT_MISMATCH)",
+          "name": "large_amounts_two_cents_high_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "missing_vat_amount_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "missing_base_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "empty_string_vat_amount_does_not_fire",
+          "passed": true,
+          "expected": false
+        }
+      ],
+      "valid": true,
+      "reviews": [],
+      "attempts": 1,
+      "activation": {
+        "why": "changes 0/0 past decisions (limit 100%)",
+        "auto": true,
+        "changed": 0,
+        "decided": 0
+      },
+      "discrepancies": []
+    },
+    "created_at": "2026-09-19T07:25:11.786235Z",
+    "activated_at": "2026-09-19T07:26:04.116431Z"
+  },
+  {
+    "id": 23,
+    "process_id": 2,
+    "norm_rule_id": 3,
+    "text": "The invoice's `total` must match `base` + `vat_amount` within ±0.01 EUR (abs(cents(total) - cents(base + vat_amount)) <= 1).",
+    "type": "requirement",
+    "decision": "NO_PAGAR",
+    "status": "active",
+    "hash": "09a9864f7139f8d1a9d4af29d023ff67e35c0459105c969f09c23d95582dcb43",
+    "report": {
+      "norm": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "policies": [],
+        "norm_rule": "El IVA debe estar bien calculado y el total debe ser base + IVA, con la misma tolerancia de 0,01 EUR.",
+        "kind_reason": "Base, VAT and total are present and the total does not equal base + VAT, a clear breach of the condition.",
+        "interpretation": "I read 'el total debe ser base + IVA' as total equalling base plus vat_amount with the same 0.01 EUR tolerance; no outcome is named, so it is a policy check.",
+        "decision_source": "policy"
+      },
+      "tests": [
+        {
+          "got": "does not fire",
+          "name": "total_exactly_matches_base_plus_vat_no_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "total_one_cent_above_sum_no_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "total_one_cent_below_sum_no_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (Total 121.02 != base+vat 100+21)",
+          "name": "total_two_cents_above_sum_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "fires (Total 120.98 != base+vat 100+21)",
+          "name": "total_two_cents_below_sum_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "text_amounts_matching_no_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "half_cent_rounding_half_up_no_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "empty_base_does_not_fire",
+          "passed": true,
+          "expected": false
+        }
+      ],
+      "valid": true,
+      "reviews": [],
+      "attempts": 1,
+      "activation": {
+        "why": "changes 0/0 past decisions (limit 100%)",
+        "auto": true,
+        "changed": 0,
+        "decided": 0
+      },
+      "discrepancies": []
+    },
+    "created_at": "2026-09-19T07:25:11.793451Z",
+    "activated_at": "2026-09-19T07:25:59.479243Z"
+  },
+  {
+    "id": 24,
+    "process_id": 2,
+    "norm_rule_id": 4,
+    "text": "The invoice's `date` must be a valid calendar date (a real YYYY-MM-DD day, e.g. not 2026-02-31).",
+    "type": "requirement",
+    "decision": "NO_PAGAR",
+    "status": "active",
+    "hash": "f59b47c69d5bb68041770d78d3f891e68a08b045684349a562d7979e30962d54",
+    "report": {
+      "norm": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "policies": [],
+        "norm_rule": "La fecha debe ser valida y no futura.",
+        "kind_reason": "The date is present and impossible, which clearly breaks the condition.",
+        "interpretation": "I read 'la fecha debe ser valida' as the invoice date being a real calendar date; no outcome is named, so it is a policy check.",
+        "decision_source": "policy"
+      },
+      "tests": [
+        {
+          "got": "does not fire",
+          "name": "valid_date_ordinary_day",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "valid_date_end_of_january",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (DATE 2026-02-31 is not a real calendar day)",
+          "name": "impossible_day_february_31",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "fires (DATE 2026-04-31 is not a real calendar day)",
+          "name": "impossible_day_april_31",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "fires (DATE 2026-13-01 is not a real calendar day)",
+          "name": "invalid_month_13",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "fires (DATE 2026-00-15 is not a real calendar day)",
+          "name": "invalid_month_00",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "fires (DATE 2026-04-00 is not a real calendar day)",
+          "name": "invalid_day_00",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "leap_year_february_29_valid",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (DATE 2026-02-29 is not a real calendar day)",
+          "name": "non_leap_year_february_29_invalid",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "empty_date_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "null_date_does_not_fire",
+          "passed": true,
+          "expected": false
+        }
+      ],
+      "valid": true,
+      "reviews": [],
+      "attempts": 1,
+      "activation": {
+        "why": "changes 0/0 past decisions (limit 100%)",
+        "auto": true,
+        "changed": 0,
+        "decided": 0
+      },
+      "discrepancies": []
+    },
+    "created_at": "2026-09-19T07:25:11.799090Z",
+    "activated_at": "2026-09-19T07:25:59.160190Z"
+  },
+  {
+    "id": 25,
+    "process_id": 2,
+    "norm_rule_id": 4,
+    "text": "The invoice's `date` must not be later than `parameters.cut_off_date` (compared as dates).",
+    "type": "requirement",
+    "decision": "NO_PAGAR",
+    "status": "active",
+    "hash": "16b3f7d6bed9a7b2edd3baa315de26d0b23011eaa6b6707a26f142eb63ed282c",
+    "report": {
+      "norm": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "policies": [],
+        "norm_rule": "La fecha debe ser valida y no futura.",
+        "kind_reason": "The date is present and after the cut-off, a clear breach of the condition.",
+        "interpretation": "I read 'no futura' as the invoice date not exceeding the process cut-off date from parameters; no outcome is named, so it is a policy check.",
+        "decision_source": "policy"
+      },
+      "tests": [
+        {
+          "got": "does not fire",
+          "name": "date_before_cut_off_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "date_equal_to_cut_off_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (DATE_AFTER_CUT_OFF)",
+          "name": "date_one_day_after_cut_off_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "fires (DATE_AFTER_CUT_OFF)",
+          "name": "date_much_later_than_cut_off_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "fires (DATE_AFTER_CUT_OFF)",
+          "name": "date_after_a_different_cut_off_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "date_before_a_different_cut_off_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "empty_date_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "impossible_date_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "missing_parameters_row_does_not_fire",
+          "passed": true,
+          "expected": false
+        }
+      ],
+      "valid": true,
+      "reviews": [],
+      "attempts": 1,
+      "activation": {
+        "why": "changes 0/0 past decisions (limit 100%)",
+        "auto": true,
+        "changed": 0,
+        "decided": 0
+      },
+      "discrepancies": []
+    },
+    "created_at": "2026-09-19T07:25:11.804826Z",
+    "activated_at": "2026-09-19T07:25:42.960045Z"
+  },
+  {
+    "id": 26,
+    "process_id": 2,
+    "norm_rule_id": 5,
+    "text": "The `erp` entry of the invoice's `purchase_order` (normalised) must have `erp.status` = 'PENDIENTE'.",
+    "type": "requirement",
+    "decision": "NO_PAGAR",
+    "status": "active",
+    "hash": "c7875ec52ebb115c98ad742cd7480c62e70a1706fb98a2d6df84bdc2ee9b19e7",
+    "report": {
+      "norm": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "policies": [],
+        "norm_rule": "Estado ERP del pedido: PENDIENTE. Nunca pagar dos veces el mismo pedido.",
+        "kind_reason": "The ERP entry exists and its status is not PENDIENTE, a clear breach of the condition.",
+        "interpretation": "I read 'Estado ERP del pedido: PENDIENTE' as the erp row for the invoice's purchase_order having status PENDIENTE; no outcome is named, so it is a policy check.",
+        "decision_source": "policy"
+      },
+      "tests": [
+        {
+          "got": "does not fire",
+          "name": "erp_entry_pending_matching_po_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (The ERP says PAGADA)",
+          "name": "erp_entry_pagada_matching_po_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "no_erp_entry_for_po_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "po_normalised_case_and_spaces_matches_pending_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (The ERP says PAGADA)",
+          "name": "po_normalised_case_and_spaces_matches_pagada_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "erp_entry_with_different_po_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "empty_purchase_order_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "two_erp_entries_same_po_both_pending_does_not_fire",
+          "passed": true,
+          "expected": false
+        }
+      ],
+      "valid": true,
+      "reviews": [],
+      "attempts": 1,
+      "activation": {
+        "why": "changes 0/0 past decisions (limit 100%)",
+        "auto": true,
+        "changed": 0,
+        "decided": 0
+      },
+      "discrepancies": []
+    },
+    "created_at": "2026-09-19T07:25:11.810383Z",
+    "activated_at": "2026-09-19T07:25:56.526007Z"
+  },
+  {
+    "id": 27,
+    "process_id": 2,
+    "norm_rule_id": 5,
+    "text": "The `erp` entry of the invoice's `purchase_order` (normalised) must not have `erp.status` = 'PAGADA' (the order must not already be paid).",
+    "type": "prohibition",
+    "decision": "NO_PAGAR",
+    "status": "active",
+    "hash": "76e32fb9e9dca32f8b1849f0933d309ff809656dd1a9796e97e6e9d394334125",
+    "report": {
+      "norm": {
+        "kind": "violation",
+        "quote": "",
+        "covered": [],
+        "policies": [],
+        "norm_rule": "Estado ERP del pedido: PENDIENTE. Nunca pagar dos veces el mismo pedido.",
+        "kind_reason": "The external ERP record shows the order already paid, which clearly proves paying again would be wrong.",
+        "interpretation": "I read 'Nunca pagar dos veces el mismo pedido' as forbidding payment when the erp record of the order already shows status PAGADA; no outcome is named, so it is a policy check.",
+        "decision_source": "policy"
+      },
+      "tests": [
+        {
+          "got": "fires (The ERP says PAGADA for PO-2026-0001)",
+          "name": "erp_entry_of_order_is_PAGADA_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "erp_entry_of_order_is_PENDIENTE_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "no_erp_entry_for_order_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (The ERP says PAGADA for PO-2026-0001)",
+          "name": "purchase_order_normalised_lowercase_matches_PAGADA_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "fires (The ERP says PAGADA for PO-2026-0001)",
+          "name": "erp_purchase_order_with_spaces_normalised_matches_PAGADA_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "empty_purchase_order_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (The ERP says PAGADA for PO-2026-0001)",
+          "name": "one_of_several_erp_entries_for_order_is_PAGADA_fires",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "PAGADA_entry_for_a_different_order_does_not_fire",
+          "passed": true,
+          "expected": false
+        }
+      ],
+      "valid": true,
+      "reviews": [],
+      "attempts": 1,
+      "activation": {
+        "why": "changes 0/0 past decisions (limit 100%)",
+        "auto": true,
+        "changed": 0,
+        "decided": 0
+      },
+      "discrepancies": []
+    },
+    "created_at": "2026-09-19T07:25:11.816301Z",
+    "activated_at": "2026-09-19T07:25:59.962793Z"
+  },
+  {
+    "id": 28,
+    "process_id": 2,
+    "norm_rule_id": 5,
+    "text": "No other instance in `others` may carry the same normalised `purchase_order` as this invoice.",
+    "type": "prohibition",
+    "decision": "ESCALAR",
+    "status": "active",
+    "hash": "8e88465527489e8a3f9093d599f0aad3b21ae0d1d51012e8dc5d185118a3a0fd",
+    "report": {
+      "norm": {
+        "kind": "doubt",
+        "quote": "",
+        "covered": [],
+        "policies": [],
+        "norm_rule": "Estado ERP del pedido: PENDIENTE. Nunca pagar dos veces el mismo pedido.",
+        "kind_reason": "Several instances share an order reference that should be unique, so the system cannot tell which invoice is legitimate and a person must decide.",
+        "interpretation": "I read 'Nunca pagar dos veces el mismo pedido' as also covering duplicate invoices for the same order across instances; since the system cannot tell which is legitimate, this is a doubt check.",
+        "decision_source": "policy"
+      },
+      "tests": [
+        {
+          "got": "does not fire",
+          "name": "no_other_instance_shares_purchase_order",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (Same order as: a.pdf)",
+          "name": "other_instance_same_purchase_order_exact",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "fires (Same order as: a.pdf)",
+          "name": "other_instance_same_purchase_order_different_case_and_spaces",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "fires (Same order as: a.pdf)",
+          "name": "other_instance_same_purchase_order_internal_space",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "empty_purchase_order_in_this_invoice_does_not_fire",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "does not fire",
+          "name": "other_instances_with_empty_purchase_order_are_not_matches",
+          "passed": true,
+          "expected": false
+        },
+        {
+          "got": "fires (Same order as: b.pdf)",
+          "name": "duplicate_among_many_other_instances",
+          "passed": true,
+          "expected": true
+        },
+        {
+          "got": "does not fire",
+          "name": "no_other_instances_at_all",
+          "passed": true,
+          "expected": false
+        }
+      ],
+      "valid": true,
+      "reviews": [],
+      "attempts": 1,
+      "activation": {
+        "why": "changes 0/0 past decisions (limit 100%)",
+        "auto": true,
+        "changed": 0,
+        "decided": 0
+      },
+      "discrepancies": []
+    },
+    "created_at": "2026-09-19T07:25:11.821596Z",
+    "activated_at": "2026-09-19T07:26:00.333905Z"
+  }
+]

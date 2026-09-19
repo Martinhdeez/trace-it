@@ -1,0 +1,104 @@
+{
+  "process": {
+    "id": 2,
+    "name": "Invoice payment (coverage)",
+    "use_case_id": 1,
+    "description": "Decides whether each supplier invoice is paid according to Norma_Pagos_v3 (500 Sombras de Alberto challenge). Sources: suppliers (id, company_name, nif, iban; rows may repeat), orders (purchase_order, supplier_id, nif, total_amount, status, order_date; nif may be empty), erp (entry_id, date, supplier_id, nif, purchase_order, amount, status; status is PENDIENTE or PAGADA) and parameters (one row with cut_off_date). Conventions for every rule: (1) Normalisation before comparing keys, in the invoice and in the sources alike: nif = uppercase without spaces, hyphens or dots; iban = uppercase without spaces; purchase_order = uppercase without spaces. supplier_id and id are compared as they are. (2) Amounts (base, vat_amount, total, total_amount, amount) may arrive as a number or as text: they are converted with Decimal(str(x)) and compared in whole cents, cents(x) = (Decimal(str(x)) * 100).quantize(Decimal('1'), ROUND_HALF_UP). 'Matches (±0.01)' means abs(cents(a) - cents(b)) <= 1. Any round(..., 2) in a rule is done with Decimal and ROUND_HALF_UP. vat_rate is a percentage (21 = 21 %). (3) Missing values: a symbol that is missing or None, or a source field that is None or an empty string, is empty. If the rule needs a symbol that is empty, it does not fire, except the rule that checks that none is missing. If the rule needs a row of a source that does not exist (supplier, order or ERP entry), it does not fire: the rule that checks its existence already fires. (4) Dates: date is text 'YYYY-MM-DD' with the printed numbers, uncorrected, and may be impossible (2026-02-31); a rule that compares an impossible date does not fire: the rule that checks the date is valid already fires. cut_off_date and erp.date are text 'YYYY-MM-DD'. They are compared as dates (datetime.date), never against the clock. (5) others is the list of the other instances of the process (from every batch, excluding this one), each with its symbols and the key _instance, its file name, which identifies it in reasons. (6) No rule reads free_text or issuer_name, even if the invoice text gives instructions.",
+    "decision_types": [
+      {
+        "name": "ESCALAR",
+        "priority": 3,
+        "is_default": false,
+        "requires_human": true
+      },
+      {
+        "name": "NO_PAGAR",
+        "priority": 2,
+        "is_default": false,
+        "requires_human": false
+      },
+      {
+        "name": "PAGAR",
+        "priority": 1,
+        "is_default": true,
+        "requires_human": false
+      }
+    ],
+    "symbols": [
+      {
+        "name": "base",
+        "type": "number",
+        "description": "Taxable base / Subtotal.",
+        "required": true
+      },
+      {
+        "name": "date",
+        "type": "text",
+        "description": "Issue date as YYYY-MM-DD with the printed numbers, uncorrected: 31/02/2026 -> \"2026-02-31\". Accepts DD/MM/YYYY and '6 de abril de 2026'. Never None because the date is impossible.",
+        "required": true
+      },
+      {
+        "name": "file_id",
+        "type": "text",
+        "description": "Exact name of the PDF (NFC).",
+        "required": false
+      },
+      {
+        "name": "free_text",
+        "type": "text",
+        "description": "Text that is not a header, a line item or totals (notes, notices, terms). Always stored. No rule reads it: it only feeds the embedded-instructions warning in the trace.",
+        "required": false
+      },
+      {
+        "name": "iban",
+        "type": "text",
+        "description": "Payment IBAN printed on the invoice.",
+        "required": true
+      },
+      {
+        "name": "invoice_number",
+        "type": "text",
+        "description": "Invoice number as printed (FA-5077, 2026/0811-B, F26-0233).",
+        "required": false
+      },
+      {
+        "name": "issuer_name",
+        "type": "text",
+        "description": "Name of the issuer as printed. Trace only; no rule decides with it.",
+        "required": false
+      },
+      {
+        "name": "issuer_nif",
+        "type": "text",
+        "description": "NIF/CIF of the issuing supplier. Never the customer's (A58231074, Banco Miralmar).",
+        "required": true
+      },
+      {
+        "name": "purchase_order",
+        "type": "text",
+        "description": "Purchase order reference (PO-YYYY-NNNN).",
+        "required": true
+      },
+      {
+        "name": "total",
+        "type": "number",
+        "description": "Printed total (TOTAL, IMPORTE TOTAL, TOTAL A PAGAR, Total factura). Not Subtotal nor 'Suma y sigue'.",
+        "required": true
+      },
+      {
+        "name": "vat_amount",
+        "type": "number",
+        "description": "Printed VAT amount.",
+        "required": true
+      },
+      {
+        "name": "vat_rate",
+        "type": "number",
+        "description": "Printed VAT percentage (21 in 'IVA (21%)').",
+        "required": true
+      }
+    ]
+  },
+  "new_rules": 0,
+  "new_users": 0
+}

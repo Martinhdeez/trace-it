@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 590" font-family="Helvetica, Arial, sans-serif" font-size="13" role="img" aria-label="Arquitectura de trace-it">
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker>
+<marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#888"/></marker>
+</defs>
+<style>
+.lane{stroke:#bbb;stroke-width:1;}
+.lt{font-size:12px;font-weight:bold;fill:#555;letter-spacing:.3px}
+.b{stroke:#333;stroke-width:1.2;rx:6;}
+.llm{fill:#fdf1dc;}
+.det{fill:#e3eef9;}
+.st{fill:#eef3e6;}
+.ppl{fill:#e8f5e4;}
+.obs{fill:#f1ecf7;}
+.io{fill:#fff;}
+.t{font-weight:bold;fill:#111}
+.s{font-size:11px;fill:#333}
+.e{stroke:#333;stroke-width:1.4;fill:none;marker-end:url(#a)}
+.d{stroke:#888;stroke-width:1.2;fill:none;stroke-dasharray:5 4;marker-end:url(#g)}
+.el{font-size:10.5px;fill:#444;font-style:italic}
+</style>
+<!-- lanes -->
+<rect class="lane" x="4" y="6" width="992" height="180" rx="8" fill="#fffaf2"/>
+<text class="lt" x="16" y="24">1 · CAMBIO DE NORMA — agentes LLM, fuera del camino de decisión (≈85–103 s, ≈149k tokens por norma)</text>
+<rect class="lane" x="4" y="196" width="992" height="214" rx="8" fill="#f6f9fd"/>
+<text class="lt" x="16" y="214">2 · DECISIÓN — determinista, 0 tokens por factura (899 facturas/s con 11 reglas)</text>
+<rect class="lane" x="4" y="420" width="992" height="164" rx="8" fill="#f8fbf6"/>
+<text class="lt" x="16" y="438">3 · PERSONAS Y OBSERVABILIDAD</text>
+<!-- lane 1 -->
+<rect class="b io" x="20" y="60" width="140" height="62"/>
+<text class="t" x="90" y="84" text-anchor="middle">Norma del cliente</text>
+<text class="s" x="90" y="101" text-anchor="middle">texto libre, cualquier</text>
+<text class="s" x="90" y="114" text-anchor="middle">idioma (6 frases v3)</text>
+<rect class="b llm" x="190" y="54" width="160" height="74"/>
+<text class="t" x="270" y="76" text-anchor="middle">Normalizador</text>
+<text class="s" x="270" y="93" text-anchor="middle">1 norm rule por frase →</text>
+<text class="s" x="270" y="106" text-anchor="middle">checks atómicos con cita,</text>
+<text class="s" x="270" y="119" text-anchor="middle">violation / doubt</text>
+<rect class="b llm" x="385" y="38" width="175" height="56"/>
+<text class="t" x="472" y="59" text-anchor="middle">Tester ciego</text>
+<text class="s" x="472" y="76" text-anchor="middle">≥6 tests desde el texto,</text>
+<text class="s" x="472" y="88" text-anchor="middle">nunca ve el código</text>
+<rect class="b llm" x="385" y="106" width="175" height="56"/>
+<text class="t" x="472" y="127" text-anchor="middle">Coder</text>
+<text class="s" x="472" y="144" text-anchor="middle">evaluate() hasta pasar tests;</text>
+<text class="s" x="472" y="156" text-anchor="middle">disputa o NeedsData</text>
+<rect class="b st" x="595" y="60" width="165" height="62"/>
+<text class="t" x="677" y="82" text-anchor="middle">Sandbox + impacto</text>
+<text class="s" x="677" y="99" text-anchor="middle">tests en subproceso;</text>
+<text class="s" x="677" y="112" text-anchor="middle">replay sobre el histórico</text>
+<rect class="b st" x="795" y="60" width="185" height="62"/>
+<text class="t" x="887" y="82" text-anchor="middle">Regla activa</text>
+<text class="s" x="887" y="99" text-anchor="middle">código + hash(texto, código)</text>
+<text class="s" x="887" y="112" text-anchor="middle">o draft / blocked</text>
+<text class="el" x="190" y="178">cadena por rol: deepseek-v4-flash → glm5.3 → qwen3.6 (ADR 0019)</text>
+<path class="e" d="M160,91 L188,91"/>
+<path class="e" d="M350,80 L383,68"/>
+<path class="e" d="M350,104 L383,128"/>
+<path class="e" d="M472,94 L472,104"/>
+<path class="e" d="M560,128 L593,100"/>
+<path class="e" d="M760,91 L793,91"/>
+<!-- lane 2 -->
+<rect class="b io" x="20" y="232" width="140" height="56"/>
+<text class="t" x="90" y="254" text-anchor="middle">PDFs + Excel</text>
+<text class="s" x="90" y="272" text-anchor="middle">500 + 40 facturas</text>
+<rect class="b det" x="190" y="232" width="160" height="56"/>
+<text class="t" x="270" y="254" text-anchor="middle">Ingesta</text>
+<text class="s" x="270" y="272" text-anchor="middle">texto nativo / OCR / visión</text>
+<rect class="b st" x="385" y="232" width="175" height="56"/>
+<text class="t" x="472" y="254" text-anchor="middle">Instancias + símbolos</text>
+<text class="s" x="472" y="272" text-anchor="middle">archivo por SHA-256, origen</text>
+<rect class="b io" x="20" y="318" width="140" height="56"/>
+<text class="t" x="90" y="340" text-anchor="middle">ERP 2009</text>
+<text class="s" x="90" y="358" text-anchor="middle">XML latin-1, falla adrede</text>
+<rect class="b det" x="190" y="312" width="160" height="68"/>
+<text class="t" x="270" y="333" text-anchor="middle">Conector ERP</text>
+<text class="s" x="270" y="350" text-anchor="middle">token, backoff, Retry-After,</text>
+<text class="s" x="270" y="363" text-anchor="middle">rate limit, validación</text>
+<rect class="b st" x="385" y="318" width="175" height="56"/>
+<text class="t" x="472" y="340" text-anchor="middle">Snapshot versionado</text>
+<text class="s" x="472" y="358" text-anchor="middle">+ diff con el anterior</text>
+<rect class="b det" x="595" y="248" width="165" height="112"/>
+<text class="t" x="677" y="272" text-anchor="middle">Motor puro</text>
+<text class="s" x="677" y="291" text-anchor="middle">TODAS las reglas activas</text>
+<text class="s" x="677" y="305" text-anchor="middle">en sandbox (1 subproceso</text>
+<text class="s" x="677" y="319" text-anchor="middle">por regla y lote)</text>
+<text class="s" x="677" y="337" text-anchor="middle" style="font-size:9.6px">ESCALAR › NO_PAGAR › PAGAR</text>
+<text class="s" x="677" y="351" text-anchor="middle">sin LLM, reloj ni red</text>
+<rect class="b st" x="795" y="236" width="185" height="62"/>
+<text class="t" x="887" y="258" text-anchor="middle">Decisiones append-only</text>
+<text class="s" x="887" y="275" text-anchor="middle">resultado por regla, razón,</text>
+<text class="s" x="887" y="288" text-anchor="middle">hash del conjunto de reglas</text>
+<rect class="b io" x="795" y="326" width="185" height="50"/>
+<text class="t" x="887" y="347" text-anchor="middle">outcomes.jsonl</text>
+<text class="s" x="887" y="364" text-anchor="middle">1 línea por archivo</text>
+<text class="el" x="190" y="400">reprocess (dry-run primero): sólo añade una decisión donde cambia; lo que decidió una persona no se toca</text>
+<path class="e" d="M160,260 L188,260"/>
+<path class="e" d="M350,260 L383,260"/>
+<path class="e" d="M160,346 L188,346"/>
+<path class="e" d="M350,346 L383,346"/>
+<path class="e" d="M560,260 L593,282"/>
+<path class="e" d="M560,346 L593,326"/>
+<path class="e" d="M887,122 L887,150 L677,150 L677,246"/>
+<path class="e" d="M760,280 L793,270"/>
+<path class="e" d="M887,298 L887,324"/>
+<!-- lane 3 -->
+<rect class="b ppl" x="20" y="456" width="330" height="76"/>
+<text class="t" x="185" y="478" text-anchor="middle">Manager (Alberto)</text>
+<text class="s" x="185" y="496" text-anchor="middle">pega la norma · resuelve la cola ESCALAR ·</text>
+<text class="s" x="185" y="510" text-anchor="middle">lee findings del histórico · activa configuraciones</text>
+<text class="s" x="185" y="524" text-anchor="middle">su resolución es una fila nueva; el export no cambia</text>
+<rect class="b llm" x="385" y="456" width="175" height="76"/>
+<text class="t" x="472" y="478" text-anchor="middle">Asistente</text>
+<text class="s" x="472" y="496" text-anchor="middle">explica un caso escalado,</text>
+<text class="s" x="472" y="510" text-anchor="middle">propone decisión y regla</text>
+<text class="s" x="472" y="524" text-anchor="middle">(≈3,7k tokens, opcional)</text>
+<rect class="b obs" x="595" y="456" width="165" height="76"/>
+<text class="t" x="677" y="478" text-anchor="middle">Spans en Postgres</text>
+<text class="s" x="677" y="496" text-anchor="middle">tabla events = auditoría</text>
+<text class="s" x="677" y="510" text-anchor="middle">/traces · /metrics ·</text>
+<text class="s" x="677" y="524" text-anchor="middle">/instances/{id}/trace</text>
+<rect class="b obs" x="795" y="456" width="185" height="76"/>
+<text class="t" x="887" y="478" text-anchor="middle">OpenTelemetry</text>
+<text class="s" x="887" y="496" text-anchor="middle">mismos ids → Logfire o</text>
+<text class="s" x="887" y="510" text-anchor="middle">Phoenix local (opcional;</text>
+<text class="s" x="887" y="524" text-anchor="middle">sin token no sale nada)</text>
+<path class="d" d="M20,494 L11,494 L11,110 L18,110"/>
+<text class="el" x="-300" y="9" transform="rotate(-90)" text-anchor="middle">norma</text>
+<path class="d" d="M980,267 L992,267 L992,415 L300,415 L300,454"/>
+<text class="el" x="610" y="450">cola ESCALAR, con el motivo de cada caso</text>
+<path class="e" d="M383,494 L352,494"/>
+<path class="e" d="M760,494 L793,494"/>
+<text class="el" x="16" y="572">Línea continua: flujo de datos. Discontinua: intervención humana. Cada caja de las bandas 1 y 2 escribe spans en la banda 3 (prompt exacto, tokens, duración, config_id).</text>
+</svg>

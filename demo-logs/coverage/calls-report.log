@@ -1,0 +1,8 @@
+GET /traces -> 200 (52 ms)
+GET /traces -> 200 (4 ms)
+GET /instances/19/trace -> 200 (11 ms)
+GET /rules/17/trace -> 200 (13 ms)
+GET /rules/16/trace -> 200 (4 ms)
+GET /processes/2/metrics -> 200 (18 ms)
+GET /processes/2/events -> 200 (40 ms)
+GET /processes/1/events -> 200 (7 ms)

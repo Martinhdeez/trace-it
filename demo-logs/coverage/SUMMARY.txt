@@ -1,0 +1,93 @@
+SPANS by step (ok/error):
+  activate_agent_config    ok=   1 error=0
+  activate_rule            ok=  28 error=0
+  coder_attempt            ok=  12 error=0
+  compile_rule             ok=  12 error=0
+  compile_rules            ok=   1 error=0
+  configure_agent          ok=   1 error=0
+  decision                 ok=  20 error=0
+  evaluate_rule            ok=  35 error=0
+  export_outcomes          ok=   2 error=0
+  extraction               ok=  21 error=0
+  impact_check             ok=  13 error=0
+  ingest_document          ok=  20 error=0
+  llm_run                  ok=  26 error=0
+  load_definition          ok=   2 error=0
+  load_use_case            ok=   1 error=0
+  load_workbook            ok=   1 error=0
+  native_text              ok=  20 error=0
+  norm                     ok=   1 error=0
+  normalize_norm           ok=   1 error=0
+  ocr                      ok=   4 error=0
+  reprocess                ok=   1 error=0
+  resolution               ok=   1 error=0
+  retire_rule              ok=   1 error=0
+  run_process              ok=   1 error=1
+  run_tests                ok=  12 error=0
+  store_file               ok=  20 error=0
+  suggest_escalation       ok=   1 error=0
+  sync_source              ok=   1 error=1
+  upload_document          ok=  20 error=0
+  upload_workbook          ok=   1 error=0
+
+ERROR spans:
+  sync_source | SourceUnavailableError: Sync of 'erp' failed; the previous snapshot stays current. POST /erp/login : gave up after 6 att
+  run_process | ConflictError: The process has no active rules; activate its rules first
+
+INSTANCE 19 copia_2026_0518.pdf | file: copia_2026_0518.pdf | exported: ESCALAR
+  decisions: [('ESCALAR', 'engine'), ('NO_PAGAR', 'Mateo')]
+  symbols origin: {'document:0ea2640913e04898b1777572d7581d70'}
+  upload_document ok {'file': 'copia_2026_0518.pdf'}
+    store_file ok 
+    extraction ok 
+      native_text ok 
+      ocr ok {'lines': 11, 'reader': 'primary', 'page': 1}
+      ocr ok {'lines': 12, 'reader': 'secondary', 'page': 1}
+    ingest_document ok 
+  run_process ok 
+    evaluate_rule ok 
+    evaluate_rule ok 
+    evaluate_rule ok 
+    evaluate_rule ok 
+    evaluate_rule ok 
+    evaluate_rule ok 
+    evaluate_rule ok 
+    evaluate_rule ok 
+    evaluate_rule ok 
+    evaluate_rule ok 
+    evaluate_rule ok 
+    evaluate_rule ok 
+    decision ok {'decision': 'ESCALAR', 'reason': 'MISSING_DATA: date, iban, issuer_nif, purchase_order'}
+  suggest_escalation ok {'decision': 'ESCALAR'}
+    llm_run ok 
+  resolution ok {'author': 'Mateo', 'decision': 'NO_PAGAR', 'reason': 'Checked with the supplier by phone'}
+  export_outcomes ok {'lines': 20, 'batch': 0}
+  export_outcomes ok {'lines': 20, 'batch': 0}
+
+RULE 17 active | norm rule: Pagar solo si el NIF esta en el maestro y el IBAN de la fact
+  normalization: normalize_norm
+  compilations: [('compile_rule', 'ok', ['llm_run', 'coder_attempt', 'impact_check', 'activate_rule'])]
+  lifecycle: [('compile_rule', 'ok', 'auto'), ('impact_check', 'ok', None), ('activate_rule', 'ok', 'auto'), ('impact_check', 'ok', None)]
+  runtime: {'runs': 1, 'instances': 20, 'fired': 0, 'errors': 0, 'p50_ms': 27.0, 'p95_ms': 27.0}
+RULE 16 lifecycle: [('activate_rule', 'cli', 'draft', 'active'), ('retire_rule', 'Martín', 'active', 'retired')]
+
+METRICS runs 1 decided 20 by outcome {'ESCALAR': 2, 'NO_PAGAR': 1, 'PAGAR': 18} escalated 1 failures {'MISSING_DATA': 2, 'RULE_ERROR': 0, 'RULE_NEEDS_DATA': 0, 'RULE_CONFLICT': 0}
+  steps: [('activate_rule', 12, 0), ('coder_attempt', 12, 0), ('compile_rule', 12, 0), ('compile_rules', 1, 0), ('decision', 20, 0), ('evaluate_rule', 35, 0), ('export_outcomes', 2, 0), ('extraction', 21, 0), ('impact_check', 13, 0), ('ingest_document', 20, 0), ('llm_run', 26, 0), ('load_definition', 1, 0), ('load_workbook', 1, 0), ('native_text', 20, 0), ('norm', 1, 0), ('normalize_norm', 1, 0), ('ocr', 4, 0), ('reprocess', 1, 0), ('resolution', 1, 0), ('run_process', 2, 1), ('run_tests', 12, 0), ('store_file', 20, 0), ('suggest_escalation', 1, 0), ('sync_source', 2, 1), ('upload_document', 20, 0), ('upload_workbook', 1, 0)]
+  llm: [('deepseek/deepseek-v4.1-flash', 'assistant', 1, 0, 2995, 353), ('deepseek/deepseek-v4.1-flash', 'compiler', 12, 0, 71952, 8706), ('deepseek/deepseek-v4.1-flash', 'normalizer', 1, 0, 3663, 2204), ('deepseek/deepseek-v4.1-flash', 'tester', 12, 0, 30870, 29677)]
+
+PROCESS 2 FEED steps: [('activate_agent_config', 1), ('activate_rule', 12), ('coder_attempt', 12), ('compile_rule', 12), ('compile_rules', 1), ('configure_agent', 1), ('decision', 20), ('evaluate_rule', 35), ('export_outcomes', 2), ('extraction', 21), ('impact_check', 13), ('ingest_document', 20), ('llm_run', 26), ('load_definition', 1), ('load_use_case', 1), ('load_workbook', 1), ('native_text', 20), ('norm', 1), ('normalize_norm', 1), ('ocr', 4), ('reprocess', 1), ('resolution', 1), ('run_process', 2), ('run_tests', 12), ('store_file', 20), ('suggest_escalation', 1), ('sync_source', 2), ('upload_document', 20), ('upload_workbook', 1)]
+  sync_source            error {"error": "SourceUnavailableError: Sync of 'erp' failed; the previous snapshot stays current. POST /erp/login : gave up after 6 attempts (last: transp
+  export_outcomes        ok    {"lines": 20}
+  export_outcomes        ok    {"lines": 20}
+  reprocess              ok    {"dry_run": true}
+  activate_agent_config  ok    {"author": "Martín", "role": "assistant", "before_version": 2, "after_version": 1}
+  configure_agent        ok    {"author": "Martín", "role": "assistant", "before_version": 1, "after_version": 2}
+  resolution             ok    {"author": "Mateo", "decision": "NO_PAGAR", "before": "ESCALAR"}
+  run_process            ok    {}
+  norm                   ok    {"author": "Martín"}
+  sync_source            ok    {"rows": 516}
+  upload_workbook        ok    {}
+  run_process            error {"error": "ConflictError: The process has no active rules; activate its rules first"}
+  load_definition        ok    {}
+
+PROCESS 1 FEED steps: [('activate_agent_config', 1), ('activate_rule', 16), ('configure_agent', 1), ('load_definition', 1), ('load_use_case', 1), ('retire_rule', 1)]

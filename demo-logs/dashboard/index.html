@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>trace-it live</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+:root{--bg:#0f1115;--panel:#171a21;--card:#1e222b;--line:#2a2f3a;--fg:#e6e8ee;--dim:#8b93a5;
+  --green:#2fbf71;--red:#e5484d;--amber:#f5a524;--blue:#4c8dff;--violet:#a78bfa}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.4 -apple-system,BlinkMacSystemFont,"Inter",sans-serif;height:100vh;display:flex;flex-direction:column}
+header{display:flex;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:15px;margin:0 8px 0 0}
+select,button{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font:inherit;cursor:pointer}
+button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+button:disabled{opacity:.45;cursor:default}
+#steps{display:flex;gap:4px;flex-wrap:wrap}
+#steps span{padding:3px 8px;border-radius:10px;background:var(--card);color:var(--dim);font-size:11px}
+#steps span.done{color:var(--green)} #steps span.now{background:var(--blue);color:#fff}
+#msg{color:var(--dim);margin-left:auto;max-width:40vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+main{flex:1;display:grid;grid-template-columns:1fr 1.3fr 1.5fr 1.2fr 1fr;gap:10px;padding:10px;min-height:0;overflow-x:auto}
+.col{background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-height:0;min-width:220px}
+.col h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0;padding:10px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.body{overflow:auto;padding:8px 10px;flex:1}
+.stat{font-size:22px;font-weight:600}
+.small{font-size:11px;color:var(--dim)}
+.pdf{display:flex;justify-content:space-between;gap:6px;padding:2px 4px;border-radius:4px;animation:in .4s ease;font-family:ui-monospace,monospace;font-size:11px}
+@keyframes in{from{opacity:0;transform:translateX(-12px);background:#2a3a5a}to{opacity:1}}
+.badge{font-size:10px;padding:1px 6px;border-radius:8px;background:var(--card);color:var(--dim);white-space:nowrap}
+.b-scan{color:var(--amber)} .b-text{color:var(--green)}
+.sentence{background:var(--card);border-radius:8px;padding:8px;margin-bottom:8px;border-left:3px solid var(--line)}
+.sentence.on{border-left-color:var(--violet)}
+.check{margin:6px 0 0 8px;padding-left:8px;border-left:1px dashed var(--line);font-size:12px;color:#c9cdd8}
+.card{background:var(--card);border-radius:8px;padding:8px;margin-bottom:8px;cursor:pointer;border:1px solid transparent;animation:in .4s ease}
+.card:hover{border-color:var(--blue)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.st{font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;text-transform:uppercase}
+.st-compiling{background:#1e3a8a;color:#bfdbfe} .st-active{background:#14532d;color:#bbf7d0}
+.st-draft{background:#44403c;color:#e7e5e4} .st-blocked{background:#7f1d1d;color:#fecaca} .st-retired{background:#333;color:#999}
+.spin{display:inline-block;width:10px;height:10px;border:2px solid #bfdbfe;border-top-color:transparent;border-radius:50%;animation:sp 1s linear infinite;vertical-align:-1px;margin-right:4px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.agent{font-size:11px;color:var(--dim);font-family:ui-monospace,monospace}
+.chips{display:flex;flex-wrap:wrap;gap:3px}
+.chip{width:11px;height:11px;border-radius:2px;background:var(--line);transition:background .3s}
+.PAGAR{background:var(--green)} .NO_PAGAR{background:var(--red)} .ESCALAR{background:var(--amber)}
+.tot{display:flex;gap:10px;margin:8px 0}
+.tot div{flex:1;background:var(--card);border-radius:8px;padding:6px 8px}
+.mis{font-size:11px;padding:4px;border-bottom:1px solid var(--line)}
+#panel{position:fixed;top:0;right:0;width:min(760px,100vw);height:100vh;background:var(--panel);border-left:1px solid var(--line);transform:translateX(100%);transition:transform .25s;overflow:auto;padding:14px 18px;z-index:5}
+#panel.open{transform:none}
+#panel h3{font-size:13px;margin:16px 0 6px;color:var(--violet)}
+pre{background:#0b0d11;border:1px solid var(--line);border-radius:6px;padding:8px;overflow:auto;white-space:pre-wrap;font-size:11px;max-height:420px;margin:0}
+pre code.hljs{padding:0;background:none}
+details{margin:6px 0} summary{cursor:pointer;color:var(--dim)}
+.ok{color:var(--green)} .ko{color:var(--red)}
+#metrics{display:flex;gap:8px;padding:8px 16px 0;flex-wrap:wrap;font-size:11px}
+#metrics .m{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 9px}
+#metrics .m b{color:var(--fg)} #metrics .m span{color:var(--dim)}
+.tree{font-family:ui-monospace,monospace;font-size:11px}
+.tree div{padding:1px 0;white-space:nowrap} .tree .err{color:var(--red)}
+table{border-collapse:collapse;width:100%;font-size:11px} td,th{padding:3px 5px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+</style>
+</head>
+<body>
+<header>
+  <h1>trace-it · live</h1>
+  <select id="proc" title="process"></select>
+  <button id="newrun">New demo run</button>
+  <button id="next" class="primary" disabled>Next step</button>
+  <div id="steps"></div>
+  <div id="msg"></div>
+</header>
+<div id="metrics"></div>
+<main>
+  <section class="col"><h2>1 · PDFs <span id="pdfCount" class="badge">0</span></h2><div class="body" id="pdfs"></div></section>
+  <section class="col"><h2>2 · Norm <span id="normInfo" class="badge"></span></h2><div class="body" id="norm"></div></section>
+  <section class="col"><h2>3 · Agents <span id="ruleCount" class="badge"></span></h2><div class="body" id="rules"></div></section>
+  <section class="col"><h2>4 · Engine <button id="run">Run</button></h2><div class="body" id="engine"></div></section>
+  <section class="col"><h2>5 · Export <button id="export">Export</button></h2><div class="body" id="exp"></div></section>
+</main>
+<aside id="panel"></aside>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function j(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+  return (r.headers.get('content-type') || '').includes('json') ? r.json() : r.text();
+}
+const post = (url, body) => j(url, {method: 'POST', headers: {'content-type': 'application/json'}, body: body ? JSON.stringify(body) : undefined});
+const setHtml = (sel, h) => { const el = $(sel); if (el._h !== h) { el._h = h; el.innerHTML = h; } };  // re-render only on change: no flicker
+const msg = t => { $('#msg').textContent = t; $('#msg').title = t; };
+
+let pid = +(new URLSearchParams(location.hash.slice(1)).get('p') || 0);
+let lastPdf = 0, sentences = [], golden = null, runInfo = null, normPending = false, running = false;
+let events = [], rulesNow = [];
+const compiling = () => rulesNow.filter(r => r.status === 'compiling').length;
+let lastIngest = null;
+const ingesting = () => lastIngest && lastIngest.running;
+
+// ---- step-by-step demo ----
+const STEPS = ['create process', 'ingest (API)', 'ERP sync', 'post norm', 'compile (auto)', 'run engine', 'export + golden'];
+let step = -1;  // index of the last completed step; -1 = not in a demo run
+function drawSteps() {
+  $('#steps').innerHTML = step < 0 ? '' : STEPS.map((s, i) => `<span class="${i <= step ? 'done' : i === step + 1 ? 'now' : ''}">${i + 1}. ${s}</span>`).join('');
+  $('#next').disabled = step < 0 || step >= STEPS.length - 1;
+  $('#next').textContent = step >= 0 && step < STEPS.length - 1 ? `Next: ${STEPS[step + 1]}` : 'Next step';
+}
+async function doStep(i) {
+  $('#next').disabled = true;
+  try {
+    if (i === 0) { const p = await post('/helper/create'); await loadProcs(); setPid(p.id); msg(`created process ${p.id} "${p.name}"`); }
+    if (i === 1) { await post(`/helper/ingest/${pid}`); msg('workbook + 500 PDFs through POST /processes/{id}/files...'); }
+    if (i === 2) {
+      if (ingesting()) throw new Error('wait until ingestion finishes');
+      msg('syncing the ERP (paginated XML, token, retries)...');
+      const t = performance.now(), e = await post(`/api/processes/${pid}/sources/erp/sync`);
+      msg(`ERP synced in ${((performance.now() - t) / 1000).toFixed(1)}s: ${e.rows} rows · ${e.stats.pages} pages · ${e.stats.logins} login · ${e.stats.retries} retries ${JSON.stringify(e.stats.transient_errors || {})}`);
+    }
+    if (i === 3) { postNorm(); }
+    if (i === 4) { if (!rulesNow.length) throw new Error('the norm has not produced rules yet; wait for the normalizer'); msg('compilations run in the background; watch the Agents column'); }
+    if (i === 5) { if (compiling()) throw new Error(`${compiling()} rules still compiling: the API would answer 409. Wait until all are active.`); }
+    if (i === 5) { await runEngine(); }
+    if (i === 6) { await doExport(); }
+    step = i;
+  } catch (e) { msg('step failed: ' + e.message); }
+  drawSteps();
+}
+$('#newrun').onclick = () => { step = -1; doStep(0); };
+$('#next').onclick = () => doStep(step + 1);
+
+async function postNorm() {
+  normPending = true; msg('normalizer is reading the norm...');
+  const n = await j('/helper/norm');
+  try { await post(`/api/processes/${pid}/norm`, {text: n.text}); msg('norm normalized; checks compiling'); }
+  catch (e) { msg('norm failed: ' + e.message); }
+  normPending = false;
+}
+
+// ---- process selection ----
+async function loadProcs() {
+  const ps = await j('/api/processes');
+  $('#proc').innerHTML = '<option value="0">— pick a process or click New demo run —</option>' + ps.map(p => `<option value="${p.id}">${p.id} · ${esc(p.name)}</option>`).join('');
+  $('#proc').value = pid;
+}
+function setPid(id) {
+  pid = +id; location.hash = 'p=' + pid; $('#proc').value = pid;
+  lastPdf = 0; runInfo = null; events = [];
+  $('#pdfs').innerHTML = ''; $('#metrics').innerHTML = ''; $('#exp').innerHTML = ''; $('#engine').innerHTML = ''; chipsKey = '';
+  tick();
+}
+$('#proc').onchange = e => { step = -1; drawSteps(); setPid(e.target.value); };
+
+// ---- column 1: PDFs ----
+async function pollPdfs() {
+  const d = await j(`/helper/pdfs/${pid}?after=${lastPdf}`);
+  const box = $('#pdfs');
+  for (const f of d.files) {
+    lastPdf = f.id;
+    box.insertAdjacentHTML('afterbegin', `<div class="pdf" style="cursor:pointer" onclick="openInstance(${f.id})"><span>${esc(f.name)}</span><span><span class="badge ${f.scan ? 'b-scan' : 'b-text'}">${f.scan ? 'no text' : 'text'}</span> <span class="badge">${f.symbols} sym</span></span></div>`);
+  }
+  while (box.children.length > 600) box.lastChild.remove();
+  const n = box.children.length, scans = box.querySelectorAll('.b-scan').length;
+  const ing = d.ingest; lastIngest = ing;
+  $('#pdfCount').textContent = (ing && ing.running ? `${ing.done}/${ing.total ?? '?'} · ${ing.secs}s` : `${n}${ing ? ` in ${ing.secs}s` : ''}`) + ` · ${scans} no symbols`;
+  if (ing && ing.error) msg('ingest error: ' + ing.error);
+  if (ing && ing.failed.length) msg(`${ing.failed.length} uploads failed: ${ing.failed[0]}`);
+}
+
+// ---- column 2: norm ----
+async function pollNorm() {
+  const nrs = await j(`/api/processes/${pid}/norm-rules`);
+  const norm = events.find(e => e.data.role === 'normalizer');
+  $('#normInfo').textContent = norm ? `${norm.data.model} · ${(norm.duration_ms / 1000).toFixed(1)}s · ${norm.data.input_tokens}→${norm.data.output_tokens} tok` : (normPending ? 'normalizing…' : '');
+  const byNum = Object.fromEntries(nrs.map(n => [n.number, n]));
+  const shown = nrs.length ? nrs : sentences.map((s, i) => ({number: i + 1, text: s.replace(/^\d+\.\s*/, ''), rules: [], policies: [], pending: true}));
+  setHtml('#norm', (normPending ? '<div class="small"><span class="spin"></span>normalizer agent reading the norm…</div>' : '') + shown.map(n => `
+    <div class="sentence ${n.rules.length ? 'on' : ''}">
+      <b>${n.number}.</b> ${esc(n.text)}
+      ${n.rules.map(r => `<div class="check"><span class="st st-${r.status}">${r.status === 'compiling' ? '<span class="spin"></span>' : ''}${r.status}</span> #${r.id} → ${esc(r.decision)}<br>${esc(r.text)}</div>`).join('')}
+      ${n.policies.map(p => `<div class="check small">policy: ${esc(p)}</div>`).join('')}
+    </div>`).join(''));
+}
+
+// ---- column 3: agents ----
+function agentLine(rid, role) {
+  const es = events.filter(e => e.rule_id === rid && e.data.role === role);
+  if (!es.length) return '';
+  const ms = es.reduce((a, e) => a + (e.duration_ms || 0), 0);
+  const tin = es.reduce((a, e) => a + (e.data.input_tokens || 0), 0), tout = es.reduce((a, e) => a + (e.data.output_tokens || 0), 0);
+  return `<div class="agent">${role === 'compiler' ? 'coder ' : 'tester'} ${esc(es[0].data.model)} · ${es.length} run${es.length > 1 ? 's' : ''} · ${(ms / 1000).toFixed(1)}s · ${tin}→${tout} tok</div>`;
+}
+async function pollRules() {
+  const [rules, evs] = await Promise.all([j(`/api/processes/${pid}/rules`), j(`/api/traces?process_id=${pid}&name=llm_run&limit=1000`)]);
+  events = evs; rulesNow = rules;
+  $('#run').disabled = running || compiling() > 0; $('#run').title = compiling() ? 'rules compiling: run is refused (409)' : '';
+  const count = s => rules.filter(r => r.status === s).length;
+  $('#ruleCount').textContent = `${rules.length} · ${count('active')} active · ${count('compiling')} compiling`;
+  setHtml('#rules', rules.map(r => {
+    const rep = r.report || {}, tests = rep.tests || [];
+    const passed = tests.filter(t => t.passed).length;
+    return `<div class="card" onclick="openRule(${r.id})">
+      <div class="row"><b>#${r.id}${r.norm_rule_id ? ` <span class="small">norm ${r.norm_rule_id}</span>` : ''}</b>
+        <span class="st st-${r.status}">${r.status === 'compiling' ? '<span class="spin"></span>' : ''}${r.status}</span></div>
+      ${rep.norm ? `<div class="small">${rep.norm.kind === 'doubt' ? '<span style="color:var(--amber)">doubt</span>' : 'violation'} · decision ${esc(rep.norm.decision_source)}</div>` : ''}
+      <div style="margin:4px 0">${esc(r.text.slice(0, 140))}${r.text.length > 140 ? '…' : ''}</div>
+      ${agentLine(r.id, 'tester')}${agentLine(r.id, 'compiler')}
+      <div class="small">${r.status === 'compiling' ? '' : `tests ${passed}/${tests.length} · attempts ${rep.attempts ?? '-'} · reviews ${(rep.reviews || []).length} · → ${esc(r.decision)}`}${rep.needs_data ? ' · <span class="ko">needs data</span>' : ''}</div>
+    </div>`;
+  }).join('') || '<div class="small">no rules yet</div>');
+}
+
+const llmCalls = (n, out = []) => { if (n.step === 'llm_run') out.push(n); n.children.forEach(c => llmCalls(c, out)); return out; };
+function treeHtml(n, d = 0) {
+  const x = n.data || {}, bits = [];
+  if (x.role) bits.push(`${x.role} ${x.model}`);
+  if (x.input_tokens != null) bits.push(`${x.input_tokens}→${x.output_tokens} tok`);
+  if (x.cases != null) bits.push(`${x.passed}/${x.cases} pass`);
+  if (x.attempt != null) bits.push(`attempt ${x.attempt}`);
+  if (x.why) bits.push(x.why);
+  if (x.error) bits.push(String(x.error).slice(0, 120));
+  return `<div class="${n.status === 'error' ? 'err' : ''}" style="padding-left:${d * 14}px">${d ? '└ ' : ''}<b>${n.step}</b> ${n.duration_ms ?? '·'}ms <span class="small">${esc(bits.join(' · '))}</span></div>` + n.children.map(c => treeHtml(c, d + 1)).join('');
+}
+async function openRule(id) {
+  const p = $('#panel'); p.classList.add('open');
+  p.innerHTML = '<button onclick="this.parentNode.classList.remove(\'open\')">close ✕</button> <span class="small">loading…</span>';
+  const [r, tr] = await Promise.all([j(`/api/rules/${id}`), j(`/api/rules/${id}/trace`).catch(e => ({error: e.message}))]);
+  const rep = r.report || {}, norm = rep.norm || {};
+  const block = (t, lang) => `<pre><code class="language-${lang || 'plaintext'}">${esc(t)}</code></pre>`;
+  const json = v => typeof v === 'string' ? v : JSON.stringify(v, null, 1);
+  const tests = rep.tests || [];
+  const inputs = Object.fromEntries((r.tests || []).map(t => [t.name, t]));
+  const comps = tr.compilations || [], calls = comps.length ? llmCalls(comps[0]) : [], rt = tr.runtime;
+  p.innerHTML = `<button onclick="this.parentNode.classList.remove('open')">close ✕</button>
+    <h2 style="margin:10px 0 4px">Rule #${r.id} <span class="st st-${r.status}">${r.status}</span></h2>
+    <div>${esc(r.text)}</div><div class="small">${r.type} → ${r.decision} · attempts ${rep.attempts ?? '-'} · valid ${rep.valid}${rt ? ` · runtime: ${rt.runs} runs, fired ${rt.fired}/${rt.instances}, ${rt.errors} errors, p50 ${rt.p50_ms ?? '-'}ms` : ''}</div>
+    ${norm.norm_rule ? `<h3>Norm interpretation</h3><div class="small">“${esc(norm.norm_rule)}”</div><div>${esc(norm.interpretation)}</div>
+      <table><tr><th>kind</th><td>${esc(norm.kind)}${norm.kind_reason ? ` — ${esc(norm.kind_reason)}` : ''}</td></tr>
+      <tr><th>decision source</th><td>${esc(norm.decision_source)} → ${esc(r.decision)}${norm.quote ? ` · quote “${esc(norm.quote)}”` : ''}</td></tr>
+      ${(norm.policies || []).length ? `<tr><th>policies</th><td>${norm.policies.map(esc).join('<br>')}</td></tr>` : ''}</table>` : ''}
+    ${rep.activation ? `<h3>Activation</h3><div>${rep.activation.auto ? 'auto' : 'manual'}: ${esc(rep.activation.why)}</div>` : ''}
+    ${rep.needs_data ? `<h3>Needs data</h3>${block(JSON.stringify(rep.needs_data, null, 2), 'json')}` : ''}
+    ${(rep.discrepancies || []).length ? `<h3>Discrepancies</h3>${rep.discrepancies.map(d => `<div class="ko">${esc(d)}</div>`).join('')}` : ''}
+    <h3>Trace <span class="small">(GET /rules/${id}/trace · ${comps.length} compilation${comps.length === 1 ? '' : 's'})</span></h3>
+    ${tr.error ? `<div class="ko">${esc(tr.error)}</div>` : `<div class="tree">${tr.normalization ? treeHtml({...tr.normalization, children: []}) : ''}${comps.map(c => treeHtml(c)).join('<hr style="border-color:var(--line)">')}</div>`}
+    <h3>Generated code</h3>${r.code ? block(r.code, 'python') : '<div class="small">none</div>'}
+    <h3>Tests (${tests.filter(t => t.passed).length}/${tests.length} pass)</h3>
+    <table><tr><th></th><th>name</th><th>expected</th><th>got</th></tr>${tests.map(t => `<tr><td class="${t.passed ? 'ok' : 'ko'}">${t.passed ? '✓' : '✗'}</td><td>${esc(t.name)}${inputs[t.name] ? `<details><summary>input</summary>${block(JSON.stringify({instance: inputs[t.name].instance, sources: inputs[t.name].sources, others: inputs[t.name].others}, null, 1), 'json')}</details>` : ''}</td><td>${t.expected ? 'fires' : 'does not fire'}</td><td>${esc(t.got)}</td></tr>`).join('')}</table>
+    ${(rep.reviews || []).length ? `<h3>Tester reviews</h3>${block(JSON.stringify(rep.reviews, null, 2), 'json')}` : ''}
+    <h3>Agent context <span class="small">(exactly what each model saw, from the llm_run spans of the latest compilation)</span></h3>
+    ${calls.map(c => { const x = c.data; return `
+      <details open><summary><b>${x.role === 'compiler' ? 'coder' : x.role}</b> · ${esc(x.model)} · ${(c.duration_ms / 1000).toFixed(1)}s · ${x.input_tokens}→${x.output_tokens} tok · retries ${x.retries} · prompt ${x.prompt_hash} · config ${x.config_id}</summary>
+      <details><summary>instructions (${(x.instructions || '').length} chars)</summary>${block(x.instructions || '', 'markdown')}</details>
+      <details><summary>user message (${(x.user_prompt || '').length} chars)</summary>${block(x.user_prompt || '')}</details>
+      <details><summary>output</summary>${block(json(x.output), x.role === 'compiler' ? 'json' : 'json')}</details>
+      ${(x.retry_prompts || []).length ? `<details><summary>retry prompts (${x.retry_prompts.length})</summary>${block(json(x.retry_prompts))}</details>` : ''}</details>`; }).join('') || '<div class="small">no LLM calls recorded</div>'}`;
+  p.querySelectorAll('pre code').forEach(el => window.hljs && hljs.highlightElement(el));
+}
+
+// ---- instance trace ----
+async function openInstance(id) {
+  const p = $('#panel'); p.classList.add('open');
+  p.innerHTML = '<button onclick="this.parentNode.classList.remove(\'open\')">close ✕</button> <span class="small">loading…</span>';
+  const [t, proc] = await Promise.all([j(`/api/instances/${id}/trace`), j(`/api/processes/${pid}`)]);
+  const last = t.decisions[t.decisions.length - 1];
+  const human = new Set(proc.decision_types.filter(d => d.requires_human).map(d => d.name));
+  const sym = Object.entries(t.symbols || {}).filter(([k]) => k !== 'free_text');
+  const ft = (t.symbols || {}).free_text;
+  p.innerHTML = `<button onclick="this.parentNode.classList.remove('open')">close ✕</button>
+    <h2 style="margin:10px 0 4px">${esc(t.name)} <span class="chip ${last ? last.decision : ''}" style="display:inline-block"></span> ${last ? last.decision : 'PENDING'}</h2>
+    <div class="small">instance #${t.id} · ${t.status} · export writes <b>${esc(t.exported_decision ?? '-')}</b> · <a style="color:var(--blue)" href="/api/instances/${id}/file" target="_blank">open PDF</a> · GET /instances/${id}/trace</div>
+    ${last && human.has(last.decision) ? `<h3>Resolve (human decision)</h3>
+      <div class="row" style="justify-content:flex-start"><select id="resDec">${proc.decision_types.filter(d => !d.requires_human).map(d => `<option>${d.name}</option>`).join('')}</select>
+      <input id="resWhy" placeholder="reason" style="flex:1;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px">
+      <button class="primary" onclick="resolve(${id})">Resolve as Martín</button></div>` : ''}
+    <h3>File</h3><div>${t.file ? `${esc(t.file.name)} · ${t.file.size_bytes} bytes · ${esc(t.file.hash.slice(0, 16))}… · ingested ${esc(t.file.ingested_at)}` : 'none'}</div>
+    <h3>Symbols</h3><table>${sym.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v && v.value != null ? esc(v.value) : '<span class="ko">null</span>'}</td><td class="small">${esc(v && v.origin)}</td></tr>`).join('')}</table>
+    ${ft && ft.value ? `<details><summary>free_text (never read by rules)</summary><pre>${esc(ft.value)}</pre></details>` : ''}
+    <h3>Decisions (${t.decisions.length}, oldest first)</h3>
+    ${t.decisions.map(d => { const fired = d.rule_results.filter(r => r.fires !== false); return `<div class="sentence on">
+      <div class="row"><b>${d.decision}</b><span class="small">${esc(d.author)} · ${esc(d.created_at)}</span></div>
+      ${d.reason ? `<div>reason: <code>${esc(d.reason)}</code></div>` : ''}
+      ${d.rule_results.length ? `<div class="small">${d.rule_results.length} rules evaluated · ${fired.length} fired/failed</div>` : ''}
+      ${fired.map(r => `<div class="check" style="cursor:pointer" onclick="openRule(${r.rule_id})">#${r.rule_id} ${r.fires === null ? '<span class="ko">error</span>' : 'fires'} · <code>${esc(r.reason)}</code><br><span class="small">${esc(r.rule_text || '')}</span></div>`).join('')}
+    </div>`; }).join('') || '<div class="small">not decided yet</div>'}
+    <h3>Spans (ingestion → reading → run → rules → resolution → export)</h3><div class="tree">${t.spans.map(n => treeHtml(n)).join('')}</div>`;
+}
+async function resolve(id) {
+  const why = $('#resWhy').value.trim();
+  if (!why) { msg('write a reason first'); return; }
+  try { await post(`/api/instances/${id}/resolve`, {decision: $('#resDec').value, reason: why}); msg('resolved'); chipsKey = ''; openInstance(id); }
+  catch (e) { msg('resolve failed: ' + e.message); }
+}
+
+// ---- metrics strip ----
+async function pollMetrics() {
+  const m = await j(`/api/processes/${pid}/metrics`);
+  const step = n => m.steps.find(s => s.step === n);
+  const ms = v => v == null ? '-' : v >= 1000 ? (v / 1000).toFixed(1) + 's' : Math.round(v) + 'ms';
+  const pp = n => { const s = step(n); return s ? `<div class="m"><span>${n}</span> <b>${s.count}</b> <span>p50</span> ${ms(s.p50_ms)} <span>p95</span> ${ms(s.p95_ms)}</div>` : ''; };
+  const esc_ = Object.entries(m.failures).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(' · ') || 'none';
+  $('#metrics').innerHTML = `<div class="m"><span>runs</span> <b>${m.runs}</b> <span>decided</span> <b>${m.instances_decided}</b> <span>inv/s</span> <b>${m.instances_per_second ?? '-'}</b></div>`
+    + m.llm.map(l => `<div class="m"><span>${l.role}</span> <b>${l.calls}</b> calls · <b>${l.input_tokens.toLocaleString()}→${l.output_tokens.toLocaleString()}</b> tok <span>${esc(l.model)}</span>${l.retries ? ` · ${l.retries} retries` : ''}${l.errors ? ` <span class="ko">${l.errors} err</span>` : ''}</div>`).join('')
+    + ['llm_run', 'compile_rule', 'run_process', 'evaluate_rule'].map(pp).join('')
+    + `<div class="m"><span>escalated</span> <b>${m.escalated}</b> <span>by reason</span> ${esc(esc_)}</div>`;
+}
+
+// ---- column 4: engine ----
+let chipsKey = '';
+async function pollEngine() {
+  const inst = await j(`/api/processes/${pid}/instances`);
+  const key = inst.map(i => i.decision || '-').join();
+  if (key === chipsKey && !running) return;
+  chipsKey = key;
+  const c = {PAGAR: 0, NO_PAGAR: 0, ESCALAR: 0, pending: 0};
+  inst.forEach(i => i.decision ? c[i.decision] = (c[i.decision] || 0) + 1 : c.pending++);
+  $('#engine').innerHTML = `
+    <div class="tot"><div><div class="stat" style="color:var(--green)">${c.PAGAR}</div>PAGAR</div><div><div class="stat" style="color:var(--red)">${c.NO_PAGAR}</div>NO_PAGAR</div><div><div class="stat" style="color:var(--amber)">${c.ESCALAR}</div>ESCALAR</div></div>
+    <div class="small">${inst.length} instances · ${c.pending} pending${running ? ' · <span class="spin"></span>running…' : ''}${runInfo ? ` · last run ${runInfo.secs}s ${esc(JSON.stringify(runInfo.result))}` : ''}</div>
+    <div class="chips" style="margin-top:8px">${inst.map(i => `<div class="chip ${i.decision || ''}" style="cursor:pointer" onclick="openInstance(${i.id})" title="${esc(i.name)} ${i.decision || 'pending'} ${esc(i.reason || '')}"></div>`).join('')}</div>`;
+}
+async function runEngine() {
+  if (compiling()) { msg(`${compiling()} rules still compiling: the API refuses to run (409). Wait.`); return; }
+  running = true; msg('engine running…'); $('#run').disabled = true;
+  const t = performance.now();
+  try { runInfo = {result: await post(`/api/processes/${pid}/run`), secs: ((performance.now() - t) / 1000).toFixed(1)}; msg(`run done in ${runInfo.secs}s`); }
+  catch (e) { msg('run failed: ' + e.message); }
+  running = false; chipsKey = '';
+}
+$('#run').onclick = runEngine;
+
+// ---- column 5: export ----
+async function doExport() {
+  golden = golden || await j('/helper/golden');
+  let text;
+  try { const r = await fetch(`/api/processes/${pid}/export`); text = await r.text(); if (!r.ok) throw new Error(`${r.status} ${text.slice(0, 200)}`); }
+  catch (e) { $('#exp').innerHTML = `<div class="ko">export refused: ${esc(e.message)}</div>`; return; }
+  const rows = text.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+  const c = {};
+  rows.forEach(r => c[r.result] = (c[r.result] || 0) + 1);
+  const has = r => golden[r.file_id] && golden[r.file_id].expected;  // null expected = golden undecided (scans)
+  const mis = rows.filter(r => has(r) && golden[r.file_id].expected !== r.result);
+  const known = rows.filter(has).length;
+  $('#exp').innerHTML = `<div class="tot">${Object.entries(c).map(([k, v]) => `<div><div class="stat">${v}</div>${k}</div>`).join('')}</div>
+    <div><b>${known - mis.length}/${known}</b> match golden · <b class="${mis.length ? 'ko' : 'ok'}">${mis.length} mismatches</b></div>
+    ${mis.map(r => `<div class="mis"><b>${esc(r.file_id)}</b><br>got <span class="chip ${r.result}" style="display:inline-block"></span> ${r.result}, expected <span class="chip ${golden[r.file_id].expected}" style="display:inline-block"></span> ${golden[r.file_id].expected}<br><span class="small">${esc(golden[r.file_id].why)}</span></div>`).join('')}`;
+}
+$('#export').onclick = doExport;
+
+// ---- loop ----
+let busy = false;
+async function tick() {
+  if (busy || !pid) return; busy = true;
+  await Promise.all([pollPdfs(), pollNorm(), pollRules(), pollEngine(), pollMetrics()].map(p => p.catch(e => msg(e.message))));
+  busy = false;
+}
+(async () => {
+  sentences = (await j('/helper/norm').catch(() => ({sentences: []}))).sentences;
+  await loadProcs(); drawSteps(); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>
