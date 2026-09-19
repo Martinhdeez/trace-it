@@ -80,6 +80,10 @@ export const mockClient: ApiClient = {
   fileUrl: () => '',
   queue: noMock,
   suggestion: noMock,
+  proposeDecision: noMock,
+  listProposals: noMock,
+  acceptProposal: noMock,
+  rejectProposal: noMock,
   resolve: noMock,
 
   listFindings: () => wait([]),
