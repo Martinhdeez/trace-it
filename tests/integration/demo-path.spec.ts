@@ -143,15 +143,17 @@ test('upload two text PDFs and run', async ({ request }) => {
   await realAndClean()
 })
 
-// The run dialog is still open. Exact text: the run-history row reads "2 ESCALAR · Martín".
+// The run dialog is still open: one row per outcome, "<decision> <share>% <count>".
 test('pkg 3: the run shows real progress and `by_decision`', async () => {
-  await expect(page.getByText('100%', { exact: true })).toBeVisible()
-  // The Panel's session runs list repeats the split: read it inside the run dialog.
+  // The Panel's run history repeats the split: read it inside the run dialog.
   const dialog = page
     .locator('section')
     .filter({ has: page.getByRole('heading', { name: 'Lote completado' }) })
     .last()
-  await expect(dialog.getByText(`${ESCALATED.length} ESCALAR`, { exact: true })).toBeVisible()
+  await expect(dialog.getByText(new RegExp(`^${ESCALATED.length}\\s*documentos decididos$`))).toBeVisible()
+  await expect(dialog.getByRole('listitem')).toHaveText([
+    new RegExp(`^ESCALAR\\s*100%\\s*${ESCALATED.length}$`),
+  ])
 })
 
 test('upload a scan and run', async ({ request }) => {
