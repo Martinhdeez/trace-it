@@ -839,7 +839,7 @@ function SuggestRule({ process, instance }: { process: ProcessDetail; instance: 
                   <Link to={paths.rule(process.id, outcome.rule_id)} className="underline">
                     Ver la regla
                   </Link>
-                  <Link to={`${paths.process(process.id)}?publicar=1`} className="underline">
+                  <Link to={`${paths.panel(process.id)}?publicar=1`} className="underline">
                     Panel → Publicar
                   </Link>
                 </p>
