@@ -5,6 +5,7 @@ import os
 import re
 import threading
 import time
+import unicodedata
 import uuid
 from collections import OrderedDict
 from contextlib import suppress
@@ -112,7 +113,9 @@ class ExtractionService:
         return {"id": ident, "files": len(items), "status_url": f"/v1/batches/{ident}"}
 
     def ingest(self, stream, filename):
-        filename = filename or "upload"
+        # macOS hands a dropped file its name decomposed (NFD): "á" as "a" + accent. Compose
+        # it, or the same invoice gets a second instance under a name that only looks equal.
+        filename = unicodedata.normalize("NFC", filename or "upload")
         if len(filename) > 255:
             raise ValueError("Filename exceeds 255 characters")
         temp = self.objects / (uuid.uuid4().hex + ".part")
