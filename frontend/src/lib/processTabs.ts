@@ -6,6 +6,7 @@ export const PROCESS_TABS = [
   { id: 'reception', label: 'Recepción', path: paths.reception },
   { id: 'runs', label: 'Ejecuciones', path: paths.instances },
   { id: 'review', label: 'Revisión', path: paths.review },
+  { id: 'metrics', label: 'Métricas', path: paths.metrics },
   { id: 'settings', label: 'Ajustes', path: paths.processSettings },
 ] as const
 
@@ -25,6 +26,7 @@ export function processTabFromPath(pathname: string, processId: number): Process
   if (pathname.startsWith(`${base}/reception`)) return 'reception'
   if (pathname.startsWith(`${base}/instances`)) return 'runs'
   if (pathname.startsWith(`${base}/review`)) return 'review'
+  if (pathname.startsWith(`${base}/metrics`)) return 'metrics'
   if (pathname.startsWith(`${base}/settings`)) return 'settings'
   return 'panel'
 }
