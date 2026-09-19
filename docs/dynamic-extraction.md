@@ -21,10 +21,11 @@ through the existing process lifecycle; this is not a filesystem watcher.
    introduce a usable field. The compiler receives the proposed schema and checks
    literal references against it.
 2. Review the setup, rules and examples, then prepare the draft. Compilation and the
-   historical preview use saved evidence. They do not read PDFs again. A new required
-   field missing from historical evidence can block publication with `MISSING_DATA`.
-   Review that change explicitly; where the policy permits an optional field, declare
-   it optional and make the rule handle its absence. Do not manufacture historical values.
+   historical preview use saved evidence. They do not read PDFs again. Historical cases
+   missing a newly introduced required field are reported as not evaluable with available
+   historical evidence. That absence alone does not block publication or count as a
+   successful validation. Keep the field required when the policy requires it, and include
+   proposed-schema examples with the value present and absent.
 3. A manager publishes the prepared version. Its snapshot in PostgreSQL is the runtime
    contract for both extraction and rule execution, including the selected models and
    execution effort. Unpublished proposal changes have no effect on active extraction.
@@ -39,6 +40,41 @@ through the existing process lifecycle; this is not a filesystem watcher.
 The process execution editor is described in [Models and execution effort](process-execution.md).
 Changing `.env` remains a deployment change requiring restart; publishing a process
 configuration takes effect on the next request without one.
+
+## Historical coverage when the schema grows
+
+Publication compares proposed symbol names with the active published schema. Only newly
+introduced required symbols qualify for the historical-evidence exception; making an
+existing optional symbol required keeps the normal validation checks.
+
+All rules are still attempted in the validation sandbox. Actual reads of unavailable new
+fields are identified separately from ordinary exceptions, including reads from other
+instances. Results of rules that can run on the saved evidence remain in the report.
+Code errors, invalid outputs, unknown symbols, missing existing required data and conflicts
+on evaluable cases still block publication. There is no general exception for `MISSING_DATA`,
+`KeyError` or `TypeError`.
+
+A historical case that needs unavailable new data is excluded from unchanged, changed and
+conflicting decision counts. It is listed in `not_evaluable`, with its missing symbols and
+the rules that did and did not yield evaluable results. `coverage` reports total historical
+cases, evaluated cases, not-evaluable cases, and how many incomplete cases retained some
+rule results (`partial`) or none (`none`). Zero or partial historical coverage is visible
+in the publication panel; it is not a claim that the proposed policy passed on old evidence.
+
+When a published schema gains required symbols, the proposed schema must have acceptance
+examples covering every new required field both present and absent, even with no historical
+cases. Initial bootstrap publication keeps its existing validation flow. Discovery
+proposals carry those examples; manual process drafts can supply `acceptance_examples`.
+Present examples must include all required fields; an absent example isolates each new
+missing field while retaining the other required values. The examples execute the proposed
+rules and required-field policy, and stored rule tests still run. A new document missing
+the field must produce the configured human-review
+outcome. Tests and examples establish behavior on their inputs; they do not prove arbitrary
+untested rule branches correct.
+
+After publication, new uploads and pending re-extractions use the new required schema.
+No historical PDF is re-extracted automatically, and no historical decision or evidence
+is edited. See [ADR 0030](adr/detail/0030-report-partial-history-for-new-symbols.md).
 
 ## Configure a field
 
@@ -139,6 +175,10 @@ recognizer and its evidence when interpreting generic fields; primary OCR remain
    another network call. Timeouts, dropped connections and rejected successful
    responses remain blocked as uncertain deliveries. Definite HTTP refusals
    (4xx or 503) can be attempted on a later extraction after provider cooldown.
+
+The deployment option `TRACEPAY_OCR_FORCE_RECOMPUTE=1` explicitly bypasses reading,
+provider-journal and pending-evidence reuse. Its default is off. It does not authorize
+rewriting historical decisions or turn publication previews into OCR runs.
 
 Keeping all declared symbols covers computed rule references conservatively. Optional
 fields can therefore also trigger reading or model assistance. Mark data that should not

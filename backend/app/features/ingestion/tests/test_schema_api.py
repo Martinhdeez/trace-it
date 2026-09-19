@@ -33,7 +33,14 @@ pytestmark = [
 ]
 
 
-async def publish_draft(client, process_id):
+async def publish_draft(client, process_id, examples=None):
+    if examples is not None:
+        staged = (await client.get(f"/processes/{process_id}/draft")).json()
+        updated = await client.put(
+            f"/processes/{process_id}/draft",
+            json={"expected_revision": staged["revision"], "acceptance_examples": examples},
+        )
+        assert updated.status_code == 200, updated.text
     validated = await client.post(f"/processes/{process_id}/draft/validate")
     assert validated.status_code == 200, validated.text
     draft = validated.json()
@@ -93,7 +100,24 @@ async def test_new_definition_fields_are_used_without_restarting_and_history_is_
     assert loaded.status_code == 200, loaded.text
     staged = (await client.get(f"/processes/{process_id}/extraction-plan")).json()
     assert staged["fingerprint"] == before["fingerprint"]
-    await publish_draft(client, process_id)
+    await publish_draft(
+        client,
+        process_id,
+        [
+            {
+                "name": "complete certificate",
+                "instance": {"holder": "Ana", "expires_on": "2027-04-21"},
+                "decision": "ACCEPT",
+                "explanation": "Both required fields are present",
+            },
+            {
+                "name": "expiry missing",
+                "instance": {"holder": "Ana"},
+                "decision": "REVIEW",
+                "explanation": "The newly required expiry is absent",
+            },
+        ],
+    )
     after = (await client.get(f"/processes/{process_id}/extraction-plan")).json()
     assert after["fingerprint"] != before["fingerprint"]
     assert any(field["labels"] == ["Expiry"] for field in after["fields"])
@@ -183,19 +207,27 @@ async def test_agent_published_field_reaches_extraction_and_rules_without_restar
 
     proposal = plan(initial["plan"]["name"], field="exposure_hours")
     proposal["symbols"][0]["extraction"] = {"labels": ["Exposure"]}
-    # Saved historical symbols do not contain the new field. The new rule explicitly
-    # tolerates that absence; publication must not rewrite or invent old evidence.
-    proposal["symbols"][0]["required"] = False
+    # The field stays required. Old evidence cannot validate this new requirement;
+    # new missing-field cases must still escalate through the engine's required gate.
+    assert proposal["symbols"][0]["required"]
     proposal["rules"][0]["text"] = "If exposure_hours is present and greater than 100, review."
     proposal["symbols"].extend(initial["plan"]["symbols"])
     for example in proposal["examples"]:
-        if example["instance"]:
-            example["instance"]["amount"] = 20
+        example["instance"]["amount"] = 20
     responses = scripts(proposal, field="exposure_hours")
     responses["compiler"][0]["code"] = responses["compiler"][0]["code"].replace(
         "Decimal(str(instance['exposure_hours'])) > 100",
         "instance.get('exposure_hours') is not None "
         "and Decimal(str(instance['exposure_hours'])) > 100",
+    )
+    responses["tester"][0]["tests"].append(
+        {
+            "name": "absent exposure is handled by the required-symbol engine gate",
+            "instance_json": '{"amount":20}',
+            "sources_json": "{}",
+            "others_json": "[]",
+            "fires": False,
+        }
     )
     monkeypatch.setattr(llm, "model_for", per_role(responses))
     started = await client.post("/process-drafts", json={"process_id": process_id})
@@ -208,6 +240,12 @@ async def test_agent_published_field_reaches_extraction_and_rules_without_restar
     )
     prepared = await post(client, await accept(client, draft), "prepare")
     assert prepared["preview"]["valid"], prepared["preview"]
+    impact = prepared["preview"]["impact"]
+    assert impact["coverage"]["evaluated"] == 0
+    assert impact["coverage"]["not_evaluable"] == 1
+    assert impact["coverage"]["none"]
+    assert impact["unchanged"] == 0 and impact["changes"] == [] and impact["errors"] == []
+    assert impact["not_evaluable"][0]["missing_symbols"] == ["exposure_hours"]
     assert (await client.get(f"/processes/{process_id}/extraction-plan")).json() == before
     unchanged = await client.post(endpoint, files={"file": ("pending.pdf", content)})
     assert unchanged.json()["extraction"]["id"] == original["extraction"]["id"]
@@ -228,10 +266,29 @@ async def test_agent_published_field_reaches_extraction_and_rules_without_restar
     assert repeated.json()["extraction"]["cache_hit"]
     assert repeated.json()["extraction"]["metrics"]["schema_calls_this_request"] == 0
 
+    newly_uploaded = await client.post(endpoint, files={"file": ("new.pdf", content)})
+    assert newly_uploaded.status_code == 201, newly_uploaded.text
+    assert newly_uploaded.json()["symbols"]["exposure_hours"]["value"] == "250"
+    missing_content = pdf_bytes(
+        "Monitoring certificate with the exposure measurement intentionally absent\nAmount: 20"
+    )
+    missing = await client.post(endpoint, files={"file": ("missing.pdf", missing_content)})
+    assert missing.status_code == 201, missing.text
+    assert missing.json()["symbols"]["exposure_hours"]["value"] is None
+
     run = await client.post(f"/processes/{process_id}/run")
-    assert run.status_code == 200 and run.json()["decided"] == 1, run.text
+    assert run.status_code == 200 and run.json()["decided"] == 3, run.text
     decided = (await client.get(f"/instances/{original['instance_id']}")).json()
     assert decided["decisions"][0]["decision"] == "REVIEW"
     assert "LIMIT" in decided["decisions"][0]["reason"]
+    new_decision = (await client.get(f"/instances/{newly_uploaded.json()['instance_id']}")).json()[
+        "decisions"
+    ][0]
+    assert new_decision["decision"] == "REVIEW" and "LIMIT" in new_decision["reason"]
+    missing_decision = (await client.get(f"/instances/{missing.json()['instance_id']}")).json()[
+        "decisions"
+    ][0]
+    assert missing_decision["decision"] == "REVIEW"
+    assert missing_decision["reason"] == "MISSING_DATA: exposure_hours"
     assert (await client.get(f"/instances/{historical_id}")).json()["decisions"] == history
     assert set(service.get_result(original["extraction"]["id"])["fields"]) == {"amount"}

@@ -38,17 +38,18 @@ extraction cost and the scan decision policy.
    Pass scan verification to the existing engine gates, including additional invoice
    fields and fields read from scanned pages in mixed PDFs. Metadata is not an OCR vote.
 5. Apply published changes on the next upload or explicit pending re-extraction.
-   Drafts remain inert. Repeated unchanged requests reuse evidence and report no new
-   reader calls. Existing decisions and attached historical evidence remain immutable.
+   Drafts remain inert. By default, repeated unchanged requests reuse evidence and report
+   no new reader calls. The explicit force-recompute deployment option bypasses reuse.
+   Existing decisions and attached historical evidence remain immutable.
 
 ## Consequences
 
 The original invoice adapter and its default extraction policy remain in place. Generic
 scan fields now reach the same conservative review gates; some cases previously decided
 without those gates will require review on future executions. Previous decisions are not
-rewritten. Publication previews still evaluate saved symbols, so introducing a required
-field can be blocked by missing historical evidence. This change does not automate
-historical re-extraction or weaken publication validation.
+rewritten. Publication previews still evaluate saved symbols; ADR 0030 defines how to
+report historical cases missing newly introduced required fields. This change does not
+automate historical re-extraction.
 
 ## Evidence
 

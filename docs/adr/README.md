@@ -50,7 +50,7 @@ flowchart LR
 | ![E](https://img.shields.io/badge/-E-db2777?style=for-the-badge) | [Change without code, recover without loss](E-change-without-code-recover-without-loss.md) | Resilience (10) and bonus (10) | A norm is configuration published as an atomic version; history is append-only; failures fall back |
 
 <details>
-<summary>Supporting ADRs (30)</summary>
+<summary>Supporting ADRs (31)</summary>
 
 ADR 0001 is the founding decision and wins over any other document. Superseded plans live
 in `.artifacts/archive/`.
@@ -87,6 +87,7 @@ in `.artifacts/archive/`.
 | [0027](detail/0027-ocr-execution-modes-and-provider-fallback.md) | Configure local/API/hybrid OCR and bounded provider fallback | accepted | E |
 | [0028](detail/0028-live-sources-sync-before-run.md) | Sync live sources before every run; fail closed when one is down | accepted | B, E |
 | [0029](detail/0029-bind-dynamic-extraction-to-published-execution.md) | Bind dynamic extraction to published execution and evidence | accepted | B, E |
+| [0030](detail/0030-report-partial-history-for-new-symbols.md) | Report incomplete historical coverage for newly required symbols | accepted | B, E |
 
 ### Glossary
 - **Rule finding:** the result of one rule on one instance (`fires`, `reason`).

@@ -12,6 +12,7 @@ class DraftIn(BaseModel):
     description: str | None = None
     decision_types: list[DecisionTypeIO] | None = None
     symbols: list[SymbolIO] | None = None
+    acceptance_examples: list[dict[str, Any]] | None = None
     decision_review: DecisionReviewConfig | None = None
     rule_ids: list[int] | None = None
     guidance: dict[str, str] | None = None

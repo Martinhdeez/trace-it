@@ -69,7 +69,13 @@ async def capture(session, process_id: int) -> dict:
 
 
 async def evaluate(
-    session, snapshot: dict, inputs: dict, selected_ids: list[int], *, tables: dict | None = None
+    session,
+    snapshot: dict,
+    inputs: dict,
+    selected_ids: list[int],
+    *,
+    tables: dict | None = None,
+    validation_missing: dict[int, list[str]] | None = None,
 ):
     if tables is None:
         source_rows = list(
@@ -101,10 +107,29 @@ async def evaluate(
 
     def run_dataset(code, dataset, sources, population):
         with events.span("evaluate_rule", rule_id=by_code[code], instances=len(dataset)) as span:
-            results = sandbox.run_dataset(code, dataset, sources, population)
+            results = (
+                sandbox.run_dataset(
+                    code, dataset, sources, population, validation_missing=validation_missing
+                )
+                if validation_missing
+                else sandbox.run_dataset(code, dataset, sources, population)
+            )
             span.set(
                 fired=sum(isinstance(r, dict) and r.get("fires") is True for r in results),
-                errors=sum(isinstance(r, BaseException) for r in results),
+                errors=sum(
+                    isinstance(r, BaseException)
+                    and not isinstance(r, sandbox.MissingValidationSymbol)
+                    for r in results
+                ),
+                **(
+                    {
+                        "not_evaluable": sum(
+                            isinstance(r, sandbox.MissingValidationSymbol) for r in results
+                        )
+                    }
+                    if validation_missing
+                    else {}
+                ),
             )
             return results
 

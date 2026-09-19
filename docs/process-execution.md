@@ -131,6 +131,13 @@ re-extract original documents or prove that a new model improves quality. Use th
 compiler and OCR evaluation tools to measure changes before choosing deployment mappings.
 No automatic optimizer or hard monetary budget is implemented.
 
+When new required symbols are missing from historical evidence, validation reports those
+cases as not evaluable and shows historical coverage separately from blocking failures.
+The manager can publish with partial or zero historical coverage once the proposed-schema
+examples, stored rule tests and remaining validation gates pass. Newly uploaded cases
+still require every required symbol. The complete rules are in the
+[historical coverage guide](dynamic-extraction.md#historical-coverage-when-the-schema-grows).
+
 OCR mode (`local`, `api`, or `hybrid`) is pinned with the process settings. `local`
 mode uses installed OCR only; local server vision calls use `hybrid` or `api` mode.
 The selected reader can also use `helmcode:qwen3.6` or `helmcode:gemma4` with the
