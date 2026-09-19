@@ -4,6 +4,8 @@ status: accepted
 
 # Snapshot the whole process as an immutable version on every activation
 
+Amended by ADR 0031: a version is created only when a manager publishes a validated draft.
+
 ## Context
 ADR 0001 requires that "published process versions and past decisions are immutable" and
 defines `simulate(draft_process_version, historical_cases) -> impact_report`. A process is
@@ -45,19 +47,30 @@ records which priorities it used.
   version in place (refines the loader contract in ADR 0007).
 - Going back activates an earlier version as a new activation; it is recorded, not undone.
 
+**Update (2026-09-19).** Rule activation and retirement now only stage changes in the
+process draft (`rules/service.py`, `activate`, `retire`). A new version is created by
+`POST /processes/{id}/draft/validate` followed by a manager's
+`POST /processes/{id}/draft/publish`. Going back restores an earlier version into the
+draft (`restore_version_id`) and publishes it (ADR 0031).
+
 ## Consequences
 - Replaying a past decision uses its own version, not the current configuration.
 - Implemented through complete published snapshots and captured execution inputs in ADR
-  0022. Legacy authoring tables no longer determine a published process's runtime behavior.
+  0031. Legacy authoring tables no longer determine a published process's runtime behavior.
 - Existing decisions retain unknown historical configuration rather than receiving a
   fabricated migration version. Replay is available for new captured engine executions.
 - Listing versions and activating an older one in the UI (F9) builds on this.
 
 ## Evidence
+The state before this decision:
 - `processes/definition.py` (`load_definition`): `session.merge(DecisionType(...))`,
   `session.merge(Symbol(...))`, `process.description = data.description`.
 - `decisions/model.py`: `Decision.rules_hash` identifies the rule set only.
 - `decisions/engine.py` (`hash_rules`): hash over rule id and rule hash.
+
+Today: `load_definition` stages its result in the process draft
+(`processes/definition.py`); `Decision.version_id` references `process_versions`
+(`decisions/model.py`); `features/versions/` holds drafts, publication and replay.
 
 ## Related
 ADR 0001, 0007, 0008, 0014.

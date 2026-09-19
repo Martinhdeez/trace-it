@@ -33,9 +33,12 @@ the shared event schema and OpenTelemetry export.
 1. Native text is used first. Pages requiring OCR use both pinned local readers.
    Missing or conflicting readings can invoke the configured visual reader;
    bounded crops and scale changes may recheck critical fields. Repeating one
-   reader at another scale is not an independent vote. Gemini is used unless a
-   complete generic visual endpoint/model pair is configured; partial generic
-   settings must not block configured Gemini or mislabel its provenance.
+   reader at another scale is not an independent vote. The visual reader order
+   comes from `TRACEPAY_VISION_PROVIDERS` (default `helmcode`: Qwen 3.6, then
+   Gemma 4); Gemini and a generic `compatible` endpoint are used only when listed.
+   Partial generic settings must not block a configured reader or mislabel its
+   provenance. A published version pins one reader (`execution.extraction.vision_model`)
+   and inherits no deployment fallback (ADR 0027).
 2. The invoice-specific adapter stays in `features/ingestion`. NIF, IBAN and
    purchase-order `value` require the current native/corroboration policy;
    unconfirmed alternatives remain `proposed_value` and candidates. Other fields
@@ -68,7 +71,7 @@ the shared event schema and OpenTelemetry export.
    | `journal_hit` | An existing journal record was found, complete or uncertain |
    | `network_attempted` | Execution reached the outbound request; delivery or billing is not guaranteed |
    | `network_succeeded` | The request returned a usable response accepted by the reader |
-   | `outcome` | `success`, `replay`, `error`, or `blocked_uncertain` |
+   | `outcome` | `success`, `forced` (force-recompute), `replay`, `error`, or `blocked_uncertain` |
    | `http_status_code` | HTTP response status when a response arrived, including rejected responses |
    | `input_tokens`, `output_tokens`, `total_tokens` | Nonnegative integer usage reported by the provider, when available |
    | `error_type`, `error` | Exception class and a fixed safe description, without provider bodies |

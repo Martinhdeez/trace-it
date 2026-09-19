@@ -46,7 +46,9 @@ audit must survive without any external service.
   `step` (name), `status` (`ok`/`error`), `started_at`, `duration_ms`, `data` JSONB and the
   links `instance_id`, `process_id`, `rule_id`, `norm_rule_id`. No foreign keys: the audit
   never blocks the transaction it describes. `cost` is dropped: cost is tokens
-  (`data.input_tokens`, `data.output_tokens`).
+  (`data.input_tokens`, `data.output_tokens`). **Update (2026-09-19):** `llm_run` and OCR
+  `provider_call` spans also record `cost_status` and `cost_usd` where a price is known
+  (`agents/llm.py`, `_price`; `ingestion/ocr/pricing.py`).
 - `app/core/events.py`: `with events.span("step", rule_id=..., **data) as s:`. The current
   span is a context variable, so children attach across `await`, `asyncio.gather` and
   threads; a background job continues a trace with `parent=`. Links `process_id`,
@@ -69,7 +71,7 @@ audit must survive without any external service.
   rule (instances, fired, errors) + a `decision` point
   per instance (fired rules, reason, `rules_hash`); `reprocess` the same, with unchanged,
   changed and conflicts; a run or reprocess refused with 409 (rules compiling, none
-  enforced) is an `error` span, so it shows in the metrics; `upload_document` > `store_file`,
+  enforced; since ADR 0031, no published version) is an `error` span, so it shows in the metrics; `upload_document` > `store_file`,
   `extraction` > `native_text`, `ocr`, `vision`, `text_judge`, then the `ingest_document`
   point with the reading and symbols; `sync_source` (the
   connector's requests, retries, 429s, logins, pages); `suggest_escalation`;
@@ -96,7 +98,8 @@ audit must survive without any external service.
 - Spans of the standalone extraction worker (`/v1/extractions`) are traces of their own,
   not tied to an instance.
 - Found while measuring: activating a freshly compiled rule runs the impact check twice
-  (`impact_check`, then `activate_rule`), about 1 s each on 471 invoices.
+  (`impact_check`, then `activate_rule`), about 1 s each on 471 invoices. Historical: since
+  ADR 0031 activation only stages the rule in the draft, and draft validation checks impact.
 
 ## Evidence
 - Measured locally (M-series Mac, Postgres in Docker), real sandbox over the 471 batch-1
@@ -155,17 +158,19 @@ audit must survive without any external service.
 ## Monitoring planes (2026-09-19)
 The same spans, cut three ways so that each question has its own view. `PLANES` in
 `features/traces/service.py` maps every span name to exactly one plane.
-`traces/tests/test_planes.py` reads every `events.span`/`events.record` call in
-`backend/app` and `tools`, and fails if a span has no plane or if a plane lists a span that
+`traces/tests/test_planes.py` reads every `events.span`/`events.record`/`_status_span` call
+in `backend/app` and `tools`, and fails if a span has no plane or if a plane lists a span that
 nothing emits. An `llm_run` always belongs to `agents`, whichever step called it, so
 agent tokens are counted in one place. OCR `provider_call` operations belong to
-`ingestion`; their separate reported usage excludes journal replay (ADR 0022).
+`ingestion`; their separate reported usage excludes journal replay (ADR 0022). One
+exception: `unhandled_error` (a 500, `core/events.py`) is emitted through the module's own
+`span`, which the test does not scan, and has no plane.
 
 | Plane | Spans | Key metrics | Endpoint |
 |---|---|---|---|
-| ingestion | `upload_document`, `store_file`, `extraction`, `native_text`, `ocr`, `vision`, `text_judge`, `focused_read`, `provider_call`, `ingest_document`, `reextract_document`, `extract_document`, `upload_workbook`, `load_workbook`, `sync_source` | files, files/s (first reading's start to last reading's end), pages, OCR/vision/judge/focused calls, cache hits, provider attempts/replays/reported tokens, abstentions (declared symbols read as null) by field, errors, p50/p95 per step | `GET /processes/{id}/metrics/ingestion`, `GET /metrics/ingestion` |
-| agents | `load_use_case`, `load_definition`, `configure_agent`, `activate_agent_config`, `save_rule`, `norm`, `normalize_norm`, `compile_rules`, `compile_rule`, `coder_attempt`, `run_tests`, `impact_check`, `activate_rule`, `retire_rule`, `llm_run`, `demo_llm_down`, `learn_norms`, `validate_norm`, `adopt_norm`, `reject_norm`, `suggest_escalation`, `propose_decision` | tokens in/out/cached, requests, retries, fallbacks, truncations and errors by model, role (agent), rule, norm rule and use case; tokens per hour; compile success rate, attempts per compilation; per norm: tokens and seconds from the norm to its last rule active | `GET /processes/{id}/metrics/agents`, `GET /metrics/agents` |
-| execution | `run_process`, `evaluate_rule`, `decision`, `reprocess`, `review_decision`, `resolution`, `export_outcomes` | runs, invoices/s, per-rule evaluations, fired, errors and p50/p95; decisions by type; escalations by cause (`MISSING_DATA`, `RULE_ERROR`...); the human queue; pending; resolutions by author; engine decision to a person's decision (p50/p95 s) | `GET /processes/{id}/metrics/execution`, `GET /metrics/execution` |
+| ingestion | `upload_document`, `store_file`, `extraction`, `native_text`, `ocr`, `vision`, `text_judge`, `schema_fields`, `focused_read`, `provider_call`, `ingest_document`, `reextract_document`, `extract_document`, `upload_workbook`, `load_workbook`, `sync_source`, `discover_source` | files, files/s (first reading's start to last reading's end), pages, OCR/vision/judge/focused calls, cache hits, provider attempts/replays/reported tokens, `known_cost_usd`, `unpriced_requests`, abstentions (declared symbols read as null) by field, `rate_limited` (HTTP 429) per provider, `sources[]` (syncs, errors, requests, retries, `rate_limited`, p95 per source of truth), errors, p50/p95 per step | `GET /processes/{id}/metrics/ingestion`, `GET /metrics/ingestion` |
+| agents | `load_use_case`, `load_definition`, `configure_agent`, `activate_agent_config`, `save_rule`, `norm`, `normalize_norm`, `discover_process`, `discuss_process`, `compile_process_draft`, `publish_process_draft`, `compile_rules`, `compile_rule`, `coder_attempt`, `run_tests`, `impact_check`, `activate_rule`, `publish_process_version`, `retire_rule`, `llm_run`, `demo_llm_down`, `learn_norms`, `validate_norm`, `adopt_norm`, `reject_norm`, `accept_proposal`, `reject_proposal`, `suggest_escalation`, `propose_decision` | tokens in/out/cached, `known_cost_usd`, `unpriced_requests`, requests, retries, fallbacks, truncations and errors by model, role (agent), rule, norm rule and use case; tokens per hour; compile success rate, attempts per compilation; per norm: tokens and seconds from the norm to its last rule active | `GET /processes/{id}/metrics/agents`, `GET /metrics/agents` |
+| execution | `run_process`, `evaluate_rule`, `decision`, `reprocess`, `review_decision`, `resolution`, `export_outcomes`, `detect_stale_decisions`, `ack_alert` | runs, invoices/s, per-rule evaluations, fired, errors and p50/p95; decisions by type (each instance's latest decision); `escalation_reasons` (the queue by first reason code); escalations by cause (`MISSING_DATA`, `RULE_ERROR`...); the human queue; pending; resolutions by author; engine decision to a person's decision (p50/p95 s) | `GET /processes/{id}/metrics/execution`, `GET /metrics/execution` |
 
 All of these take `since`. `GET /processes/{id}/metrics` retains its existing fields:
 `llm[]` gains fields and `providers[]` adds OCR provider usage (ADR 0022).
@@ -175,9 +180,19 @@ its error rate and p95 over the last `TRACE_HEALTH_WINDOW_MINUTES`, measured aga
 event named after its plane; it polls `events` by id every second and can filter by plane
 and process.
 
+**Update (2026-09-19, #150).** The assistant's spans (`suggest_escalation`,
+`propose_decision`) belong to the agents plane: they are LLM work, not the engine's run.
+Outcome counts use each instance's latest decision. `GET /instances/{id}/trace` adds
+`sources_read`: for each source, the latest `sync_source` span before the decision, with its
+requests, retries, `rate_limited` (HTTP 429), timeouts and `trace_id`. `GET /traces` takes
+`source=` to list one source's syncs.
+
 Every `llm_run` now records the provider's `cached_tokens` too. A failed run still records
 the requests and tokens of the answers that came back. Cost stays in tokens: there is no
-per-model price setting.
+per-model price setting. **Update (2026-09-19):** cost is also reported in USD where the
+model's price is known (the provider's price, else a listed rate in `agents/llm.py`);
+`known_cost_usd` sums it and `unpriced_requests` counts the requests with no price, never
+read as 0 USD (`traces/schemas.py`).
 
 Alternatives considered:
 - **Prometheus + Grafana (or OTel metrics to a collector).**

@@ -54,7 +54,7 @@ frontend, and a second answer to "what does this case need from me".
   malformed; ADR 0004, 0020) is `blocked` too, with no code and `report.error`: it
   escalates every instance with `RULE_COMPILE_FAILED <id>: <error>` until it compiles.
   A rule that cannot be applied escalates; the older rules never decide without it.
-  **Superseded by ADR 0022 (atomic publication):** a failed compile now leaves a `draft` that
+  **Superseded by ADR 0031 (atomic publication):** a failed compile now leaves a `draft` that
   cannot be published; the published version keeps deciding with its complete rule set.
 - A rule that reads a live source whose pre-run sync failed does not run on an older
   snapshot: unless the rules that ran already decide the case, it escalates with the reason
@@ -65,6 +65,9 @@ frontend, and a second answer to "what does this case need from me".
   this: the challenge wants the process output, and a person's resolution never changes
   it). A person's decision is exported only for an instance the engine never decided. Export
   refuses (409) while any instance is `PENDING`.
+  **Update (2026-09-19).** When the engine decision has an optional review (ADR 0021),
+  a later person's resolution is exported instead, and export refuses (409) while a review
+  awaits a person (`decisions/service.py`, `_export`).
 - The engine runs one code per rule, agent A's (ADR 0004 revised): the A/B cross-check
   belongs to compile time, where a disagreement blocks activation.
 
@@ -86,8 +89,10 @@ frontend, and a second answer to "what does this case need from me".
   (`UNVERIFIED_DATA`) and a rejection on scanned data (`SCAN_REVIEW: <rule>`).
 
 ## Evidence
-- `decisions/engine.py` (`Outcomes`, `decide`); `decisions/service.py` (`outcomes`, `run`,
-  `export`); `processes/definition.py` refuses a definition without a `requires_human` type.
+- `decisions/engine.py` (`Outcomes`, `decide`); `decisions/service.py` (`run`, `export`);
+  a run takes its outcomes from the published version (`versions/configuration.py`,
+  `outcomes`) and evaluates through `versions/execution.py` (`evaluate`);
+  `processes/definition.py` refuses a definition without a `requires_human` type.
 - Tests: `test_engine.py` (failed rule → `ESCALAR` with `RULE_ERROR`, tie → `RULE_CONFLICT`,
   malformed answer, rule without code, blocked rule → `RULE_NEEDS_DATA`, failed compile →
   `RULE_COMPILE_FAILED`, a required symbol

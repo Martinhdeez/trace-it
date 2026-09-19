@@ -5,8 +5,8 @@ status: accepted
 # Decide scans only on confirmed data, and escalate a scan the rules would reject
 
 ## Context
-Batch 1 holds 29 PDFs with no text layer. Since ADR 0022 they are read by local OCR, Gemini
-and Jev, and the rules decide them like any other invoice. Two kinds of result are unsafe:
+Batch 1 holds 29 PDFs with no text layer. Since ADR 0022 they are read by local OCR, the
+configured visual reader (Helmcode Qwen 3.6 by default; Gemini at the time) and Jev, and the rules decide them like any other invoice. Two kinds of result are unsafe:
 
 - **A rejection on scanned data.** The rules reject a scan when a value fails a check (the
   IBAN is not the supplier master's, the VAT does not add up). On OCR data such a mismatch
@@ -16,7 +16,7 @@ and Jev, and the rules decide them like any other invoice. Two kinds of result a
   (`unverified`), was still used. The freeze rehearsal (PR #65) decided eight scans that
   way: scan_002, 010, 012, 013, 014, 015 and 022 `PAGAR`, scan_008 `NO_PAGAR`.
 
-Gemini and Jev are called live, so the readings of a scan can change between runs, and
+The visual reader and Jev are called live, so the readings of a scan can change between runs, and
 with them the decision. The product owner decided (2026-09-19, `docs/mentor-questions.md`):
 scans are read and decided; a null field, a field we would have to check, or a failed check
 on scanned data means `ESCALAR`. Text PDFs are unaffected.
@@ -45,6 +45,8 @@ on scanned data means `ESCALAR`. Text PDFs are unaffected.
   a text PDF. Ingestion records it in each symbol's origin (`payment_symbols`):
   `scan:<extraction id>`, and `scan:<extraction id>:<verification>` for a value its readers
   did not confirm (`unverified`, `ambiguous`). A text PDF keeps `document:<extraction id>`.
+  **Update (2026-09-19).** Dynamic schema fields (ADR 0029) carry provenance per field: a
+  value with no native evidence, even in a mixed PDF, gets `scan:` (`process_extraction.py`).
 - The service passes the engine, per scanned instance, the symbols its readers did not
   confirm (`symbols.scan`); the engine (`_combine`) applies, in this order:
   1. a required symbol missing -> escalate, `MISSING_DATA: <symbols>` (unchanged);
@@ -69,7 +71,7 @@ on scanned data means `ESCALAR`. Text PDFs are unaffected.
 - A `NO_PAGAR` the reference expects on a scan becomes `ESCALAR` (5-6 files in batch 1).
 
 ## Evidence
-- Recount of `demo-logs/scan-review/report.json` (29 scans, one full-OCR run): today 18
+- Recount of `demo-logs/scan-review/report.json` (not committed) (29 scans, one full-OCR run): today 18
   `PAGAR` / 5 `NO_PAGAR` / 6 `ESCALAR`; with `SCAN_REVIEW` 18 / 0 / 11; with
   `UNVERIFIED_DATA` as well 10 / 0 / 19.
 - Recount of the frozen rehearsal (`trace_freeze`, process 3, read-only): the stored rule

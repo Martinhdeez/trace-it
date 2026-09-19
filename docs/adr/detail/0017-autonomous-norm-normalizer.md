@@ -4,7 +4,7 @@ status: accepted
 
 # Turn the client's norm into rules with an autonomous normalizer
 
-Automatic adoption is superseded by [ADR 0022](0022-publish-approved-process-versions.md).
+Automatic adoption is superseded by [ADR 0031](0031-publish-approved-process-versions.md).
 Compilation and normalization remain in use.
 
 ## Context
@@ -80,6 +80,9 @@ checks, possibly with different decisions.
 - `POST /processes/{id}/run` and `/reprocess` refuse (409) while any rule of the process
   is `compiling`, or when none is `active` or `blocked`: a run started while the norm's
   checks compiled decided 500 invoices with no rule, all paid by default.
+  **Update (2026-09-19): superseded by ADR 0031.** A run uses only the published version, so
+  a draft rule's status never blocks it; without a published version, run and reprocess
+  refuse (409) "Publish an approved process version before running cases".
 - Output validator (`ModelRetry`): decisions exist and are never the default type, check
   texts unique and not already active, `covered` ids exist, no empty sentence.
 - `POST /processes/{id}/norm` (manager) creates the norm rules and their checks (status
@@ -129,8 +132,9 @@ checks, possibly with different decisions.
 - Tests: `agents/tests/test_normalizer.py` (policy applied to an unstated decision, an
   explicit decision kept, no policy leaves the model's, an unknown or default policy
   refused, a quote not in its sentence retried, the invoice use case sets `NO_PAGAR` and
-  disables the share limit), `decisions/tests/test_api.py` (run and reprocess refused
-  while compiling or with no enforced rule). The four escalation paths were already covered in
+  disables the share limit, no longer read since ADR 0031), `decisions/tests/test_api.py`
+  (then: run and reprocess refused while compiling or with no enforced rule; now
+  `test_draft_rule_status_does_not_stop_published_execution`). The four escalation paths were already covered in
   `decisions/tests/test_engine.py`.
 
 - Doubt runs, `make eval-norm`, 2026-09-19, all roles `helmcode:deepseek-v4-flash` (with

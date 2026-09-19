@@ -46,8 +46,8 @@ A definition without `use_case` gets a use case of its own, with the process's n
 | Secrets | `.env` (never committed) | API keys, ERP credentials | each deployment |
 
 - **Platform prompt**: the role's contract, the same for every use case, in a file.
-- **Agent config** (`AgentSettings`), per use case and role (`compiler`, `tester`,
-  `assistant`): model, `instructions` (domain guidance appended to the platform prompt under
+- **Agent config** (`AgentSettings`), per use case and role (seven roles: `compiler`,
+  `tester`, `assistant`, `normalizer`, `decision_reviewer`, `learner`, `discovery`): model, `instructions` (domain guidance appended to the platform prompt under
   "## Guidance for this use case"), `model_settings`, `limits` (compiler: `max_attempts`,
   `auto_activate_max_change`; tester: `min_tests`, `max_reviews`) and `examples`
   (approved rule/code pairs; the rule being compiled never sees its own). Empty fields
@@ -62,9 +62,16 @@ A definition without `use_case` gets a use case of its own, with the process's n
 - Secrets are referenced by variable name (e.g. in `sources.json`), never stored inline.
 
 Model fallback chains and a per-request timeout were added later (ADR 0019).
-Not implemented: presets (`quality`, `cheap`, `fast`), per-role
-retry and request limits, exporting a version back to a file, and an event for each
+Not implemented: exporting a version back to a file, and an event for each
 activation (the version row keeps author, note and time).
+
+**Update (2026-09-19).** Per-role `retries` and `request_limit` exist in `AgentSettings`
+(`use_cases/schemas.py`), and each process has execution presets (`lowest_cost`,
+`fastest`, `balanced`, `highest_quality`, `processes/execution.py`) that only fill editable
+values. A published process version pins its agent settings: runs read them from the
+version snapshot (`versions/configuration.py`, `setups`), and `agent_configs` versions are
+authoring defaults for the next draft (ADR 0031). The `auto_activate_max_change` limit is no
+longer read: automatic activation was replaced by manager publication (ADR 0031).
 
 ## Consequences
 - Results are comparable per configuration with one query over `events`.

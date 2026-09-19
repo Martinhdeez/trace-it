@@ -82,8 +82,9 @@ expects ESCALAR. Two files with the same name also produced two lines.
   `review_correction`), new `export`; tests `test_run_review_and_export` (an
   escalated instance resolved as NO_PAGAR still exports ESCALAR) and `test_export_a_duplicate_name_gives_a_single_line`; 56 tests green
   on that branch.
-- `ingestion/model.py`: `INSTANCE_STATUSES = ("PENDING", "REVIEW", "DECIDED")`.
+- `ingestion/model.py`: `INSTANCE_STATUSES = ("PENDING", "REVIEW", "DECIDED")` (at PR #17; now
+  `("PENDING", "DECIDED")`).
 
 ## Related
-ADR 0001, 0002, 0004, 0007, 0008, 0010, 0014. Plan P4, P21; `docs/process-packs.md`
+ADR 0001, 0002, 0004, 0007, 0008, 0010, 0014. Plan P4, P21; `.artifacts/archive/process-packs.md`
 (policies); PR #13, #17.

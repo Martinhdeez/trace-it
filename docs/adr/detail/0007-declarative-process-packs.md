@@ -49,18 +49,26 @@ and configuration at runtime, and those changes must never be lost by reloading 
 - **Export** returns the current process (and agent configuration) as pack JSON so a change
   made in the app can be committed.
 
+**Update (2026-09-19).** A pack gives either `description` or `use_case`. The invoice pack uses
+`use_case`: its description and agent configuration live in
+`processes/invoice-payment/use-case.json`, and its hand-written rule code in `processes/rules-v3/`.
+Loading stages a draft process version; `make activate MANAGER_ID=<id>` publishes it (ADR 0031).
+With optional decision review, a reviewed decision exports a later human resolution (ADR 0021).
+
 ## Consequences
 - New process = new pack; a new kind of source is the only code to write.
 - **Known gap:** the loader still overwrites decision types, symbols and the description
   with the file's values (`session.merge`). That contradicts "loading never overrides
-  runtime decisions"; ADR 0015 (proposed) versions them with the whole process.
+  runtime decisions"; ADR 0015 versions them with the whole process. **Update (2026-09-19):**
+  resolved; execution reads the published version, and the loader only stages a draft.
 - Export back to pack JSON is not implemented.
 
 ## Evidence
 - Loader and validation: `processes/definition.py` (`Definition._consistent`,
-  `load_definition`); 5 tests in `processes/tests/test_definition.py`, 4 in `test_api.py`.
-- Invoice pack: 16 rules with hand-written code, 12 symbols, 3 decision types (ESCALAR 3
-  requires human, NO_PAGAR 2, PAGAR 1 default). `make demo` over the 500 files of batch 1:
+  `load_definition`); 8 tests in `processes/tests/test_definition.py`, 4 in `test_api.py`.
+- Invoice pack: 17 rules with hand-written code, 12 symbols, 3 decision types (ESCALAR 3
+  requires human, NO_PAGAR 2, PAGAR 1 default). The text-layer demo (historical; `make demo` now runs OCR
+  through the API) over the 500 files of batch 1:
   433 PAGAR, 36 NO_PAGAR, 31 ESCALAR (29 of them scans without a text layer), identical to
   the golden reference on all 471 text PDFs.
 - `make setup` loads the invoice pack; `travel-expenses.json` loads with the same code.

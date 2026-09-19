@@ -57,6 +57,16 @@ published process symbol/rule definitions take effect on the next request. These
 are separate configuration mechanisms; this ADR does not promise hot reload of
 environment variables or rewrite historical decisions.
 
+**Update (2026-09-19).** Gemini's free quota ran out, so Helmcode became the primary
+visual reader. The default chains are now `TRACEPAY_VISION_PROVIDERS=helmcode` (Qwen 3.6,
+then Gemma 4) and `TRACEPAY_TEXT_PROVIDERS=jev,helmcode`; Gemini is retired and used only
+when listed explicitly. The default profile is `experimental`: the historical `verified`
+profile requires Gemini first and cannot certify this committee. A published version pins
+one visual reader, one text judge and the mode at publication, with no deployment
+fallback (`processes/execution.py`). Under it, process uploads use the pinned mode, the
+two-model API corroboration does not apply, and `.env` changes take effect only after a
+new version is published. The per-request mode override still applies to `/v1` requests.
+
 The [operator guide](../../ingestion/providers-and-modes.md) documents model capability,
 configuration examples, quota caveats, and monitoring. This extends the ingestion
 evidence contract in ADR 0022 and retains the deterministic engine in ADR 0002.
