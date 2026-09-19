@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { mailApi, mailKeys, type MailActivity } from '../../api/mail'
 import { isNotifiable, notificationText } from '../../lib/mail'
 import { paths, processFromPath } from '../../lib/paths'
@@ -59,13 +59,12 @@ function ProcessMailNotifications({ processId, userId }: { processId: number; us
     return () => clearTimeout(timer)
   }, [notices])
   return <>
-    <div className="absolute bottom-4 right-5 z-20"><Link to={paths.reception(processId)} aria-label={`Actividad de correo${query.data?.unread ? `, ${query.data.unread} sin leer` : ''}`} className="inline-flex items-center gap-2 rounded-full bg-shell px-3 py-2 text-xs shadow-md ring-1 ring-line"><Bell size={14} />Correo{query.data?.unread ? <span className="rounded-full bg-ink px-1.5 text-on-ink">{query.data.unread}</span> : null}</Link></div>
-    <div aria-live="polite" aria-atomic="false" className="pointer-events-none fixed bottom-16 right-4 z-50 w-[min(360px,calc(100vw-32px))] space-y-2">
+    <div aria-live="polite" aria-atomic="false" className="pointer-events-none fixed bottom-4 right-4 z-50 w-[min(360px,calc(100vw-32px))] space-y-2">
       {notices.map(event => <div key={event.message_id} role="status" className="pointer-events-auto rounded-2xl border border-hairline bg-shell p-4 shadow-lg">
         <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><p className="text-sm font-medium">{notificationText(event)}</p><p className="mt-1 truncate text-xs text-muted">{String(event.data.subject || 'Sin asunto')}</p></div><button aria-label="Cerrar aviso de correo" onClick={() => setNotices(n => n.filter(e => e.message_id !== event.message_id))}><X size={16} /></button></div>
-        <Link className="mt-3 inline-block text-sm underline" to={`${paths.reception(processId)}?message=${event.message_id}#mail-${event.message_id}`} onClick={() => setNotices(n => n.filter(e => e.message_id !== event.message_id))}>Ver correo</Link>
+        <Link className="mt-3 inline-block text-sm underline" to={`${paths.processSettings(processId)}#mail-${event.message_id}`} onClick={() => setNotices(n => n.filter(e => e.message_id !== event.message_id))}>Ver correo</Link>
       </div>)}
-      {notices.length > 0 && more > 0 && <p className="rounded-lg bg-shell p-2 text-xs">{more} correos más en la actividad de recepción.</p>}
+      {notices.length > 0 && more > 0 && <p className="rounded-lg bg-shell p-2 text-xs">{more} correos más en Ajustes.</p>}
     </div>
   </>
 }

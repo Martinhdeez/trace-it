@@ -6,7 +6,6 @@ import { keys } from '../../api/queries'
 import { useSession } from '../../state/session'
 import { Button, Field, Input, Select, Textarea } from '../shell/Controls'
 import { ErrorNotice } from '../shell/Notice'
-import { NestedCard } from '../shell/Well'
 import { ExecutionEditor } from './ExecutionEditor'
 import { PublishDraft } from './PublishDraft'
 
@@ -16,13 +15,13 @@ export function ProcessExecutionSettings({ processId }: { processId: number }) {
   const { isManager } = useSession()
   const query = useQuery({ queryKey: keys.execution(processId), queryFn: () => api.getExecution(processId), enabled: isManager, refetchOnWindowFocus: false })
   if (!isManager) return null
-  return <section className="mt-6"><NestedCard label="Models and execution effort">
-    <div className="space-y-3 p-4">
+  return (
+    <div className="space-y-3">
       {query.isError && <ErrorNotice error={query.error} />}
       {query.data && <SettingsForm key={`${processId}:${query.data.revision}:${query.data.version_id}`} processId={processId} initial={query.data} />}
-      {query.isPending && <p>Loading execution settings…</p>}
+      {query.isPending && <p className="text-[12.5px] text-faint">Cargando…</p>}
     </div>
-  </NestedCard></section>
+  )
 }
 
 function SettingsForm({ processId, initial }: { processId: number; initial: ExecutionOut }) {
@@ -54,7 +53,6 @@ function SettingsForm({ processId, initial }: { processId: number; initial: Exec
   } })
   const busy = save.isPending
   return <div className="space-y-4">
-    <p className="text-sm text-muted">Presets fill editable settings. Model choices are retained unless the deployment supplies a preset model mapping. Changes take effect after publication.</p>
     <p className="text-sm">Current configuration: <strong>{value.preset.replaceAll('_', ' ')}</strong></p>
     <fieldset disabled={busy} className="space-y-4">
       <div className="flex gap-2">

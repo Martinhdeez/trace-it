@@ -7,7 +7,7 @@ This integration targets Trace-it, not the ERP simulator.
 
 ## Process assignment and behavior
 
-In **Process → Ajustes → Correo de recepción (gathering)**, a manager can assign
+In **Process → Ajustes → Correo**, a manager can assign
 `migration-test@j-aautomation.com` or leave the field empty. Only this address is accepted
 in this first release; a database uniqueness constraint and serialized API updates prevent
 assigning it to two processes. Assignment is audited and does not enable the worker.
@@ -220,12 +220,10 @@ CI runs this test in addition to the existing integration and production-image c
 
 ## Reception console and activity (migration 0019)
 
-Open a process and choose **Reception** ("Recepción" in the console). The overview also
-has a mailbox summary; Settings retains mailbox assignment. Reception lists messages,
-PDF attachments, reading/evaluation stages, outcomes and links to documents, review and
-executions. Review-required outcomes are distinct from technical failures. It refreshes
-every five seconds; filters apply to the current page and older messages remain paginated.
-Activity links open their exact message, including messages outside the first page.
+Mail lives in the process settings (**Ajustes → Correo**): the mailbox assignment, the
+connection state, and the last eight messages with each PDF's state, a link to its document
+and, for a manager, a retry for a failed reading. The old Reception tab redirects there.
+It refreshes every ten seconds.
 
 The worker sends a heartbeat every 15 seconds, independently of document extraction.
 A heartbeat older than 60 seconds displays a warning, not a claim that the mailbox is

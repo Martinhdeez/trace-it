@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { api } from '../api/client'
 import { keys } from '../api/queries'
 import { Segmented, Select } from '../components/shell/Controls'
+import { SettingsSection } from '../components/shell/SettingsSection'
 import { UseCaseModels } from '../components/process/UseCaseModels'
 import { LanguageSelect } from '../components/shell/LanguageSelect'
 import { ErrorNotice } from '../components/shell/Notice'
@@ -49,34 +50,13 @@ export function Settings() {
   )
 }
 
-/** One row of the page: what it is on the left, the control on the right. */
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string
-  description: string
-  children: ReactNode
-}) {
-  return (
-    <section className="grid gap-4 py-6 md:grid-cols-[220px_1fr] md:gap-8">
-      <div>
-        <h2 className="text-[14px] font-medium tracking-[-0.02em] text-ink">{title}</h2>
-        <p className="mt-1 text-[12.5px] leading-5 text-muted">{description}</p>
-      </div>
-      <div className="min-w-0">{children}</div>
-    </section>
-  )
-}
-
 function Identity() {
   const { user, signIn } = useSession()
   const users = useQuery({ queryKey: keys.users, queryFn: () => api.listUsers() })
   const switchUser = useMutation({ mutationFn: (email: string) => signIn(email) })
 
   return (
-    <Section
+    <SettingsSection
       title={t('settings.identity')}
       description={t('settings.identityHint')}
     >
@@ -118,7 +98,7 @@ function Identity() {
           )
         })}
       </ul>
-    </Section>
+    </SettingsSection>
   )
 }
 
@@ -126,7 +106,7 @@ function Appearance() {
   const { theme, setTheme } = useTheme()
 
   return (
-    <Section title={t('settings.appearance')} description={t('settings.appearanceHint')}>
+    <SettingsSection title={t('settings.appearance')} description={t('settings.appearanceHint')}>
       <Segmented<Theme>
         value={theme}
         onChange={setTheme}
@@ -135,7 +115,7 @@ function Appearance() {
           { value: 'dark', label: t('settings.dark') },
         ]}
       />
-    </Section>
+    </SettingsSection>
   )
 }
 
@@ -143,9 +123,9 @@ function Language() {
   const { locale, setLocale } = useLocale()
 
   return (
-    <Section title={t('settings.language')} description={t('settings.languageHint')}>
+    <SettingsSection title={t('settings.language')} description={t('settings.languageHint')}>
       <LanguageSelect value={locale} onChange={setLocale} />
-    </Section>
+    </SettingsSection>
   )
 }
 
@@ -155,7 +135,7 @@ function Models() {
   const useCaseId = picked ?? useCases.data?.[0]?.id
 
   return (
-    <Section
+    <SettingsSection
       title={t('settings.models')}
       description={t('settings.modelsHint')}
     >
@@ -172,6 +152,6 @@ function Models() {
         ) : null}
         {useCaseId != null ? <UseCaseModels useCaseId={useCaseId} /> : null}
       </div>
-    </Section>
+    </SettingsSection>
   )
 }
