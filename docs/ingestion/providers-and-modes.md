@@ -6,9 +6,9 @@ every mode; an API mode replaces image recognition, not PDF decoding or business
 
 | Mode | Image readers | Remote field mapping / text judge | Model weights |
 |---|---|---|---|
-| `hybrid` (default) | Two local OCR readers, then configured visual providers when needed | Allowed when needed | Required for local recognition |
+| `hybrid` | Two local OCR readers, then configured visual providers when needed | Allowed when needed | Required for local recognition |
 | `local` | Local OCR only | Disabled, even when credentials exist | Required for scans |
-| `api` | Up to two distinct configured visual models | Allowed when needed | Not loaded or inspected |
+| `api` (default) | Up to two distinct configured visual models | Allowed when needed | Not loaded or inspected |
 
 One visual model produces proposals. Two distinct visual models may corroborate a
 reading; conflicts and unreadable characters remain unresolved. A model's retry,
@@ -22,14 +22,14 @@ in `local` mode.
 Set the server default in the ignored root `.env`:
 
 ```dotenv
-TRACEPAY_OCR_MODE=hybrid
+TRACEPAY_OCR_MODE=api
 TRACEPAY_OCR_PROFILE=experimental
 TRACEPAY_VISION_PROVIDERS=helmcode
 ```
 
-For an offline reader, use `TRACEPAY_OCR_MODE=local`. For hosted image models without
-local weights, use `TRACEPAY_OCR_MODE=api`. Both alternative server configurations
-also use `TRACEPAY_OCR_PROFILE=experimental`. The historical `verified` profile
+For an offline reader, explicitly use `TRACEPAY_OCR_MODE=local`. Hosted image models
+without local weights are the default with `TRACEPAY_OCR_MODE=api`. Both configurations
+use `TRACEPAY_OCR_PROFILE=experimental`. The historical `verified` profile
 checks the evaluated local weights and Gemini/Jev primary readers before startup;
 it cannot certify a different committee. For example, an API-only Helmcode server uses:
 
@@ -45,6 +45,10 @@ Restart the server after editing `.env`
 (or recreate the Docker backend). This is separate from process field/rule updates,
 which are read from the published process version on each request. Unpublished
 edits do not change an active process's extraction contract.
+
+Existing published versions keep their pinned mode. To apply the API default to an
+existing process, validate and publish a new version with extraction `mode=api`,
+`ocr=false` and `secondary_ocr=false`, retaining the configured API readers.
 
 Override the default for a particular request with multipart `mode=local`, `api`,
 or `hybrid` on `/v1/extractions`, `/v1/batches`, or `/processes/{id}/files`:
