@@ -663,8 +663,28 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Workbook */
+        /**
+         * Evidence Asset
+         * @deprecated
+         */
         post: operations["uploadDraftWorkbook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/process-drafts/{draft_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evidence Asset */
+        post: operations["uploadDraftEvidence"];
         delete?: never;
         options?: never;
         head?: never;
@@ -788,6 +808,46 @@ export interface paths {
          * @description The normalizer agent keeps each sentence of the norm (any language) as one norm rule and splits it into atomic checks in English, each an ordinary rule (`norm_rule_id` links it) with the decision the norm implies and how it was read (kept in the rule's `report.norm`). Statements that are not checkable conditions come back as the norm rule's `policies`; ids of active rules that already cover it, as `covered`.
          */
         post: operations["normalizeNorm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/norm/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What the normalizer makes of a norm, without saving anything
+         * @description Same reading as `POST /norm`, returned for review: nothing is written. With `previous` (an earlier preview) and `feedback` the normalizer revises that proposal. `existing` holds the rules that the sentences' `covered` ids name, whatever their status: what the norm asks for that is already there. `POST /norm/accept` saves the reviewed one.
+         */
+        post: operations["previewNorm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/norm/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save a reviewed norm preview: its checks become rules that compile in the background (status `compiling`)
+         * @description The body is a preview's `norm_rules`, possibly with checks or sentences removed. 409 when a check decides a decision type that does not exist or is the default, or says exactly what an existing rule says.
+         */
+        post: operations["acceptNorm"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2333,6 +2393,13 @@ export interface components {
             /** Mode */
             mode?: ("local" | "api" | "hybrid") | null;
         };
+        /** Body_uploadDraftEvidence */
+        Body_uploadDraftEvidence: {
+            /** Revision */
+            revision: number;
+            /** File */
+            file: string;
+        };
         /** Body_uploadDraftWorkbook */
         Body_uploadDraftWorkbook: {
             /** Revision */
@@ -2392,6 +2459,49 @@ export interface components {
             previous_author: string;
             /** Reason */
             reason: string;
+        };
+        /**
+         * Check
+         * @description One checkable condition of a norm sentence: becomes one `Rule`.
+         */
+        Check: {
+            /** Text */
+            text: string;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "requirement" | "prohibition";
+            /** Decision */
+            decision: string;
+            /**
+             * Decision Source
+             * @enum {string}
+             */
+            decision_source: "explicit" | "policy";
+            /**
+             * Quote
+             * @default
+             */
+            quote: string;
+            /**
+             * Kind
+             * @default violation
+             * @enum {string}
+             */
+            kind: "violation" | "doubt";
+            /**
+             * Kind Reason
+             * @default
+             */
+            kind_reason: string;
+            /** Interpretation */
+            interpretation: string;
         };
         /** CheckOut */
         CheckOut: {
@@ -3197,6 +3307,22 @@ export interface components {
             };
             extraction: components["schemas"]["ExtractionSettings"];
         };
+        /**
+         * ExistingRule
+         * @description A rule a sentence's `covered` names: what already implements part of it.
+         */
+        ExistingRule: {
+            /** Id */
+            id: number;
+            /** Text */
+            text: string;
+            /** Summary */
+            summary: string | null;
+            /** Status */
+            status: string;
+            /** Decision */
+            decision: string;
+        };
         /** ExtractOptions */
         ExtractOptions: {
             /** Mode */
@@ -3884,6 +4010,27 @@ export interface components {
             /** Norm Rules */
             norm_rules: components["schemas"]["CreatedNormRule"][];
         };
+        /** NormPreview */
+        NormPreview: {
+            /** Norm Rules */
+            norm_rules: components["schemas"]["Sentence"][];
+            /**
+             * Existing
+             * @default []
+             */
+            existing: components["schemas"]["ExistingRule"][];
+        };
+        /** NormPreviewIn */
+        NormPreviewIn: {
+            /** Text */
+            text: string;
+            /**
+             * Feedback
+             * @default
+             */
+            feedback: string;
+            previous?: components["schemas"]["Normalization"] | null;
+        };
         /** NormRuleOut */
         NormRuleOut: {
             /** Id */
@@ -3928,6 +4075,11 @@ export interface components {
             seconds_to_active: number | null;
             /** Traces */
             traces: string;
+        };
+        /** Normalization */
+        Normalization: {
+            /** Norm Rules */
+            norm_rules: components["schemas"]["Sentence"][];
         };
         /** Option */
         Option: {
@@ -4755,6 +4907,31 @@ export interface components {
             down_sources: {
                 [key: string]: string;
             };
+        };
+        /**
+         * Sentence
+         * @description One sentence of the norm and what the normalizer made of it.
+         */
+        Sentence: {
+            /** Number */
+            number: number;
+            /** Text */
+            text: string;
+            /**
+             * Checks
+             * @default []
+             */
+            checks: components["schemas"]["Check"][];
+            /**
+             * Policies
+             * @default []
+             */
+            policies: string[];
+            /**
+             * Covered
+             * @default []
+             */
+            covered: number[];
         };
         /** SettleIn */
         SettleIn: {
@@ -6840,6 +7017,43 @@ export interface operations {
             };
         };
     };
+    uploadDraftEvidence: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                draft_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_uploadDraftEvidence"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscoveryDraftOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     syncDraftSource: {
         parameters: {
             query?: never;
@@ -7137,6 +7351,94 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    previewNorm: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NormPreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NormPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The normalizer's model failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    acceptNorm: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-user-id"?: number | null;
+            };
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Normalization"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NormOut"];
+                };
+            };
+            /** @description A check is invalid or already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
