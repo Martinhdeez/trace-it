@@ -117,6 +117,15 @@ an execution hash; cache keys include the reader identities and effective extrac
 options. Configured extraction readers share storage and worker capacity without mutating
 another process's settings.
 
+The same process settings govern dynamic field mapping after OCR: provider, endpoint,
+visual timeout and output budget (capped at 1,500 tokens for this stage). Changing those
+settings changes its cache identity. Secondary OCR can be disabled for generic processes
+and invoice extensions as well as the original invoice reader. Deployment API keys do not
+enable a disabled reader or add cloud fallbacks to a local-only process.
+
+See [Process-driven document extraction](dynamic-extraction.md) for the complete agent
+proposal, publication, extraction and decision flow, including historical evidence limits.
+
 Publication validation reruns deterministic rules against saved symbols. It does not
 re-extract original documents or prove that a new model improves quality. Use the existing
 compiler and OCR evaluation tools to measure changes before choosing deployment mappings.

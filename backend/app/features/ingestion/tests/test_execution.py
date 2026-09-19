@@ -1,10 +1,12 @@
 import io
+import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
 import httpx
 import pytest
 
+from app.features.ingestion.extraction_plan import ExtractionField, ExtractionPlan
 from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.pdf.committee import reconcile
 from app.features.ingestion.schemas import ExtractOptions
@@ -48,6 +50,130 @@ def test_configured_services_share_capacity_but_isolate_models_and_caches(settin
     assert service.configured(configs[0]) is first
     item = service.ingest(io.BytesIO(pdf_bytes("invoice")), "invoice.pdf")
     assert first.cache_key(item, ExtractOptions()) != second.cache_key(item, ExtractOptions())
+
+
+def test_configured_schema_mapper_uses_process_endpoint_timeout_and_budget(settings, monkeypatch):
+    global_settings = replace(
+        settings,
+        vlm_url="https://global-vision.example/v1",
+        vlm_model="global-model",
+        gemini_api_key="dummy-cloud",
+        helmcode_api_key="dummy-cloud",
+    )
+    base = ExtractionService(global_settings, NoOCR(), NoVLM())
+    scoped = base.configured(
+        config(
+            settings,
+            vision_model="local:schema-model",
+            vision_timeout_seconds=7,
+            vision_max_tokens=128,
+        )
+    )
+    assert scoped.field_reader.settings is scoped.settings
+    assert base.field_reader.settings is global_settings
+    calls = []
+    original_client = httpx.Client
+    fail_local = [False]
+
+    def respond(request):
+        calls.append(request)
+        assert request.url.host == "localhost"  # Cloud routes fail this test.
+        if fail_local[0]:
+            return httpx.Response(503)
+        body = json.loads(request.content)
+        assert str(request.url) == "http://localhost:11434/v1/chat/completions"
+        assert body["model"] == "schema-model"
+        assert body["max_tokens"] == 128
+        task = json.loads(body["messages"][1]["content"])
+        source = next(line for line in task["lines"] if "21/04/2027" in line["text"])
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "expires_on": {
+                                        "line_id": source["line_id"],
+                                        "quote": "21/04/2027",
+                                    }
+                                }
+                            )
+                        }
+                    }
+                ]
+            },
+        )
+
+    def client(**kwargs):
+        assert kwargs["timeout"] == 7
+        return original_client(**kwargs, transport=httpx.MockTransport(respond))
+
+    monkeypatch.setattr(httpx, "Client", client)
+    plan = ExtractionPlan(process_id=1, fields=[ExtractionField(name="expires_on", type="date")])
+    options = ExtractOptions(ocr=False, vlm=True, jev=False)
+    item = base.ingest(
+        io.BytesIO(
+            pdf_bytes("Please pay before 21/04/2027. This visible native text has no field label.")
+        ),
+        "case.pdf",
+    )
+    result = scoped.extract_schema(item, options, plan)
+    assert result.fields["expires_on"].value == "2027-04-21"
+    provenance = result.data["provenance"]
+    assert provenance["execution_hash"] == scoped.execution_hash
+    assert provenance["schema_mapper"]["chain"][0]["model"] == "schema-model"
+    assert "dummy-cloud" not in json.dumps(provenance)
+    assert not result.cache_hit
+    replay = scoped.extract_schema({**item, "id": "repeat"}, options, plan)
+    assert replay.cache_hit
+    assert replay.data["provenance"]["execution_hash"] == provenance["execution_hash"]
+    assert replay.data["provenance"]["cache_key"] == provenance["cache_key"]
+    assert len(calls) == 1
+
+    fail_local[0] = True
+    unavailable = base.ingest(
+        io.BytesIO(
+            pdf_bytes("Please pay before 22/04/2027. This visible native text has no field label.")
+        ),
+        "unavailable.pdf",
+    )
+    failed = scoped.extract_schema(unavailable, options, plan)
+    assert any(warning["code"] == "SCHEMA_READER_ERROR" for warning in failed.warnings)
+    assert len(calls) == 2
+    assert all(request.url.host == "localhost" for request in calls)
+
+
+def test_schema_cache_changes_with_process_mapping_timeout(settings):
+    service = ExtractionService(settings, NoOCR(), NoVLM())
+    first = service.configured(
+        config(
+            settings,
+            vision_model="local:schema-model",
+            vision_timeout_seconds=7,
+        )
+    )
+    second = service.configured(
+        config(
+            settings,
+            vision_model="local:schema-model",
+            vision_timeout_seconds=8,
+        )
+    )
+    item = service.ingest(
+        io.BytesIO(pdf_bytes("Destination: London\nThis native document has enough visible text.")),
+        "case.pdf",
+    )
+    plan = ExtractionPlan(process_id=1, fields=[ExtractionField(name="destination", type="text")])
+    options = ExtractOptions(ocr=False, vlm=True, jev=False)
+    assert first.cache_key(item, options) != second.cache_key(item, options)
+    initial = first.extract_schema(item, options, plan)
+    changed = second.extract_schema({**item, "id": "different"}, options, plan)
+    repeated = first.extract_schema({**item, "id": "repeat"}, options, plan)
+    assert initial.fields["destination"].value == "London"
+    assert not initial.cache_hit and not changed.cache_hit
+    assert repeated.cache_hit
 
 
 def test_disabled_readers_cannot_be_auto_enabled_by_available_cloud_keys(settings):

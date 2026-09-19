@@ -266,3 +266,17 @@ def test_provider_failure_is_warning(settings, monkeypatch):
     result, warnings = SchemaFieldReader(settings).read(lines("Unknown data"), [field("lote")])
     assert result["lote"].value is None
     assert warnings == [{"code": "SCHEMA_READER_ERROR"}]
+
+
+def test_helm_schema_mapping_uses_pinned_vision_model_without_text_judge(settings):
+    pinned = replace(
+        settings,
+        helmcode_api_key="offline",
+        vision_providers=("helmcode",),
+        helmcode_vision_models=("gemma4",),
+        helmcode_text_model="qwen3.6",
+        text_providers=(),
+    )
+    assert SchemaFieldReader(pinned)._chain() == [("helmcode", "gemma4")]
+    with_text_judge = replace(pinned, text_providers=("helmcode",))
+    assert SchemaFieldReader(with_text_judge)._chain() == [("helmcode", "qwen3.6")]

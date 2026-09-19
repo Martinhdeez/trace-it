@@ -6,10 +6,20 @@ import uuid
 import pytest
 
 from app.core.database import session_factory
+from app.features.agents import llm
 from app.features.ingestion.model import Instance
 from app.features.processes.model import Symbol
+from app.features.processes.tests.test_drafts import (
+    accept,
+    plan,
+    post,
+    prepare_new,
+    scripted_pinned_models,
+    scripts,
+)
 from app.features.users.model import User
 from tests.support import rows
+from tests.support.models import per_role
 
 from .conftest import VALID, pdf_bytes
 from .test_payment_api import payment_api as payment_api
@@ -141,3 +151,87 @@ async def test_invoice_extension_preserves_default_fields_and_adds_new_symbol(pa
         assert extended["symbols"][name]["value"] == symbol["value"]
     for name, field in initial["extraction"]["fields"].items():
         assert extended["extraction"]["fields"][name] == field
+
+
+async def test_agent_published_field_reaches_extraction_and_rules_without_restart(
+    process_api, monkeypatch
+):
+    client, _, service = process_api
+    scripted_pinned_models(monkeypatch)
+    async with session_factory() as session:
+        manager = await session.get(User, int(client.headers["X-User-Id"]))
+        manager.role = "manager"
+        await session.commit()
+
+    initial = await post(client, await prepare_new(client, monkeypatch), "publish")
+    process_id = initial["published_process_id"]
+    endpoint = f"/processes/{process_id}/files"
+    content = pdf_bytes(
+        "Monitoring certificate for the reviewed operating period\nAmount: 20\nExposure: 250"
+    )
+    first = await client.post(endpoint, files={"file": ("decided.pdf", content)})
+    assert first.status_code == 201, first.text
+    historical_id = first.json()["instance_id"]
+    run = await client.post(f"/processes/{process_id}/run")
+    assert run.status_code == 200 and run.json()["decided"] == 1, run.text
+    history = (await client.get(f"/instances/{historical_id}")).json()["decisions"]
+    assert history[0]["decision"] == "PAY"
+    pending = await client.post(endpoint, files={"file": ("pending.pdf", content)})
+    assert pending.status_code == 201, pending.text
+    original = pending.json()
+    before = (await client.get(f"/processes/{process_id}/extraction-plan")).json()
+
+    proposal = plan(initial["plan"]["name"], field="exposure_hours")
+    proposal["symbols"][0]["extraction"] = {"labels": ["Exposure"]}
+    # Saved historical symbols do not contain the new field. The new rule explicitly
+    # tolerates that absence; publication must not rewrite or invent old evidence.
+    proposal["symbols"][0]["required"] = False
+    proposal["rules"][0]["text"] = "If exposure_hours is present and greater than 100, review."
+    proposal["symbols"].extend(initial["plan"]["symbols"])
+    for example in proposal["examples"]:
+        if example["instance"]:
+            example["instance"]["amount"] = 20
+    responses = scripts(proposal, field="exposure_hours")
+    responses["compiler"][0]["code"] = responses["compiler"][0]["code"].replace(
+        "Decimal(str(instance['exposure_hours'])) > 100",
+        "instance.get('exposure_hours') is not None "
+        "and Decimal(str(instance['exposure_hours'])) > 100",
+    )
+    monkeypatch.setattr(llm, "model_for", per_role(responses))
+    started = await client.post("/process-drafts", json={"process_id": process_id})
+    assert started.status_code == 201, started.text
+    draft = await post(
+        client,
+        started.json(),
+        "messages",
+        message="Review documents with exposure above 100 hours.",
+    )
+    prepared = await post(client, await accept(client, draft), "prepare")
+    assert prepared["preview"]["valid"], prepared["preview"]
+    assert (await client.get(f"/processes/{process_id}/extraction-plan")).json() == before
+    unchanged = await client.post(endpoint, files={"file": ("pending.pdf", content)})
+    assert unchanged.json()["extraction"]["id"] == original["extraction"]["id"]
+
+    await post(client, prepared, "publish")
+    after = (await client.get(f"/processes/{process_id}/extraction-plan")).json()
+    assert after["fingerprint"] != before["fingerprint"]
+    assert any(rule["instance_keys"] == ["exposure_hours"] for rule in after["rules"])
+    updated = await client.post(endpoint, files={"file": ("pending.pdf", content)})
+    assert updated.status_code == 201, updated.text
+    refreshed = updated.json()
+    assert refreshed["instance_id"] == original["instance_id"]
+    assert refreshed["symbols"]["amount"]["value"] == "20"
+    assert refreshed["symbols"]["exposure_hours"]["value"] == "250"
+    assert refreshed["extraction"]["data"]["extraction_plan"]["fingerprint"] == after["fingerprint"]
+    repeated = await client.post(endpoint, files={"file": ("pending.pdf", content)})
+    assert repeated.json()["extraction"]["id"] == refreshed["extraction"]["id"]
+    assert repeated.json()["extraction"]["cache_hit"]
+    assert repeated.json()["extraction"]["metrics"]["schema_calls_this_request"] == 0
+
+    run = await client.post(f"/processes/{process_id}/run")
+    assert run.status_code == 200 and run.json()["decided"] == 1, run.text
+    decided = (await client.get(f"/instances/{original['instance_id']}")).json()
+    assert decided["decisions"][0]["decision"] == "REVIEW"
+    assert "LIMIT" in decided["decisions"][0]["reason"]
+    assert (await client.get(f"/instances/{historical_id}")).json()["decisions"] == history
+    assert set(service.get_result(original["extraction"]["id"])["fields"]) == {"amount"}
