@@ -1,0 +1,6 @@
+{
+  "decision": "ESCALAR",
+  "reasoning": "The invoice has base=760.00, vat_rate=21, vat_amount=159.60, total=919.60 (all from the document). Rule 22 holds: 760.00*21/100 = 159.60, matches within ±0.01. Rule 23 holds: 760.00+159.60 = 919.60, matches. However, the invoice's `date`, `iban`, `issuer_nif` and `purchase_order` are all empty (value null, origin document). Per convention (3), any rule needing an empty symbol does not fire, so rules 17, 18, 19, 20, 21, 25, 26, 27 cannot be evaluated. The only rule that fires is the missing-data check, which is exactly the escalation reason (MISSING_DATA: date, iban, issuer_nif, purchase_order). No rule can confirm the invoice is payable, and the missing symbols are not recoverable from the sources, so the case must go to a person.",
+  "proposed_rule": "If any of the invoice's `date`, `iban`, `issuer_nif` or `purchase_order` (all from the document) is empty, the case must be escalated (ESCALAR) instead of being decided automatically.",
+  "proposed_type": "requirement"
+}

@@ -1,0 +1,63 @@
+{
+  "id": 16,
+  "process_id": 1,
+  "text": "There is at least one instance in `others` with the same normalised `purchase_order`. Each instance in `others` is identified by its `_instance` key (its file name). Reason: the `_instance` values with that purchase order.",
+  "status": "retired",
+  "norm_rule_id": null,
+  "norm_rule_text": null,
+  "activation": null,
+  "normalization": null,
+  "compilations": [],
+  "lifecycle": [
+    {
+      "id": 18,
+      "trace_id": "01a0b88cf91e66b9c069ebf389125f84",
+      "span_id": "0cd67660ca958e60",
+      "parent_id": null,
+      "step": "activate_rule",
+      "status": "ok",
+      "started_at": "2026-09-19T07:24:01.694123Z",
+      "duration_ms": 3,
+      "data": {
+        "after": "active",
+        "author": "cli",
+        "before": "draft",
+        "findings": 0,
+        "rule_hash": "f46e28ccb59a217c680dbe87997e5467bf641b9ec1e291d8d707d5a62cf9ce27"
+      },
+      "instance_id": null,
+      "process_id": 1,
+      "rule_id": 16,
+      "norm_rule_id": null
+    },
+    {
+      "id": 282,
+      "trace_id": "01a0b88f3a09059c2499e938b944561e",
+      "span_id": "84b1de714aaeda21",
+      "parent_id": null,
+      "step": "retire_rule",
+      "status": "ok",
+      "started_at": "2026-09-19T07:26:29.388100Z",
+      "duration_ms": 6,
+      "data": {
+        "after": "retired",
+        "author": "Martín",
+        "before": "active",
+        "findings": 0,
+        "rule_hash": "f46e28ccb59a217c680dbe87997e5467bf641b9ec1e291d8d707d5a62cf9ce27"
+      },
+      "instance_id": null,
+      "process_id": 1,
+      "rule_id": 16,
+      "norm_rule_id": null
+    }
+  ],
+  "runtime": {
+    "runs": 0,
+    "instances": 0,
+    "fired": 0,
+    "errors": 0,
+    "p50_ms": null,
+    "p95_ms": null
+  }
+}

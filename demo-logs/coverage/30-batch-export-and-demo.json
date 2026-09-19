@@ -1,0 +1,65 @@
+{
+  "export_spans": [
+    {
+      "batch": 5,
+      "lines": 5,
+      "duplicates": 0
+    },
+    {
+      "batch": 0,
+      "lines": 20,
+      "duplicates": 0
+    },
+    {
+      "batch": 0,
+      "lines": 20,
+      "duplicates": 0
+    }
+  ],
+  "demo_ingest_tree": [
+    [
+      "demo_ingest",
+      [
+        "ingest_document",
+        "ingest_document",
+        "ingest_document",
+        "ingest_document",
+        "ingest_document",
+        "ingest_document"
+      ]
+    ]
+  ],
+  "demo_instance_journey": [
+    [
+      "demo_ingest",
+      [
+        "ingest_document"
+      ]
+    ],
+    [
+      "run_process",
+      [
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "evaluate_rule",
+        "decision"
+      ]
+    ],
+    [
+      "export_outcomes",
+      []
+    ]
+  ]
+}

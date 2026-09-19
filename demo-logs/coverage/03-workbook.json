@@ -1,0 +1,170 @@
+{
+  "process_id": 2,
+  "file_hash": "d7729db76ec7501f35e5cf4ef3383344c5b2bea4c6ea9ece36723663ca2a87ae",
+  "extraction_id": "b3320d0c00eb40a8abfd783dfc867c56",
+  "sources": [
+    {
+      "id": 1,
+      "name": "suppliers",
+      "rows": 12
+    },
+    {
+      "id": 2,
+      "name": "orders",
+      "rows": 516
+    },
+    {
+      "id": 3,
+      "name": "parameters",
+      "rows": 1
+    }
+  ],
+  "warnings": [
+    {
+      "code": "DUPLICATE_IDENTICAL",
+      "identity": "P007",
+      "first": "Proveedores!8",
+      "next": "Proveedores!13"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!452"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!453"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!454"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!455"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!456"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!457"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!458"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!459"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!460"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!461"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!462"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!463"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!464"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!465"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!466"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!467"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!468"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!469"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!470"
+    },
+    {
+      "code": "FIELD_MISSING",
+      "field": "supplier_tax_id",
+      "locator": "Pedidos_2026!471"
+    },
+    {
+      "code": "UNRECOGNIZED_SCHEMA",
+      "sheet": "Pedidos_2025_OLD"
+    },
+    {
+      "code": "FORMULA_UNEVALUATED",
+      "locator": "NO_TOCAR!A1"
+    },
+    {
+      "code": "UNRECOGNIZED_SCHEMA",
+      "sheet": "NO_TOCAR"
+    },
+    {
+      "code": "UNRECOGNIZED_SCHEMA",
+      "sheet": "backup_marzo"
+    },
+    {
+      "code": "UNRECOGNIZED_SCHEMA",
+      "sheet": "Hoja1 (2)"
+    },
+    {
+      "code": "UNRECOGNIZED_SCHEMA",
+      "sheet": "notas_alberto"
+    },
+    {
+      "code": "UNRECOGNIZED_SCHEMA",
+      "sheet": "pendiente_revisar"
+    },
+    {
+      "code": "UNRECOGNIZED_SCHEMA",
+      "sheet": "MACROS_ROTAS"
+    },
+    {
+      "code": "UNRECOGNIZED_SCHEMA",
+      "sheet": "v6_deprecated"
+    },
+    {
+      "code": "UNRECOGNIZED_SCHEMA",
+      "sheet": "tablas_dinamicas"
+    }
+  ]
+}

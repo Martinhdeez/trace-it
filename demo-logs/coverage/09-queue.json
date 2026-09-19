@@ -1,0 +1,20 @@
+[
+  {
+    "id": 19,
+    "name": "copia_2026_0518.pdf",
+    "status": "DECIDED",
+    "decision": "ESCALAR",
+    "author": "engine",
+    "reason": "MISSING_DATA: date, iban, issuer_nif, purchase_order",
+    "decided_at": "2026-09-19T07:26:19.472743Z"
+  },
+  {
+    "id": 20,
+    "name": "fax_2026_0411.pdf",
+    "status": "DECIDED",
+    "decision": "ESCALAR",
+    "author": "engine",
+    "reason": "MISSING_DATA: base, date, iban, issuer_nif, purchase_order, vat_amount, vat_rate",
+    "decided_at": "2026-09-19T07:26:19.472743Z"
+  }
+]

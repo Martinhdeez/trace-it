@@ -1,0 +1,7 @@
+04:47:02 process 5
+04:47:08 ingest 471 read 29 scans 6.1 s
+04:47:14 erp sync p1 200 {"source_id":17,"origin":"erp:2026-09-19T02:47:08+00:00|http://127.0.0.1:8009","rows":516,"rows_hash":"216c4e276f9c74fd801c62c3497256abeb6764fef8710fb660e05878ea3e6fbd","stats":{"requests":31,"pages":26,"retries":3,"logins":1,"rate_limited":0,"transient_errors":{"ORA-00600":3},"timeouts":0,"invalid_
+04:47:33 norm 201 19.6 s
+04:48:38 rules settled {'active': 11} 84.7 s
+04:48:39 run 200 {"decided":500,"by_decision":{"PAGAR":435,"NO_PAGAR":36,"ESCALAR":29}} 0.6 s
+04:48:39 export 200 500

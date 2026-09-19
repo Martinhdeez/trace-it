@@ -1,0 +1,194 @@
+{
+  "norm_rules": [
+    {
+      "number": 1,
+      "text": "Pagar solo si el NIF esta en el maestro y el IBAN de la factura coincide con el maestro.",
+      "checks": [
+        {
+          "text": "The invoice's `issuer_nif` (normalised) must appear as `suppliers.nif` (normalised) in the suppliers master.",
+          "type": "requirement",
+          "decision": "NO_PAGAR",
+          "decision_source": "policy",
+          "quote": "",
+          "kind": "violation",
+          "kind_reason": "The data is present and the NIF is absent from the master, which clearly breaks the payment condition.",
+          "interpretation": "I read 'el NIF esta en el maestro' as the invoice's issuer_nif matching a suppliers.nif row after normalisation; the sentence names no outcome for this failure, so it is a policy check.",
+          "rule_id": 17
+        },
+        {
+          "text": "The invoice's `iban` (normalised) must equal the `suppliers.iban` (normalised) of the supplier whose `suppliers.nif` (normalised) equals the invoice's `issuer_nif` (normalised).",
+          "type": "requirement",
+          "decision": "NO_PAGAR",
+          "decision_source": "policy",
+          "quote": "",
+          "kind": "violation",
+          "kind_reason": "The invoice IBAN is present and differs from the master's IBAN for that supplier, a clear breach of the payment condition.",
+          "interpretation": "I read 'el IBAN de la factura coincide con el maestro' as comparing the invoice iban with the suppliers.iban of the matched supplier row; no outcome is named, so it is a policy check.",
+          "rule_id": 18
+        }
+      ],
+      "policies": [
+        "Pagar solo si se cumplen las condiciones: la frase fija la condición de pago, no el resultado de su incumplimiento."
+      ],
+      "covered": [],
+      "id": 1
+    },
+    {
+      "number": 2,
+      "text": "El pedido debe existir, pertenecer al proveedor y el importe de la factura debe ser igual al del pedido (tolerancia 0,01 EUR).",
+      "checks": [
+        {
+          "text": "The invoice's `purchase_order` (normalised) must exist as `orders.purchase_order` (normalised).",
+          "type": "requirement",
+          "decision": "NO_PAGAR",
+          "decision_source": "policy",
+          "quote": "",
+          "kind": "violation",
+          "kind_reason": "The order reference is present but no matching order row exists, which clearly breaks the condition.",
+          "interpretation": "I read 'el pedido debe existir' as the invoice purchase_order matching an orders row; no outcome is named, so it is a policy check.",
+          "rule_id": 19
+        },
+        {
+          "text": "The order found for the invoice's `purchase_order` must belong to the supplier: `orders.supplier_id` must equal the `suppliers.id` of the supplier whose `suppliers.nif` (normalised) equals the invoice's `issuer_nif` (normalised).",
+          "type": "requirement",
+          "decision": "NO_PAGAR",
+          "decision_source": "policy",
+          "quote": "",
+          "kind": "violation",
+          "kind_reason": "The order exists and its supplier_id differs from the invoice issuer's supplier, a clear breach of the condition.",
+          "interpretation": "I read 'pertenecer al proveedor' as the order's supplier_id matching the supplier identified by the invoice's issuer_nif; no outcome is named, so it is a policy check.",
+          "rule_id": 20
+        },
+        {
+          "text": "The invoice's `total` must match the order's `orders.total_amount` within ±0.01 EUR (abs(cents(total) - cents(total_amount)) <= 1).",
+          "type": "requirement",
+          "decision": "NO_PAGAR",
+          "decision_source": "policy",
+          "quote": "",
+          "kind": "violation",
+          "kind_reason": "Both amounts are present and differ beyond the tolerance, a clear breach of the condition.",
+          "interpretation": "I read 'el importe de la factura debe ser igual al del pedido' as the invoice total compared with orders.total_amount with the stated 0.01 EUR tolerance; no outcome is named, so it is a policy check.",
+          "rule_id": 21
+        }
+      ],
+      "policies": [],
+      "covered": [],
+      "id": 2
+    },
+    {
+      "number": 3,
+      "text": "El IVA debe estar bien calculado y el total debe ser base + IVA, con la misma tolerancia de 0,01 EUR.",
+      "checks": [
+        {
+          "text": "The invoice's `vat_amount` must match `base` * `vat_rate` / 100 within ±0.01 EUR (abs(cents(vat_amount) - cents(base * vat_rate / 100)) <= 1).",
+          "type": "requirement",
+          "decision": "NO_PAGAR",
+          "decision_source": "policy",
+          "quote": "",
+          "kind": "violation",
+          "kind_reason": "Base, rate and VAT amount are present and the VAT is miscalculated, a clear breach of the condition.",
+          "interpretation": "I read 'el IVA debe estar bien calculado' as vat_amount equalling base times vat_rate (a percentage) with the 0.01 EUR tolerance; no outcome is named, so it is a policy check.",
+          "rule_id": 22
+        },
+        {
+          "text": "The invoice's `total` must match `base` + `vat_amount` within ±0.01 EUR (abs(cents(total) - cents(base + vat_amount)) <= 1).",
+          "type": "requirement",
+          "decision": "NO_PAGAR",
+          "decision_source": "policy",
+          "quote": "",
+          "kind": "violation",
+          "kind_reason": "Base, VAT and total are present and the total does not equal base + VAT, a clear breach of the condition.",
+          "interpretation": "I read 'el total debe ser base + IVA' as total equalling base plus vat_amount with the same 0.01 EUR tolerance; no outcome is named, so it is a policy check.",
+          "rule_id": 23
+        }
+      ],
+      "policies": [],
+      "covered": [],
+      "id": 3
+    },
+    {
+      "number": 4,
+      "text": "La fecha debe ser valida y no futura.",
+      "checks": [
+        {
+          "text": "The invoice's `date` must be a valid calendar date (a real YYYY-MM-DD day, e.g. not 2026-02-31).",
+          "type": "requirement",
+          "decision": "NO_PAGAR",
+          "decision_source": "policy",
+          "quote": "",
+          "kind": "violation",
+          "kind_reason": "The date is present and impossible, which clearly breaks the condition.",
+          "interpretation": "I read 'la fecha debe ser valida' as the invoice date being a real calendar date; no outcome is named, so it is a policy check.",
+          "rule_id": 24
+        },
+        {
+          "text": "The invoice's `date` must not be later than `parameters.cut_off_date` (compared as dates).",
+          "type": "requirement",
+          "decision": "NO_PAGAR",
+          "decision_source": "policy",
+          "quote": "",
+          "kind": "violation",
+          "kind_reason": "The date is present and after the cut-off, a clear breach of the condition.",
+          "interpretation": "I read 'no futura' as the invoice date not exceeding the process cut-off date from parameters; no outcome is named, so it is a policy check.",
+          "rule_id": 25
+        }
+      ],
+      "policies": [],
+      "covered": [],
+      "id": 4
+    },
+    {
+      "number": 5,
+      "text": "Estado ERP del pedido: PENDIENTE. Nunca pagar dos veces el mismo pedido.",
+      "checks": [
+        {
+          "text": "The `erp` entry of the invoice's `purchase_order` (normalised) must have `erp.status` = 'PENDIENTE'.",
+          "type": "requirement",
+          "decision": "NO_PAGAR",
+          "decision_source": "policy",
+          "quote": "",
+          "kind": "violation",
+          "kind_reason": "The ERP entry exists and its status is not PENDIENTE, a clear breach of the condition.",
+          "interpretation": "I read 'Estado ERP del pedido: PENDIENTE' as the erp row for the invoice's purchase_order having status PENDIENTE; no outcome is named, so it is a policy check.",
+          "rule_id": 26
+        },
+        {
+          "text": "The `erp` entry of the invoice's `purchase_order` (normalised) must not have `erp.status` = 'PAGADA' (the order must not already be paid).",
+          "type": "prohibition",
+          "decision": "NO_PAGAR",
+          "decision_source": "policy",
+          "quote": "",
+          "kind": "violation",
+          "kind_reason": "The external ERP record shows the order already paid, which clearly proves paying again would be wrong.",
+          "interpretation": "I read 'Nunca pagar dos veces el mismo pedido' as forbidding payment when the erp record of the order already shows status PAGADA; no outcome is named, so it is a policy check.",
+          "rule_id": 27
+        },
+        {
+          "text": "No other instance in `others` may carry the same normalised `purchase_order` as this invoice.",
+          "type": "prohibition",
+          "decision": "ESCALAR",
+          "decision_source": "policy",
+          "quote": "",
+          "kind": "doubt",
+          "kind_reason": "Several instances share an order reference that should be unique, so the system cannot tell which invoice is legitimate and a person must decide.",
+          "interpretation": "I read 'Nunca pagar dos veces el mismo pedido' as also covering duplicate invoices for the same order across instances; since the system cannot tell which is legitimate, this is a doubt check.",
+          "rule_id": 28
+        }
+      ],
+      "policies": [],
+      "covered": [],
+      "id": 5
+    },
+    {
+      "number": 6,
+      "text": "Cualquier anomalia que un humano deba ver: ESCALAR con motivo. Ante duda razonable, escalar antes que pagar.",
+      "checks": [],
+      "policies": [
+        "Cualquier anomalia que un humano deba ver se ESCALA con motivo.",
+        "Ante duda razonable, escalar antes que pagar."
+      ],
+      "covered": [],
+      "id": 6
+    }
+  ]
+}
