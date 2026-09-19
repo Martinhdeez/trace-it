@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -37,9 +37,6 @@ class Rule(Base):
 
     __tablename__ = "rules"
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["process_id", "decision"], ["decision_types.process_id", "decision_types.name"]
-        ),
         CheckConstraint(f"type in {RULE_TYPES}", name="type"),
         CheckConstraint(f"status in {RULE_STATUSES}", name="status"),
     )

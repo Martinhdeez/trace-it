@@ -42,6 +42,7 @@ class ProcessOut(BaseModel):
 
 
 class ProcessDetail(ProcessOut):
+    active_version_id: int | None = None
     decision_types: list[DecisionTypeIO]
     symbols: list[SymbolIO]
     decision_review: DecisionReviewConfig | None = None

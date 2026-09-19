@@ -215,7 +215,21 @@ async def test_the_norm_becomes_norm_rules_whose_checks_compile(api, monkeypatch
         "tester": [{"tests": TESTS}] * 3,
         "compiler": [{"code": CODE}] * 3,
     }
-    monkeypatch.setattr(llm, "model_for", per_role(scripts))
+    models = per_role(scripts)
+    monkeypatch.setattr(llm, "model_for", models)
+    # The draft predates this test's scripted model setup.
+    from copy import deepcopy
+
+    from app.features.versions.model import ProcessDraft
+
+    async with session_factory() as session:
+        draft = await session.get(ProcessDraft, process_id)
+        if draft:
+            snapshot = deepcopy(draft.snapshot)
+            for agent in snapshot["agents"].values():
+                agent["settings"]["model"] = None
+            draft.snapshot = snapshot
+            await session.commit()
 
     r = await client.post(
         f"/processes/{process_id}/norm", json={"text": NORM}, headers=headers["manager"]
@@ -227,7 +241,7 @@ async def test_the_norm_becomes_norm_rules_whose_checks_compile(api, monkeypatch
     ids = [c["rule_id"] for n in (first, other) for c in n["checks"]]
     for rule_id in ids:
         rule = (await client.get(f"/rules/{rule_id}")).json()
-        assert rule["status"] == "active", rule["report"]
+        assert rule["status"] == "draft", rule["report"]
         assert rule["code"] == CODE
         assert rule["report"]["valid"] is True
         assert rule["report"]["norm"]["interpretation"] == CHECK["interpretation"]
@@ -238,11 +252,14 @@ async def test_the_norm_becomes_norm_rules_whose_checks_compile(api, monkeypatch
     doubt = (await client.get(f"/rules/{ids[1]}")).json()["report"]["norm"]
     assert (doubt["kind"], doubt["kind_reason"]) == ("doubt", "Why")
 
+    draft = (await client.get(f"/processes/{process_id}/draft", headers=headers["manager"])).json()
+    assert len(draft["snapshot"]["rules"]) == 3
+    assert all(r["code"] == CODE for r in draft["snapshot"]["rules"])
     norm_rules = (await client.get(f"/processes/{process_id}/norm-rules")).json()
     assert [n["text"] for n in norm_rules] == [first["text"], "Nunca pagar a la lista negra."]
     assert [(c["id"], c["decision"], c["status"]) for c in norm_rules[0]["rules"]] == [
-        (ids[0], "NO_PAGAR", "active"),
-        (ids[1], "ESCALAR", "active"),
+        (ids[0], "NO_PAGAR", "draft"),
+        (ids[1], "ESCALAR", "draft"),
     ]
     async with session_factory() as s:
         event = await s.scalar(
@@ -259,12 +276,10 @@ async def test_the_norm_becomes_norm_rules_whose_checks_compile(api, monkeypatch
     assert trace["norm_rule_text"] == first["text"]
     assert trace["normalization"]["data"]["checks"] == 3
     [compilation] = trace["compilations"]
-    assert compilation["data"]["rule_status"] == "active"
+    assert compilation["data"]["rule_status"] == "draft"
     assert [c["step"] for c in compilation["children"]] == [
         "llm_run",
         "coder_attempt",
-        "impact_check",
-        "activate_rule",
     ]
 
 

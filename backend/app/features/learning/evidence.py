@@ -12,11 +12,8 @@ from app.core.config import settings
 from app.features.agents import llm
 from app.features.decisions.model import Decision, DecisionReview
 from app.features.ingestion.model import File, Instance
-from app.features.learning import guidance
 from app.features.processes import service as processes
-from app.features.rules.model import Rule
 from app.features.sources import service as sources
-from app.features.use_cases import service as use_cases
 
 
 def digest(snapshot: dict) -> str:
@@ -25,9 +22,6 @@ def digest(snapshot: dict) -> str:
 
 async def capture(session: AsyncSession, process_id: int) -> dict:
     process = await processes.get(session, process_id)
-    rules = list(
-        await session.scalars(select(Rule).where(Rule.process_id == process_id).order_by(Rule.id))
-    )
     instances = list(
         await session.scalars(
             select(Instance).where(Instance.process_id == process_id).order_by(Instance.id)
@@ -53,20 +47,19 @@ async def capture(session: AsyncSession, process_id: int) -> dict:
     files = await session.execute(
         select(File.hash, File.text).where(File.hash.in_([i.file_hash for i in instances]))
     )
-    setups = await use_cases.setups(session, process.use_case_id)
+    from app.features.versions import configuration as version_config
+    from app.features.versions import service as versions
+
+    version = await versions.active(session, process_id)
+    setups = version_config.setups(version.snapshot)
     return {
+        "version_id": version.id,
         "process": process.model_dump(mode="json"),
         "files": {
             key: {"text": (text or "")[:12000], "truncated": bool(text and len(text) > 12000)}
             for key, text in files
         },
-        "rules": [
-            {
-                k: getattr(r, k)
-                for k in ("id", "text", "type", "decision", "code", "hash", "status", "report")
-            }
-            for r in rules
-        ],
+        "rules": version.snapshot["rules"],
         "sources": [
             {"id": s.id, "name": s.name, "rows": s.rows, "origin": s.origin}
             for s in await sources.current_loads(session, process_id)
@@ -97,7 +90,7 @@ async def capture(session: AsyncSession, process_id: int) -> dict:
             }
             for r in reviews
         ],
-        "guidance": await guidance.approved(session, process_id),
+        "guidance": version.snapshot["guidance"],
         "agents": {
             role: {"config_id": setup.config_id, "settings": setup.settings.model_dump(mode="json")}
             for role, setup in sorted(setups.items())

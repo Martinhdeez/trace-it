@@ -70,22 +70,11 @@ async def test_rule_status_changes_carry_author_and_show_in_the_rule_trace(
         assert (await api.get(f"/rules/{retired}/impact")).status_code == 200
         assert (await api.post(f"/rules/{retired}/retire", headers=headers)).status_code == 200
         assert (await api.post(f"/rules/{draft.id}/activate", headers=headers)).status_code == 200
-        r = await api.post(f"/rules/{draft.id}/activate", headers=headers)
-        assert r.status_code == 409
-
         [retire] = await feed(api, process_id, "retire_rule")
         assert retire["rule_id"] == retired and retire["status"] == "ok"
-        assert {k: retire["data"][k] for k in ("author", "before", "after")} == {
-            "author": "Ana",
-            "before": "active",
-            "after": "retired",
-        }
-        assert (
-            retire["data"]["findings"] == 0 and retire["data"]["rule_hash"] == "hash-iban_mismatch"
-        )
-        refused, activated = await feed(api, process_id, "activate_rule")
-        assert activated["data"]["after"] == "active" and activated["data"]["author"] == "Ana"
-        assert refused["status"] == "error" and refused["data"]["before"] == "active"
+        assert retire["data"]["author"] == "Ana" and retire["data"]["draft_only"]
+        [activated] = await feed(api, process_id, "activate_rule")
+        assert activated["data"]["draft_only"] and activated["data"]["author"] == "Ana"
 
         trace = (await api.get(f"/rules/{retired}/trace")).json()
         steps = [(s["step"], s["data"].get("author")) for s in trace["lifecycle"]]

@@ -71,7 +71,7 @@ async def test_run_journey_and_metrics(fake_sandbox: None) -> None:
         assert set(metrics["failures"].values()) == {0}
 
 
-async def test_reprocess_and_a_refused_run_are_spans(fake_sandbox: None) -> None:
+async def test_reprocess_and_runs_during_draft_compilation_are_spans(fake_sandbox: None) -> None:
     async with client() as api:
         process_id, _ = await create_process(api, "manager")
         await api.post(f"/processes/{process_id}/run")
@@ -83,7 +83,7 @@ async def test_reprocess_and_a_refused_run_are_spans(fake_sandbox: None) -> None
         assert span["data"]["dry_run"] is True and span["data"]["unchanged"] == 3
         assert span["data"]["changed"] == 0 and span["data"]["conflicts"] == 0
 
-        # A run refused while a rule compiles (409) is an error span, counted in metrics.
+        # Draft compilation does not interrupt the published version.
         async with session_factory() as session:
             session.add(
                 Rule(
@@ -95,14 +95,14 @@ async def test_reprocess_and_a_refused_run_are_spans(fake_sandbox: None) -> None
                 )
             )
             await session.commit()
-        assert (await api.post(f"/processes/{process_id}/run")).status_code == 409
+        assert (await api.post(f"/processes/{process_id}/run")).status_code == 200
         runs = (
             await api.get("/traces", params={"process_id": process_id, "name": "run_process"})
         ).json()
-        assert runs[0]["status"] == "error" and "still compiling" in runs[0]["data"]["error"]
+        assert runs[0]["status"] == "ok"
         metrics = (await api.get(f"/processes/{process_id}/metrics")).json()
         [run] = [s for s in metrics["steps"] if s["step"] == "run_process"]
-        assert run["count"] == 2 and run["errors"] == 1 and metrics["runs"] == 1
+        assert run["count"] == 2 and run["errors"] == 0 and metrics["runs"] == 2
 
 
 async def test_provider_metrics_separate_network_usage_from_journal_replay() -> None:

@@ -21,6 +21,7 @@ from app.features.traces.router import router as traces_router
 from app.features.use_cases.router import router as use_cases_router
 from app.features.users.dependencies import current_user
 from app.features.users.router import router as users_router
+from app.features.versions.router import router as versions_router
 
 
 @asynccontextmanager
@@ -61,6 +62,7 @@ async def health() -> dict[str, str]:
 
 
 for router in (
+    versions_router,
     users_router,
     processes_router,
     rules_router,

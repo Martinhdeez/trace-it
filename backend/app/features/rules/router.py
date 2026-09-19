@@ -114,7 +114,7 @@ async def get_impact(rule_id: int, session: Session) -> ImpactOut:
 @router.post(
     "/rules/{rule_id}/activate",
     operation_id="activateRule",
-    summary="Activate a validated draft",
+    summary="Stage a validated rule in the process draft; publish the draft to activate",
     responses={
         409: {
             "description": "Not compiled, discrepancies unresolved, or it would "
@@ -130,7 +130,7 @@ async def activate_rule(rule_id: int, session: Session, user: CurrentUser) -> Ru
 @router.post(
     "/rules/{rule_id}/retire",
     operation_id="retireRule",
-    summary="Retire a rule. Checked against past decisions exactly like activating one",
+    summary="Stage removal of a rule; validate and publish the process draft to retire it",
     responses={409: {"description": "It would contradict a decision a person took"}},
 )
 async def retire_rule(rule_id: int, session: Session, user: CurrentUser) -> RuleDetail:

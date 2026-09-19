@@ -244,6 +244,12 @@ async def normalize_norm(session: AsyncSession, process_id: int, norm: str) -> N
         await session.scalars(select(DecisionType).where(DecisionType.process_id == process_id))
     )
     symbols = list(await session.scalars(select(Symbol).where(Symbol.process_id == process_id)))
+    from app.features.versions.model import ProcessDraft
+
+    draft = await session.get(ProcessDraft, process_id)
+    if draft:
+        types = [DecisionType(**t) for t in draft.snapshot["process"]["decision_types"]]
+        symbols = [Symbol(**s) for s in draft.snapshot["process"]["symbols"]]
     active = list(
         await session.scalars(
             select(Rule)

@@ -10,8 +10,12 @@ from app.features.rules.model import NormRule, Rule
 from app.features.sources.model import Source
 from app.features.use_cases.model import AgentConfig, UseCase
 from app.features.users.model import User
+from app.features.versions.model import Execution, ProcessDraft, ProcessVersion
 
 __all__ = [
+    "Execution",
+    "ProcessDraft",
+    "ProcessVersion",
     "Adoption",
     "Analysis",
     "Proposal",

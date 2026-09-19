@@ -4,6 +4,9 @@ status: accepted
 
 # Verify generated rule code against a blind tester, and activate it by impact
 
+Automatic adoption is superseded by [ADR 0022](0022-publish-approved-process-versions.md).
+Compilation and normalization remain in use.
+
 ## Context
 Rule code is written by an LLM (ADR 0003). A single model can misread the rule, write a
 bug, or write tests that confirm its own bug. Nobody on the team can review every

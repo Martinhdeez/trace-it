@@ -172,6 +172,7 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
     }
     assert {s["step"] for s in agents["steps"]} == {
         "load_definition",
+        "publish_process_version",
         "compile_rule",
         "coder_attempt",
         "llm_run",

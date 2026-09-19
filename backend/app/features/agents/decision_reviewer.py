@@ -57,6 +57,7 @@ async def assess(
     decision: Decision,
     rules: list[Rule],
     sources: list[Source],
+    snapshot: dict | None = None,
 ) -> None:
     """Append one assessment or failure. Disabled processes never call a model.
 
@@ -68,11 +69,15 @@ async def assess(
     if config is None:
         return
     file = await session.get(File, instance.file_hash)
-    setup = (await use_cases.setups(session, process.use_case_id)).get("decision_reviewer")
+    from app.features.versions.configuration import setups
+
+    setup = (
+        setups(snapshot) if snapshot else await use_cases.setups(session, process.use_case_id)
+    ).get("decision_reviewer")
     setup = setup or llm.Setup()
     evidence = {
         "guidance": config.guidance,
-        **await guidance.approved(session, process.id),
+        **(snapshot["guidance"] if snapshot else await guidance.approved(session, process.id)),
         **{f"symbol:{k}": v for k, v in (instance.symbols or {}).items()},
         **{f"rule:{r.id}": {"text": r.text, "decision": r.decision, "hash": r.hash} for r in rules},
         **{f"source:{s.id}": {"name": s.name, "origin": s.origin, "rows": s.rows} for s in sources},
@@ -93,7 +98,9 @@ async def assess(
         },
         "evidence": evidence,
     }
-    instructions = llm.prompt("decision_reviewer")
+    instructions = (snapshot.get("reviewer_prompt") if snapshot else None) or llm.prompt(
+        "decision_reviewer"
+    )
     row = DecisionReview(
         decision_id=decision.id,
         status="failed",

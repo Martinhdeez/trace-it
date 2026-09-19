@@ -4,6 +4,9 @@ status: accepted
 
 # Turn the client's norm into rules with an autonomous normalizer
 
+Automatic adoption is superseded by [ADR 0022](0022-publish-approved-process-versions.md).
+Compilation and normalization remain in use.
+
 ## Context
 The client's norm is `Norma_Pagos_v3`: six loose Spanish sentences in a workbook sheet
 ("Pagar solo si el NIF esta en el maestro y el IBAN ... coincide", "Ante duda razonable,
