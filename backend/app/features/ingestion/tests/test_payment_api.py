@@ -167,7 +167,11 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
     assert run.json() == {"decided": 1, "by_decision": {"PAGAR": 1}}, run.text
     assert (await client.post(f"/processes/{process_id}/run")).json()["decided"] == 0
     export = await client.get(f"/processes/{process_id}/export")
-    assert json.loads(export.text) == {"file_id": "invoice.pdf", "result": "PAGAR"}
+    assert json.loads(export.text) == {
+        "file_id": "invoice.pdf",
+        "result": "PAGAR",
+        "reason": "NO_FINDING",
+    }
     detail = (await client.get(f"/instances/{instance_id}")).json()
     assert len(detail["decisions"]) == 1
     assert len(detail["decisions"][0]["results"]) == 16
