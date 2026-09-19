@@ -232,3 +232,35 @@ def test_provider_http_failure_records_status_without_response_body(settings, mo
     assert "input_tokens" not in call["data"]
     assert call["data"]["cost_status"] == "unknown"
     assert "private response body" not in json.dumps(rows, default=str)
+
+
+def test_a_refused_call_is_retried_once_the_provider_is_back(settings, monkeypatch):
+    """A 429 is a definite refusal, not an uncertain delivery: the journal lets the next
+    call through instead of blocking it forever."""
+    rows, answers = [], [httpx.Response(429, text="slow down")]
+    monkeypatch.setattr(events, "_write", rows.extend)
+    ok = {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": "TOTAL 1"}]}}]}
+    original_client = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: original_client(
+            transport=httpx.MockTransport(
+                lambda request: answers.pop() if answers else httpx.Response(200, json=ok)
+            ),
+            **kwargs,
+        ),
+    )
+    model = VisionFallback(replace(settings, gemini_api_key="secret-key"))
+    with pytest.raises(ProviderUnavailable):
+        model.transcribe(b"image", 1, (595, 842))
+    [record] = (settings.data_dir / "provider-journal" / "gemini").glob("*.json")
+    assert json.loads(record.read_text())["state"] == "refused"
+
+    assert model.transcribe(b"image", 1, (595, 842))[0].text == "TOTAL 1"
+    calls = [row["data"] for row in rows if row["step"] == "provider_call"]
+    assert [(c["outcome"], c["network_attempted"]) for c in calls] == [
+        ("error", True),
+        ("success", True),
+    ]
+    assert json.loads(record.read_text())["state"] == "complete"

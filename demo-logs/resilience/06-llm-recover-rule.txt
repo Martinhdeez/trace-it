@@ -1,0 +1,20 @@
+## 2026-09-19T10:10:25Z the LLM provider is back: recover rule 30
+$ restart the API with the real Helmcode URL
+$ POST /rules/30/compile
+   {'status': 'draft', 'valid': True, 'tests': 8, 'error': None}
+  llm_run: tester deepseek/deepseek-v4.1-flash failed=[]; compiler deepseek/deepseek-v4.1-flash failed=[]
+$ GET /rules/30/impact   (what publishing it would change)
+   {'unchanged': 462, 'changes': 38, 'conflicts': 0}
+$ POST /processes/1/draft/validate
+  valid: True revision 4 {'unchanged': 462, 'changes': [{'instance_id': 22, 'decision_id': 22, 'name': '2026-02-04_P001.pdf', 'before': 'PAGAR', 'after': 'ESCALAR', 'reason': 'TOTAL_ABOVE_10000'}, {'instance_id': 39, 'decision_id': 39, 'name': '2026-03-01_P001.pdf', 'before': 'PAGAR', 'after': 'ESCALAR', 'reason': 'TOTAL_ABOVE_10000'}, {'instance_id': 47, 'decision_id': 47, 'name': '2026-03-10_P007.pdf', 'before': 'PAGAR', 'after': 'ESCALAR', 'reason': 'TOTAL_ABOVE_10000'}, {'instance_id': 48, 'decision_id': 48, 'name': '2026-03-11_P003.pdf', 'before': 'PAGAR', 'after': 'ESCALAR', 'reason': 'T
+$ POST /processes/1/draft/publish  (Martín, manager)
+   {'id': 3, 'number': 2, 'published_by': None, 'reason': 'Resilience demo: rules recompiled after the LLM outage'}
+  rule 30: active
+  alerts: 2 -> 40  (trigger rule_change)
+    rule_change|NO_PAGAR -> ESCALAR|2
+    rule_change|PAGAR -> ESCALAR|36
+  detect_stale_decisions span: {"kind": "rule_change", "version": 2, "version_id": 3, "added_rule_ids": [17, 30], "changed_rule_ids": [], "removed_rule_ids": []} instances=500 would_change=38 alerts_created=38 1102 ms
+$ GET /processes/1/alerts?status=open  (first 3)
+   2026-02-04_P001.pdf PAGAR -> ESCALAR added_rule_ids [17, 30]
+   2026-03-01_P001.pdf PAGAR -> ESCALAR added_rule_ids [17, 30]
+   2026-03-10_P007.pdf PAGAR -> ESCALAR added_rule_ids [17, 30]

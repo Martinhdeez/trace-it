@@ -1,0 +1,33 @@
+## 2026-09-19T10:07:39Z keep state: append-only decisions, backup and restore
+
+### Decisions are append-only
+Code: the only writes to `decisions` are two INSERTs (decisions/service.py _append and resolve); no UPDATE or DELETE path exists.
+decisions: 500, max id 500
+hash of the 500 existing rows: 3dada11113ad0477e7d642f21f159930
+$ POST /processes/1/reprocess   (after the ERP change of 02: two orders changed)
+   {'unchanged': 497, 'changes': [('2026-01-08_P001.pdf', 'PAGAR', 'NO_PAGAR'), ('2026-03-28_P002.pdf', 'NO_PAGAR', 'PAGAR'), ('2026-05-28_P003.pdf', 'NO_PAGAR', 'PAGAR')], 'conflicts': 0}
+decisions: 503, max id 503
+hash of the first 500 rows now: 3dada11113ad0477e7d642f21f159930   (unchanged)
+  2026-03-28_P002.pdf|64|NO_PAGAR|1|2026-09-19 10:05:15.288812+00
+  2026-03-28_P002.pdf|502|PAGAR|5|2026-09-19 10:07:40.116374+00
+  2026-05-28_P003.pdf|110|NO_PAGAR|1|2026-09-19 10:05:15.288812+00
+  2026-05-28_P003.pdf|503|PAGAR|5|2026-09-19 10:07:40.116374+00
+
+### make backup, restore into a new database, same decisions
+$ make backup DB_NAME=trace_resilience
+  -rw-r--r--@ 1 apple  staff  7215981 Sep 19 12:07 trace_resilience-20260919-120741.dump
+$ createdb trace_resilience_restore && pg_restore -d trace_resilience_restore backups/trace_resilience-20260919-120741.dump
+NOTICE:  database "trace_resilience_restore" does not exist, skipping
+  restored
+  instances: live 500 / restored 500
+  decisions: live 503 / restored 503
+  executions: live 5 / restored 5
+  events: live 3261 / restored 3261
+  alerts: live 2 / restored 2
+  sources: live 10 / restored 10
+  files: live 501 / restored 501
+  decisions hash: live 7b8d24b13023ed4daf419cd5ac279b22 / restored 7b8d24b13023ed4daf419cd5ac279b22
+$ app.cli export on the restored database, compared with the live API export
+  /private/tmp/claude-501/-Users-apple-orca-workspaces-trace-pay-pelican/81951f95-6768-4335-9ebf-6930a2d5a39b/scratchpad/res/restored.jsonl: 500 lines for 500 PDFs in /Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-a9d710321dffacbec/.context/500-sombras-de-alberto/facturas
+  OK: one line per file, valid results {'ESCALAR': 28, 'NO_PAGAR': 35, 'PAGAR': 437}
+  live 500 lines, restored 500 lines, identical: True

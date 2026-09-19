@@ -74,7 +74,9 @@ the shared event schema and OpenTelemetry export.
    | `error_type`, `error` | Exception class and a fixed safe description, without provider bodies |
 
    A completed journal response is replayed without another request. An incomplete
-   or uncertain record blocks automatic resubmission. A received response can
+   or uncertain record blocks automatic resubmission. A definite HTTP refusal (4xx or
+   503, e.g. a 429 rate limit) delivered nothing: it is journaled `refused` and the next
+   call tries again (2026-09-19, [resilience](../resilience.md)). A received response can
    report usage even if its content is subsequently rejected. Secrets, raw images,
    transcripts and request payloads do not enter these provider spans; the protected
    local journal and document evidence retain the material needed for reproduction.
