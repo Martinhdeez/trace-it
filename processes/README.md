@@ -52,7 +52,7 @@ A use case is what the app is used for (e.g. "Invoice payment"); a process is on
 |---|---|
 | `name` | Unique name of the use case; the process's `use_case` names it |
 | `description` | The domain conventions every rule follows, shown to the compiler, tester and assistant |
-| `agents` | `{role: settings}`, roles `compiler`, `tester`, `assistant`. Settings: `model` (`provider:model` or `helmcode:<id>`; default `TRACE_<ROLE>_MODEL`), `instructions` (domain guidance appended to the platform prompt in `backend/app/features/agents/prompts/`), `model_settings` (e.g. `{"temperature": 0}`), `limits` (compiler: `max_attempts`, `auto_activate_max_change`; tester: `min_tests`, `max_reviews`), `examples` (`[{text, type, code}]`, `code` a path relative to this file; the compiler sees the examples of the other rules, never the one being compiled) |
+| `agents` | `{role: settings}`, roles `compiler`, `tester`, `assistant`, `normalizer`. Settings: `model` (`provider:model` or `helmcode:<id>`; default `TRACE_<ROLE>_MODEL`), `instructions` (domain guidance appended to the platform prompt in `backend/app/features/agents/prompts/`), `model_settings` (e.g. `{"temperature": 0}`), `limits` (compiler: `max_attempts`, `auto_activate_max_change`; tester: `min_tests`, `max_reviews`), `examples` (`[{text, type, code}]`, `code` a path relative to this file; the compiler sees the examples of the other rules, never the one being compiled) |
 
 Loading never overrides what was changed at runtime: a role with no stored version gets the file's settings as version 1, active; settings that differ from every stored version enter as a new, inactive version, for a manager to activate (`POST /agent-configs/{id}/activate`).
 

@@ -4,9 +4,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 # compiler: writes a rule's code; tester: writes its tests and reviews disputes;
-# assistant: suggests how to resolve an escalated case.
-Role = Literal["compiler", "tester", "assistant"]
-ROLES: tuple[Role, ...] = ("compiler", "tester", "assistant")
+# assistant: suggests how to resolve an escalated case; normalizer: turns a norm in
+# natural language into rule texts.
+Role = Literal["compiler", "tester", "assistant", "normalizer"]
+ROLES: tuple[Role, ...] = ("compiler", "tester", "assistant", "normalizer")
 
 
 class Example(BaseModel):

@@ -40,12 +40,12 @@ backend/
     support/                  # challenge.py, pack.py, fakes.py, models.py, prepare_db.py
     golden/                   # expected outcomes of batch 1 (README there)
     e2e/                      # golden engine run, API flow
-  evals/                      # opt-in compiler evaluation against the hand-written rules
+  evals/                      # opt-in evaluations: compiler vs hand-written rules, norm vs golden
 ```
 
 Inside a feature: `model.py` (SQLAlchemy tables), `schemas.py` (Pydantic in/out), `service.py` (logic, takes the session), `router.py` (thin: validate, call the service, return), `tests/`. A router runs no SQL. A feature imports another's `model.py` or `service.py`, never its `router.py`. Errors are `TraceError` subclasses (`app/common/exceptions.py`); the API maps them to status codes. Naming and vocabulary: `docs/CONVENTIONS.md`.
 
-Agents (tester, compiler, assistant) run on PydanticAI: ADR 0006 and `features/agents/llm.py`.
+Agents (tester, compiler, assistant, normalizer) run on PydanticAI: ADR 0006 and `features/agents/llm.py`.
 
 ## Rule life cycle
 
@@ -63,7 +63,7 @@ A manager saves a rule in plain language (`POST /processes/{id}/rules`); nobody 
 
 ## Use cases and agent configuration
 
-A **use case** is what the app is used for (e.g. "Invoice payment"): its `description` (domain conventions) and how its agents work. A **process** is one set of rules inside a use case (`processes.use_case_id`); `ProcessOut.description` is its use case's. What an agent does is not in the code (ADR 0011): the platform prompt is a file in `features/agents/prompts/`, the same for every use case, and each use case adds a versioned configuration per role (`compiler`, `tester`, `assistant`): model, domain guidance, model settings, limits, examples. A role without one runs with `TRACE_<ROLE>_MODEL` and the defaults in `compiler.py`. Every agent event records `config_id` and `prompt_hash` (sha256[:12] of the effective instructions). The pack file `processes/<pack>/use-case.json` seeds it (`processes/README.md`).
+A **use case** is what the app is used for (e.g. "Invoice payment"): its `description` (domain conventions) and how its agents work. A **process** is one set of rules inside a use case (`processes.use_case_id`); `ProcessOut.description` is its use case's. What an agent does is not in the code (ADR 0011): the platform prompt is a file in `features/agents/prompts/`, the same for every use case, and each use case adds a versioned configuration per role (`compiler`, `tester`, `assistant`, `normalizer`): model, domain guidance, model settings, limits, examples. A role without one runs with `TRACE_<ROLE>_MODEL` and the defaults in `compiler.py`. Every agent event records `config_id` and `prompt_hash` (sha256[:12] of the effective instructions). The pack file `processes/<pack>/use-case.json` seeds it (`processes/README.md`).
 
 | Endpoint | Who | What |
 |---|---|---|
@@ -71,6 +71,8 @@ A **use case** is what the app is used for (e.g. "Invoice payment"): its `descri
 | `GET /use-cases/{id}/agents/{role}/versions` | anyone | Every version of a role's configuration, oldest first |
 | `PUT /use-cases/{id}/agents/{role}` | manager | Body `{config, note}`: a new version, active from now on |
 | `POST /agent-configs/{id}/activate` | manager | Activate an existing version: rollback, or adopt one loaded from the pack |
+
+**The client's norm** (ADR 0017): `POST /processes/{id}/norm` (manager), body `{"text": ...}`, the norm as the client wrote it, in any language. The normalizer agent keeps each sentence as one **norm rule** (`norm_rules`, the unit the client owns) and splits it into atomic checks: ordinary rules (one code, one decision), compiled in one background job, at most `TRACE_COMPILE_CONCURRENCY` (default 5) at once, linked by `rules.norm_rule_id`, with the normalizer's reading in `report.norm`. Statements that are not checkable conditions become the norm rule's `policies`. `GET /processes/{id}/norm-rules` lists each norm rule with its checks. `make eval-norm` runs norm -> normalizer -> compiler -> engine on batch 1 against the golden outcomes (opt-in, real LLMs).
 
 Versions are append-only: only `active` moves. Tests script the model with `FunctionModel` (`tests/support/models.py`): no network, no keys. Before writing PydanticAI code, read `.context/pydantic-ai/START-HERE.md`: the v2 API differs from what a model remembers.
 
@@ -90,6 +92,7 @@ Requirements: Docker, [uv](https://docs.astral.sh/uv/), `pdftotext` (poppler) fo
 | `make test-e2e` | Golden outcomes of batch 1 and the API flow (needs the challenge submodule) |
 | `make check` | `ruff check`, `ruff format --check`, then `test` and `test-e2e`. Run before every PR |
 | `make eval-compiler` | Opt-in, calls real LLMs: compiles the 16 rules and compares with `rules-v3/`; report in `backend/evals/reports/` |
+| `make eval-norm` | Opt-in, calls real LLMs: the client's `Norma_Pagos_v3` -> normalizer -> compiler -> batch 1 vs golden; report in `backend/evals/reports/` |
 | `make down` | Stops the containers; data stays |
 | `make reset-db` | Deletes the database volume. Then `make setup` |
 
@@ -109,7 +112,7 @@ Without Docker for the backend (faster loop): `docker compose up db -d`, then in
 
 ## Database and migrations
 
-The migration history starts at `alembic/versions/0001_initial_schema.py` (squashed); a database older than it needs `make reset-db && make setup`. `0002_use_cases.py` moves each process's description into a use case of its own, so `alembic upgrade head` is enough from 0001.
+The migration history starts at `alembic/versions/0001_initial_schema.py` (squashed); a database older than it needs `make reset-db && make setup`. `0004_norm_rules.py` adds `norm_rules` and `rules.norm_rule_id`. `0002_use_cases.py` moves each process's description into a use case of its own, so `alembic upgrade head` is enough from 0001.
 
 To change a table: edit the feature's `model.py` (a new table must be imported in `app/models.py`), then in `backend/`: `uv run alembic revision --autogenerate -m "add x to rules"`. Read the generated file before committing. Two branches generating migrations at once leave two heads: `uv run alembic merge heads` and tell the group.
 

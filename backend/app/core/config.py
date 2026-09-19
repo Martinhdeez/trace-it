@@ -18,12 +18,16 @@ class Settings(BaseSettings):
     compiler_model: str = "anthropic:claude-opus-5"
     tester_model: str = "openai:gpt-5"
     assistant_model: str = "anthropic:claude-opus-5"
+    normalizer_model: str = "anthropic:claude-opus-5"
     # Helmcode, an OpenAI-compatible API: select it with `helmcode:<model>` (e.g.
     # `helmcode:deepseek-v4-flash`). Its key is read like every provider's: HELMCODE_API_KEY.
     helmcode_base_url: str = "https://api.helmcode.com/v1"
     # A compiled rule activates by itself when it would change at most this share of the
     # decisions already taken and contradicts no decision a person took (ADR 0004).
     auto_activate_max_change: float = 0.05
+    # Rules one background job compiles at once (Helmcode allows 5 concurrent requests
+    # per model).
+    compile_concurrency: int = 5
 
 
 settings = Settings()

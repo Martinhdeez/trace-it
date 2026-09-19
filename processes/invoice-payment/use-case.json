@@ -50,6 +50,12 @@
       "model_settings": {
         "temperature": 0
       }
+    },
+    "normalizer": {
+      "model": "helmcode:deepseek-v4-flash",
+      "model_settings": {
+        "temperature": 0
+      }
     }
   }
 }
