@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Play } from 'lucide-react'
+import { BookOpenText, Cpu, Download, FileText, Play } from 'lucide-react'
 import { api } from '../api/client'
 import { keys } from '../api/queries'
 import { ExportButton } from '../components/process/ExportButton'
@@ -12,6 +12,7 @@ import { NestedCard, PageIntro, PreviewWell } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { tone } from '../lib/status'
 import { paths } from '../lib/paths'
+import type { Instance, NormRule, Rule } from '../api/contracts'
 import { byPriority, countsOf, waitingOnPerson, type Counts } from '../lib/process'
 
 export function Process() {
@@ -28,9 +29,17 @@ export function Process() {
     queryFn: () => api.listInstances(processId),
     select: countsOf,
   })
+  const instances = useQuery({
+    queryKey: keys.instances(processId),
+    queryFn: () => api.listInstances(processId),
+  })
   const rules = useQuery({
     queryKey: keys.rules(processId),
     queryFn: () => api.listRules(processId),
+  })
+  const norm = useQuery({
+    queryKey: keys.norm(processId),
+    queryFn: () => api.listNormRules(processId),
   })
 
   const run = useMutation({
@@ -93,14 +102,22 @@ export function Process() {
         ) : null}
         {summary ? <p className="mb-4 text-[13px] text-muted">{summary}</p> : null}
 
-        <Split counts={counts.data} />
+        <Pipeline
+          total={counts.data?.total ?? 0}
+          norm={norm.data ?? []}
+          rules={rules.data ?? []}
+          decided={counts.data?.decided ?? 0}
+          pending={(counts.data?.pending ?? 0) + (counts.data?.review ?? 0)}
+        />
+
+        <Split counts={counts.data} instances={instances.data ?? []} />
 
         <section className="mt-10 grid gap-3 lg:grid-cols-2">
           <Shortcut
             to={paths.rules(processId)}
             title="Reglas"
             detail={`${active} activas${drafts ? ` · ${drafts} en borrador` : ''}`}
-            foot="Texto → dos agentes escriben el código → informe → activar."
+            foot="Norma → comprobaciones → tester ciego → código validado."
           />
           <Shortcut
             to={paths.queue(processId)}
@@ -182,7 +199,63 @@ export function Process() {
   )
 }
 
-function Split({ counts }: { counts: Counts | undefined }) {
+function Pipeline({
+  total,
+  norm,
+  rules,
+  decided,
+  pending,
+}: {
+  total: number
+  norm: NormRule[]
+  rules: Rule[]
+  decided: number
+  pending: number
+}) {
+  const checks = norm.reduce((sum, item) => sum + item.reglas.length, 0)
+  const compiling = rules.filter((rule) => rule.estado === 'compilando').length
+  const active = rules.filter((rule) => rule.estado === 'activa').length
+
+  const stages = [
+    { icon: FileText, label: 'Documentos', value: total, note: 'instancias' },
+    { icon: BookOpenText, label: 'Norma', value: norm.length, note: `${checks} comprobaciones` },
+    {
+      icon: Cpu,
+      label: 'Compilador',
+      value: active,
+      note: compiling ? `${compiling} compilando` : 'activas',
+    },
+    { icon: Play, label: 'Motor', value: decided, note: pending ? `${pending} pendientes` : 'cerrado' },
+    { icon: Download, label: 'Exportación', value: decided, note: 'líneas listas' },
+  ]
+
+  return (
+    <section className="mb-3">
+      <p className="mb-3 font-mono text-[11px] tracking-[0.12em] text-faint">
+        ESTADO DEL PROCESO
+      </p>
+      <div className="grid overflow-hidden rounded-[16px] bg-white ring-1 ring-black/[0.06] sm:grid-cols-5">
+        {stages.map((stage, index) => (
+          <div
+            key={stage.label}
+            className="relative border-b border-hairline px-3.5 py-3 last:border-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
+          >
+            <div className="flex items-center gap-1.5 text-[11px] text-muted">
+              <stage.icon size={12} strokeWidth={1.6} />
+              <span>{index + 1} · {stage.label}</span>
+            </div>
+            <p className="mt-2 font-mono text-[22px] tracking-[-0.04em] tabular-nums">
+              {stage.value}
+            </p>
+            <p className="mt-0.5 font-mono text-[10px] text-faint">{stage.note}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function Split({ counts, instances }: { counts: Counts | undefined; instances: Instance[] }) {
   const cells = useMemo(() => {
     if (!counts) return []
     const outcomes = Object.entries(counts.byOutcome).sort(([a], [b]) => a.localeCompare(b))
@@ -194,28 +267,48 @@ function Split({ counts }: { counts: Counts | undefined }) {
   }, [counts])
 
   return (
-    <PreviewWell name={`${counts?.total ?? 0} instancias`}>
+    <PreviewWell name={`${counts?.total ?? 0} instancias · cada punto es una decisión`}>
       {cells.length === 0 ? (
         <p className="text-[13px] text-muted">
           Aún no hay instancias. Sube ficheros desde Fuentes y pulsa Ejecutar.
         </p>
       ) : (
-        <div className="flex flex-wrap items-end justify-center gap-6">
-          {cells.map((cell) => (
-            <div key={cell.label} className="flex flex-col items-center">
-              <span className="font-mono text-[34px] leading-none tracking-[-0.04em] tabular-nums">
-                {cell.value}
-              </span>
+        <div className="w-full">
+          <div className="mb-5 flex flex-wrap items-end justify-center gap-6">
+            {cells.map((cell) => (
+              <div key={cell.label} className="flex flex-col items-center">
+                <span className="font-mono text-[30px] leading-none tracking-[-0.04em] tabular-nums">
+                  {cell.value}
+                </span>
+                <span
+                  className={cn(
+                    'mt-2 rounded-full px-2 py-0.5 font-mono text-[10px] tracking-[0.04em]',
+                    tone(cell.label),
+                  )}
+                >
+                  {cell.label.replaceAll('_', ' ')}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mx-auto flex max-w-[620px] flex-wrap justify-center gap-[3px]">
+            {instances.map((item) => (
               <span
+                key={item.id}
+                title={`${item.nombre} · ${item.decision ?? item.estado}`}
                 className={cn(
-                  'mt-2 rounded-full px-2 py-0.5 font-mono text-[10px] tracking-[0.04em]',
-                  tone(cell.label),
+                  'h-[7px] w-[7px] rounded-[2px]',
+                  item.decision === 'PAGAR' || item.decision === 'APROBAR'
+                    ? 'bg-pagar'
+                    : item.decision === 'NO_PAGAR' || item.decision === 'RECHAZAR'
+                      ? 'bg-nopagar'
+                      : item.decision
+                        ? 'bg-escalar'
+                        : 'bg-faint/40',
                 )}
-              >
-                {cell.label.replaceAll('_', ' ')}
-              </span>
-            </div>
-          ))}
+              />
+            ))}
+          </div>
         </div>
       )}
     </PreviewWell>

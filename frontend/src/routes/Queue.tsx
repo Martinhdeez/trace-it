@@ -14,11 +14,9 @@ import { cn } from '../lib/cn'
 import { paths } from '../lib/paths'
 import { byPriority, humanOutcomes } from '../lib/process'
 
-const REVIEW = 'REVISION'
-
 /**
- * F8. What is waiting on a person: every outcome the process marked
- * `requiere_persona`, plus the instances stuck in REVISION (P21).
+ * What is waiting on a person: every outcome the process marked
+ * `requiere_persona`. Extraction gaps stay pending; they are not queue decisions.
  */
 export function Queue() {
   const processId = Number(useParams().processId)
@@ -32,29 +30,19 @@ export function Queue() {
     queryKey: keys.queue(processId, 'all'),
     queryFn: () => api.queue(processId),
   })
-  const review = useQuery({
-    queryKey: keys.instances(processId, 'REVISION'),
-    queryFn: () => api.listInstances(processId, 'REVISION'),
-  })
-
   const human = byPriority(humanOutcomes(process.data))
   const tabs = useMemo(
-    () => [
-      ...human.map((outcome) => ({
+    () =>
+      human.map((outcome) => ({
         value: outcome.nombre,
         label: outcome.nombre.replaceAll('_', ' '),
         count: (escalated.data ?? []).filter((item) => item.decision === outcome.nombre).length,
       })),
-      { value: REVIEW, label: REVIEW, count: review.data?.length },
-    ],
-    [human, escalated.data, review.data],
+    [human, escalated.data],
   )
 
-  const tab = params.get('tipo') ?? human[0]?.nombre ?? REVIEW
-  const items =
-    tab === REVIEW
-      ? (review.data ?? [])
-      : (escalated.data ?? []).filter((item) => item.decision === tab)
+  const tab = params.get('tipo') ?? human[0]?.nombre ?? ''
+  const items = (escalated.data ?? []).filter((item) => item.decision === tab)
   const selectedId = params.get('i') ? Number(params.get('i')) : undefined
   const current = items.find((item) => item.id === selectedId) ?? items[0]
 
@@ -75,12 +63,8 @@ export function Queue() {
       <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
         <PageIntro
           kicker="Cola"
-          title={tab === REVIEW ? 'En revisión' : tab.replaceAll('_', ' ')}
-          description={
-            tab === REVIEW
-              ? 'REVISION es un estado interno, no una decisión: las dos extracciones no coinciden, o una regla falló al evaluarse. Mientras quede una, no se puede exportar.'
-              : 'El proceso marcó esta salida como algo que decide una persona. Lo que resuelvas entra en el histórico como una decisión nueva, y la regla que escribas cierra los casos parecidos que vengan después.'
-          }
+          title={tab.replaceAll('_', ' ')}
+          description="El proceso marcó esta salida como algo que decide una persona. Lo que resuelvas entra en el histórico como una decisión nueva, y la regla que escribas cierra los casos parecidos que vengan después."
         />
 
         {escalated.isError ? <ErrorNotice error={escalated.error} /> : null}
@@ -90,9 +74,7 @@ export function Queue() {
             {items.length === 0 ? (
               <li>
                 <Empty>
-                  {tab === REVIEW
-                    ? 'Nada en revisión. Se puede exportar.'
-                    : 'Nada esperando. Las reglas cierran todos los casos.'}
+                  Nada esperando. Las reglas cierran todos los casos.
                 </Empty>
               </li>
             ) : (

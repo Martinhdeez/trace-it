@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { BookOpenText, Plus } from 'lucide-react'
 import { api } from '../api/client'
 import { keys } from '../api/queries'
-import type { RuleInput, RuleKind, RuleState } from '../api/contracts'
+import type { NormRule, RuleInput, RuleKind, RuleState } from '../api/contracts'
 import { Button, Field, Segmented, Select, Textarea } from '../components/shell/Controls'
 import { DataTable } from '../components/shell/DataTable'
 import { Empty, ErrorNotice } from '../components/shell/Notice'
@@ -30,13 +30,17 @@ export function Rules() {
     queryKey: keys.rules(processId),
     queryFn: () => api.listRules(processId),
   })
+  const norm = useQuery({
+    queryKey: keys.norm(processId),
+    queryFn: () => api.listNormRules(processId),
+  })
 
   const create = useMutation({
     mutationFn: (body: RuleInput) => api.createRule(processId, body),
-    // Adding a rule and compiling it is one move: the rule page picks it up.
+    // Saving starts background compilation; the rule page polls while it runs.
     onSuccess: (rule) => {
       void queryClient.invalidateQueries({ queryKey: ['rules'] })
-      navigate(`${paths.rule(processId, rule.id)}?compile=1`)
+      navigate(paths.rule(processId, rule.id))
     },
   })
 
@@ -64,7 +68,7 @@ export function Rules() {
         <PageIntro
           kicker="Reglas"
           title="Reglas del proceso"
-          description="Se escriben en texto. Al crearla, dos agentes independientes la compilan a código con sus tests, se cruzan los tests y se comprueba el histórico. Tarda entre 30 y 60 segundos, y hasta que no sale limpia no se puede activar."
+          description="Pega la norma como la escribió el cliente, o añade una comprobación concreta. Un normalizador conserva cada frase y la divide; después un tester ciego escribe los casos y un compilador genera el código hasta pasarlos."
         />
 
         {formOpen ? (
@@ -77,6 +81,16 @@ export function Rules() {
           />
         ) : null}
 
+        <NormPanel
+          rows={norm.data ?? []}
+          loading={norm.isLoading}
+          onNormalized={() => {
+            void queryClient.invalidateQueries({ queryKey: keys.norm(processId) })
+            void queryClient.invalidateQueries({ queryKey: ['rules'] })
+          }}
+          processId={processId}
+        />
+
         <div className="mb-3 mt-6">
           <Segmented
             value={filter}
@@ -84,8 +98,9 @@ export function Rules() {
             options={[
               { value: 'todas', label: 'Todas', count: all.length },
               { value: 'activa', label: 'Activas', count: count('activa') },
+              { value: 'compilando', label: 'Compilando', count: count('compilando') },
+              { value: 'bloqueada', label: 'Bloqueadas', count: count('bloqueada') },
               { value: 'borrador', label: 'Borrador', count: count('borrador') },
-              { value: 'rechazada', label: 'Rechazadas', count: count('rechazada') },
               { value: 'retirada', label: 'Retiradas', count: count('retirada') },
             ]}
           />
@@ -141,6 +156,105 @@ export function Rules() {
         </NestedCard>
       </div>
     </>
+  )
+}
+
+function NormPanel({
+  rows,
+  loading,
+  processId,
+  onNormalized,
+}: {
+  rows: NormRule[]
+  loading: boolean
+  processId: number
+  onNormalized: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const normalize = useMutation({
+    mutationFn: () => api.normalizeNorm(processId, text.trim()),
+    onSuccess: () => {
+      setText('')
+      setOpen(false)
+      onNormalized()
+    },
+  })
+
+  return (
+    <section className="mt-6">
+      <NestedCard
+        label={
+          <span className="flex items-center gap-1.5">
+            <BookOpenText size={12} strokeWidth={1.75} />
+            norma del cliente · {rows.length} apartados
+          </span>
+        }
+        action={
+          <Button tone="ghost" onClick={() => setOpen((value) => !value)}>
+            {open ? 'Cerrar' : rows.length ? 'Añadir norma' : 'Pegar norma'}
+          </Button>
+        }
+      >
+        {open ? (
+          <div className="border-t border-hairline px-3.5 py-3">
+            <Field
+              label="Norma en lenguaje natural"
+              hint="Conservamos cada frase tal cual. El normalizador la separa en comprobaciones atómicas y las manda a compilar en segundo plano."
+            >
+              <Textarea
+                autoFocus
+                rows={6}
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder={'1. El proveedor debe estar en el maestro.\\n2. El IBAN debe coincidir…'}
+                className="mt-1"
+              />
+            </Field>
+            {normalize.isError ? <ErrorNotice error={normalize.error} /> : null}
+            <Button
+              tone="primary"
+              className="mt-3"
+              disabled={!text.trim() || normalize.isPending}
+              onClick={() => normalize.mutate()}
+            >
+              {normalize.isPending ? 'Leyendo la norma…' : 'Convertir en comprobaciones'}
+            </Button>
+          </div>
+        ) : rows.length ? (
+          <ul className="divide-y divide-hairline border-t border-hairline">
+            {rows.map((row) => (
+              <li key={row.id} className="grid gap-2 px-3.5 py-3 md:grid-cols-[2rem_1fr_auto]">
+                <span className="font-mono text-[11px] text-faint">
+                  {String(row.numero).padStart(2, '0')}
+                </span>
+                <div>
+                  <p className="text-[13px] leading-6">{row.texto}</p>
+                  {row.politicas.length ? (
+                    <p className="mt-1 text-[11.5px] text-muted">
+                      Política: {row.politicas.join(' · ')}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  {row.reglas.map((check) => (
+                    <StatusBadge key={check.id} value={check.estado}>
+                      {`#${check.id} · ${check.estado}`}
+                    </StatusBadge>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="border-t border-hairline px-3.5 py-5 text-[13px] text-muted">
+            {loading
+              ? 'Cargando la norma…'
+              : 'Pega la norma completa. Verás sus frases y las comprobaciones que salen de cada una.'}
+          </p>
+        )}
+      </NestedCard>
+    </section>
   )
 }
 
