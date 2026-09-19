@@ -172,6 +172,16 @@ async def test_two_invalid_decisions_give_502(case, monkeypatch) -> None:
     assert r.json()["code"] == "llm_error"
 
 
+async def test_no_llm_key_gives_502(case, monkeypatch) -> None:
+    for key in ("HELMCODE_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.setenv(key, "")
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        r = await api.get(f"/instances/{case['escalated']}/suggestion")
+    assert r.status_code == 502, r.text
+    assert r.json()["code"] == "llm_error"
+
+
 async def test_not_escalated_gives_409(case, monkeypatch) -> None:
     script(monkeypatch, [])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:

@@ -60,12 +60,9 @@ export default defineConfig({
         // No LLM and no provider OCR: text PDFs need neither, a scan uses the local weights.
         TRACEPAY_OCR_PROFILE: 'experimental',
         TRACEPAY_OCR_MODE: 'local',
-        // Every model call goes to a closed port and fails fast as 502 `llm_error`. An empty
-        // key would not: the OpenAI client raises before the call, and the API answers 500.
-        TRACE_HELMCODE_BASE_URL: 'http://127.0.0.1:9/v1',
-        OPENAI_BASE_URL: 'http://127.0.0.1:9/v1',
-        HELMCODE_API_KEY: 'unreachable',
-        OPENAI_API_KEY: 'unreachable',
+        // No key: every model call fails before it is made, as 502 `llm_error`.
+        HELMCODE_API_KEY: '',
+        OPENAI_API_KEY: '',
         ANTHROPIC_API_KEY: '',
         GEMINI_API_KEY: '',
         GOOGLE_API_KEY: '',
