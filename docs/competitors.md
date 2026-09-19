@@ -8,7 +8,7 @@ snapshot: re-check before the defence.
 **Our headline feature is that trace-it is not an invoice system.** While solving Alberto's process it
 builds a general one: a process pack in plain language (ADR 0007), agents that compile each rule to
 Python and test it blind (ADR 0003, 0004), and a deterministic engine that runs any pack. A new process
-is a new JSON file plus one compilation (the invoice norm, 6 sentences to 11 active rules, took 103 s,
+is a new JSON file plus one compilation (the invoice norm, 6 sentences to 11 active rules, took 84.7 s,
 `docs/scale-and-cost.md`), and `processes/travel-expenses.json` is the proof. This is
 also what Maisa sells (digital workers described in natural language, with code generated and run in a
 sandbox), so the tribunal knows exactly what it is looking at.
