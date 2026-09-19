@@ -44,6 +44,7 @@ import type {
   VersionDraft,
   VersionOut,
   WorkbookUpload,
+  SpanNode,
 } from './contracts'
 import { BASE, del, get, getText, post, put, query, upload } from './http'
 
@@ -136,6 +137,7 @@ export const liveClient: ApiClient = {
   getInstance: (id) => get<InstanceDetail>(`/instances/${id}`),
   getDocument: (instanceId) => get<ExtractionResult>(`/instances/${instanceId}/document`),
   getTrace: (instanceId) => get<InstanceTrace>(`/instances/${instanceId}/trace`),
+  getAuditTrace: (traceId) => get<SpanNode[]>(`/traces/${traceId}`),
   fileUrl: (instanceId) => `${BASE}/instances/${instanceId}/file`,
   queue: (processId) => get<InstanceOut[]>(`/processes/${processId}/queue`),
   suggestion: (instanceId) => get<Suggestion>(`/instances/${instanceId}/suggestion`),
