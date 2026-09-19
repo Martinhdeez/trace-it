@@ -1,7 +1,7 @@
 import { paths } from './paths'
 
 export const PROCESS_TABS = [
-  { id: 'panel', label: 'Panel', path: paths.process },
+  { id: 'panel', label: 'Panel', path: paths.panel },
   { id: 'definition', label: 'Definición', path: paths.definition },
   { id: 'runs', label: 'Ejecuciones', path: paths.instances },
   { id: 'review', label: 'Revisión', path: paths.review },

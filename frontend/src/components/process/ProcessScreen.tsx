@@ -3,7 +3,9 @@ import { Link, useLocation } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import { keys } from '../../api/queries'
+import { ArrowLeft } from 'lucide-react'
 import { cn } from '../../lib/cn'
+import { paths } from '../../lib/paths'
 import { PROCESS_TABS, processTabFromPath } from '../../lib/processTabs'
 import { CountChip } from '../shell/Controls'
 import { ErrorNotice } from '../shell/Notice'
@@ -45,11 +47,18 @@ export function ProcessTabs({ processId }: { processId: number }) {
   const error = process.error ?? summary.error
 
   return (
-    <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-hairline px-8">
+    <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-hairline px-6">
       {error ? (
         <ErrorNotice error={error} />
       ) : (
         <>
+          <Link
+            to={paths.process(processId)}
+            className="-mb-px mr-2 inline-flex shrink-0 items-center gap-1 border-b-2 border-transparent py-2.5 pr-3 text-[13px] text-muted hover:text-ink"
+          >
+            <ArrowLeft size={13} strokeWidth={1.6} />
+            Bandeja
+          </Link>
           {PROCESS_TABS.map((tab) => {
             const active = current === tab.id
             const count = tab.id === 'review' ? waiting : undefined

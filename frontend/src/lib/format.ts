@@ -21,3 +21,9 @@ export function formatRunDate(iso: string): string {
     minute: '2-digit',
   })
 }
+
+/** NO_PAGAR reads as "No pagar". */
+export function humanize(label: string): string {
+  const words = label.replaceAll('_', ' ').toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}

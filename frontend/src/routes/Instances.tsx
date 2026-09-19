@@ -106,16 +106,16 @@ export function Instances() {
     >
 
       {instances.isError || run.isError ? (
-        <div className="px-8 py-4">
+        <div className="px-6 py-4">
           <ErrorNotice error={instances.error ?? run.error} />
         </div>
       ) : null}
       {run.data ? (
-        <div className="px-8 py-4">
+        <div className="px-6 py-4">
           <Notice
             title={`Ejecución del ${formatRunDate(run.data.started_at)} · v${run.data.version_number}`}
             action={
-              <Link to={paths.process(processId)} className="text-[12px] text-muted hover:text-ink">
+              <Link to={paths.panel(processId)} className="text-[12px] text-muted hover:text-ink">
                 Volver
               </Link>
             }
@@ -132,7 +132,7 @@ export function Instances() {
           className="flex-1 justify-center"
           action={
             <Link
-              to={paths.process(processId)}
+              to={paths.panel(processId)}
               className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-[12px] font-medium text-on-ink hover:bg-ink/90"
             >
               Ir al Panel

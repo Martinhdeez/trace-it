@@ -23,7 +23,7 @@ export function ProcessSettings() {
         { label: 'Ajustes' },
       ]}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
         <header className="mb-6">
           <p className="text-[13px] text-muted">Ajustes del proceso</p>
           <h1 className="mt-1 text-[32px] font-medium leading-[1.1] tracking-[-0.045em]">
