@@ -145,11 +145,17 @@ def test_restored_database_reset_and_failure_recovery(tmp_path):
             {"status": "PENDING"}
         ]
         for table in module.RUNTIME_TABLES:
-            if table != "instances":
+            if table not in {"instances", "events"}:
                 assert (
                     db.execute(f'SELECT count(*) AS n FROM "{table}"').fetchone()["n"]
                     == 0
                 )
+        assert (
+            db.execute(
+                "SELECT count(*) AS n FROM events WHERE data->>'demo_seed'='true' AND data->'extraction' IS NOT NULL"
+            ).fetchone()["n"]
+            == 12
+        )
         assert [p.name for p in data.iterdir()] == ["server.lock"]
         assert (
             db.execute(

@@ -207,7 +207,8 @@ After stopping frontend, backend and the active mail worker, deployment verifies
 dump and ingestion archive, runs migrations, then invokes the installed `reset-demo.py`.
 A reviewed private `/opt/trace-it/demo-seed.json` contains six extracted invoices and six
 CVs, with their original PDF bytes and checksums. Examples are recreated as pending cases
-with new monotonic IDs, without provider calls. Runtime decisions, runs, proposals,
+with new monotonic IDs, without provider calls. Their original extraction evidence is
+retained as explicitly marked seed events so PDF fields and evidence views remain usable. Runtime decisions, runs, proposals,
 learning results, alerts, traces, mail receipts and uploaded documents are removed.
 The complete extraction directory is cleared, including SQLite jobs and OCR/provider caches.
 
@@ -219,7 +220,7 @@ replaced with one baseline version. The invoice baseline has the six original `N
 `ikurotime/500-sombras-de-alberto` Excel, implemented by the frozen 12 checks. Capture
 verifies the workbook text and compiled-rule hashes; it requires `--norm-workbook`.
 Hiring uses its first approved version (13 rules). Current provider,
-execution and schema settings remain intact. The version-2 private fixture records and checks
+execution and schema settings remain intact. The version-3 private fixture records and checks
 these baselines; it is never recaptured automatically from a modified live process.
 Mailbox identity, token and UID cursor are preserved, so old messages are not replayed.
 A previously active worker is checked and resumed with the new backend image after successful

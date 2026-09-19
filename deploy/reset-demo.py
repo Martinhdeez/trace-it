@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import uuid
 from copy import deepcopy
 from pathlib import Path
 
@@ -215,9 +216,16 @@ def restore_rules(db, baselines):
 def export_seed(db, ids, invoice_pack, norm_workbook):
     rows = db.execute(
         """SELECT i.process_id, p.name AS process_name, i.name, i.symbols,
-                  f.hash, f.content, f.text
+                  f.hash, f.content, f.text, reading.data AS evidence
            FROM instances i JOIN files f ON f.hash=i.file_hash
-           JOIN processes p ON p.id=i.process_id WHERE i.id=ANY(%s) ORDER BY i.id""",
+           JOIN processes p ON p.id=i.process_id
+           LEFT JOIN LATERAL (
+               SELECT data FROM events WHERE instance_id=i.id
+               AND step IN ('ingest_document','extract_document')
+               AND (step='extract_document' OR COALESCE((data->>'created')::boolean,true))
+               ORDER BY id DESC LIMIT 1
+           ) reading ON true
+           WHERE i.id=ANY(%s) ORDER BY i.id""",
         (ids,),
     ).fetchall()
     if len(rows) != len(set(ids)):
@@ -225,7 +233,7 @@ def export_seed(db, ids, invoice_pack, norm_workbook):
     for row in rows:
         row["content"] = base64.b64encode(row["content"]).decode()
     seed = {
-        "version": 2,
+        "version": 3,
         "examples": rows,
         "rule_baselines": capture_baselines(db, invoice_pack, norm_workbook),
     }
@@ -234,7 +242,7 @@ def export_seed(db, ids, invoice_pack, norm_workbook):
 
 
 def validate_seed(seed):
-    if seed.get("version") != 2 or not seed.get("examples"):
+    if seed.get("version") != 3 or not seed.get("examples"):
         raise ValueError("A versioned, nonempty example fixture is required")
     baselines = seed.get("rule_baselines", [])
     if not baselines or len({b["process_id"] for b in baselines}) != len(baselines):
@@ -264,6 +272,8 @@ def validate_seed(seed):
             raise ValueError("Example PDF checksum mismatch")
         if not content.startswith(b"%PDF-") or not item["symbols"]:
             raise ValueError("Examples must be extracted PDFs")
+        if not isinstance(item.get("evidence", {}).get("extraction"), dict):
+            raise TypeError("Examples require their original extraction evidence")
         key = (item["process_id"], item["hash"])
         if key in seen:
             raise ValueError("Duplicate example content")
@@ -335,14 +345,29 @@ def reset(db, seed, data_dir):
                             item["text"],
                         ),
                     )
-                    db.execute(
+                    instance = db.execute(
                         """INSERT INTO instances (process_id,file_hash,name,status,symbols)
-                           VALUES (%s,%s,%s,'PENDING',%s)""",
+                           VALUES (%s,%s,%s,'PENDING',%s) RETURNING id""",
                         (
                             item["process_id"],
                             item["hash"],
                             item["name"],
                             Jsonb(item["symbols"]),
+                        ),
+                    ).fetchone()["id"]
+                    # Reuse the sample's persisted reading, explicitly identified as a seed.
+                    # It is not a new OCR/provider call; runtime traces from tests are gone.
+                    evidence = {**item["evidence"], "created": True, "demo_seed": True}
+                    db.execute(
+                        """INSERT INTO events (trace_id,span_id,step,status,started_at,
+                           duration_ms,data,instance_id,process_id)
+                           VALUES (%s,%s,'ingest_document','ok',now(),0,%s,%s,%s)""",
+                        (
+                            uuid.uuid4().hex,
+                            uuid.uuid4().hex[:16],
+                            Jsonb(evidence),
+                            instance,
+                            item["process_id"],
                         ),
                     )
                 # Never reset initial_uid/next_uid, account identity, credentials or halt state.
@@ -408,7 +433,7 @@ def main():
                     "Reviewed baselines already exist; refusing to overwrite them"
                 )
             seed.update(
-                version=2,
+                version=3,
                 rule_baselines=capture_baselines(
                     db, args.invoice_pack, args.norm_workbook
                 ),
