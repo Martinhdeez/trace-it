@@ -142,6 +142,21 @@ and validator rejections; and for the batch, each step with its count, time and 
 `GET /traces/{trace_id}` returns any of those trees in full, including the exact
 instructions and output of each call. The dated report of each run holds those tables.
 
+## What it cost
+
+Every one of the six discovery runs behind this folder, from the first to the clean one,
+came to **177 model calls, 1.31M input and 0.47M output tokens, $0.77**, priced at the
+answering model's public list price (`docs/scale-and-cost.md`). Helmcode itself bills a flat
+monthly fee per API key with no per-token rate, so nothing here is a marginal invoice: the
+1.78M tokens are 0.036 % of a Starter plan's 5B monthly cap on DeepSeek V4 Flash.
+
+The tests cost nothing. `pytest` deselects the `llm` marker by default, only the two files
+under `backend/evals/` carry it, and everything else drives a scripted model with no network.
+Discovery is where the money goes — about 40 % of the tokens and 70 % of the wall clock —
+because its context grows with every round, not because the CVs are messy. The 44 CVs are
+sixteen seconds and four OCR calls.
+
+
 ## What is checked without a model
 
 `make check` covers what does not need an LLM:

@@ -227,6 +227,8 @@ def totals(calls: list[dict]) -> dict:
         "input_tokens": sum(d.get("input_tokens") or 0 for d in data),
         "output_tokens": sum(d.get("output_tokens") or 0 for d in data),
         "cached_tokens": sum(d.get("cached_tokens") or 0 for d in data),
+        "usd": round(sum(d.get("cost") or 0 for d in data), 4),
+        "unpriced_calls": sum(1 for d in data if d.get("cost") is None),
         "seconds": round(sum(s.get("duration_ms") or 0 for s in calls) / 1000, 1),
         "failed_over": sum(len(d.get("failed_attempts") or []) for d in data),
     }
