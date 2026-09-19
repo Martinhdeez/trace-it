@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [dev]
+    branches: [dev, main]
   push:
     branches: [dev, main]
   workflow_dispatch:
@@ -217,8 +217,37 @@ jobs:
         if: always()
         run: bash deploy/ci-stack.sh down
 
+  erp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build and probe every versioned ERP scenario
+        env:
+          REVISION: ${{ github.sha }}
+        run: bash deploy/erp/ci.sh
+      - name: Publish the tested active ERP (main only)
+        id: publish
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_ACTOR: ${{ github.actor }}
+          REVISION: ${{ github.sha }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          image="ghcr.io/martinhdeez/trace-it/erp:$REVISION"
+          docker tag trace-it-erp:ci "$image"
+          docker push "$image"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image")
+          echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+
   deploy:
-    needs: [backend, mail-integration, production-stack, e2e-integration]
+    needs: [backend, mail-integration, production-stack, e2e-integration, erp]
     # The independent kill switch stays unset until root bootstrap and app integration pass.
     if: >-
       github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
@@ -253,6 +282,7 @@ jobs:
           REVISION: ${{ github.sha }}
           BACKEND_DIGEST: ${{ needs.production-stack.outputs.backend_digest }}
           FRONTEND_DIGEST: ${{ needs.production-stack.outputs.frontend_digest }}
+          ERP_DIGEST: ${{ needs.erp.outputs.digest }}
         run: |
           current=$(gh api repos/Martinhdeez/trace-it/git/ref/heads/main --jq '.object.sha')
           if [ "$current" != "$REVISION" ]; then
@@ -263,6 +293,10 @@ jobs:
             -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
             kripta@gex-dashboard.hopto.org \
             "deploy $REVISION $BACKEND_DIGEST $FRONTEND_DIGEST $GH_ACTOR"
+          printf '%s' "$GH_TOKEN" | ssh -T -i ~/.ssh/trace-it \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            kripta@gex-dashboard.hopto.org \
+            "deploy-erp $REVISION $ERP_DIGEST $GH_ACTOR"
       - name: Remove the temporary SSH identity
         if: always()
         run: rm -f ~/.ssh/trace-it

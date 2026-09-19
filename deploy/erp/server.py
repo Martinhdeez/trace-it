@@ -1,12 +1,16 @@
 """Host the unmodified challenge ERP, including its faults, under a public subpath."""
 
+import hashlib
+import json
 import re
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import alberto_erp as erp
 
 PREFIX = "/nexia/erp"
+RELEASE = None
 
 
 class Handler(erp.ManejadorERP):
@@ -19,6 +23,14 @@ class Handler(erp.ManejadorERP):
         getattr(super(), method)()
 
     def do_GET(self):
+        if urlsplit(self.path).path in {"/healthz", PREFIX + "/healthz"} and RELEASE:
+            body = json.dumps({**RELEASE, "rows": len(erp.ESTADO.asientos)}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         self._dispatch("do_GET")
 
     def do_POST(self):
@@ -37,8 +49,26 @@ class Handler(erp.ManejadorERP):
         print(f"ERP {self.command} {urlsplit(self.path).path}", flush=True)
 
 
-def main():
+def initialize(directory=None):
+    global RELEASE
+    directory = directory or Path(__file__).resolve().parent
     erp.ESTADO = erp.EstadoERP(erp._cargar_asientos_embebidos(), latencia=0.12)
+    manifest_path = directory / "release.json"
+    RELEASE = None
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text())
+        for name, digest in manifest["sha256"].items():
+            if hashlib.sha256((directory / name).read_bytes()).hexdigest() != digest:
+                raise ValueError(f"Release checksum mismatch: {name}")
+        for name in manifest["updates"]:
+            erp.ESTADO.cargar_lote2(erp._cargar_asientos_csv(str(directory / name)))
+        if len(erp.ESTADO.asientos) != manifest["expected_rows"]:
+            raise ValueError("ERP row count does not match release manifest")
+        RELEASE = manifest
+
+
+def main():
+    initialize()
     server = ThreadingHTTPServer(("0.0.0.0", 8009), Handler)
     server.daemon_threads = True
     server.serve_forever()

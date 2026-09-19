@@ -1,0 +1,10 @@
+{
+  "id": "initial",
+  "upstream_repository": "https://github.com/ikurotime/500-sombras-de-alberto",
+  "upstream_revision": "18d43b3ccee6802842c72054d5e5c8b8bb953949",
+  "updates": [],
+  "expected_rows": 516,
+  "sha256": {
+    "alberto_erp.py": "38087d8e2537f19a6537b799ca7a522024c97bbad8a024c358fe180626aa0fb6"
+  }
+}
