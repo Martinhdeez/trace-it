@@ -12,6 +12,15 @@ export type Role = User['role']
 type Schemas = components['schemas']
 export type ProcessSummary = Schemas['ProcessSummary']
 export type ExecutionMetrics = Schemas['ExecutionMetrics']
+export type IngestionMetrics = Schemas['IngestionMetrics']
+export type AgentsMetrics = Schemas['AgentsMetrics']
+export type Plane = Schemas['Plane']
+/** Each plane has its own metrics; they are never added together. */
+export type PlaneMetrics = {
+  ingestion: IngestionMetrics
+  agents: AgentsMetrics
+  execution: ExecutionMetrics
+}
 export type ProcessMetrics = Schemas['ProcessMetrics']
 export type PlaneHealth = Schemas['PlaneHealth']
 export type VersionDraft = Schemas['VersionDraftOut']
@@ -36,6 +45,17 @@ export type ResolveIn = Schemas['ResolveIn']
 export type RuleIn = Schemas['RuleIn']
 export type RunOut = Schemas['RunOut']
 export type AlertOut = Schemas['AlertOut']
+export type Proposal = Schemas['ManagerProposalOut']
+export type ProposalStatus = Proposal['status']
+/** `payload` of an escalation (`kind: decision`) proposal. */
+export type DecisionProposalPayload = {
+  proposed: string
+  why?: string[]
+  options?: { decision: string; consequence: string }[]
+  escalation_reason?: string | null
+  fired_rules?: number[]
+  proposed_rule?: { text: string; type: RuleIn['type'] }
+}
 export type UseCaseOut = Schemas['UseCaseOut']
 export type UseCaseDetail = Schemas['UseCaseDetail']
 export type AgentConfigOut = Schemas['AgentConfigOut']
@@ -124,17 +144,8 @@ export type DiscoverySessionSummary = Schemas['DiscoverySessionSummary']
 /** One entry of `DiscoverySession.messages`. */
 export type DiscoveryMessage = { role: 'user' | 'assistant'; text: string; author?: string }
 
-export type FindingKind = 'pagada_indebidamente' | 'no_pagada_debiendo' | (string & {})
-
-/** A past decision a later rule says was wrong. A notice, never a correction (P14). */
-export type Finding = {
-  id: number
-  decision_id: number
-  regla_id: number | null
-  tipo: FindingKind
-  detalle: string | null
-  creado: string
-}
+/** A past decision a later rule says was wrong. A notice, never a correction. */
+export type Finding = Schemas['FindingOut']
 
 export interface ApiClient {
   health(): Promise<boolean>
@@ -167,7 +178,7 @@ export interface ApiClient {
   uploadDraftWorkbook(id: number, revision: number, file: File): Promise<DiscoverySession>
 
   summary(processId: number): Promise<ProcessSummary>
-  planeMetrics(processId: number, plane: 'execution'): Promise<ExecutionMetrics>
+  planeMetrics<P extends Plane>(processId: number, plane: P): Promise<PlaneMetrics[P]>
   processMetrics(processId: number): Promise<ProcessMetrics>
   planesHealth(): Promise<PlaneHealth[]>
   /** 404 when the process has no draft. */
@@ -194,6 +205,12 @@ export interface ApiClient {
   queue(processId: number): Promise<InstanceOut[]>
   suggestion(instanceId: number): Promise<Suggestion>
   resolve(instanceId: number, body: ResolveIn): Promise<InstanceDetail>
+  /** The assistant proposes a decision for an escalated case; a new one supersedes the open one. */
+  proposeDecision(instanceId: number): Promise<Proposal>
+  listProposals(processId: number, status?: ProposalStatus): Promise<Proposal[]>
+  /** Applies it through its channel: a decision resolves the case; chat and learning stage it. */
+  acceptProposal(id: number, reason?: string): Promise<Proposal>
+  rejectProposal(id: number, reason: string): Promise<Proposal>
 
   listFindings(processId: number): Promise<Finding[]>
   /** Past decisions that newer data or rules would decide differently. */

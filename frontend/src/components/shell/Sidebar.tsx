@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import mark from '../../assets/trace-mark-clear.png'
-import { api, mode } from '../../api/client'
+import { api } from '../../api/client'
 import { keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
 import { ErrorNotice } from './Notice'
@@ -76,7 +76,6 @@ export function Sidebar() {
         <p className="text-[13px] font-medium tracking-[-0.03em] text-ink">
           trace<span className="text-faint">[.]</span>it
         </p>
-        {mode === 'mock' ? <StatusBadge value="ESCALAR">MOCK DATA</StatusBadge> : null}
         {health ? <StatusBadge value={health}>{t(`health.${health}`)}</StatusBadge> : null}
       </Link>
 

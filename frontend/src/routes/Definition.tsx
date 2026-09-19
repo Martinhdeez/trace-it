@@ -3,11 +3,12 @@ import { Link, useLocation, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUp, ChevronDown, Hammer, Paperclip, Plus, Sparkles, X } from 'lucide-react'
 import { api, ApiError } from '../api/client'
-import { keys } from '../api/queries'
+import { families, keys } from '../api/queries'
 import type {
   CreatedCheck,
   DiscoverySession,
   Finding,
+  Proposal,
   ProcessDetail,
   Rule,
   RuleStatus as RuleStatusCode,
@@ -152,6 +153,14 @@ export function Definition() {
       query.state.data?.some((rule) => rule.status === 'compiling') ? 2_000 : false,
   })
 
+  // Chat and learning proposals wait here; escalation ones live on their case in Revisión.
+  const proposals = useQuery({
+    queryKey: keys.proposals(processId, 'open'),
+    queryFn: () => api.listProposals(processId, 'open'),
+    select: (items) => items.filter((item) => item.channel !== 'escalation'),
+  })
+  const inbox = proposals.data ?? []
+
   const all = rules.data ?? []
   const outcomes = process.data?.decision_types.map((outcome) => outcome.name) ?? []
   const latestVersion = versions.data?.reduce<VersionOut | undefined>(
@@ -217,8 +226,23 @@ export function Definition() {
       <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,1fr)]">
         <section className="flex min-h-0 flex-col border-b border-hairline lg:border-b-0 lg:border-r">
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-            {turns.length > 0 ? (
+            {proposals.isError ? <ErrorNotice error={proposals.error} /> : null}
+            {turns.length > 0 || inbox.length > 0 ? (
               <ol className="space-y-6">
+                {inbox.length > 0 ? (
+                  <li className="space-y-3">
+                    <div className="flex items-center gap-1.5 text-[12px] text-muted">
+                      <Sparkles size={13} strokeWidth={1.6} />
+                      {inbox.length} propuesta{inbox.length === 1 ? '' : 's'} esperan tu decisión ·
+                      aceptar entra al borrador
+                    </div>
+                    <ul className="space-y-2">
+                      {inbox.map((proposal) => (
+                        <ProposalCard key={proposal.id} processId={processId} proposal={proposal} />
+                      ))}
+                    </ul>
+                  </li>
+                ) : null}
                 {turns.map((turn) => (
                   <li key={turn.id} className="space-y-3">
                     <div className="rounded-[16px] bg-surface px-4 py-3 ring-1 ring-line">
@@ -886,7 +910,7 @@ function VersionChip({
             <ul className="max-h-40 overflow-y-auto border-t border-hairline py-1">
               {findings.slice(0, 6).map((finding) => (
                 <li key={finding.id} className="px-2.5 py-1 text-[11px] leading-4 text-muted">
-                  {finding.tipo.replaceAll('_', ' ')}
+                  {finding.type.replaceAll('_', ' ')}
                 </li>
               ))}
             </ul>
@@ -897,8 +921,18 @@ function VersionChip({
   )
 }
 
-/** One check the normalizer created. It is already a draft rule that compiles on its own. */
-function ProposalCard({ processId, check }: { processId: number; check: CreatedCheck }) {
+/**
+ * One card per proposal: a check the normalizer already created as a draft rule, or a
+ * chat or learning proposal that waits for the manager. Accepting one stages it into the
+ * draft; nothing here publishes.
+ */
+function ProposalCard(
+  props:
+    | { processId: number; check: CreatedCheck; proposal?: undefined }
+    | { processId: number; proposal: Proposal; check?: undefined },
+) {
+  if (props.proposal) return <InboxCard proposal={props.proposal} />
+  const { processId, check } = props
   return (
     <li className="rounded-[16px] bg-surface px-4 py-3 ring-1 ring-line">
       <div className="flex items-start justify-between gap-3">
@@ -914,6 +948,78 @@ function ProposalCard({ processId, check }: { processId: number; check: CreatedC
       </div>
       <p className="mt-2 text-[13px] leading-6 text-ink">{check.text}</p>
       {check.quote ? <p className="mt-1 text-[12px] text-muted">«{check.quote}»</p> : null}
+    </li>
+  )
+}
+
+function InboxCard({ proposal }: { proposal: Proposal }) {
+  const queryClient = useQueryClient()
+  const [rejecting, setRejecting] = useState(false)
+  const [reason, setReason] = useState('')
+
+  const settle = useMutation({
+    mutationFn: (accept: boolean) =>
+      accept ? api.acceptProposal(proposal.id) : api.rejectProposal(proposal.id, reason.trim()),
+    // Keep the card with its outcome until the list comes back without it.
+    onSuccess: () => {
+      for (const name of families.proposals) {
+        void queryClient.invalidateQueries({ queryKey: [name] })
+      }
+    },
+  })
+  const settled = settle.data?.status
+
+  return (
+    <li className="rounded-[16px] bg-surface px-4 py-3 ring-1 ring-line">
+      <div className="flex items-start justify-between gap-3">
+        <p className="font-mono text-[11px] tracking-[0.12em] text-faint">
+          {t(`proposalKind.${proposal.kind}`)} · {t(`proposalChannel.${proposal.channel}`)}
+        </p>
+        {settled ? (
+          <span className={cn('text-[12px]', settled === 'accepted' ? 'text-pagar' : 'text-muted')}>
+            {settled === 'accepted' ? 'Aceptada' : 'Rechazada'}
+          </span>
+        ) : (
+          <div className="flex gap-2">
+            <Button
+              tone="soft"
+              disabled={settle.isPending || (rejecting && !reason.trim())}
+              onClick={() => (rejecting ? settle.mutate(false) : setRejecting(true))}
+            >
+              Rechazar
+            </Button>
+            <Button tone="primary" disabled={settle.isPending} onClick={() => settle.mutate(true)}>
+              Aceptar
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <p className="mt-2 text-[13px] leading-6 text-ink">{proposal.summary}</p>
+      {proposal.rationale ? (
+        <p className="mt-1 text-[12px] text-muted">{proposal.rationale}</p>
+      ) : null}
+      {proposal.evidence.length ? (
+        <p className="mt-1 text-[12px] text-muted">
+          <span className="font-mono">{proposal.evidence.join(' · ')}</span>
+        </p>
+      ) : null}
+
+      {rejecting && !settled ? (
+        <div className="mt-3 space-y-2">
+          <Textarea
+            rows={2}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Por qué no"
+          />
+        </div>
+      ) : null}
+      {settle.isError ? (
+        <div className="mt-3 space-y-2">
+          <ErrorNotice error={settle.error} />
+        </div>
+      ) : null}
     </li>
   )
 }

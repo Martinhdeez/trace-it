@@ -19,6 +19,11 @@ export const es = {
     signIn: 'Entrar',
     anonymous: 'sin identificar',
   },
+  planes: {
+    ingestion: 'Lectura',
+    agents: 'Agentes',
+    execution: 'Ejecución',
+  },
   health: {
     ok: 'Bien',
     degraded: 'Degradado',
@@ -67,6 +72,24 @@ export const es = {
     open: 'Abierta',
     acknowledged: 'Vista',
     resolved: 'Resuelta',
+  },
+  proposalKind: {
+    decision: 'Decisión',
+    rule: 'Regla',
+    context: 'Contexto',
+    input: 'Input',
+    source: 'Fuente',
+  },
+  proposalChannel: {
+    escalation: 'Asistente',
+    chat: 'Chat',
+    learning: 'Aprendizaje',
+  },
+  proposalStatus: {
+    open: 'Abierta',
+    accepted: 'Aceptada',
+    rejected: 'Rechazada',
+    superseded: 'Sustituida',
   },
   alertTrigger: {
     source_sync: 'Cambio en la fuente',

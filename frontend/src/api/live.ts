@@ -2,12 +2,14 @@ import type {
   AgentConfigOut,
   AlertOut,
   ApiClient,
+  Finding,
   Definition,
   DiscoverySession,
   DiscoverySessionSummary,
   DocumentUpload,
   DraftIn,
-  ExecutionMetrics,
+  Plane,
+  PlaneMetrics,
   ExecutionOut,
   ExtractionResult,
   Impact,
@@ -19,6 +21,7 @@ import type {
   NormRule,
   PlaneHealth,
   ProcessDetail,
+  Proposal,
   ProcessMetrics,
   ProcessOut,
   ProcessSummary,
@@ -41,7 +44,7 @@ import type {
 } from './contracts'
 import { BASE, get, getText, post, put, query, upload } from './http'
 
-/** The FastAPI API, as it is. Only findings still get Spanish keys at the edge. */
+/** The FastAPI API, as it is. */
 export const liveClient: ApiClient = {
   health: async () => {
     const body = await get<{ status: string }>('/health')
@@ -80,8 +83,8 @@ export const liveClient: ApiClient = {
   },
 
   summary: (processId) => get<ProcessSummary>(`/processes/${processId}/summary`),
-  planeMetrics: (processId, plane) =>
-    get<ExecutionMetrics>(`/processes/${processId}/metrics/${plane}`),
+  planeMetrics: <P extends Plane>(processId: number, plane: P) =>
+    get<PlaneMetrics[P]>(`/processes/${processId}/metrics/${plane}`),
   processMetrics: (processId) => get<ProcessMetrics>(`/processes/${processId}/metrics`),
   planesHealth: () => get<PlaneHealth[]>('/health/planes'),
   getDraft: (processId) => get<VersionDraft>(`/processes/${processId}/draft`),
@@ -104,20 +107,13 @@ export const liveClient: ApiClient = {
   queue: (processId) => get<InstanceOut[]>(`/processes/${processId}/queue`),
   suggestion: (instanceId) => get<Suggestion>(`/instances/${instanceId}/suggestion`),
   resolve: (instanceId, body) => post<InstanceDetail>(`/instances/${instanceId}/resolve`, body),
+  proposeDecision: (instanceId) => post<Proposal>(`/instances/${instanceId}/proposal`),
+  listProposals: (processId, status) =>
+    get<Proposal[]>(`/processes/${processId}/proposals${query({ status })}`),
+  acceptProposal: (id, reason) => post<Proposal>(`/proposals/${id}/accept`, { reason: reason ?? '' }),
+  rejectProposal: (id, reason) => post<Proposal>(`/proposals/${id}/reject`, { reason }),
 
-  listFindings: async (processId) => {
-    const raw = await get<
-      { id: number; decision_id: number; rule_id: number | null; type: string; detail: string | null; created_at: string }[]
-    >(`/processes/${processId}/findings`)
-    return raw.map((item) => ({
-      id: item.id,
-      decision_id: item.decision_id,
-      regla_id: item.rule_id,
-      tipo: item.type,
-      detalle: item.detail,
-      creado: item.created_at,
-    }))
-  },
+  listFindings: (processId) => get<Finding[]>(`/processes/${processId}/findings`),
   listAlerts: (processId, status) =>
     get<AlertOut[]>(`/processes/${processId}/alerts${query({ status })}`),
   ackAlert: (id, note) => post<AlertOut>(`/alerts/${id}/ack`, { note: note || null }),

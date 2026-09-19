@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import { keys } from '../api/queries'
+import { MetricCells, PlaneDashboards } from '../components/process/PlaneDashboards'
 import { PublishDraft } from '../components/process/PublishDraft'
 import { ProcessExecutionSettings } from '../components/process/ExecutionSettings'
 import { ExportButton } from '../components/process/ExportButton'
@@ -97,6 +98,11 @@ export function Process() {
     queryKey: keys.alerts(processId, 'open'),
     queryFn: () => api.listAlerts(processId, 'open'),
     refetchInterval: 10_000,
+  })
+  const proposals = useQuery({
+    queryKey: keys.proposals(processId, 'open'),
+    queryFn: () => api.listProposals(processId, 'open'),
+    enabled: isManager,
   })
   const findings = useQuery({
     queryKey: keys.findings(processId),
@@ -285,6 +291,7 @@ export function Process() {
           findings={findings.data?.length ?? 0}
           draftVersion={hasDraft && draft.data ? nextVersion : undefined}
           alerts={alerts.data?.length ?? 0}
+          proposals={proposals.data?.length ?? 0}
         />
 
         <Metrics summary={summary.data} plane={plane.data} providers={providers.data} />
@@ -305,6 +312,7 @@ export function Process() {
         />
 
         <Split summary={summary.data} process={process.data} />
+        <PlaneDashboards processId={processId} decisionTypes={process.data?.decision_types} />
         <ProcessExecutionSettings processId={processId} />
       </div>
     </ProcessScreen>
@@ -326,6 +334,7 @@ function Alerts({
   findings,
   draftVersion,
   alerts,
+  proposals,
 }: {
   processId: number
   waiting: number
@@ -333,6 +342,7 @@ function Alerts({
   findings: number
   draftVersion: number | undefined
   alerts: number
+  proposals: number
 }) {
   const items = [
     waiting > 0
@@ -345,6 +355,12 @@ function Alerts({
       ? {
           to: paths.definition(processId),
           text: `${compiling} regla${compiling === 1 ? '' : 's'} compilando. El motor no arranca hasta que terminen.`,
+        }
+      : null,
+    proposals > 0
+      ? {
+          to: paths.definition(processId),
+          text: `${proposals} propuesta${proposals === 1 ? ' espera' : 's esperan'} tu decisión`,
         }
       : null,
     alerts > 0
@@ -415,20 +431,7 @@ function Metrics({
     },
   ]
 
-  return (
-    <section className="mb-6 grid overflow-hidden rounded-[16px] bg-surface ring-1 ring-line sm:grid-cols-5">
-      {cells.map((cell) => (
-        <div
-          key={cell.label}
-          className="border-b border-hairline px-3.5 py-3 last:border-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
-        >
-          <p className="text-[11px] text-muted">{cell.label}</p>
-          <p className="mt-2 font-mono text-[22px] tracking-[-0.04em] tabular-nums">{cell.value}</p>
-          <p className="mt-0.5 font-mono text-[10px] text-faint">{cell.note}</p>
-        </div>
-      ))}
-    </section>
-  )
+  return <MetricCells cells={cells} />
 }
 
 /** ESCALAR first: it is what a rerun after learning should shrink. */

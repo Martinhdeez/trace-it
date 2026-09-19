@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { api, mode } from '../api/client'
+import { api } from '../api/client'
 import { keys } from '../api/queries'
 import { Segmented, Select } from '../components/shell/Controls'
 import { UseCaseModels } from '../components/process/UseCaseModels'
@@ -128,21 +128,17 @@ function Appearance() {
   )
 }
 
-/** Where the console gets its data: the real backend, or the simulator when asked for. */
+/** Where the console gets its data: only the backend. */
 function ApiStatus() {
   return (
     <NestedCard label="api">
       <div className="space-y-2 px-3.5 py-3">
         <div className="flex items-baseline justify-between text-[13px]">
-          <span className="text-muted">Modo</span>
-          <span className="font-mono">
-            {mode} · {import.meta.env.VITE_API_URL ?? '/api'}
-          </span>
+          <span className="text-muted">Base</span>
+          <span className="font-mono">{import.meta.env.VITE_API_URL ?? '/api'}</span>
         </div>
         <p className="text-[12px] text-muted">
-          Por defecto todo sale del backend real y sus errores se muestran tal cual. Con{' '}
-          <span className="font-mono">VITE_API_MODE=mock</span> la consola usa el simulador y lo
-          indica con la etiqueta MOCK DATA.
+          Todo sale del backend real y sus errores se muestran tal cual.
         </p>
       </div>
     </NestedCard>
