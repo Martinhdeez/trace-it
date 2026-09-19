@@ -1,0 +1,82 @@
+name: trace-it
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "3"}
+
+services:
+  db:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_USER: trace
+      POSTGRES_DB: trace
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes: [database:/var/lib/postgresql/data]
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    logging: *logging
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U trace -d trace"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    image: ${TRACE_BACKEND_IMAGE:?Set TRACE_BACKEND_IMAGE}
+    env_file: ["${TRACE_ENV_FILE:-./.env.runtime}"]
+    environment:
+      TRACE_DATABASE_URL: postgresql+psycopg://trace:${POSTGRES_PASSWORD}@db:5432/trace
+      TRACE_PROCESSES_DIR: /processes
+      TRACEPAY_DATA_DIR: /srv/.data
+      TRACEPAY_MODEL_DIR: /srv/.models
+      TRACEPAY_WORKERS: "1"
+      TRACEPAY_OCR_THREADS: "1"
+      TRACE_COMPILE_CONCURRENCY: "1"
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    volumes:
+      - ingestion:/srv/.data
+      - ${TRACE_MODEL_DIR:-./models}:/srv/.models:ro
+    depends_on:
+      db: {condition: service_healthy}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp:size=256m,mode=1777"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 2g
+    cpus: 1.0
+    pids_limit: 128
+    logging: *logging
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+
+  frontend:
+    image: ${TRACE_FRONTEND_IMAGE:?Set TRACE_FRONTEND_IMAGE}
+    ports: ["127.0.0.1:${TRACE_PORT:-18173}:8080"]
+    volumes: ["${TRACE_AUTH_FILE:-./.htpasswd}:/etc/nginx/trace-it.htpasswd:ro"]
+    depends_on:
+      backend: {condition: service_healthy}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
+    logging: *logging
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/internal-health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  database:
+  ingestion:
