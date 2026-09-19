@@ -40,6 +40,23 @@ case "${1:-}" in
       rm /tmp/trace-ci.dump
     '
     ;;
+  maintenance-check)
+    # Disposable stack only: prove the gateway survives API replacement and DNS changes.
+    frontend_id=$("${compose[@]}" ps -q frontend)
+    "${compose[@]}" stop backend
+    trap '"${compose[@]}" up -d --no-deps --wait backend' ERR
+    base="http://127.0.0.1:$TRACE_PORT/nexia/trace-it"
+    curl --fail --silent --show-error -u ci:ci-only-password "$base/processes/1/panel" >/dev/null
+    status=$(curl --silent --show-error -u ci:ci-only-password -o /tmp/trace-it-ci-maintenance.json \
+      -w '%{http_code}' "$base/api/ready")
+    [[ "$status" == 503 ]]
+    python3 -c 'import json; assert json.load(open("/tmp/trace-it-ci-maintenance.json"))["code"] == "maintenance"'
+    "${compose[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 180 backend
+    curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors \
+      -u ci:ci-only-password "$base/api/ready" >/dev/null
+    [[ $("${compose[@]}" ps -q frontend) == "$frontend_id" ]]
+    trap - ERR
+    ;;
   logs) "${compose[@]}" logs --no-color --tail=150 ;;
-  *) echo 'Usage: deploy/ci-stack.sh up|backup-check|down|logs' >&2; exit 2 ;;
+  *) echo 'Usage: deploy/ci-stack.sh up|backup-check|maintenance-check|down|logs' >&2; exit 2 ;;
 esac

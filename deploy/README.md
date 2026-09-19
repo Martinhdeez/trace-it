@@ -36,11 +36,11 @@ Production uses `live` mode. The default development workflow is unchanged.
 6. A restricted SSH key invokes one root-owned deployment script. The job token is
    sent on stdin for temporary registry login, then removed. Existing VPS GitHub
    keys are not exported or changed. No self-hosted runner executes PR code on the VPS.
-7. Take a PostgreSQL custom-format dump and ingestion archive with this app's
-   writers stopped. Migrate, start with health checks, check PostgreSQL readiness,
-   initialize the bundled use case/users on the first release, add only the new
-   Caddy subpath, then check HTTPS. Record the successful release. Seeded rules stay
-   in draft until a manager explicitly validates and publishes them.
+7. Compare component input hashes with the images currently deployed. Keep unchanged
+   services on their existing digests. For a backend change, stop only the writers,
+   verify the database/ingestion backup, migrate and start with health checks.
+   Keep the frontend serving requests and resume any previously active mail worker.
+   Check HTTPS and record the selected digests, including retained older images.
 
 This is a short maintenance deployment, not zero downtime. With the existing
 single-process ingestion lock and 7.6 GiB VPS, running two competing workers against
@@ -199,9 +199,20 @@ References: [Vite public base](https://vite.dev/guide/build#public-base-path),
 [Playwright API tests](https://playwright.dev/docs/api-testing).
 
 
-## Cached full challenge on every main deployment
+## Explicit demo reset, independent of application deployment
 
-This installation opts into a backed-up demo refresh through `DEMO_RESET_ENABLED`.
+Normal deployments preserve the demo data. The old `DEMO_RESET_ENABLED` marker is ignored.
+An operator can explicitly request a backed-up refresh, using the currently deployed images:
+
+```bash
+sudo /usr/local/sbin/trace-it-deploy --reset-demo
+```
+
+This is a local root command; the restricted CI SSH receiver cannot request it. It verifies
+the fixture/cache before stopping writers, then backs up, resets and runs the seed, restarts
+the backend and resumes any previously active mail worker. It keeps the frontend running
+and leaves the selected release unchanged. It never runs automatically from CI.
+
 The version-4 private `/opt/trace-it/demo-seed.json` contains all 500 PDFs from
 `facturas/`, all 40 from `facturas_primin/`, their original bytes and SHA256 values,
 accepted application symbols, extraction evidence and the cached extraction trace trees.
@@ -212,19 +223,19 @@ one live `INTERVIEW`, `REJECT` and `REVIEW` upload.
 
 The initial invoice process uses its original 516-entry ERP. A separate
 `Invoice payment - batch 2` process uses the 556-entry updated ERP, plus the new supplier
-and order CSVs. Each deployment appends fresh, pinned source snapshots. Automatic live
+and order CSVs. Each explicit reset appends fresh, pinned source snapshots. Automatic live
 ERP synchronization is disabled in these two demo versions so a later decision cannot
 silently replace the initial scenario with the updated one. Manual source changes remain
-possible for a demo, and the next deployment restores the pinned scenarios.
-Hiring follows the same pattern: deployment restores the 23-row criminal-records snapshot
+possible for a demo, and the next explicit reset restores the pinned scenarios.
+Hiring follows the same pattern: an explicit reset restores the 23-row criminal-records snapshot
 without contacting the service. Normal runs still use the published connector. An exact,
 case-insensitive full-name match rejects the candidate; `cv-001.pdf` (Ana Molina) is the
 fixture's checked match for `CR-00001`.
 
-Deployment stops application and mail writers, validates a database dump and ingestion
+Explicit reset stops application and mail writers, validates a database dump and ingestion
 archive, checks the extraction-cache identity, and transactionally restores the complete
 fixture. Instance IDs remain monotonic. Deleting the previous population before restoring
-it prevents repeated deployments from creating duplicate documents. Real duplicate orders
+it prevents repeated resets from creating duplicate documents. Real duplicate orders
 within the original documents still escalate normally. Users and mailbox UID cursors are
 preserved; no old email is replayed.
 
@@ -233,13 +244,13 @@ rules with the application's deterministic engine, and appends normal decisions,
 execution and rule traces. It does not invoke source synchronization, OCR, compilers or the
 optional LLM reviewer. Every restored case ends decided, including legitimate escalations.
 The original extraction trees retain their timestamps and are explicitly marked
-`cached_replay`, with `source_trace_id` and zero provider calls in this deployment. They are
+`cached_replay`, with `source_trace_id` and zero provider calls in this reset. They are
 historical evidence, not newly billed calls. Engine decisions are recomputed; human-reviewed
 JSONL labels are never injected into the engine.
 
 The seed caches the code/dependency fingerprint, extraction settings and symbol schemas.
 Unrelated frontend or business-rule changes do not invalidate extraction. Changes to the
-extraction implementation, models, schema or locked dependencies stop deployment before
+extraction implementation, models, schema or locked dependencies stop the reset before
 reset, with a message to refresh the seed once. The initial single-reader-to-two-reader
 upgrade explicitly records its previous settings in `adopt_from`; the fixture then pins
 the settings used for its readings. Unexpected configurations are rejected. A partial OCR
@@ -281,5 +292,40 @@ Validation covers missing/duplicate/corrupt PDFs, wrong ERP populations, OCR ide
 changes, deployment ordering and backup/cache/reset/replay failures. The full private
 fixture is additionally restored twice against an isolated production database copy with
 HTTP clients blocked: identical document counts and results, no duplicate rows, zero
-provider calls, preserved extraction traces, and a separate ERP per batch. Each release
+provider calls, preserved extraction traces, and a separate ERP per batch. Each explicit reset
 records `demo-cache-check.json`, `demo-reset.json` and `demo-seed-run.json` in its backup.
+
+## Component deployment upgrade
+
+CD waits for `backend`, `e2e-integration`, `production-stack` and `erp` to pass.
+All components are built and tested together; the VPS replaces only components whose
+`org.trace-it.source-hash` differs from the installed image. Criminal records has its own
+hash and pinned image. A frontend-only release does not stop backend, mail, database or ERP,
+and does not back up/reset/migrate the database. Unrelated documentation changes retain all
+running services. A missing old hash causes one initial replacement.
+
+Input hashes cover tracked files copied by the production Dockerfiles and their configuration.
+To deliberately refresh an upstream base image, update/pin its `FROM` reference so that the
+component hash changes too. Retained images keep their own revision labels; release records
+list the actual immutable digests selected for each service.
+
+Before stopping writers, the receiver pulls and verifies candidate images, validates Compose,
+checks migration discovery, checks nginx configuration and validates an active mail worker.
+Backups remain inside the write pause to keep the database and ingestion archive consistent.
+The gateway serves assets and structured 503 responses with `Retry-After` while the backend
+is unavailable. Docker DNS refresh handles backend replacement without a gateway restart.
+No Caddy change is required. Code rollback restores only touched services and resumes mail;
+it never restores the database automatically.
+
+For an existing initialized VPS, install the reviewed `deploy/deploy.sh` and
+`deploy/erp/deploy.sh` as the existing root-owned receivers. Update `/opt/trace-it/compose.yml`
+with the new criminal-records image selection while preserving installation-specific settings.
+Do this under `/run/lock/trace-it-deploy.lock`, between releases, never over an active deploy.
+Deploy the new labeled images through CI. The first upgrade also replaces the gateway to
+support backend replacement without a restart. This receiver requires an initialized
+installation and existing routes; it does not bootstrap Caddy.
+
+Validation: `pytest deploy` exercises component selection, preflight failures, rollback/mail
+recovery and explicit reset. `deploy/ci-stack.sh maintenance-check` stops and recreates only
+the disposable CI backend, checking the console/503 response, API recovery and unchanged
+frontend container ID. Never run that destructive test against production.
