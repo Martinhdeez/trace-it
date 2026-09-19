@@ -285,10 +285,19 @@ Reference prices (EUR or USD as published, excluding VAT, read 2026-09-19):
 | Hetzner GEX44, RTX 4000 Ada 20 GB | €184/month + setup (reports of €234 after 2026 changes) | hetzner.com press room; bex.co, 2026-07-13 |
 | AWS RDS PostgreSQL db.t4g.medium (2 vCPU / 4 GB) | $0.065/hour ≈ $47/month single-AZ | instances.vantage.sh/aws/rds/db.t4g.medium |
 | Helmcode Starter (5 keys, flat) | €399/month | helmcode.com/pricing |
+| DeepSeek V4.1 Flash, per 1M in / out / cached in | $0.30 / $1.20 / $0.006 | benchlm.ai/deepseek/api-pricing, read 2026-09-19 |
+| DeepSeek V4 Flash, per 1M in / out / cached in | $0.14 / $0.28 / $0.0028 | same |
 | Claude Opus 5 / Sonnet 5 (per 1M tokens in / out) | $5 / $25; $2 / $10 | Anthropic public list prices, cached 2026-06-24 |
 | Logfire Personal | free, 10M records/month, 30 days | pydantic.dev/pricing |
 | Logfire Team | $49/month, then $2 per 1M records | same |
 | Arize Phoenix, self-hosted | $0 (runs in our compose profile) | `docker compose --profile observability` |
+
+Helmcode publishes no per-token rate, so PydanticAI cannot price a run on it and an
+`llm_run` span would carry no cost at all. The span is priced at the answering model's public
+list price above (`_RATES` in `agents/llm.py`), which answers what the tokens would cost per
+token elsewhere; it is not our invoice, which is the flat subscription. A model with neither a
+provider price nor a listed rate records no cost, and the demo driver counts those calls
+separately rather than reporting them as free.
 
 OCR runs on CPU with 98 MB of local weights: no per-page price. A vision model or Gemini is
 optional and per page. A span is one record for Logfire: at ≈ 7 spans per invoice, 10,000

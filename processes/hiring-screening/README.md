@@ -44,20 +44,29 @@ Precedence is `REVIEW` over `REJECT` over `INTERVIEW`, mirroring the invoice pro
 make setup                                  # backend + database; keys for the agents in .env
 make hiring-demo                            # you answer the agent's questions in the terminal
 make hiring-demo HIRING_ARGS="--auto"       # manager-notes.md answers, every proposal accepted
-make hiring-demo HIRING_ARGS="--process 7 --skip-learning"   # rerun the batch on a published process
+make hiring-demo HIRING_ARGS="--process 2 --skip-learning"   # rerun the batch on a published process
 ```
 
 The run of 19 September is in
 [docs/evaluations/hiring-screening-2026-09-19.md](../../docs/evaluations/hiring-screening-2026-09-19.md).
-It went the whole way: discovery settled every question in two rounds, proposed eleven rules
-that match the policy, compiled them all, passed twelve of thirteen acceptance examples,
-published, and read all 44 CVs. Then it decided every single case `REVIEW`.
+It goes the whole way and **42 of the 44 CVs are decided as the policy implies**, each with
+the reason the answer key expects. Discovery settled every question in two rounds, proposed
+twelve rules, compiled all of them and passed all thirteen acceptance examples. The reader got
+every symbol of all 42 text CVs, Spanish captions included, and OCR recovered the two scanned
+ones. The CEO's override, the ambiguous "hace poco", the duplicate pair and the injected CV
+all come out the way the manager said they should.
 
-Not one symbol was extracted. Every case escalated for missing data the reader had in front
-of it, and the headline "18 of 44 as the policy implies" is an illusion: those eighteen are
-the categories whose expected outcome happens to be `REVIEW`. The cause is the seventh gap
-below. Read that run as the experiment working exactly as intended: the platform never
-guessed, never decided on absent evidence, and sent every uncertain case to a person.
+The two divergences are both scanned CVs, expected to interview and escalated as
+`UNVERIFIED_DATA`. That is not a misread: it is ADR 0025, a required symbol seen by one reader
+on a page with no text layer is not confirmed, so a person looks at it whatever the rules
+answered. The answer key encodes the hiring policy, which says nothing about scans; the engine
+adds a safety rule above it.
+
+The run before this one, on the same inputs, decided all 44 cases `REVIEW` and extracted not
+one symbol, because every symbol was published with `extraction.source: "text"`. Nothing was
+written for this process to fix that — the seventh gap below is the fix, in the shared
+discovery prompt and in `ready`. Both runs are the experiment working as intended: the
+platform never guessed, and when it could not read, it sent the case to a person.
 
 `tools/hiring_demo.py` starts a discovery draft, uploads the workbook, pastes `policy.md`,
 relays questions and answers until none remain, reviews every proposal, prepares (the agents
@@ -116,6 +125,14 @@ Each is fixed here, with a regression test:
   declaring labels or while typed as anything but text: it can only ever be the entire page
   or null.
 
+Two more were bugs in the driver, not in the platform. Publishing refuses a name a process
+already has, which is right — a second discovery for an existing process is a version draft —
+but the refusal arrived after fifteen minutes of questions and a four-minute compilation, so
+`discover` now checks the name before it starts anything. And the comparison read the answer
+key's `INTERVIEW` against the engine's `interview` and reported 0 of 44 while every category
+was in fact correct; it case-folds now.
+
+
 ## What the agents did, in the report
 
 Every stage of the driver also prints the backend's own audit trail (ADR 0018), so the run
@@ -124,6 +141,21 @@ answered, requests, rejected outputs, tokens, latency and the trace id, plus fal
 and validator rejections; and for the batch, each step with its count, time and failures.
 `GET /traces/{trace_id}` returns any of those trees in full, including the exact
 instructions and output of each call. The dated report of each run holds those tables.
+
+## What it cost
+
+Every one of the six discovery runs behind this folder, from the first to the clean one,
+came to **177 model calls, 1.31M input and 0.47M output tokens, $0.77**, priced at the
+answering model's public list price (`docs/scale-and-cost.md`). Helmcode itself bills a flat
+monthly fee per API key with no per-token rate, so nothing here is a marginal invoice: the
+1.78M tokens are 0.036 % of a Starter plan's 5B monthly cap on DeepSeek V4 Flash.
+
+The tests cost nothing. `pytest` deselects the `llm` marker by default, only the two files
+under `backend/evals/` carry it, and everything else drives a scripted model with no network.
+Discovery is where the money goes — about 40 % of the tokens and 70 % of the wall clock —
+because its context grows with every round, not because the CVs are messy. The 44 CVs are
+sixteen seconds and four OCR calls.
+
 
 ## What is checked without a model
 
