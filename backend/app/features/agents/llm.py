@@ -135,7 +135,9 @@ def chain(setup: Setup, role: str, failed: list[dict[str, str]]) -> FallbackMode
         failed.append({"model": response.model_name or "", "error": TRUNCATED})
         return True
 
-    models = [setup.settings.model or model_for(role), *setup.settings.fallback_models]
+    own = setup.settings
+    fallbacks = own.fallback_models or ([] if own.model else settings.fallback_models)
+    models = [own.model or model_for(role), *fallbacks]
     if setup.local_only and any(
         not isinstance(model, str) or not model.startswith("local:") for model in models
     ):

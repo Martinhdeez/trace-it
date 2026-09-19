@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,17 +15,23 @@ class Settings(BaseSettings):
     processes_dir: Path = Path(__file__).resolve().parents[3] / "processes"
     # One model per agent role, in PydanticAI's `provider:model` form (ADR 0006): any
     # provider PydanticAI supports. The tester writes the tests the compiler's code must
-    # pass; a different provider makes a shared misreading less likely (ADR 0004).
-    compiler_model: str = "anthropic:claude-opus-5"
-    tester_model: str = "openai:gpt-5"
-    assistant_model: str = "anthropic:claude-opus-5"
-    decision_reviewer_model: str = "anthropic:claude-opus-5"
-    learner_model: str = "anthropic:claude-opus-5"
-    normalizer_model: str = "anthropic:claude-opus-5"
-    discovery_model: str = "anthropic:claude-opus-5"
+    # pass (ADR 0004). Defaults: the Helmcode models the team runs, with `fallback_models`
+    # tried in order when a role has no model of its own in the use case (ADR 0019).
+    compiler_model: str = "helmcode:deepseek-v4-flash"
+    tester_model: str = "helmcode:deepseek-v4-flash"
+    assistant_model: str = "helmcode:deepseek-v4-flash"
+    decision_reviewer_model: str = "helmcode:deepseek-v4-flash"
+    learner_model: str = "helmcode:deepseek-v4-flash"
+    normalizer_model: str = "helmcode:deepseek-v4-flash"
+    discovery_model: str = "helmcode:deepseek-v4-flash"
+    fallback_models: list[str] = ["helmcode:glm5.3", "helmcode:qwen3.6"]
     # Helmcode, an OpenAI-compatible API: select it with `helmcode:<model>` (e.g.
     # `helmcode:deepseek-v4-flash`). Its key is read like every provider's: HELMCODE_API_KEY.
-    helmcode_base_url: str = "https://api.helmcode.com/v1"
+    # HELMCODE_URL (the ingestion's older name) is read when this one is not set.
+    helmcode_base_url: str = Field(
+        "https://api.helmcode.com/v1",
+        validation_alias=AliasChoices("TRACE_HELMCODE_BASE_URL", "HELMCODE_URL"),
+    )
     # The deployment's trusted local OpenAI-compatible server. Key: LOCAL_LLM_API_KEY.
     local_base_url: str = "http://localhost:11434/v1"
     # Optional per-preset model/effort overrides. No credentials in this JSON.

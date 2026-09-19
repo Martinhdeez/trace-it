@@ -9,7 +9,7 @@ How we work in this repo: branches, backend layout, running it. What the system 
 1. Branch from an up-to-date `dev`: `git switch dev && git pull && git switch -c feat/erp-client`.
 2. Small commits in Conventional Commits form, English, imperative, scope = feature folder: `feat(rules): add impact check`, `fix(sources): retry on ORA-00600`, `docs: update team guide`. Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`.
 3. Before the PR: `git fetch && git rebase origin/dev`, then `make check`.
-4. `git push -u origin feat/erp-client && gh pr create --base dev --fill`. Someone else reviews. **Squash merge**: each feature lands in `dev` as one commit. Delete the branch.
+4. `git push -u origin feat/erp-client && gh pr create --base dev --fill`. Someone else reviews. **Squash merge**: each feature lands in `dev` as one commit. Delete the branch. Every merged branch and how to restore it: [`docs/branches.md`](branches.md).
 
 Never push directly to `dev` or `main`; never `--force` on shared branches (`--force-with-lease` on your own). No secrets in the repo: keys live in `.env`, which is ignored. One PR = one feature. If you change a shared contract (a model, a schema, a signature another feature calls), say so in the group first.
 
@@ -129,7 +129,7 @@ Without Docker for the backend (faster loop): `docker compose up db -d`, then in
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` | LLM providers. Only `make compile`, `make eval-compiler` and the assistant need them |
 | `TRACE_ERP_USER`, `TRACE_ERP_PASSWORD`, `TRACE_ERP_URL` | The ERP connector, named in `processes/invoice-payment/sources.json`. Docker sets the URL to `host.docker.internal:${ERP_PORT:-8009}` |
 | `TRACE_HEALTH_*` | `GET /health/planes` thresholds: window, error rates, p95 per plane, and `TRACE_HEALTH_MIN_SPANS` (default 5): below it a plane is `ok`, "not enough data" |
-| `TRACE_COMPILER_MODEL`, `TRACE_TESTER_MODEL`, `TRACE_ASSISTANT_MODEL` | One model per agent role, `provider:model` (any PydanticAI provider, or `helmcode:<model>` with `HELMCODE_API_KEY`). Defaults in `app/core/config.py`; tester and compiler should differ (ADR 0004) |
+| `TRACE_COMPILER_MODEL`, `TRACE_TESTER_MODEL`, `TRACE_ASSISTANT_MODEL` | One model per agent role, `provider:model` (any PydanticAI provider, or `helmcode:<model>` with `HELMCODE_API_KEY`). Default `helmcode:deepseek-v4-flash` for every role, with `TRACE_FALLBACK_MODELS` (`helmcode:glm5.3`, `helmcode:qwen3.6`) for roles the use case does not set (`app/core/config.py`) |
 | `TRACE_AUTO_ACTIVATE_MAX_CHANGE` | Share of past decisions a compiled rule may change and still activate by itself (default 0.05) |
 | `TRACE_DATABASE_URL` | Set by Docker; the Makefile overrides it for tests |
 | `LOGFIRE_TOKEN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | Live monitoring (see Traces and observability). Unset: spans stay in `events` only |

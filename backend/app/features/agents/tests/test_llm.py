@@ -11,6 +11,7 @@ from pydantic_ai.messages import ModelResponse
 from pydantic_ai.models.function import FunctionModel
 
 from app.core import events
+from app.core.config import settings
 from app.core.database import session_factory
 from app.features.agents import llm
 from app.features.use_cases import service as use_cases
@@ -180,3 +181,13 @@ async def test_a_rule_whose_models_all_fail_stays_a_draft_with_the_error(
     assert rule["report"]["valid"] is False
     assert "every model failed: primary: " in rule["report"]["error"]
     assert "; backup: " in rule["report"]["error"]
+
+
+def test_the_default_model_brings_the_default_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(llm, "resolve", lambda n: FunctionModel(lambda *_: None, model_name=n))
+
+    def names(setup: llm.Setup) -> list[str]:
+        return [m.model_name for m in llm.chain(setup, "compiler", []).models]
+
+    assert names(llm.Setup()) == [settings.compiler_model, *settings.fallback_models]
+    assert names(llm.Setup(AgentSettings(model="own"))) == ["own"]

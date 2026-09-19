@@ -54,7 +54,10 @@ class Settings:
         default_factory=lambda: os.getenv("HELMCODE_API_KEY"), repr=False
     )
     helmcode_url: str = field(
-        default_factory=lambda: os.getenv("HELMCODE_URL", "https://api.helmcode.com/v1")
+        default_factory=lambda: (
+            os.getenv("TRACE_HELMCODE_BASE_URL")
+            or os.getenv("HELMCODE_URL", "https://api.helmcode.com/v1")
+        )
     )
     helmcode_vision_models: tuple[str, ...] = field(
         default_factory=lambda: _providers("TRACEPAY_HELMCODE_VISION_MODELS", "qwen3.6,gemma4")
