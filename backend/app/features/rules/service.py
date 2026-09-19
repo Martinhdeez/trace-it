@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ConflictError, NotFoundError
@@ -13,6 +14,7 @@ from app.core.config import settings
 from app.core.database import session_factory
 from app.features.agents import compiler
 from app.features.decisions import audit
+from app.features.decisions.model import Decision
 from app.features.processes.model import DecisionType, Process, Symbol
 from app.features.processes.service import get as get_process
 from app.features.rules.model import ENFORCED, Rule
@@ -86,8 +88,10 @@ async def _compile(session: AsyncSession, rule: Rule) -> RuleDetail:
         rule.activated_at = datetime.now(UTC)
         await session.commit()
         return _detail(rule)
-    rule.status, rule.activated_at = "draft", None  # a blocked rule leaves the process
-    rule.report = {**result.report, "activation": await _auto_activation(session, rule, result)}
+    was_blocked = rule.status == "blocked"
+    rule.status, rule.activated_at = "draft", None
+    activation = await _auto_activation(session, rule, result, was_blocked)
+    rule.report = {**result.report, "activation": activation}
     await session.commit()
     if rule.report["activation"]["auto"]:
         return await activate(session, rule.id)
@@ -117,18 +121,33 @@ _jobs: set[asyncio.Task] = set()  # references, so a running compilation is not 
 
 
 async def resume_compilations() -> list[asyncio.Task]:
-    """On startup: compile again every rule a restart left in `compiling`."""
-    async with session_factory() as session:
-        ids = await session.scalars(select(Rule.id).where(Rule.status == "compiling"))
-        tasks = [asyncio.create_task(compile_in_background(i)) for i in ids]
+    """On startup: compile again every rule a restart left in `compiling`. Best effort: with
+    the database unreachable the API still starts, and those rules wait for the next start
+    or a recompile."""
+    try:
+        async with session_factory() as session:
+            ids = list(await session.scalars(select(Rule.id).where(Rule.status == "compiling")))
+    except (SQLAlchemyError, OSError) as e:
+        logger.warning("Rules left compiling were not resumed: %s", e)
+        return []
+    tasks = [asyncio.create_task(compile_in_background(i)) for i in ids]
     for task in tasks:
         _jobs.add(task)
         task.add_done_callback(_jobs.discard)
     return tasks
 
 
+async def _own_escalations(session: AsyncSession, rule: Rule, impact: audit.Impact) -> set[int]:
+    """The changed decisions this rule itself escalated while blocked. Undoing them is the
+    point of recompiling it, not an effect on history to weigh."""
+    ids = [c.decision_id for c in impact.changes]
+    own = f"RULE_NEEDS_DATA {rule.id}:"
+    query = select(Decision.id).where(Decision.id.in_(ids), Decision.reason.contains(own))
+    return set(await session.scalars(query)) if ids else set()
+
+
 async def _auto_activation(
-    session: AsyncSession, rule: Rule, result: compiler.Compilation
+    session: AsyncSession, rule: Rule, result: compiler.Compilation, was_blocked: bool = False
 ) -> dict[str, Any]:
     """Whether a freshly compiled rule may enter the process without a person: its code
     passed the tester's tests, it contradicts no decision a person took and it changes at
@@ -136,7 +155,8 @@ async def _auto_activation(
     if not result.report["valid"]:
         return {"auto": False, "why": "not valid"}
     impact = await audit.check(session, rule.process_id, await audit.proposal_with(session, rule))
-    changed = len(impact.changes) + len(impact.conflicts)
+    unblocked = await _own_escalations(session, rule, impact) if was_blocked else set()
+    changed = len(impact.changes) - len(unblocked) + len(impact.conflicts)
     total = impact.unchanged + changed
     share = changed / total if total else 0.0
     process = await session.get(Process, rule.process_id)
@@ -153,6 +173,7 @@ async def _auto_activation(
         "why": why,
         "changed": changed,
         "decided": total,
+        **({"unblocked": len(unblocked)} if was_blocked else {}),
     }
 
 

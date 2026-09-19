@@ -59,7 +59,7 @@ A manager saves a rule in plain language (`POST /processes/{id}/rules`); nobody 
 | `draft` | Compiled but waiting for a person: failing tests, too much impact, or `report.error` (LLM down) | no |
 | `retired` | Taken out of the process by a manager | no |
 
-`POST /rules/{id}/compile` recompiles a `draft` or `blocked` rule and waits for the result; `make compile` does the same for every draft. A `blocked` rule that compiles leaves the process until the impact check (or a manager) lets it back in as `active`.
+`POST /rules/{id}/compile` recompiles a `draft` or `blocked` rule and waits for the result; `make compile` does the same for every draft. A `blocked` rule that compiles goes through the impact check, where undoing its own escalations does not count: it becomes `active` by itself unless it would contradict a person.
 
 ## Use cases and agent configuration
 

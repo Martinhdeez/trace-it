@@ -253,8 +253,9 @@ async def test_a_saved_rule_compiles_itself_and_activates(
     assert rule["status"] == "active" and rule["code"] == QUIET_RULE
 
 
+@pytest.mark.parametrize("person_decided", [False, True])
 async def test_a_rule_that_needs_data_escalates_every_instance(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, person_decided: bool
 ) -> None:
     needs_data = {
         "_output": "NeedsData",
@@ -263,7 +264,7 @@ async def test_a_rule_that_needs_data_escalates_every_instance(
     }
     monkeypatch.setattr(llm, "model_for", per_role({"tester": [needs_data]}))
     async with client() as api:
-        process_id, _ = await prepare(api)
+        process_id, headers = await prepare(api)
         rule = await save(api, process_id, "Escalate late deliveries")
 
         # Enforced although it would change every past decision: failing closed needs no
@@ -286,17 +287,29 @@ async def test_a_rule_that_needs_data_escalates_every_instance(
         [decision] = (await api.get(f"/instances/{late['id']}")).json()["decisions"]
         assert decision["reason"] == f"RULE_NEEDS_DATA {rule['id']}: missing symbol: delivery_date"
 
-        # Once the process has the data, a recompile makes it an ordinary rule, under the
-        # ordinary impact check: the invoice it escalated would now be paid, so a person
-        # decides whether it enters the process.
+        if person_decided:
+            r = await api.post(
+                f"/instances/{late['id']}/resolve",
+                json={"decision": "NO_PAGAR", "reason": "Delivered late, checked by hand"},
+                headers=headers,
+            )
+            assert r.status_code == 200, r.text
+
+        # Once the process has the data, a recompile makes it an ordinary rule. Undoing its
+        # own escalations does not count as impact; contradicting a person still blocks.
         monkeypatch.setattr(sandbox, "run_dataset", dataset_runner(QUIET))
         monkeypatch.setattr(compiler, "compile_rule", compiled(QUIET_RULE))
         r = await api.post(f"/rules/{rule['id']}/compile")
         assert r.status_code == 200, r.text
         rule = r.json()
-        assert rule["status"] == "draft" and rule["code"] == QUIET_RULE
-        assert rule["report"]["valid"] is True
-        assert rule["report"]["activation"]["changed"] == 1
+        assert rule["code"] == QUIET_RULE and rule["report"]["valid"] is True
+        activation = rule["report"]["activation"]
+        if person_decided:
+            assert rule["status"] == "draft"
+            assert activation["why"] == "1 decisions taken by a person would change"
+        else:
+            assert rule["status"] == "active"
+            assert activation["unblocked"] == 1 and activation["changed"] == 0
 
 
 async def test_startup_resumes_rules_left_compiling(monkeypatch: pytest.MonkeyPatch) -> None:

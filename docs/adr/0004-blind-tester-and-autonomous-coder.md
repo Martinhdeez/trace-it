@@ -66,7 +66,8 @@ implementation only served as a test oracle, at the price of a second full compi
    and returns at once; a FastAPI background task compiles it with its own session and it
    ends `active`, `blocked` or `draft`. An error (LLM down, still malformed after repairs)
    leaves a draft with `report.error` and a `compile_rule` event; app startup re-queues
-   any rule a restart left in `compiling`. The manager never presses "compile".
+   any rule a restart left in `compiling` (best effort: with the database down the API
+   still starts, and they wait for the next start or a recompile). The manager never presses "compile".
 8. Models are `provider:model` strings; any PydanticAI provider works, and
    `helmcode:<model>` uses Helmcode's OpenAI-compatible API. The tester should be a
    different model family from the coder, so a shared misreading is less likely.
@@ -76,8 +77,9 @@ implementation only served as a test oracle, at the price of a second full compi
 - A person is involved only by exception: no agreement, needs data, or high impact.
 - A rule that needs data costs a queue of escalations until someone adds the symbol or
   source: loud on purpose, since the alternative is paying invoices the rule would stop.
-- A `blocked` rule that recompiles leaves the process until the impact gate (or a person)
-  activates it; its own escalations count as changes, so this usually needs a person.
+- A `blocked` rule that recompiles goes through the impact gate, but the decisions it
+  escalated itself (`RULE_NEEDS_DATA <id>`) do not count towards the share: undoing them
+  is the point of the recompile. Contradicting a person still blocks it.
 - Background compilation lives in the API process: one server, no queue. Several API
   workers would each re-queue the same `compiling` rules on startup.
 - The report (`rules.report`) holds the tests with their results, the attempts, the
@@ -100,7 +102,8 @@ implementation only served as a test oracle, at the price of a second full compi
 - API tests in `decisions/tests/test_audit.py`: a rule that changes nothing activates
   itself; one that changes 2 of 3 decisions waits for a person; a saved rule compiles in
   the background and activates; NeedsData blocks the rule, the next invoice escalates with
-  `RULE_NEEDS_DATA`, and a recompile makes it an ordinary rule; startup resumes a rule left
+  `RULE_NEEDS_DATA`, and a recompile activates it unless a person decided one of the
+  invoices it escalated; startup resumes a rule left
   `compiling`. `processes/tests/test_api.py`: LLM down leaves a draft with `report.error`.
 - `make eval-compiler` runs the loop with real models on the 16 invoice rules and scores
   the code against the hand-written reference on the 471 golden instances, and the
