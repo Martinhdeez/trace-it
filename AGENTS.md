@@ -11,6 +11,7 @@ process of the "500 Sombras de Alberto" challenge is the first pack. No LLM ever
 |---|---|
 | `backend/app/features/{users,processes,rules,decisions,ingestion,sources,agents,traces}` | One folder per feature: `model.py`, `schemas.py`, `service.py`, `router.py`, `tests/` |
 | `backend/app/core/` | settings (`TRACE_*`), database, `events.py` (spans: the audit trail, ADR 0018) |
+| `backend/app/features/*/prompts/*.md` | Every instruction a model receives, one file each: `agents/prompts/` for the rule and decision agents, `ingestion/prompts/` for the readers. Never inline in Python (`app/common/prompts.py`) |
 | `backend/app/cli.py` | `load <pack> [--compile] [--activate]`, `sources sync <pack>` |
 | `processes/` | Process packs; `invoice-payment.json` + `invoice-payment/sources.json` + `rules-v3/*.py` |
 | `tools/` | Production API demo driver (`make demo`) and historical text-layer benchmark helpers |
