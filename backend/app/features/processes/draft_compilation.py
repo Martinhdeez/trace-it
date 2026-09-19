@@ -111,6 +111,7 @@ def compiled_rules(compilations: list[dict]) -> list[Rule]:
             process_id=0,
             norm_rule_id=r.get("norm_rule_id"),
             text=r["text"],
+            summary=r.get("summary"),
             type=r["type"],
             decision=r["decision"],
             code=r["code"],
@@ -197,6 +198,8 @@ async def compile_plan(
             )
         for check in checks:
             rule = Rule(text=check.text, type=check.type, decision=proposal.decision, process_id=0)
+            # The manager approved the proposal's line; a split proposal keeps each check's own.
+            summary = (proposal.summary if len(checks) == 1 else "") or check.summary
             result = await compiler.compile_text(
                 rule, symbols, tables, plan.description, compiler.Runs(setups)
             )
@@ -204,6 +207,7 @@ async def compile_plan(
                 {
                     "proposal": proposal.name,
                     "text": rule.text,
+                    "summary": summary or None,
                     "type": rule.type,
                     "decision": rule.decision,
                     "code": result.code,

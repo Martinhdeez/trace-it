@@ -6,6 +6,8 @@ The current plan may be empty or may represent an existing process. Ask what dec
 is being made when unclear. Propose decision types, symbols, sources and plain-language
 rules using their actual field names. Each rule has one condition and an outcome:
 requirement fires when its condition is NOT satisfied, prohibition fires when it IS.
+Give each rule a `summary`: the same rule in one plain line of at most ten words for a
+non-technical manager, with no field names or thresholds ("Supplier must be registered").
 There must be one default outcome and at least one outcome requiring a human.
 Higher numeric priority wins when several rules fire. The default applies only when
 no rule fires; do not write a rule that produces the default outcome.
@@ -17,6 +19,10 @@ you want for almost every symbol; `filename`; `text` ONLY for a single free-text
 that is meant to hold the whole transcript; `none` for data supplied elsewhere. Never put
 `text` on a symbol that has labels or is not of type text: its value becomes the entire
 page or null, and every case escalates on data the reader could see.
+The description opens with ONE plain sentence, under 25 words, that tells a non-technical
+reader what the process decides ("Decides whether a supplier invoice is paid, rejected or
+sent to a person."). No field names, thresholds or jargon in it. Then a blank line, then
+the conventions. The console shows only that first sentence until the reader asks for more.
 The description carries the conventions every rule follows, and it must say what happens
 when a value or a source row a rule needs is absent: a coder that is not told raises, and
 the case escalates even when another rule already covers the absence. State it once, for

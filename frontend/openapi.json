@@ -6983,6 +6983,17 @@
             "type": "string",
             "title": "Text"
           },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
           "decision": {
             "type": "string",
             "title": "Decision"
@@ -6996,6 +7007,7 @@
         "required": [
           "id",
           "text",
+          "summary",
           "decision",
           "status"
         ],
@@ -7058,6 +7070,11 @@
           "text": {
             "type": "string",
             "title": "Text"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
           },
           "type": {
             "type": "string",
@@ -11215,6 +11232,17 @@
             "type": "string",
             "title": "Text"
           },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
           "type": {
             "type": "string",
             "enum": [
@@ -11271,6 +11299,17 @@
           "text": {
             "type": "string",
             "title": "Text"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
           },
           "type": {
             "type": "string",
@@ -11357,6 +11396,7 @@
           "process_id",
           "norm_rule_id",
           "text",
+          "summary",
           "type",
           "decision",
           "status",
@@ -11374,6 +11414,17 @@
           "text": {
             "type": "string",
             "title": "Text"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
           },
           "type": {
             "type": "string",
@@ -11420,6 +11471,17 @@
           "text": {
             "type": "string",
             "title": "Text"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
           },
           "type": {
             "type": "string",
@@ -11480,6 +11542,7 @@
           "process_id",
           "norm_rule_id",
           "text",
+          "summary",
           "type",
           "decision",
           "status",
@@ -11501,6 +11564,11 @@
             "type": "string",
             "minLength": 1,
             "title": "Text"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
           },
           "type": {
             "type": "string",
@@ -11576,6 +11644,17 @@
             ],
             "title": "Rule Text"
           },
+          "rule_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Summary"
+          },
           "norm_rule_id": {
             "anyOf": [
               {
@@ -11595,6 +11674,7 @@
           "fires",
           "reason",
           "rule_text",
+          "rule_summary",
           "norm_rule_id"
         ],
         "title": "RuleResultOut",

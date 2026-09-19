@@ -46,7 +46,7 @@ The first manager comes from the pack (`make setup` loads its `users`).
 | Assistant | `GET /instances/{id}/suggestion` | decision, reasoning and a proposed rule. 409 if not escalated, 502 if the model failed |
 | Resolve | `POST /instances/{id}/resolve` `{decision, reason, proposal_id?}` | manager; adds a decision, the engine's stays. With `proposal_id`, the resolution event records it and settles that proposal |
 | Proposals | `GET /processes/{id}/proposals?status=open`, `POST /proposals/{id}/accept`, `POST /proposals/{id}/reject` `{reason?}`, `POST /instances/{id}/proposal` | everything an agent proposes, in one shape; manager-only. See [Proposals](#proposals) |
-| Rules | `GET /processes/{id}/rules?status=` | compiling, draft, active, blocked, retired |
+| Rules | `GET /processes/{id}/rules?status=` | compiling, draft, active, blocked, retired. Show `summary` (one plain line, may be null) in lists and `text` (what compiles) in the detail |
 | Rule | `GET /rules/{id}` | `code`, `tests`, `report` (`valid`, `tests`, `discrepancies`, `attempts`, `reviews`; `needs_data` when blocked) |
 | Norm | `POST /processes/{id}/norm`, `GET /processes/{id}/norm-rules` | the client's norm split into norm rules, each with its rules; the POST needs a manager |
 | Rule lifecycle | `POST /processes/{id}/rules` (compiles in the background), `POST /rules/{id}/compile`, `GET /rules/{id}/impact`, `POST /rules/{id}/activate`, `POST /rules/{id}/retire` | impact = `unchanged`, `changes`, `conflicts`; create, compile, activate and retire need a manager |

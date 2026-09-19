@@ -461,7 +461,7 @@ function WhyEscalated({ instance }: { instance: InstanceDetail }) {
         <ul className="mt-1 list-disc space-y-0.5 pl-4">
           {fired.map((result) => (
             <li key={result.rule_id}>
-              {result.rule_text ?? `Regla ${result.rule_id}`}
+              {result.rule_summary || result.rule_text || `Regla ${result.rule_id}`}
               <span className="font-mono text-[11px]"> · {result.reason}</span>
             </li>
           ))}

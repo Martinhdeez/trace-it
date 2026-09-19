@@ -14,6 +14,7 @@ import { t } from '../i18n'
 import { JsonHighlight } from '../lib/jsonHighlight'
 import { cn } from '../lib/cn'
 import { paths } from '../lib/paths'
+import { ruleLabel } from '../lib/process'
 import { useSession } from '../state/session'
 
 export function Rule() {
@@ -122,8 +123,11 @@ export function Rule() {
 
         <PageIntro
           kicker={`Regla ${ruleId} · ${data ? t(`ruleType.${data.type}`) : '…'}`}
-          title={data?.text ?? '…'}
+          title={data ? ruleLabel(data) : '…'}
         />
+        {data?.summary?.trim() ? (
+          <p className="-mt-6 mb-8 max-w-2xl text-[14px] leading-6 text-muted">{data.text}</p>
+        ) : null}
 
         <div className="-mt-4 mb-6 flex flex-wrap items-center gap-2">
           {data ? <StatusBadge value={data.status}>{t(`ruleStatus.${data.status}`)}</StatusBadge> : null}

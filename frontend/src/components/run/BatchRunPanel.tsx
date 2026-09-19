@@ -1,15 +1,24 @@
 import { useRef, useState, type DragEvent } from 'react'
+import { Link } from 'react-router'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { Check, Circle, FileText, LoaderCircle, Play, Upload, X } from 'lucide-react'
-import type { RunSummary, UploadProgress } from '../../api/contracts'
+import { ArrowRight, Check, Circle, FileText, LoaderCircle, Play, Upload, X } from 'lucide-react'
+import type { ProcessDetail, RunSummary, UploadProgress } from '../../api/contracts'
 import { FileChip, type FilePreview } from '../process/FileChip'
 import { ErrorNotice, Notice } from '../shell/Notice'
 import { cn } from '../../lib/cn'
+import { paths } from '../../lib/paths'
+import { decisionTone, type DecisionTone } from '../../lib/process'
 
 const stages = ['Lectura', 'Símbolos', 'Reglas', 'Decisión'] as const
 const ease = [0.23, 1, 0.32, 1] as const
 
+/** More files than this and the queue shows a count instead of every chip. */
+const CHIPS = 24
+
 export function BatchRunPanel({
+  processId,
+  process,
+  runId,
   queue,
   running,
   uploading,
@@ -21,9 +30,14 @@ export function BatchRunPanel({
   result,
   onFiles,
   onRemove,
+  onClear,
   onStart,
   onClose,
 }: {
+  processId: number
+  process: ProcessDetail | undefined
+  /** The run this batch produced, once it is in the history. */
+  runId: number | undefined
   queue: FilePreview[]
   running: boolean
   uploading: boolean
@@ -36,6 +50,7 @@ export function BatchRunPanel({
   result: RunSummary | undefined
   onFiles: (files: File[]) => void
   onRemove: (id: string) => void
+  onClear: () => void
   onStart: () => void
   onClose: () => void
 }) {
@@ -89,8 +104,11 @@ export function BatchRunPanel({
           error={error}
           onFiles={onFiles}
           onRemove={onRemove}
+          onClear={onClear}
           onStart={onStart}
         />
+      ) : finished && result ? (
+        <Outcome processId={processId} process={process} runId={runId} result={result} />
       ) : (
         <Progress
           queue={queue}
@@ -98,7 +116,6 @@ export function BatchRunPanel({
           running={running}
           finished={finished}
           uploaded={progress?.done ?? 0}
-          result={result}
         />
       )}
     </section>
@@ -111,6 +128,7 @@ function Collect({
   error,
   onFiles,
   onRemove,
+  onClear,
   onStart,
 }: {
   queue: FilePreview[]
@@ -118,6 +136,7 @@ function Collect({
   error?: unknown
   onFiles: (files: File[]) => void
   onRemove: (id: string) => void
+  onClear: () => void
   onStart: () => void
 }) {
   const input = useRef<HTMLInputElement>(null)
@@ -143,12 +162,15 @@ function Collect({
         onDragLeave={() => setOver(false)}
         onDrop={drop}
         className={cn(
-          'flex min-h-[140px] w-full flex-col items-center justify-center gap-2 rounded-[12px] px-4 py-8 text-center ring-1 ring-dashed transition-colors',
+          'flex w-full flex-col items-center justify-center gap-2 rounded-[12px] px-4 py-8 text-center ring-1 ring-dashed transition-colors',
+          queue.length ? 'min-h-[88px]' : 'min-h-[140px]',
           over ? 'bg-surface ring-ink/30' : 'bg-canvas ring-line hover:bg-surface',
         )}
       >
         <Upload size={18} strokeWidth={1.5} className="text-faint" />
-        <span className="text-[13px] text-ink">Arrastra aquí el lote</span>
+        <span className="text-[13px] text-ink">
+          {queue.length ? 'Añadir más documentos' : 'Arrastra aquí el lote'}
+        </span>
         <span className="text-[11px] text-faint">
           PDF, imágenes, Excel. Clic para elegir.
         </span>
@@ -167,13 +189,32 @@ function Collect({
       />
 
       {queue.length ? (
-        <ul className="mt-3 flex flex-wrap gap-2">
-          {queue.map((file) => (
-            <li key={file.id}>
-              <FileChip file={file} onRemove={() => onRemove(file.id)} />
-            </li>
-          ))}
-        </ul>
+        <div className="mt-3 rounded-[12px] ring-1 ring-line">
+          <div className="flex items-center justify-between gap-3 px-3 py-2">
+            <span className="text-[12.5px] text-ink">
+              {queue.length} documento{queue.length === 1 ? '' : 's'} en cola
+            </span>
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-[12px] text-muted hover:text-ink"
+            >
+              Quitar todos
+            </button>
+          </div>
+          <ul className="flex max-h-[168px] flex-wrap gap-2 overflow-y-auto border-t border-hairline p-3">
+            {queue.slice(0, CHIPS).map((file) => (
+              <li key={file.id}>
+                <FileChip file={file} onRemove={() => onRemove(file.id)} />
+              </li>
+            ))}
+            {queue.length > CHIPS ? (
+              <li className="self-center px-1 text-[12px] text-muted">
+                y {queue.length - CHIPS} más
+              </li>
+            ) : null}
+          </ul>
+        </div>
       ) : null}
 
       {error ? (
@@ -187,7 +228,7 @@ function Collect({
           {startBlocked
             ? startBlocked
             : queue.length
-              ? `${queue.length} en cola`
+              ? 'Se leen y se deciden con la versión publicada'
               : 'Hace falta al menos un documento'}
         </p>
         <button
@@ -197,7 +238,7 @@ function Collect({
           className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-[12px] font-medium text-on-ink hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Play size={12} strokeWidth={2} />
-          {queue.length ? `Ejecutar ${queue.length}` : 'Ejecutar'}
+          {queue.length ? `Ejecutar ${queue.length.toLocaleString('es-ES')}` : 'Ejecutar'}
         </button>
       </div>
     </div>
@@ -210,14 +251,12 @@ function Progress({
   running,
   finished,
   uploaded,
-  result,
 }: {
   queue: FilePreview[]
   uploading: boolean
   running: boolean
   finished: boolean
   uploaded: number
-  result: RunSummary | undefined
 }) {
   const reduceMotion = useReducedMotion()
 
@@ -228,16 +267,12 @@ function Progress({
   const progress = queue.length === 0 ? 100 : Math.round((activeIndex / queue.length) * 100)
   const start = Math.max(0, activeIndex - 2)
   const visible = queue.slice(start, start + 7)
-  const split = Object.entries(result?.by_decision ?? {})
-    .map(([name, value]) => `${value} ${name}`)
-    .join(' · ')
-  const down = Object.entries(result?.down_sources ?? {})
 
   return (
     <div className="grid min-h-[284px] lg:grid-cols-[minmax(0,1fr)_250px]">
       <div className="min-w-0 px-5 py-4">
         <div className="mb-4 flex items-center justify-between font-mono text-[10px] text-faint">
-          <span>PROGRESO</span>
+          <span>{running ? 'DECIDIENDO' : `LEÍDOS ${activeIndex} DE ${queue.length}`}</span>
           <span>{progress}%</span>
         </div>
         <div className="mb-5 h-px overflow-hidden bg-rule">
@@ -292,19 +327,6 @@ function Progress({
           </AnimatePresence>
         </div>
 
-        {finished && result ? (
-          <div className="mt-4 space-y-2">
-            <p className="font-mono text-[11px] text-muted">{split || 'Sin salidas'}</p>
-            {down.length ? (
-              <Notice
-                tone="warning"
-                title={`Fuentes caídas: ${down.map(([name, why]) => `${name} (${why})`).join(', ')}`}
-              >
-                Esos casos se escalan.
-              </Notice>
-            ) : null}
-          </div>
-        ) : null}
       </div>
 
       <aside className="border-t border-hairline bg-canvas px-5 py-4 lg:border-l lg:border-t-0">
@@ -345,6 +367,96 @@ function Progress({
           })}
         </ol>
       </aside>
+    </div>
+  )
+}
+
+const TONE_BAR: Record<DecisionTone, string> = {
+  positive: 'bg-pagar',
+  negative: 'bg-nopagar',
+  attention: 'bg-escalar',
+}
+
+/** What the batch decided: one bar, one line per outcome, and the way to its documents. */
+function Outcome({
+  processId,
+  process,
+  runId,
+  result,
+}: {
+  processId: number
+  process: ProcessDetail | undefined
+  runId: number | undefined
+  result: RunSummary
+}) {
+  const outcomes = Object.entries(result.by_decision)
+    .filter(([, value]) => value > 0)
+    .sort(([, a], [, b]) => b - a)
+    .map(([name, value]) => ({ name, value, tone: decisionTone(process, name) }))
+  const total = outcomes.reduce((sum, item) => sum + item.value, 0)
+  const down = Object.entries(result.down_sources ?? {})
+  const share = (value: number) => (total ? Math.round((value / total) * 100) : 0)
+
+  return (
+    <div className="px-5 py-5">
+      <p className="text-[28px] font-medium leading-none tracking-[-0.04em] tabular-nums">
+        {result.decided.toLocaleString('es-ES')}
+        <span className="ml-2 text-[13px] font-normal tracking-normal text-muted">
+          documento{result.decided === 1 ? '' : 's'} decidido{result.decided === 1 ? '' : 's'}
+        </span>
+      </p>
+
+      {total ? (
+        <>
+          <div className="mt-5 flex h-2 overflow-hidden rounded-full bg-rule">
+            {outcomes.map((item) => (
+              <span
+                key={item.name}
+                title={`${item.name.replaceAll('_', ' ')}: ${item.value}`}
+                className={TONE_BAR[item.tone]}
+                style={{ width: `${(item.value / total) * 100}%` }}
+              />
+            ))}
+          </div>
+          <ul className="mt-4 divide-y divide-hairline">
+            {outcomes.map((item) => (
+              <li key={item.name} className="flex items-center gap-3 py-2">
+                <span className={cn('h-2.5 w-2.5 shrink-0 rounded-[3px]', TONE_BAR[item.tone])} />
+                <span className="min-w-0 flex-1 text-[13px] text-ink">
+                  {item.name.replaceAll('_', ' ')}
+                </span>
+                <span className="font-mono text-[12px] text-faint">{share(item.value)}%</span>
+                <span className="w-14 text-right font-mono text-[15px] tabular-nums">
+                  {item.value.toLocaleString('es-ES')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="mt-3 text-[13px] text-muted">El motor no dejó ninguna decisión.</p>
+      )}
+
+      {down.length ? (
+        <div className="mt-4">
+          <Notice
+            tone="warning"
+            title={`Fuentes caídas: ${down.map(([name, why]) => `${name} (${why})`).join(', ')}`}
+          >
+            Esos casos se escalan.
+          </Notice>
+        </div>
+      ) : null}
+
+      <div className="mt-5 flex justify-end">
+        <Link
+          to={paths.instances(processId, runId)}
+          className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-[12px] font-medium text-on-ink hover:bg-ink/90"
+        >
+          Ver documentos
+          <ArrowRight size={12} strokeWidth={2} />
+        </Link>
+      </div>
     </div>
   )
 }

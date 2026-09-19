@@ -259,6 +259,7 @@ async def instance_trace(session: AsyncSession, instance_id: int) -> InstanceTra
                     RuleResultOut(
                         **r,
                         rule_text=rules[r["rule_id"]].text if r["rule_id"] in rules else None,
+                        rule_summary=rules[r["rule_id"]].summary if r["rule_id"] in rules else None,
                         norm_rule_id=rules[r["rule_id"]].norm_rule_id
                         if r["rule_id"] in rules
                         else None,
