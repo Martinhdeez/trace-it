@@ -47,6 +47,11 @@ make hiring-demo HIRING_ARGS="--auto"       # manager-notes.md answers, every pr
 make hiring-demo HIRING_ARGS="--process 7 --skip-learning"   # rerun the batch on a published process
 ```
 
+The run of 19 September is in
+[docs/evaluations/hiring-screening-2026-09-19.md](../../docs/evaluations/hiring-screening-2026-09-19.md):
+discovery settled every question in three rounds and proposed twelve rules that match the
+policy, then preparation refused the candidate for the reason below.
+
 `tools/hiring_demo.py` starts a discovery draft, uploads the workbook, pastes `policy.md`,
 relays questions and answers until none remain, reviews every proposal, prepares (the agents
 compile and test the rules; the acceptance examples run), publishes, uploads the CVs, runs the
@@ -79,6 +84,20 @@ Each is fixed here, with a regression test:
   the discovery responses returned no trace id, so a console or a script had to list recent
   spans and guess which were its own. `DraftOut` now carries `trace_id`, the last agent run
   on that draft, and `GET /process-drafts/{id}` reports it too.
+
+### Still open: a rule may name a source column that does not exist
+
+The run of 19 September stopped at preparation. The agent proposed the `positions` source
+with a `code` column, then wrote its rules against `positions.position_code`, so the coder
+produced lookups on a key no row has and every acceptance example failed with `RULE_ERROR`.
+The platform behaved correctly: the preview refused the candidate and nothing was published.
+But the mismatch is only discovered after compiling and testing twelve rules, and the
+manager sees a wall of sandbox errors rather than "no such column".
+
+Nothing checks a rule's literal `<source>.<field>` references against the columns the same
+proposal maps. Every dotted reference in the invoice pack's rule texts does resolve against
+`processes/invoice-payment/schema.json`, so a deterministic check before compilation looks
+feasible and cheap. It is not in this change.
 
 ## What the agents did, in the report
 
