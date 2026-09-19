@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.common.exceptions import ConflictError, NotFoundError
 from app.core import events
-from app.features.agents import sandbox
+from app.features.agents import compiler, sandbox
 from app.features.decisions.engine import decide
 from app.features.decisions.model import Decision, DecisionReview
 from app.features.ingestion.model import Instance
@@ -90,6 +90,14 @@ async def evaluate(
         if i["id"] in selected and i["symbols"] is not None
     ]
     by_code = {r["code"]: r["id"] for r in snapshot["rules"]}
+    rules = config.rules(snapshot)
+    # ADR 0028: sources whose pre-run sync failed; a rule reading one does not run.
+    unavailable = set(inputs.get("down") or {})
+    down = {}
+    for rule in rules:
+        reads = set(compiler.source_reads(rule.code))
+        if hit := sorted(unavailable if compiler.ANY_SOURCE in reads else reads & unavailable):
+            down[rule.id] = hit
 
     def run_dataset(code, dataset, sources, population):
         with events.span("evaluate_rule", rule_id=by_code[code], instances=len(dataset)) as span:
@@ -102,7 +110,7 @@ async def evaluate(
 
     verdicts = await asyncio.to_thread(
         decide,
-        config.rules(snapshot),
+        rules,
         config.outcomes(snapshot),
         dataset,
         tables,
@@ -113,6 +121,7 @@ async def evaluate(
             for i in inputs["instances"]
             if i["id"] in selected and (unconfirmed := scan(i["symbols"])) is not None
         },
+        down,
     )
     return dict(zip((key for key, _ in dataset), verdicts, strict=True))
 

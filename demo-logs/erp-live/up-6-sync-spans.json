@@ -1,0 +1,37 @@
+[
+  {
+    "step": "sync_source",
+    "status": "ok",
+    "trace_id": "01a0b939ab28384266139c79e3009f5b",
+    "parent_id": "98fdd7277d989e6f",
+    "started_at": "2026-09-19T10:32:39.468151Z",
+    "data": {
+      "diff": {
+        "added": 516,
+        "changed": 0,
+        "removed": 0
+      },
+      "rows": 516,
+      "pages": 26,
+      "logins": 1,
+      "origin": "erp:2026-09-19T10:32:39+00:00|http://127.0.0.1:8032",
+      "source": "erp",
+      "status": {
+        "entries": "516",
+        "update_loaded": "NO"
+      },
+      "retries": 2,
+      "requests": 30,
+      "timeouts": 0,
+      "rows_hash": "216c4e276f9c74fd801c62c3497256abeb6764fef8710fb660e05878ea3e6fbd",
+      "source_id": 4,
+      "duration_ms": 5053,
+      "rate_limited": 0,
+      "invalid_values": 0,
+      "transient_errors": {
+        "ORA-00600": 2
+      },
+      "invalid_responses": 0
+    }
+  }
+]

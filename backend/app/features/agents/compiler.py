@@ -224,6 +224,54 @@ def read_keys(code: str) -> tuple[set[str], set[str]]:
     return keys.get(params[0], set()), keys.get(params[1], set())
 
 
+ANY_SOURCE = "*"
+
+
+def source_reads(code: str | None) -> list[str]:
+    """The sources a rule's `evaluate` reads (ADR 0028): the literal keys `read_keys` finds
+    on its second parameter, plus the literal names passed with it to a helper
+    (`rows(sources, "erp")`, as the hand-written and frozen rules do). Any other use of the
+    parameter (a computed key, iterating it, passing it on without a name) could read
+    anything: `["*"]`, every source. No code reads nothing."""
+    if not code:
+        return []
+    tree = ast.parse(code)
+    function = next(
+        (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "evaluate"),
+        None,
+    )
+    if function is None or len(function.args.args) < 2:
+        return []
+    param = function.args.args[1].arg
+    names = set(read_keys(code)[1])
+    parents = {child: node for node in ast.walk(function) for child in ast.iter_child_nodes(node)}
+    for node in ast.walk(function):
+        if not (isinstance(node, ast.Name) and node.id == param):
+            continue
+        parent = parents.get(node)
+        keyed = isinstance(parent, ast.Subscript) and parent.value is node
+        if isinstance(parent, ast.Attribute) and parent.attr == "get":
+            call = parents.get(parent)
+            keyed = isinstance(call, ast.Call) and call.func is parent
+            parent = call
+        if keyed:
+            key = parent.slice if isinstance(parent, ast.Subscript) else (parent.args or [None])[0]
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                continue
+            return [ANY_SOURCE]
+        if isinstance(parent, ast.Call) and node in parent.args:
+            literals = [
+                a.value
+                for a in parent.args
+                if isinstance(a, ast.Constant) and isinstance(a.value, str)
+            ]
+            if literals:
+                names.update(literals)
+                continue
+        return [ANY_SOURCE]
+    return sorted(names)
+
+
 @coder.output_validator
 def _allowed(ctx: RunContext[CoderDeps], output: Proposal | NeedsData) -> Any:
     if isinstance(output, NeedsData):
@@ -411,6 +459,7 @@ async def compile_text(
         "discrepancies": [f"Test {_failure(f)}" for f in failures],
         "attempts": attempt,
         "reviews": reviews,
+        "sources": source_reads(proposal.code),  # ADR 0028: what a source outage stops
     }
     return Compilation(proposal.code, tests, report)
 

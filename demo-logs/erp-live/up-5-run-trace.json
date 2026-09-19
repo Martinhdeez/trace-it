@@ -1,0 +1,60 @@
+[
+  {
+    "depth": 0,
+    "step": "run_process",
+    "status": "ok",
+    "ms": 5421,
+    "data": {
+      "failures": {},
+      "by_decision": {
+        "PAGAR": 1,
+        "NO_PAGAR": 3
+      },
+      "down_sources": {}
+    }
+  },
+  {
+    "depth": 1,
+    "step": "sync_source",
+    "status": "ok",
+    "ms": 5064,
+    "data": {
+      "diff": {
+        "added": 516,
+        "changed": 0,
+        "removed": 0
+      },
+      "rows": 516,
+      "source": "erp",
+      "rows_hash": "216c4e276f9c74fd801c62c3497256abeb6764fef8710fb660e05878ea3e6fbd"
+    }
+  },
+  {
+    "depth": 1,
+    "step": "decision",
+    "status": "ok",
+    "ms": null,
+    "data": {}
+  },
+  {
+    "depth": 1,
+    "step": "decision",
+    "status": "ok",
+    "ms": null,
+    "data": {}
+  },
+  {
+    "depth": 1,
+    "step": "decision",
+    "status": "ok",
+    "ms": null,
+    "data": {}
+  },
+  {
+    "depth": 1,
+    "step": "decision",
+    "status": "ok",
+    "ms": null,
+    "data": {}
+  }
+]

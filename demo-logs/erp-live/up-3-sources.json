@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1,
+    "name": "suppliers",
+    "origin": "d7729db76ec7501f35e5cf4ef3383344c5b2bea4c6ea9ece36723663ca2a87ae",
+    "rows": 12,
+    "loaded_at": "2026-09-19T10:32:39.103005Z",
+    "status": null,
+    "error": null,
+    "checked_at": null
+  },
+  {
+    "id": 2,
+    "name": "orders",
+    "origin": "d7729db76ec7501f35e5cf4ef3383344c5b2bea4c6ea9ece36723663ca2a87ae",
+    "rows": 516,
+    "loaded_at": "2026-09-19T10:32:39.103005Z",
+    "status": null,
+    "error": null,
+    "checked_at": null
+  },
+  {
+    "id": 3,
+    "name": "parameters",
+    "origin": "d7729db76ec7501f35e5cf4ef3383344c5b2bea4c6ea9ece36723663ca2a87ae",
+    "rows": 1,
+    "loaded_at": "2026-09-19T10:32:39.103005Z",
+    "status": null,
+    "error": null,
+    "checked_at": null
+  },
+  {
+    "id": 4,
+    "name": "erp",
+    "origin": "erp:2026-09-19T10:32:39+00:00|http://127.0.0.1:8032",
+    "rows": 516,
+    "loaded_at": "2026-09-19T10:32:39.462724Z",
+    "status": "ok",
+    "error": null,
+    "checked_at": "2026-09-19T10:32:39.468151Z"
+  }
+]

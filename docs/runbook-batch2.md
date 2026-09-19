@@ -62,7 +62,7 @@ challenge inputs). The challenge Makefile expects the CSV at
 | 2 | `make backup` | `backups/trace-<time>.dump`, about 6.5 MB | Container name: `docker ps --format '{{.Names}}' \| grep db`, then `make backup DB_CONTAINER=<name>` |
 | 3 | `ls $L2/facturas \| wc -l`; `comm -12 <(ls $B1 \| sort) <(ls $L2/facturas \| sort)` | `40`; nothing printed | A name shared with batch 1: stop and ask the organisers. Export keeps only the newest instance of a name (`X-Duplicate-Names`), so batch 1's file would change |
 | 4 | Stop `make erp` (Ctrl+C), then `make -C .context/500-sombras-de-alberto erp-lote2 LOTE2_ERP=$L2/erp_export_lote2.csv` (keep it running) | `actualizacion cargada: N asientos nuevos, M actualizados` | `faltan columnas`: the CSV is not the ERP export format; ask. Port busy: `ERP_PORT=8010` and `TRACE_ERP_URL=http://127.0.0.1:8010` |
-| 4b | `make -C .context/500-sombras-de-alberto erp-status`, then `curl -s -X POST $API/processes/$P/sources/erp/sync \| python3 -m json.tool` | `<actualizacion_cargada>SI`; sync `rows` (516 before the update), `stats.status.update_loaded: "SI"`, `diff` with `added` and `changed` entries | Not `make erp-sync`: it syncs the process named `Invoice payment` only. 502: nothing was written, the previous snapshot is still current (`docs/sources-http.md`); rerun. `SI` missing: the ERP started without `--lote2` |
+| 4b | `make -C .context/500-sombras-de-alberto erp-status`, then `curl -s -X POST $API/processes/$P/sources/erp/sync \| python3 -m json.tool` | `<actualizacion_cargada>SI`; sync `rows` (516 before the update), `stats.status.update_loaded: "SI"`, `diff` with `added` and `changed` entries | The ERP update needs no sync of its own any more: every run and reprocess (5b, 7) syncs the ERP first (ADR 0028). This sync is for reading the diff and raising the alerts now, and for step 5's dry run, which reads the stored snapshot. Not `make erp-sync`: it syncs the process named `Invoice payment` only. 502: nothing was written and runs will not read the old snapshot either; fix the ERP and rerun. `SI` missing: the ERP started without `--lote2` |
 | 5 | `curl -s -X POST "$API/processes/$P/reprocess?dry_run=true" \| python3 -m json.tool` | `unchanged`, `changes` (batch-1 invoices the ERP update changes, each with before/after/reason), `conflicts: []` | Conflicts: a person decided that invoice; the manager looks at each (`GET /instances/{id}`) and resolves again if needed. Reprocess never overrides a person |
 | 5b | Same without `?dry_run=true` | same body; each change is a new engine decision, the old one stays | Run it **before step 7**: once batch 2 is in, it takes part in batch 1's duplicate check (same order on two invoices) |
 | 6 | `python3 -c 'import json,sys; print(json.dumps({"text": open(sys.argv[1]).read()}))' $L2/norma_v4.txt > /tmp/norm.json` then `curl -s -X POST $API/processes/$P/norm -H "$MANAGER" -H 'Content-Type: application/json' --data @/tmp/norm.json \| python3 -m json.tool` | One norm rule per sentence, each with its `checks` (English text, decision, `interpretation`, `rule_id`) and `policies` | Norm arrives in the workbook: copy the sheet's text to `norma_v4.txt`. 502: the normalizer's model failed; retry once, then write the rule yourself (6d). If v4 repeats all of v3, send only the new sentences: the frozen checks already cover v3 |
@@ -94,8 +94,8 @@ applies to batch 1 too: step 5 again after step 6, with `names` = batch 1.
 ## Sunday: a datum of La Caja changes
 
 1. `make backup`.
-2. The new datum in its source: ERP (restart with the new CSV,
-   `curl -X POST $API/processes/$P/sources/erp/sync`, read the diff) or workbook (`--book` in
+2. The new datum in its source: ERP (restart with the new CSV; the next run or reprocess
+   syncs it, `curl -X POST $API/processes/$P/sources/erp/sync` to read the diff first) or workbook (`--book` in
    `demo_run.py` / `POST /processes/$P/sources/workbook`). A corrected PDF is a new file (new
    hash): ingest it; export keeps the newest instance of a name.
 3. `POST /processes/$P/reprocess?dry_run=true` with `{"names": [...]}` of the batch it
@@ -103,6 +103,15 @@ applies to batch 1 too: step 5 again after step 6, with `names` = batch 1.
    `dry_run`. Without `names` it re-decides every instance, and once batch 2 is in, batch 1's
    duplicate-order check sees batch 2 (the rehearsal flipped 36 batch-1 invoices this way).
 4. Steps 10, 10b, 11.
+
+## The ERP is down during a run (ADR 0028)
+
+Every `run` and `reprocess` syncs the ERP first. If the sync fails, the answer carries
+`down_sources: {"erp": "<why>"}`, the ERP's status in `GET $API/processes/$P/sources` is
+`down` and `GET $API/health/planes` shows ingestion `degraded`. No rule reads the older
+snapshot: invoices a non-ERP rule rejects stay `NO_PAGAR`, every other one is `ESCALAR` with
+`SOURCE_UNAVAILABLE: erp`. Restart the ERP (step 4), then `reprocess` those instances: it
+syncs again and re-decides them. Outputs of a live run in `demo-logs/erp-live/`.
 
 ## Stale decision alerts (ADR 0026)
 
