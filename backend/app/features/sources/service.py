@@ -237,8 +237,30 @@ async def process_config(session: AsyncSession, process_id: int, name: str) -> H
     process = await session.get(Process, process_id)
     if process is None:
         raise NotFoundError(f"Process {process_id} does not exist")
+    if process.active_version_id:
+        from app.features.versions.model import ProcessVersion
+
+        version = await session.get(ProcessVersion, process.active_version_id)
+        if row := (version.snapshot.get("connectors", {}) if version else {}).get(name):
+            return HttpSourceConfig.model_validate(row)
     use_case = await session.get(UseCase, process.use_case_id)
     return load_config(pack_sources_file(find_pack(use_case.name)), name)
+
+
+async def process_schemas(session: AsyncSession, process_id: int) -> dict[str, SourceSchema]:
+    """Merge pack schemas with published schemas; the published entry wins by name."""
+    process = await session.get(Process, process_id)
+    if process is None:
+        raise NotFoundError(f"Process {process_id} does not exist")
+    pack = await process_pack(session, process_id)
+    schemas = load_schema(pack) if pack else {}
+    if process.active_version_id:
+        from app.features.versions.model import ProcessVersion
+
+        version = await session.get(ProcessVersion, process.active_version_id)
+        rows = version.snapshot.get("source_schemas", {}) if version else {}
+        schemas.update({name: SourceSchema.model_validate(row) for name, row in rows.items()})
+    return schemas
 
 
 def load_config(sources_file: Path, source_name: str) -> HttpSourceConfig:
@@ -362,8 +384,7 @@ async def sync(
 
 async def sync_process(session: AsyncSession, process_id: int, name: str) -> SyncResult:
     config = await process_config(session, process_id, name)
-    pack = await process_pack(session, process_id)
-    schema = load_schema(pack).get(name) if pack else None
+    schema = (await process_schemas(session, process_id)).get(name)
     return await sync(session, process_id, name, config, schema=schema)
 
 
@@ -371,15 +392,12 @@ async def sync_before_run(session: AsyncSession, process_id: int) -> dict[str, s
     """Sync every live source of the process's use case (ADR 0028) and return the ones that
     failed, name -> why: down for this run. Each attempt is a `sync_source` span under the
     caller's (`run_process`, `reprocess`)."""
-    pack = await process_pack(session, process_id)
-    if pack is None:
-        return {}
     down = {}
-    for name, schema in load_schema(pack).items():
+    for name, schema in (await process_schemas(session, process_id)).items():
         if not schema.sync_before_run:
             continue
         try:
-            config = load_config(pack_sources_file(pack), name)
+            config = await process_config(session, process_id, name)
         except TraceError as e:  # a broken configuration is an outage too: trace it
             down[name] = e.message
             with (

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.features.processes.definition import Definition
 from app.features.processes.execution import ExecutionSettings
 from app.features.processes.schemas import DecisionReviewConfig, DecisionTypeIO, SymbolIO
+from app.features.sources.http_connector import HttpSourceConfig
 
 
 class ProposalEvidence(BaseModel):
@@ -31,6 +32,29 @@ class SourceProposal(BaseModel):
     )
     snapshot: str = ""
     rows: list[dict[str, Any]] = []  # constants only, approved as part of this proposal
+    operation: Literal["replace", "append", "upsert", "delete"] = "replace"
+    key: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def valid_mutation(self) -> Self:
+        if self.operation in {"upsert", "delete"} and not self.key:
+            raise ValueError(f"Source operation {self.operation} requires a key")
+        available = set(self.columns)
+        if self.kind == "constant":
+            available.update(field for row in self.rows for field in row)
+        if self.kind != "snapshot" and (unknown := set(self.key) - available):
+            raise ValueError(f"Source key fields are not mapped: {sorted(unknown)}")
+        return self
+
+
+class ConnectorProposal(BaseModel):
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    explanation: str
+    evidence: list[ProposalEvidence] = Field(min_length=1)
+    config: HttpSourceConfig
+    required: list[str] = Field(min_length=1)
+    optional: list[str] = []
+    sync_before_run: bool = True
 
 
 class RuleProposal(BaseModel):
@@ -62,6 +86,7 @@ class DraftPlan(BaseModel):
     description: str = ""
     decision_types: list[DecisionTypeIO] = []
     symbols: list[SymbolIO] = []
+    connectors: list[ConnectorProposal] = []
     sources: list[SourceProposal] = []
     rules: list[RuleProposal] = []
     decision_review: DecisionReviewConfig | None = None
@@ -72,10 +97,21 @@ class DraftPlan(BaseModel):
 
     @model_validator(mode="after")
     def unique_names(self) -> Self:
-        for field in ("sources", "rules", "guidance", "examples", "symbols", "decision_types"):
+        for field in (
+            "connectors",
+            "sources",
+            "rules",
+            "guidance",
+            "examples",
+            "symbols",
+            "decision_types",
+        ):
             names = [item.name for item in getattr(self, field)]
             if len(names) != len(set(names)):
                 raise ValueError(f"Duplicate {field} names")
+        source_names = {source.name for source in self.sources}
+        if unknown := {connector.name for connector in self.connectors} - source_names:
+            raise ValueError(f"Connectors need matching source proposals: {sorted(unknown)}")
         return self
 
     def definition(self) -> Definition:

@@ -19,9 +19,13 @@ flock -w 900 9
 [[ -f DEPLOY_ENABLED ]] || { echo 'Root bootstrap is installed but deployment is disabled.' >&2; exit 1; }
 available=$(df --output=avail -k /opt/trace-it | tail -1)
 (( available >= 6 * 1024 * 1024 )) || { echo 'Need at least 6 GiB free; no global cleanup attempted.' >&2; exit 1; }
-if [[ ! -f current.env ]] && ss -H -ltn 'sport = :18173' | grep -q .; then
-  echo 'Port 18173 is already in use; refusing to replace its service.' >&2
-  exit 1
+if [[ ! -f current.env ]]; then
+  for port in 18173 18010; do
+    if ss -H -ltn "sport = :$port" | grep -q .; then
+      echo "Port $port is already in use; refusing to replace its service." >&2
+      exit 1
+    fi
+  done
 fi
 export DOCKER_CONFIG
 DOCKER_CONFIG=$(mktemp -d /run/trace-it-docker.XXXXXX)
@@ -53,9 +57,9 @@ rollback() {
     # shellcheck source=/dev/null
     source current.env
     set +a
-    "${compose[@]}" up -d --wait --wait-timeout 180 backend frontend || true
+    "${compose[@]}" up -d --wait --wait-timeout 180 criminal-records backend frontend || true
   else
-    "${compose[@]}" stop backend frontend || true
+    "${compose[@]}" stop criminal-records backend frontend || true
   fi
   echo "Backup retained in /opt/trace-it/$backup; inspect migrations before any data restore." >&2
   exit 1
@@ -95,9 +99,13 @@ if [[ ! -f INITIALIZED ]]; then
   "${compose[@]}" run --rm --no-deps -T backend python -m app.cli load /processes/invoice-payment.json
   touch INITIALIZED
 fi
-"${compose[@]}" up -d --wait --wait-timeout 180 backend frontend
+"${compose[@]}" up -d --wait --wait-timeout 180 criminal-records backend frontend
 curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18173/internal-health >/dev/null
+curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18010/criminal/status >/dev/null
 python3 /opt/trace-it/activate-route.py
+python3 /opt/trace-it/activate-route.py --criminal-records
+curl --fail --silent --show-error --max-time 20 \
+  https://gex-dashboard.hopto.org/nexia/criminal-records/ >/dev/null
 curl --config secrets/curl.conf --fail --silent --show-error --max-time 20 \
   https://gex-dashboard.hopto.org/nexia/trace-it/api/ready >/dev/null
 curl --config secrets/curl.conf --fail --silent --show-error --max-time 20 \

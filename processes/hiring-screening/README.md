@@ -12,6 +12,7 @@ itself is created live by discovery, from these inputs and the manager's answers
 | `data/hiring-reference.xlsx` | The sources of truth: `positions`, `applicant_history`, `parameters` (the screening date) | Uploaded to the discovery draft; the agent maps the sheets |
 | `data/cvs/*.pdf` | 44 CVs, one per candidate: a `Label: value` profile block, then prose | Uploaded to the published process, one instance each |
 | `data/expected.jsonl` | Per CV: true symbols, trap category, the outcome the policy implies and why | The demo compares itself against it; tests check it |
+| `criminal_records_erp.py` | Synthetic legacy criminal records, separate from the current process | Connector discovery; see `CRIMINAL_RECORDS_ERP.md` |
 
 Everything under `data/` is written by `tools/hiring_mock.py` (`make hiring-data`), with a
 fixed seed and fixed document dates, so the files are byte-identical on every run and

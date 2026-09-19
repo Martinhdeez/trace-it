@@ -15,3 +15,6 @@
 *.pdf binary
 *.xlsx binary
 *.png binary
+# Preserve exact challenge release bytes: manifests hash the vendored artifacts.
+deploy/erp/releases/*/*.py -text whitespace=cr-at-eol
+deploy/erp/releases/*/*.csv -text whitespace=cr-at-eol

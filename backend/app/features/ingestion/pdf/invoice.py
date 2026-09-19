@@ -5,6 +5,7 @@ from app.common.extraction import Candidate, Evidence, ExtractedField, TextLine
 from app.common.normalization import fold, iban, identifier, invoice_date, money
 from app.features.ingestion.schemas import INVOICE_FIELDS
 
+from .international import extra_fields, recipient_lines
 from .uncertainty import preserve_unreadable
 
 AMOUNT = r"(?<![\w.,])[-+]?\d(?:[\d.,\u00a0 ]*\d)?(?![\w.,])"
@@ -59,6 +60,7 @@ def parse_invoice(lines: list[TextLine], min_confidence: float = 0.90):
         else:
             expanded.append(line)
     lines = expanded
+    recipients = recipient_lines(lines)
     candidates = {name: [] for name in (*INVOICE_FIELDS, "invoice_number")}
     warnings = []
     symbol_observations = []
@@ -113,7 +115,7 @@ def parse_invoice(lines: list[TextLine], min_confidence: float = 0.90):
                 }
             )
         # Only extract anchored fiscal/header labels. Ignore accounts in narrative text.
-        if not re.match(r"^(?:CLIENTE|DESTINATARIO|FACTURAR A|BILL TO)\b", upper):
+        if line.id not in recipients:
             for match in re.finditer(
                 r"\bNIF\s*[:.]?\s*([A-Z][\s.-]*\d(?:[\s.-]*\d){7})(?!\d)", upper
             ):
@@ -207,6 +209,7 @@ def parse_invoice(lines: list[TextLine], min_confidence: float = 0.90):
                 if symbol in text:
                     symbol_observations.append((symbol, iso, line))
 
+    extra_fields(lines, candidates, add)
     if not candidates["currency"]:
         for symbol, iso, line in symbol_observations:
             add("currency", symbol, line, lambda _, value=iso: value)

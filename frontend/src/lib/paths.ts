@@ -5,7 +5,11 @@ export const paths = {
   landing: '/',
   processes: '/processes',
   newProcess: '/processes/new',
+  /** The manager's inbox: what waits for them, and what was already decided. */
   process: (id: number | string) => `/processes/${id}`,
+  history: (id: number | string) => `/processes/${id}?vista=historial`,
+  /** The console: panel, definition, runs, review and settings, one tab each. */
+  panel: (id: number | string) => `/processes/${id}/panel`,
   definition: (id: number | string) => `/processes/${id}/definition`,
   definitionContext: (id: number | string) => `/processes/${id}/definition/contexto`,
   definitionInputs: (id: number | string) => `/processes/${id}/definition/inputs`,
@@ -13,6 +17,10 @@ export const paths = {
   knowledge: (id: number | string) => `/processes/${id}/definition/fuentes`,
   versions: (id: number | string) => `/processes/${id}/definition`,
   review: (id: number | string) => `/processes/${id}/review`,
+  // reviewer-agent FE-4/5 (docs/reviewer-agent.md): a case opened in Revisión. If merging a
+  // newer version from Carlos, keep his paths and preserve: review?i=<instance>.
+  reviewCase: (processId: number | string, instanceId: number | string) =>
+    `/processes/${processId}/review?i=${instanceId}`,
   processSettings: (id: number | string) => `/processes/${id}/settings`,
   rules: (id: number | string) => `/processes/${id}/definition`,
   rule: (processId: number | string, ruleId: number | string) =>

@@ -11,6 +11,7 @@ from .committee import POLICY_VERSION, reconcile
 from .focused import verify_identifiers
 from .invoice import parse_invoice, unresolved
 from .native import native_pages, render
+from .visual_risk import block_conflicts
 
 
 def extract_pdf(
@@ -64,12 +65,14 @@ def extract_pdf(
             or text.count("\ufffd") / max(1, chars) > 0.02
             or (page["image_ratio"] > 0.5 and bool(set(unresolved(fields)) - {"currency"}))
             or (page.get("suspect_spacing", False) and bool(set(unresolved(fields)) - {"currency"}))
+            or page.get("visual_risk", {}).get("fragmented", False)
         )
         report = {
             "page": number,
             "native_chars": chars,
             "method": "native",
             "ocr_needed": needs_ocr,
+            "visual_risk": page.get("visual_risk", {}),
         }
         metrics["native_pages"] += int(bool(chars))
         if needs_ocr and options.ocr:
@@ -106,9 +109,13 @@ def extract_pdf(
     )
     # Native missing currency does not justify guessing with a model. On scanned
     # pages any unresolved field, including currency, can trigger image inspection.
-    needs_vision = bool(set(unresolved(fields)) - {"currency"}) or (
-        any(report["ocr_needed"] for report in page_reports)
-        and any(field.status != "OBSERVED" for field in fields.values())
+    needs_vision = (
+        any(p.get("visual_risk", {}).get("regions") for p in pages)
+        or bool(set(unresolved(fields)) - {"currency"})
+        or (
+            any(report["ocr_needed"] for report in page_reports)
+            and any(field.status != "OBSERVED" for field in fields.values())
+        )
     )
     if vision_enabled and needs_vision:
         for page in pages:
@@ -140,9 +147,11 @@ def extract_pdf(
         options.jev is None and getattr(judge, "configured", False)
     )
     fields, decisions, final_warnings = reconcile(readers, settings.ocr_min_confidence)
+    blocked_fields = block_conflicts(fields, pages)
     focused = verify_identifiers(
         content, fields, readers, pages, settings, ocr, vlm, options, vision_enabled, metrics
     )
+    blocked_fields.update(block_conflicts(fields, pages))
     for name, report in focused.items():
         if report["errors"]:
             warnings.append({"code": "FOCUSED_READER_ERROR", "field": name})
@@ -190,6 +199,7 @@ def extract_pdf(
     return (
         fields,
         {
+            "blocked_fields": blocked_fields,
             "lines": [line.model_dump() for lines in readers.values() for line in lines],
             "vision_proposals": {
                 name: [c.model_dump() for c in field.candidates if c.evidence.method == "vlm"]

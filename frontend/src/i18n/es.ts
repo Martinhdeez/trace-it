@@ -116,6 +116,41 @@ export const es = {
     manager: 'Responsable',
     operator: 'Operador',
   },
+  // reviewer-agent FE-1..3 (docs/reviewer-agent.md). `escalationWhy`: one templated
+  // sentence per escalation code, filled with `symbols.*` labels and the fired rules'
+  // summary, no LLM (FE-2). `proposalCause`: why an open rule suggestion ended
+  // `superseded` (`outcome.cause`, FE-3).
+  escalationWhy: {
+    MISSING_DATA: 'Falta {X}; sin ese dato el proceso nunca decide solo',
+    UNVERIFIED_DATA: 'Es un escaneo y no pudimos confirmar {X}',
+    SOURCE_UNAVAILABLE: 'No pudimos consultar {X}; vuelve a ejecutar cuando responda',
+    RULE_ERROR: 'La regla {X} falló al evaluarse: es un fallo técnico, no de la factura',
+    RULE_CONFLICT: 'Dos reglas piden decisiones distintas con la misma prioridad',
+    SCAN_REVIEW: 'Las reglas lo rechazarían, pero es un escaneo y podría ser un error de lectura',
+    rule: 'La regla «{X}» pide revisión humana: {Y}',
+  },
+  proposalCause: {
+    ignored: 'resolviste otro caso sin decidir sobre ella',
+    version_published: 'se publicó una versión nueva',
+    case_changed: 'el caso cambió de decisión',
+    superseded: 'hay una sugerencia más nueva',
+  },
+  // traceability-gaps (fix/traceability-gaps): the trace pane's sources read, pending work and version.
+  // If merging a newer version from Carlos, keep his UI and preserve: these keys.
+  trace: {
+    sourcesRead: 'fuentes leídas',
+    requests: 'peticiones',
+    retries: 'reintentos',
+    rateLimited: '429',
+    timeouts: 'timeouts',
+    pending: 'pendiente',
+    nothingPending: 'Nada pendiente para este caso.',
+    waitingForPerson: 'Espera a una persona',
+    reviewPending: 'El revisor pide revisarlo',
+    openProposals: 'Propuestas abiertas',
+    openAlerts: 'Alertas abiertas',
+    version: 'Versión',
+  },
   common: {
     loading: 'Cargando…',
     empty: 'Nada por aquí todavía.',
@@ -126,5 +161,15 @@ export const es = {
     copied: 'Copiado',
     download: 'Descargar',
     retry: 'Reintentar',
+  },
+  // reviewer-agent FE-4/5
+  reviewerAgent: {
+    yourDecisions: 'Tus decisiones',
+    agree: 'coinciden',
+    contradict: 'contradicen',
+    contradicting: 'Tus decisiones que la nueva versión contradice',
+    compiling: 'Hay reglas compilando. Valida y publica cuando terminen.',
+    ruleSuggestions: 'reglas sugeridas esperan tu decisión',
+    ruleSuggestion: 'regla sugerida espera tu decisión',
   },
 } as const

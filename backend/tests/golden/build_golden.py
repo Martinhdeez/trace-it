@@ -62,7 +62,11 @@ DATE_LABEL = r"(?:Fecha|FECHA)(?: de emisi[oó]n| factura)?\s*:\s*"
 
 def text_of(pdf: Path) -> str:
     out = subprocess.run(
-        ["pdftotext", "-layout", str(pdf), "-"], capture_output=True, text=True, check=True
+        ["pdftotext", "-enc", "UTF-8", "-layout", str(pdf), "-"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
     ).stdout
     return out
 

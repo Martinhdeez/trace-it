@@ -175,3 +175,64 @@ async def test_provider_metrics_separate_network_usage_from_journal_replay() -> 
         assert [{key: row[key] for key in expected[0]} for row in metrics["providers"]] == expected
         assert metrics["providers"][0]["blocked"] == 1
         assert metrics["providers"][0]["unpriced_requests"] == 1
+
+
+async def test_the_journey_says_what_is_pending_and_which_version_decided(
+    fake_sandbox: None,
+) -> None:
+    from app.features.alerts.model import Alert
+    from app.features.proposals.model import ManagerProposal
+
+    async with client() as api:
+        process_id, headers = await create_process(api, "manager")
+        assert (await api.post(f"/processes/{process_id}/run")).status_code == 200
+        [escalated] = (await api.get(f"/processes/{process_id}/queue")).json()
+        [decision] = (await api.get(f"/instances/{escalated['id']}/trace")).json()["decisions"]
+        async with session_factory() as session:
+            proposal = ManagerProposal(
+                process_id=process_id,
+                instance_id=escalated["id"],
+                channel="escalation",
+                kind="decision",
+                summary="Pay it",
+                rationale="r",
+                evidence=[],
+                payload={},
+                author="assistant",
+            )
+            alert = Alert(
+                process_id=process_id,
+                instance_id=escalated["id"],
+                decision_id=decision["id"],
+                before="ESCALAR",
+                after="PAGAR",
+                trigger={"kind": "source_sync"},
+                evidence={},
+                status="open",
+            )
+            session.add_all([proposal, alert])
+            await session.commit()
+        journey = (await api.get(f"/instances/{escalated['id']}/trace")).json()
+        proposals = await api.get(
+            f"/processes/{process_id}/proposals",
+            params={"instance_id": escalated["id"]},
+            headers=headers,
+        )
+        alerts = await api.get(
+            f"/processes/{process_id}/alerts", params={"instance_id": escalated["id"] + 10**6}
+        )
+        versions = (await api.get(f"/processes/{process_id}/versions")).json()
+
+    pending = journey["pending"]
+    assert pending["waiting_for_person"] is True and pending["review_pending"] is False
+    assert [(p["id"], p["kind"]) for p in pending["proposals"]] == [(proposal.id, "decision")]
+    assert [(a["id"], a["kind"]) for a in pending["alerts"]] == [(alert.id, "source_sync")]
+    assert [p["id"] for p in proposals.json()] == [proposal.id]
+    assert alerts.json() == []  # another instance's: none
+    version = next(v for v in versions if v["id"] == decision["version_id"])
+    assert journey["version"] == {
+        "id": version["id"],
+        "number": version["number"],
+        "author": version["author"],
+        "created_at": version["created_at"],
+    }

@@ -12,7 +12,7 @@ from app.features.agents import compiler, sandbox
 from app.features.decisions.engine import decide
 from app.features.decisions.model import ENGINE, Decision, DecisionReview
 from app.features.ingestion.model import Instance
-from app.features.ingestion.symbols import flatten_symbols, scan
+from app.features.ingestion.symbols import flatten_symbols, scan, unverified
 from app.features.sources import service as sources
 from app.features.sources.model import Source
 from app.features.versions import configuration as config
@@ -153,6 +153,7 @@ async def evaluate(
         },
         down,
         settings.decision_workers,
+        {i["id"]: unverified(i["symbols"]) for i in inputs["instances"] if i["id"] in selected},
     )
     return dict(zip((key for key, _ in dataset), verdicts, strict=True))
 

@@ -7352,6 +7352,22 @@
               ],
               "title": "Status"
             }
+          },
+          {
+            "name": "instance_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instance Id"
+            }
           }
         ],
         "responses": {
@@ -7651,6 +7667,22 @@
             }
           },
           {
+            "name": "instance_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instance Id"
+            }
+          },
+          {
             "name": "x-user-id",
             "in": "header",
             "required": false,
@@ -7701,7 +7733,7 @@
           "proposals"
         ],
         "summary": "The manager accepts a proposal; its channel's own workflow applies it",
-        "description": "decision: resolves the instance with the proposed decision. Escalation rule: creates the amended rule in the process draft, retires `replaces` there and compiles it in the background; `outcome` is `{rule_id, retired, draft_revision}`. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.",
+        "description": "decision: resolves the instance with the proposed decision. Escalation rule: creates the amended rule in the process draft, retires `replaces` there and compiles it in the background; `outcome` is `{rule_id, retired, draft_revision}`. An optional `text` replaces the suggested rule text (the manager's edit); `outcome` then adds `edited: true` and `original_text`. Chat: accepts the change in the chat draft (publishing stays `/process-drafts/{id}/prepare` and `/publish`). Learning rule: adopts the norm's latest valid validation (`/norm-proposals/{id}/validate` first). Learning context or input: stages it in the version draft (`/processes/{id}/draft`). Learning source: recorded only.",
         "operationId": "acceptProposal",
         "security": [
           {
@@ -7741,7 +7773,7 @@
               "schema": {
                 "anyOf": [
                   {
-                    "$ref": "#/components/schemas/SettleIn"
+                    "$ref": "#/components/schemas/AcceptIn"
                   },
                   {
                     "type": "null"
@@ -8167,6 +8199,30 @@
   },
   "components": {
     "schemas": {
+      "AcceptIn": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 8000,
+            "title": "Reason",
+            "default": ""
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "title": "AcceptIn"
+      },
       "AcceptanceExample": {
         "properties": {
           "name": {
@@ -8913,6 +8969,96 @@
         ],
         "title": "AttachmentOut"
       },
+      "AuthConfig": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "form_token",
+            "title": "Type",
+            "default": "form_token"
+          },
+          "login_path": {
+            "type": "string",
+            "title": "Login Path"
+          },
+          "credentials": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Credentials"
+          },
+          "token_path": {
+            "type": "string",
+            "title": "Token Path"
+          },
+          "token_header": {
+            "type": "string",
+            "title": "Token Header"
+          },
+          "lifetime_seconds": {
+            "type": "number",
+            "title": "Lifetime Seconds"
+          },
+          "max_uses": {
+            "type": "integer",
+            "title": "Max Uses"
+          },
+          "lifetime_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifetime Path"
+          },
+          "max_uses_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Uses Path"
+          },
+          "renew_margin_seconds": {
+            "type": "number",
+            "title": "Renew Margin Seconds",
+            "default": 60
+          },
+          "renew_margin_uses": {
+            "type": "integer",
+            "title": "Renew Margin Uses",
+            "default": 10
+          },
+          "expired_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Expired Codes",
+            "default": [
+              "SES-401"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "login_path",
+          "credentials",
+          "token_path",
+          "token_header",
+          "lifetime_seconds",
+          "max_uses"
+        ],
+        "title": "AuthConfig"
+      },
       "Body_extractDocument": {
         "properties": {
           "file": {
@@ -9540,6 +9686,60 @@
           "max_attempts"
         ],
         "title": "CompileStats"
+      },
+      "ConnectorProposal": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Name"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalEvidence"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Evidence"
+          },
+          "config": {
+            "$ref": "#/components/schemas/HttpSourceConfig"
+          },
+          "required": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Required"
+          },
+          "optional": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Optional",
+            "default": []
+          },
+          "sync_before_run": {
+            "type": "boolean",
+            "title": "Sync Before Run",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "explanation",
+          "evidence",
+          "config",
+          "required"
+        ],
+        "title": "ConnectorProposal"
       },
       "CreatedCheck": {
         "properties": {
@@ -10938,6 +11138,14 @@
             "title": "Symbols",
             "default": []
           },
+          "connectors": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorProposal"
+            },
+            "type": "array",
+            "title": "Connectors",
+            "default": []
+          },
           "sources": {
             "items": {
               "$ref": "#/components/schemas/SourceProposal"
@@ -11040,6 +11248,32 @@
         },
         "type": "object",
         "title": "DraftStart"
+      },
+      "EnvValue": {
+        "properties": {
+          "env": {
+            "type": "string",
+            "title": "Env"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "env"
+        ],
+        "title": "EnvValue",
+        "description": "A value read from an environment variable (or `.env`) at sync time."
       },
       "EventOut": {
         "properties": {
@@ -11928,6 +12162,30 @@
         ],
         "title": "ExtractionSettings"
       },
+      "FieldConfig": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "convert": {
+            "type": "string",
+            "enum": [
+              "text",
+              "decimal_comma",
+              "date_dmy"
+            ],
+            "title": "Convert",
+            "default": "text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "FieldConfig"
+      },
       "FieldReading": {
         "properties": {
           "value": {
@@ -12123,6 +12381,29 @@
         ],
         "title": "FindingOut"
       },
+      "FormatConfig": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "xml",
+            "title": "Type",
+            "default": "xml"
+          },
+          "encoding": {
+            "type": "string",
+            "title": "Encoding",
+            "default": "utf-8"
+          },
+          "error_code_path": {
+            "type": "string",
+            "title": "Error Code Path",
+            "default": "codigo"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FormatConfig"
+      },
       "GatheringSettings": {
         "properties": {
           "email": {
@@ -12182,6 +12463,99 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HttpSourceConfig": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "http",
+            "title": "Type"
+          },
+          "base_url": {
+            "$ref": "#/components/schemas/EnvValue"
+          },
+          "format": {
+            "$ref": "#/components/schemas/FormatConfig"
+          },
+          "auth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthConfig"
+              },
+              {
+                "$ref": "#/components/schemas/NoAuthConfig"
+              }
+            ],
+            "title": "Auth"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationConfig"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "fields": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FieldConfig"
+            },
+            "type": "object",
+            "title": "Fields"
+          },
+          "retry": {
+            "$ref": "#/components/schemas/RetryConfig",
+            "default": {
+              "max_attempts": 6,
+              "retry_statuses": [
+                500,
+                502,
+                503,
+                504
+              ],
+              "transient_codes": [
+                "ORA-00600"
+              ],
+              "backoff_seconds": 0.2,
+              "backoff_max_seconds": 5.0
+            }
+          },
+          "rate_limit": {
+            "$ref": "#/components/schemas/RateLimitConfig",
+            "default": {
+              "requests_per_second": 6.0,
+              "max_retry_after_seconds": 30.0
+            }
+          },
+          "timeouts": {
+            "$ref": "#/components/schemas/TimeoutConfig",
+            "default": {
+              "connect_seconds": 3.0,
+              "read_seconds": 15.0
+            }
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StatusConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "base_url",
+          "format",
+          "auth",
+          "pagination",
+          "key",
+          "fields"
+        ],
+        "title": "HttpSourceConfig"
       },
       "ImpactOut": {
         "properties": {
@@ -12438,6 +12812,18 @@
             "title": "Review Pending",
             "default": false
           },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
+          },
           "file_hash": {
             "type": "string",
             "title": "File Hash"
@@ -12556,6 +12942,18 @@
             "type": "boolean",
             "title": "Review Pending",
             "default": false
+          },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
           }
         },
         "type": "object",
@@ -12639,6 +13037,19 @@
             "type": "array",
             "title": "Sources Read",
             "default": []
+          },
+          "pending": {
+            "$ref": "#/components/schemas/Pending"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -12651,7 +13062,9 @@
           "symbols",
           "decisions",
           "exported_decision",
-          "spans"
+          "spans",
+          "pending",
+          "version"
         ],
         "title": "InstanceTrace",
         "description": "The journey of one instance: its file, how it was read, its symbols, every decision\nwith each rule's answer, what people did, and what the export writes for it."
@@ -13295,6 +13708,21 @@
         ],
         "title": "MessageOut"
       },
+      "NoAuthConfig": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "none",
+            "title": "Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "NoAuthConfig"
+      },
       "NormIn": {
         "properties": {
           "text": {
@@ -13514,7 +13942,20 @@
           },
           "consequence": {
             "type": "string",
+            "maxLength": 180,
             "title": "Consequence"
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 600
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule"
           }
         },
         "type": "object",
@@ -13523,6 +13964,51 @@
           "consequence"
         ],
         "title": "Option"
+      },
+      "PaginationConfig": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "page_param": {
+            "type": "string",
+            "title": "Page Param"
+          },
+          "first_page": {
+            "type": "integer",
+            "title": "First Page",
+            "default": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Page Size"
+          },
+          "records_path": {
+            "type": "string",
+            "title": "Records Path"
+          },
+          "total_path": {
+            "type": "string",
+            "title": "Total Path"
+          },
+          "pages_path": {
+            "type": "string",
+            "title": "Pages Path"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "page_param",
+          "page_size",
+          "records_path",
+          "total_path",
+          "pages_path"
+        ],
+        "title": "PaginationConfig"
       },
       "PartIn": {
         "properties": {
@@ -13556,6 +14042,71 @@
           "advertised_size"
         ],
         "title": "PartIn"
+      },
+      "Pending": {
+        "properties": {
+          "waiting_for_person": {
+            "type": "boolean",
+            "title": "Waiting For Person"
+          },
+          "review_pending": {
+            "type": "boolean",
+            "title": "Review Pending"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/PendingItem"
+            },
+            "type": "array",
+            "title": "Proposals"
+          },
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/PendingItem"
+            },
+            "type": "array",
+            "title": "Alerts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "waiting_for_person",
+          "review_pending",
+          "proposals",
+          "alerts"
+        ],
+        "title": "Pending",
+        "description": "What this instance still waits for: a person, or a manager settling its proposals and\nalerts (`GET /processes/{id}/proposals?instance_id=`, `/alerts?instance_id=`)."
+      },
+      "PendingItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "examples": [
+              "decision",
+              "rule",
+              "source_sync",
+              "rule_change"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "created_at"
+        ],
+        "title": "PendingItem"
       },
       "Plane": {
         "type": "string",
@@ -14263,6 +14814,24 @@
         ],
         "title": "PublishIn"
       },
+      "RateLimitConfig": {
+        "properties": {
+          "requests_per_second": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Requests Per Second",
+            "default": 6
+          },
+          "max_retry_after_seconds": {
+            "type": "number",
+            "title": "Max Retry After Seconds",
+            "default": 30
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RateLimitConfig"
+      },
       "ReadingLocation": {
         "properties": {
           "candidate": {
@@ -14500,6 +15069,52 @@
           "reason"
         ],
         "title": "ResolveIn"
+      },
+      "RetryConfig": {
+        "properties": {
+          "max_attempts": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max Attempts",
+            "default": 6
+          },
+          "retry_statuses": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Retry Statuses",
+            "default": [
+              500,
+              502,
+              503,
+              504
+            ]
+          },
+          "transient_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Transient Codes",
+            "default": [
+              "ORA-00600"
+            ]
+          },
+          "backoff_seconds": {
+            "type": "number",
+            "title": "Backoff Seconds",
+            "default": 0.2
+          },
+          "backoff_max_seconds": {
+            "type": "number",
+            "title": "Backoff Max Seconds",
+            "default": 5
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RetryConfig"
       },
       "ReviewIn": {
         "properties": {
@@ -15969,6 +16584,24 @@
             "type": "array",
             "title": "Rows",
             "default": []
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "replace",
+              "append",
+              "upsert",
+              "delete"
+            ],
+            "title": "Operation",
+            "default": "replace"
+          },
+          "key": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Key"
           }
         },
         "type": "object",
@@ -16430,6 +17063,29 @@
         "title": "SpanOut",
         "description": "One step: when it started, how long it took, how it ended and what it saw."
       },
+      "StatusConfig": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Fields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "fields"
+        ],
+        "title": "StatusConfig",
+        "description": "An unauthenticated health resource whose fields are recorded with the snapshot, e.g.\nwhether the batch 2 update is loaded."
+      },
       "StepStats": {
         "properties": {
           "step": {
@@ -16496,13 +17152,16 @@
           },
           "reasoning": {
             "type": "string",
+            "maxLength": 320,
             "title": "Reasoning"
           },
           "why": {
             "items": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 180
             },
             "type": "array",
+            "maxItems": 2,
             "minItems": 1,
             "title": "Why"
           },
@@ -16519,20 +17178,48 @@
               "type": "string"
             },
             "type": "array",
+            "maxItems": 6,
             "minItems": 1,
             "title": "Evidence"
           },
           "proposed_rule": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 600
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Proposed Rule"
           },
           "proposed_type": {
-            "type": "string",
-            "enum": [
-              "requirement",
-              "prohibition"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "requirement",
+                  "prohibition"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Proposed Type"
+          },
+          "no_rule_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 320
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "No Rule Reason"
           }
         },
         "type": "object",
@@ -16541,9 +17228,7 @@
           "reasoning",
           "why",
           "options",
-          "evidence",
-          "proposed_rule",
-          "proposed_type"
+          "evidence"
         ],
         "title": "Suggestion"
       },
@@ -16702,6 +17387,23 @@
           "diff"
         ],
         "title": "SyncResult"
+      },
+      "TimeoutConfig": {
+        "properties": {
+          "connect_seconds": {
+            "type": "number",
+            "title": "Connect Seconds",
+            "default": 3
+          },
+          "read_seconds": {
+            "type": "number",
+            "title": "Read Seconds",
+            "default": 15
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TimeoutConfig"
       },
       "TokenBucket": {
         "properties": {
@@ -17155,6 +17857,36 @@
           "created_at"
         ],
         "title": "VersionOut"
+      },
+      "VersionRef": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "author": {
+            "type": "string",
+            "title": "Author"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "number",
+          "author",
+          "created_at"
+        ],
+        "title": "VersionRef",
+        "description": "The published process version that took the latest decision."
       },
       "WorkbookUpload": {
         "properties": {

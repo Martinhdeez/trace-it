@@ -1,7 +1,10 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { motion } from 'motion/react'
 
 const ease = [0.23, 1, 0.32, 1] as const
+
+/** Open overlays, innermost last: Escape closes only the one on top. */
+const stack: symbol[] = []
 
 export function Overlay({
   onClose,
@@ -14,13 +17,22 @@ export function Overlay({
   align?: 'center' | 'right'
   size?: 'md' | 'lg' | 'xl'
 }) {
+  const close = useRef(onClose)
   useEffect(() => {
+    close.current = onClose
+  })
+  useEffect(() => {
+    const id = Symbol('overlay')
+    stack.push(id)
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape' && stack.at(-1) === id) close.current()
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      stack.splice(stack.indexOf(id), 1)
+    }
+  }, [])
 
   return (
     <div
@@ -41,7 +53,11 @@ export function Overlay({
         transition={{ duration: 0.22, ease }}
         className={
           align === 'right'
-            ? 'h-full w-full max-w-md'
+            ? size === 'xl'
+              ? 'h-full w-full max-w-[1280px]'
+              : size === 'lg'
+              ? 'h-full w-full max-w-2xl'
+              : 'h-full w-full max-w-md'
             : size === 'xl'
               ? 'h-[min(88dvh,860px)] min-w-0 w-full max-w-[1100px]'
               : size === 'lg'
