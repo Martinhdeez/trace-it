@@ -5,6 +5,7 @@ import { keys } from '../api/queries'
 import { ProcessExecutionSettings } from '../components/process/ExecutionSettings'
 import { ProcessScreen } from '../components/process/ProcessScreen'
 import { MailSettings } from '../components/process/MailSettings'
+import { SettingsSection } from '../components/shell/SettingsSection'
 import { paths } from '../lib/paths'
 
 export function ProcessSettings() {
@@ -24,9 +25,19 @@ export function ProcessSettings() {
       ]}
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-4">
-        <div className="max-w-3xl">
-          <MailSettings processId={processId} />
-          <ProcessExecutionSettings processId={processId} />
+        <div className="max-w-3xl divide-y divide-rule">
+          <SettingsSection
+            title="Correo"
+            description="El buzón que alimenta el proceso y los últimos correos con el destino de cada PDF."
+          >
+            <MailSettings processId={processId} />
+          </SettingsSection>
+          <SettingsSection
+            title="Modelos y ejecución"
+            description="Presets y esfuerzo de los agentes. Los cambios se aplican al publicar."
+          >
+            <ProcessExecutionSettings processId={processId} />
+          </SettingsSection>
         </div>
       </div>
     </ProcessScreen>
