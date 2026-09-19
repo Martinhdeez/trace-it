@@ -6,6 +6,7 @@ import mark from '../../assets/trace-mark-clear.png'
 import { api, mode } from '../../api/client'
 import { keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
+import { ErrorNotice } from './Notice'
 import { StatusBadge } from './StatusBadge'
 import { t } from '../../i18n'
 import { paths, processFromPath } from '../../lib/paths'
@@ -92,18 +93,22 @@ export function Sidebar() {
           </NavLink>
         </div>
 
-        <ul className="flex flex-col gap-0.5">
-          {(processes.data ?? []).map((item) => {
-            const open = item.id === activeId
-            return (
-              <li key={item.id}>
-                <NavItem to={paths.process(item.id)} active={open}>
-                  <span className="min-w-0 truncate">{item.nombre}</span>
-                </NavItem>
-              </li>
-            )
-          })}
-        </ul>
+        {processes.isError ? (
+          <ErrorNotice error={processes.error} />
+        ) : (
+          <ul className="flex flex-col gap-0.5">
+            {(processes.data ?? []).map((item) => {
+              const open = item.id === activeId
+              return (
+                <li key={item.id}>
+                  <NavItem to={paths.process(item.id)} active={open}>
+                    <span className="min-w-0 truncate">{item.nombre}</span>
+                  </NavItem>
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
         <div className="mt-auto pb-4 pt-6">
           <NavItem to={paths.settings} end>

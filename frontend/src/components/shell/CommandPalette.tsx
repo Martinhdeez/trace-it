@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import { keys } from '../../api/queries'
 import { useAppState } from '../../state/app'
+import { ErrorNotice } from './Notice'
 import { Overlay } from './Overlay'
 import { paths, processFromPath } from '../../lib/paths'
 
@@ -128,6 +129,11 @@ export function CommandPalette() {
           className="w-full border-b border-hairline bg-transparent px-4 py-3 text-[15px] outline-none placeholder:text-faint"
         />
         <ul className="max-h-80 overflow-y-auto py-1">
+          {processes.isError || instances.isError ? (
+            <li className="px-4 py-3">
+              <ErrorNotice error={processes.error ?? instances.error} />
+            </li>
+          ) : null}
           {hits.length === 0 ? (
             <li className="px-4 py-3 text-[13px] text-muted">Nada con ese nombre.</li>
           ) : (
