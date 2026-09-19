@@ -145,9 +145,8 @@ test('new-process chat creates and resumes a saved discovery conversation', asyn
   await page.goto('processes/new')
   await expect(page.getByRole('button', { name: 'Chat' })).toHaveAttribute('data-active', 'true')
 
-  const start = page.getByRole('button', { name: 'Empezar conversación' })
-  if (await start.isVisible()) await start.click()
-  else await page.getByRole('button', { name: 'Nueva', exact: true }).click()
+  // Wait for session loading to reveal either the first conversation or the new-chat action.
+  await page.getByRole('button', { name: /^(Empezar conversación|Nueva)$/ }).click()
 
   const revision = page.getByText(/conversación \d+ · revisión 1/)
   await expect(revision).toBeVisible()
