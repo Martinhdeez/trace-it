@@ -1,0 +1,18 @@
+$ uv run --project backend --locked --env-file .env python tools/demo_run.py --api-url $API --process $P --invoices "$L2/facturas" --output output/rehearsal2/lote2-run
+workbook: FINAL_v7_DEFINITIVO_ahorasi.xlsx
+erp sync: 517 rows
+upload 1/10: lote2_2026-01-15_P003.pdf (PENDING)
+upload 2/10: lote2_2026-04-21_P004.pdf (PENDING)
+upload 3/10: lote2_2026-07-09_P010.pdf (PENDING)
+upload 4/10: lote2_FA-1120_mensajería.pdf (PENDING)
+upload 5/10: lote2_FA-8046_mensajería.pdf (PENDING)
+upload 6/10: lote2_factura_2886.pdf (PENDING)
+upload 7/10: lote2_factura_6806.pdf (PENDING)
+upload 8/10: lote2_scan_005.pdf (PENDING)
+upload 9/10: lote2_scan_021.pdf (PENDING)
+upload 10/10: lote2_scan_025.pdf (PENDING)
+run: {'decided': 10, 'by_decision': {'ESCALAR': 10}}
+export: 510 invoices (whole process)
+written to output/rehearsal2/lote2-run
+total: 43s
+[exit 0] [43.39 s] [14:53:36]

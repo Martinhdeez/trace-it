@@ -49,6 +49,11 @@ type StoredRule = RuleDetail & Partial<RuleHints>
 const imageOnly = new Set(imageOnlyFiles)
 const NOW = '2026-09-18T11:39:00'
 
+/** Screens that moved to the English API types have no simulator. */
+function noMock(): never {
+  throw new ApiError(501, 'not_implemented', 'Sin mock')
+}
+
 function wait<T>(value: T, ms = 40): Promise<T> {
   return new Promise((resolve) => {
     window.setTimeout(() => resolve(value), ms)
@@ -636,6 +641,17 @@ export const mockClient: ApiClient = {
     rule.estado = 'retirada'
     return wait(rule, 300)
   },
+
+  summary: noMock,
+  planeMetrics: noMock,
+  processMetrics: noMock,
+  planesHealth: noMock,
+  getDraft: noMock,
+  validateDraft: noMock,
+  publishDraft: noMock,
+  listVersions: noMock,
+  getExecution: noMock,
+  saveDraft: noMock,
 
   run: async (processId) => {
     const batch = ofProcess(processId)

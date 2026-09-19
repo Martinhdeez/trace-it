@@ -4,85 +4,82 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { User } from '../api/contracts'
-import { ApiError, setOnUnauthenticated, setUserId } from '../api/http'
+import { setOnIdentityRejected, setUserId } from '../api/http'
 
-const STORAGE_KEY = 'trace.usuario'
-
-function stored(): User | null {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    const user = raw ? (JSON.parse(raw) as Partial<User>) : null
-    // An older build stored the Spanish shape; treat it as signed out.
-    return user && typeof user.id === 'number' && (user.role === 'manager' || user.role === 'operator')
-      ? (user as User)
-      : null
-  } catch {
-    return null
-  }
-}
+/**
+ * The console is local and has no login screen: it signs in as the pack's manager on its
+ * own. Every write still carries that user's id, so each action keeps its author.
+ */
+const DEFAULT_EMAIL = import.meta.env.VITE_DEFAULT_USER_EMAIL || 'martin@trace-it.local'
 
 type Session = {
   user: User | null
+  /** Why the automatic identity failed, while there is no user. */
+  identityError: unknown
   /** Only a manager handles escalations, and the backend refuses everyone else. */
   isManager: boolean
+  /** Act as another user of the process, from Ajustes. */
   signIn: (email: string) => Promise<User>
-  signOut: () => void
 }
 
 const Ctx = createContext<Session | null>(null)
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(stored)
+  const [user, setUser] = useState<User | null>(null)
+  const [identityError, setIdentityError] = useState<unknown>(null)
+  const current = useRef<User | null>(null)
+  const pending = useRef<Promise<User> | null>(null)
   const queryClient = useQueryClient()
-
-  // The header travels on every request, so set it before anything fetches.
-  useEffect(() => {
-    setUserId(user?.id ?? null)
-  }, [user])
 
   const signIn = useCallback(
     async (email: string) => {
       const next = await api.login(email)
+      const changed = current.current?.id !== next.id
+      current.current = next
       setUserId(next.id)
       setUser(next)
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      void queryClient.invalidateQueries()
+      setIdentityError(null)
+      // Only a new identity changes what the backend answers. Refetching on the same one
+      // would loop on a 403 that no identity can fix.
+      if (changed) void queryClient.invalidateQueries()
       return next
     },
     [queryClient],
   )
 
-  const signOut = useCallback(() => {
-    setUserId(null)
-    setUser(null)
-    window.localStorage.removeItem(STORAGE_KEY)
-    queryClient.clear()
-  }, [queryClient])
+  /** The automatic identity, at most one request at a time. */
+  const identify = useCallback(() => {
+    pending.current ??= signIn(DEFAULT_EMAIL)
+      .catch((error: unknown) => {
+        setIdentityError(error)
+        throw error
+      })
+      .finally(() => {
+        pending.current = null
+      })
+    return pending.current
+  }, [signIn])
 
-  // A stored id can outlive its user (a database reset). Ask the backend once on boot.
   useEffect(() => {
-    if (!user) return
-    api.me().then(setUser, (error) => {
-      if (error instanceof ApiError && (error.status === 404 || error.status === 401)) signOut()
-    })
-    // Only on boot: `user` changes on every sign-in, which already came from the backend.
-  }, [])
+    identify().catch(() => undefined)
+  }, [identify])
 
-  // The console shows Login as soon as there is no user, so signing out is the whole reaction.
+  // A 401 or 403 retries the automatic identity; the screen still shows its ErrorNotice.
   useEffect(() => {
-    setOnUnauthenticated(signOut)
-    return () => setOnUnauthenticated(null)
-  }, [signOut])
+    setOnIdentityRejected(() => identify().catch(() => undefined))
+    return () => setOnIdentityRejected(null)
+  }, [identify])
 
   const value = useMemo(
-    () => ({ user, isManager: user?.role === 'manager', signIn, signOut }),
-    [user, signIn, signOut],
+    () => ({ user, identityError, isManager: user?.role === 'manager', signIn }),
+    [user, identityError, signIn],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

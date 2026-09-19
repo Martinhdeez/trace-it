@@ -1,0 +1,167 @@
+cd backend && uv run ruff check . && uv run ruff format --check .
+All checks passed!
+281 files already formatted
+cd tools && uv run --project ../backend ruff check . && uv run --project ../backend ruff format --check .
+All checks passed!
+9 files already formatted
+/Library/Developer/CommandLineTools/usr/bin/make test test-e2e
+cd backend && TRACE_DATABASE_URL=postgresql+psycopg://trace:trace@localhost:5432/trace_b8b7_check_test uv run python -m tests.support.prepare_db || (docker compose up db -d --wait && cd backend && TRACE_DATABASE_URL=postgresql+psycopg://trace:trace@localhost:5432/trace_b8b7_check_test uv run python -m tests.support.prepare_db)
+cd backend && TRACE_DATABASE_URL=postgresql+psycopg://trace:trace@localhost:5432/trace_b8b7_check_test uv run alembic upgrade head
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, The whole schema, as one migration.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Use cases and versioned agent configuration.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Rule statuses `compiling` (code being written in the background) and `blocked` (needs
+data the process does not have; every instance escalates).
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Norm rules: the sentences of the client's norm, each owning its atomic rules.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Events carry the process they belong to, so a process has one trace feed.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0007, A symbol can be required: an instance missing it always escalates (ADR 0016).
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Events become spans: trace and parent ids, start, duration, status and links (ADR 0018).
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Optional decision reviews, stored separately from immutable decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, On-demand norm proposals, isolated validations and manager adoptions.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Published process configurations, one draft, and captured execution inputs.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persistent discovery drafts and append-only revisions.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Stale decision alerts (ADR 0026).
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Optional extraction hints on process symbols.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Proposals from the escalation assistant, the process chat and learning.
+cd backend && TRACEPAY_TEST_POSTGRES=1 TRACE_DATABASE_URL=postgresql+psycopg://trace:trace@localhost:5432/trace_b8b7_check_test uv run pytest -rs -m "not e2e and not llm"
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend
+configfile: pyproject.toml
+testpaths: app, tests, evals
+plugins: logfire-5.1.0, asyncio-1.4.0, anyio-4.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 627 items / 11 deselected / 616 selected
+
+app/features/agents/tests/test_assistant.py .....                        [  0%]
+app/features/agents/tests/test_compiler.py ..............                [  3%]
+app/features/agents/tests/test_discovery.py ....                         [  3%]
+app/features/agents/tests/test_llm.py ........                           [  5%]
+app/features/agents/tests/test_normalizer.py ....................        [  8%]
+app/features/agents/tests/test_sandbox.py ..........................     [ 12%]
+app/features/alerts/tests/test_alerts.py .....                           [ 13%]
+app/features/decisions/tests/test_api.py ............                    [ 15%]
+app/features/decisions/tests/test_audit.py .............                 [ 17%]
+app/features/decisions/tests/test_engine.py ........................     [ 21%]
+app/features/decisions/tests/test_live_sources.py .......                [ 22%]
+app/features/decisions/tests/test_reprocess.py ...                       [ 22%]
+app/features/decisions/tests/test_reviews.py .........                   [ 24%]
+app/features/decisions/tests/test_rules_v3.py .......................... [ 28%]
+.............................                                            [ 33%]
+app/features/decisions/tests/test_runs.py ...                            [ 33%]
+app/features/decisions/tests/test_sandbox_integration.py ......          [ 34%]
+app/features/ingestion/tests/test_abstention.py .........                [ 36%]
+app/features/ingestion/tests/test_api.py ...........                     [ 37%]
+app/features/ingestion/tests/test_cache.py .........                     [ 39%]
+app/features/ingestion/tests/test_committee.py .......                   [ 40%]
+app/features/ingestion/tests/test_demo_run.py .........                  [ 42%]
+app/features/ingestion/tests/test_execution.py ...........               [ 43%]
+app/features/ingestion/tests/test_extraction_plan.py .....               [ 44%]
+app/features/ingestion/tests/test_focused.py ..........                  [ 46%]
+app/features/ingestion/tests/test_gemini.py ...                          [ 46%]
+app/features/ingestion/tests/test_image_quality.py ...                   [ 47%]
+app/features/ingestion/tests/test_invoice.py .....................       [ 50%]
+app/features/ingestion/tests/test_jev.py ...                             [ 51%]
+app/features/ingestion/tests/test_main_api.py .                          [ 51%]
+app/features/ingestion/tests/test_mode_health.py .                       [ 51%]
+app/features/ingestion/tests/test_normalization.py .............         [ 53%]
+app/features/ingestion/tests/test_ocr.py .........                       [ 55%]
+app/features/ingestion/tests/test_ocr_modes.py .........                 [ 56%]
+app/features/ingestion/tests/test_payment_api.py .........               [ 57%]
+app/features/ingestion/tests/test_payment_verification.py .....          [ 58%]
+app/features/ingestion/tests/test_pdf.py .....                           [ 59%]
+app/features/ingestion/tests/test_process_api.py ............            [ 61%]
+app/features/ingestion/tests/test_provider_fallbacks.py ............     [ 63%]
+app/features/ingestion/tests/test_provider_pricing.py ....               [ 64%]
+app/features/ingestion/tests/test_provider_tracing.py ........           [ 65%]
+app/features/ingestion/tests/test_quality.py ...................         [ 68%]
+app/features/ingestion/tests/test_schema_api.py ...                      [ 68%]
+app/features/ingestion/tests/test_schema_fields.py .............         [ 71%]
+app/features/ingestion/tests/test_schema_pdf.py ........                 [ 72%]
+app/features/ingestion/tests/test_schema_provenance.py ....              [ 73%]
+app/features/ingestion/tests/test_schema_usage.py .                      [ 73%]
+app/features/ingestion/tests/test_text_judge.py ...                      [ 73%]
+app/features/ingestion/tests/test_transcript.py ..                       [ 74%]
+app/features/ingestion/tests/test_vision.py ..                           [ 74%]
+app/features/learning/tests/test_api.py .............                    [ 76%]
+app/features/processes/tests/test_api.py ....                            [ 77%]
+app/features/processes/tests/test_chat.py ........                       [ 78%]
+app/features/processes/tests/test_definition.py .......                  [ 79%]
+app/features/processes/tests/test_draft_review_coverage.py .             [ 79%]
+app/features/processes/tests/test_drafts.py ..................           [ 82%]
+app/features/processes/tests/test_execution.py ..................        [ 85%]
+app/features/proposals/tests/test_api.py .......                         [ 86%]
+app/features/sources/tests/test_discovery.py .....                       [ 87%]
+app/features/sources/tests/test_erp_sync.py ........                     [ 88%]
+app/features/sources/tests/test_excel.py .....                           [ 89%]
+app/features/sources/tests/test_http_connector.py ...................... [ 93%]
+.....                                                                    [ 93%]
+app/features/traces/tests/test_api.py ...                                [ 94%]
+app/features/traces/tests/test_coverage.py ....                          [ 95%]
+app/features/traces/tests/test_planes.py ......                          [ 96%]
+app/features/traces/tests/test_spans.py ....                             [ 96%]
+app/features/use_cases/tests/test_api.py ...                             [ 97%]
+app/features/use_cases/tests/test_service.py ...                         [ 97%]
+app/features/versions/tests/test_api.py ...........                      [ 99%]
+tests/support/test_prepare_db.py .                                       [ 99%]
+tests/test_openapi.py ..                                                 [100%]
+
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+========== 616 passed, 11 deselected, 6 warnings in 97.68s (0:01:37) ===========
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+test -d .context/500-sombras-de-alberto/facturas || git submodule update --init .context/500-sombras-de-alberto
+cd backend && TRACEPAY_TEST_POSTGRES=1 TRACE_DATABASE_URL=postgresql+psycopg://trace:trace@localhost:5432/trace_b8b7_check_test uv run pytest -rs -m "e2e and not llm"
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend
+configfile: pyproject.toml
+testpaths: app, tests, evals
+plugins: logfire-5.1.0, asyncio-1.4.0, anyio-4.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 627 items / 618 deselected / 9 selected
+
+tests/e2e/test_api_flow.py ..                                            [ 22%]
+tests/e2e/test_engine_golden.py ..s                                      [ 55%]
+tests/e2e/test_frozen_rules.py .                                         [ 66%]
+tests/golden/test_build_golden.py .                                      [ 77%]
+evals/test_compiler_eval.py .                                            [ 88%]
+evals/test_norm_eval.py .                                                [100%]
+
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/backend/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/e2e/test_engine_golden.py:74: no known mismatch
+========== 8 passed, 1 skipped, 618 deselected, 6 warnings in 19.66s ===========
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

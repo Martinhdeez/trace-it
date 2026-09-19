@@ -70,11 +70,8 @@ async function instanceByName(request: APIRequestContext, name: string) {
   return (await request.get(`${API}/instances/${id}`)).json()
 }
 
-test('login as the manager', async () => {
+test('the console acts as the manager, with no login screen', async () => {
   await page.goto('/processes')
-  await expect(page).toHaveURL(/\/login$/)
-  await page.getByLabel('Email').fill(MANAGER.email)
-  await page.getByRole('button', { name: 'Entrar' }).click()
   await page.waitForLoadState('networkidle')
   await realAndClean()
   await expect(page).toHaveURL(/\/processes$/)
@@ -87,7 +84,7 @@ test('process panel shows the real process', async () => {
   await realAndClean()
 })
 
-test.fixme('pkg 2: process panel shows the published version', async () => {
+test('pkg 2: process panel shows the published version', async () => {
   await expect(page.getByText(/v1\b|versión 1/)).toBeVisible()
   await realAndClean()
 })

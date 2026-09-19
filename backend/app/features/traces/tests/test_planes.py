@@ -125,7 +125,7 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
         execution = (await api.get(f"{url}/execution")).json()
         ingestion_everywhere = (await api.get("/metrics/ingestion")).json()
         everywhere = (await api.get("/metrics/agents")).json()
-        assert (await api.get(f"{url}/nothing")).status_code == 422
+        assert (await api.get(f"{url}/nothing")).status_code == 404  # three planes only
         old = (await api.get(url)).json()
 
     assert ingestion["plane"] == "ingestion" and ingestion["process_id"] == process_id
@@ -154,17 +154,25 @@ async def test_the_three_planes_of_a_process(monkeypatch: pytest.MonkeyPatch) ->
     assert [
         {key: row[key] for key in expected_providers[0]} for row in ingestion["providers"]
     ] == expected_providers
-    assert (
-        next(p for p in ingestion_everywhere["providers"] if p["model"] == provider_model)
-        == (ingestion["providers"][0])
+    everywhere_row = next(
+        p for p in ingestion_everywhere["providers"] if p["model"] == provider_model
     )
+    assert everywhere_row | {"traces": None} == ingestion["providers"][0] | {"traces": None}
+    assert "process_id" not in everywhere_row["traces"]
     assert ingestion["cache_hits"] == 1 and ingestion["abstentions_by_field"] == {"iban": 1}
+    assert ingestion["providers"][0]["unpriced_requests"] == 1  # no tariff for this model
+    assert ingestion["providers"][0]["traces"].startswith(
+        f"/traces?process_id={process_id}&name=provider_call&provider=gemini&model={provider_model}"
+    )
 
     [compiler] = agents["by_role"]
     assert compiler["key"] == "compiler" and compiler["calls"] == 1
     assert compiler["fallbacks"] == 1 and compiler["errors"] == 0
     assert compiler["input_tokens"] > 0 and compiler["output_tokens"] > 0
     assert [m["key"] for m in agents["by_model"]] == ["ok/b"]
+    # No price for a scripted model: its requests are unpriced, never 0 USD.
+    assert agents["total"]["calls"] == 1 and agents["total"]["known_cost_usd"] == 0
+    assert agents["total"]["unpriced_requests"] == compiler["requests"] > 0
     assert [r["key"] for r in agents["by_rule"]] == [str(rule_id)]
     assert len(agents["by_use_case"]) == 1 and agents["per_hour"][0]["calls"] == 1
     assert agents["compile"] == {
@@ -263,6 +271,46 @@ async def test_the_stream_sends_new_spans_of_one_plane(monkeypatch: pytest.Monke
     head, data = event.split("data: ")
     assert head.startswith("id: ") and "event: execution" in head
     assert f'"span_id":"{run.span_id}"' in data and event.endswith("\n\n")
+
+
+async def test_agent_cost_and_drill_down(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A priced model's runs add up in USD, an unpriced one counts its requests, and every
+    row's `traces` link returns exactly its spans."""
+    # The provider reports its own model name; the price follows the configured one.
+    models = {
+        "helmcode:priced-x": scripted([{"text": "a"}], name="vendor/priced-x-2"),
+        "helmcode:free-y": scripted([{"text": "b"}], name="free-y"),
+    }
+    monkeypatch.setattr(llm, "resolve", lambda name: models[name])
+    monkeypatch.setenv("TRACEPAY_HELMCODE_BILLING_MODE", "metered")
+    monkeypatch.setenv("TRACEPAY_HELMCODE_INPUT_USD_PER_M", "1")
+    monkeypatch.setenv("TRACEPAY_HELMCODE_OUTPUT_USD_PER_M", "2")
+    agent = Agent(None, output_type=Answer, name="compiler")
+    async with client() as api:
+        process_id, _ = await create_process(api, "manager")
+        with events.span("compile_rule", process_id=process_id):
+            priced = llm.Setup(AgentSettings(model="helmcode:priced-x", fallback_models=[]))
+            _, trace = await llm.run(agent, "compiler", "hi", instructions="P", setup=priced)
+            monkeypatch.setenv("TRACEPAY_HELMCODE_BILLING_MODE", "unknown")
+            free = llm.Setup(AgentSettings(model="helmcode:free-y", fallback_models=[]))
+            _, unpriced = await llm.run(agent, "compiler", "hi", instructions="P", setup=free)
+        agents = (await api.get(f"/processes/{process_id}/metrics/agents")).json()
+        drill = {row["key"]: (await api.get(row["traces"])).json() for row in agents["by_model"]}
+        by_role = (await api.get(agents["by_role"][0]["traces"])).json()
+
+    cost = (trace.input_tokens * 1 + trace.output_tokens * 2) / 1_000_000
+    rows = {row["key"]: row for row in agents["by_model"]}
+    assert rows["vendor/priced-x-2"]["known_cost_usd"] == pytest.approx(cost)
+    assert rows["vendor/priced-x-2"]["unpriced_requests"] == 0
+    assert rows["free-y"]["known_cost_usd"] == 0
+    assert rows["free-y"]["unpriced_requests"] == unpriced.requests == 1
+    assert agents["total"]["known_cost_usd"] == pytest.approx(cost)
+    assert agents["total"]["unpriced_requests"] == 1
+    assert agents["by_role"][0]["key"] == "compiler" and len(by_role) == 2
+    for model, spans in drill.items():
+        assert [(s["step"], s["data"]["model"]) for s in spans] == [("llm_run", model)]
+    [span] = drill["vendor/priced-x-2"]
+    assert span["data"]["provider"] == "helmcode" and span["data"]["cost_status"] == "known"
 
 
 async def test_the_stream_resumes_after_last_event_id(monkeypatch: pytest.MonkeyPatch) -> None:

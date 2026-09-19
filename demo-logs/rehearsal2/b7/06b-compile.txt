@@ -1,0 +1,4 @@
+$ . /private/tmp/claude-501/-Users-apple-orca-workspaces-trace-pay-pelican/81951f95-6768-4335-9ebf-6930a2d5a39b/scratchpad/b8b7/6b.sh
+[14:51:32] 35 compiling ESCALAR None The invoice's total (symbol `total`) is at most 10,000 EUR, i.e. cents
+[14:51:47] 35 draft ESCALAR True The invoice's total (symbol `total`) is at most 10,000 EUR, i.e. cents
+[exit 0] [15.08 s] [14:51:47]

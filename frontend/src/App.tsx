@@ -1,8 +1,8 @@
 import { Navigate, Outlet, Route, Routes, useParams } from 'react-router'
 import { AppShell } from './components/shell/AppShell'
+import { ErrorNotice } from './components/shell/Notice'
 import { Instances } from './routes/Instances'
 import { Landing } from './routes/Landing'
-import { Login } from './routes/Login'
 import { NewProcess } from './routes/NewProcess'
 import { Process } from './routes/Process'
 import { Processes } from './routes/Processes'
@@ -18,7 +18,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<Navigate to={paths.processes} replace />} />
       <Route element={<Console />}>
         <Route path="/processes" element={<Processes />} />
         <Route path="/processes/new" element={<NewProcess />} />
@@ -42,12 +42,11 @@ export default function App() {
 }
 
 function Console() {
-  const { user } = useSession()
-  if (!user) return <Navigate to={paths.login} replace />
+  const { user, identityError } = useSession()
   return (
     <AppShell>
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <Outlet />
+        {user ? <Outlet /> : identityError ? <ErrorNotice error={identityError} /> : null}
       </div>
     </AppShell>
   )

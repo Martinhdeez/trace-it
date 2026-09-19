@@ -1,0 +1,4 @@
+$ make export-batch PACK=$FROZEN FILES=$B1 OUT=output/rehearsal2/friday/outcomes.jsonl 2>&1 | tail -2
+/Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/output/rehearsal2/friday/outcomes.jsonl: 500 lines for 500 PDFs in /Users/apple/orca/projects/trace-pay/.claude/worktrees/agent-adafdc763e2a934c0/.context/500-sombras-de-alberto/facturas
+OK: one line per file, valid results {'ESCALAR': 21, 'NO_PAGAR': 36, 'PAGAR': 443}
+[exit 0] [1.15 s] [14:50:01]

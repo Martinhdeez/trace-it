@@ -1,0 +1,9 @@
+  read 100/500
+  read 200/500
+  read 300/500
+  read 400/500
+  read 500/500
+output/b8-audit.html: 500 instances, 12.1 MB
+real 2.45
+user 0.33
+sys 0.06
