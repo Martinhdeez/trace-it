@@ -12,7 +12,6 @@ import type {
   Finding,
   Impact,
   Instance,
-  LlmConfig,
   Process,
   ProcessDefinition,
   ProcessDetail,
@@ -27,7 +26,6 @@ import type {
 import { ApiError } from './http'
 import { classifiedInvoices } from '../data/invoices.generated'
 import {
-  LLM_ROLES,
   invoiceOutcomes,
   invoiceSymbols,
   seedRules,
@@ -202,10 +200,6 @@ function processById(id: number): ProcessDetail {
 }
 
 const findings: Finding[] = []
-const llmConfig: LlmConfig[] = LLM_ROLES.map((role, index) => ({
-  papel: role,
-  modelo: index % 2 === 0 ? 'anthropic/claude-opus-5' : 'openai/gpt-5',
-}))
 
 // --- Compilation and audit --------------------------------------------------
 
@@ -599,12 +593,7 @@ export const mockClient: ApiClient = {
   uploadWorkbook: noMock,
   syncSource: noMock,
 
-  listLlmConfig: () => wait([...llmConfig]),
-
-  setLlmConfig: async (role, model) => {
-    const config = llmConfig.find((item) => item.papel === role)
-    if (!config) throw new ApiError(404, 'not_found', `Papel desconocido: ${role}`)
-    config.modelo = model
-    return wait(config, 200)
-  },
+  listUseCases: noMock,
+  getUseCase: noMock,
+  setAgentModel: noMock,
 }
