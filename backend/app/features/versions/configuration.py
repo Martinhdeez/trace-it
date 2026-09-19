@@ -80,7 +80,9 @@ async def agents(session, use_case_id: int) -> dict:
     for role in ROLES:
         setup = configured.get(role, llm.Setup())
         config = setup.settings.model_dump(mode="json")
-        config["model"] = config["model"] or getattr(settings, f"{role}_model")
+        if not config["model"]:
+            config["model"] = getattr(settings, f"{role}_model")
+            config["fallback_models"] = config["fallback_models"] or settings.fallback_models
         result[role] = {"config_id": setup.config_id, "settings": config}
     return result
 

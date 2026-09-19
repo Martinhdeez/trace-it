@@ -85,7 +85,7 @@ TRACEPAY_PROVIDER_TIMEOUT_S=60
 `compatible` uses the existing `TRACEPAY_VLM_URL`, `TRACEPAY_VLM_MODEL` and optional
 `TRACEPAY_VLM_API_KEY`. The URL is a base ending in `/v1`; the adapter appends
 `/chat/completions`. Helmcode defaults to `https://api.helmcode.com/v1` and accepts
-an alternate base through `HELMCODE_URL`.
+an alternate base through `TRACE_HELMCODE_BASE_URL` (legacy name: `HELMCODE_URL`).
 
 In hybrid mode, a successful first image reader ends the chain. An unavailable,
 rate-limited, malformed or truncated response allows the next configured reader.

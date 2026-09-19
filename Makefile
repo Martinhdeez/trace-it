@@ -75,7 +75,7 @@ check-outcomes:  # OUT=<file> FILES=<folder of PDFs>: one line per file, valid r
 # Tests use their own database (recreated each run), never the one `make setup` fills.
 TEST_DB_URL ?= postgresql+psycopg://trace:trace@localhost:$${DB_PORT:-5432}/trace_test
 PREPARE_DB = cd backend && TRACE_DATABASE_URL=$(TEST_DB_URL) uv run python -m tests.support.prepare_db
-PYTEST = cd backend && TRACE_DATABASE_URL=$(TEST_DB_URL) uv run pytest -rs
+PYTEST = cd backend && TRACEPAY_TEST_POSTGRES=1 TRACE_DATABASE_URL=$(TEST_DB_URL) uv run pytest -rs
 
 test-db:
 	$(PREPARE_DB) || (docker compose up db -d --wait && $(PREPARE_DB))

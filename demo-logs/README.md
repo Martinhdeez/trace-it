@@ -16,6 +16,10 @@ the API running on :8010.
 - `coverage/SUMMARY.txt`: audit spans per step (ok/error) for the API coverage run whose captures are in `coverage/`.
 - `delivery/`: the submitted plan (`albertitos_plan.*`) and the architecture diagram.
 
-Raw logs (`api*.log`, `erp.log`, `monitor.log`) and captured outputs (`integrated/`,
-`outcomes*.jsonl`) are as the runs left them.
-The `outcomes*.jsonl` files here (`outcomes_norm.jsonl`, `outcomes_p3.jsonl`, `integrated/outcomes.jsonl`) are old run artifacts, not the delivery: the batch-1 candidates are `delivery/outcomes_system.jsonl` and `delivery/outcomes_mateo_review.jsonl` at the repository root (`delivery/README.md`).
+Raw logs (`api*.log`, `erp.log`, `monitor.log`) and captured outputs (`integrated/`) are as
+the runs left them.
+
+`archive/` holds stale outcomes of old runs (`outcomes_norm.jsonl`, `outcomes_p3.jsonl`, and
+`outcomes_integrated.jsonl`, from `integrated/`). They are not the delivery: the batch-1
+candidates are `delivery/outcomes_system.jsonl` and `delivery/outcomes_mateo_review.jsonl` at
+the repository root (`delivery/README.md`).
