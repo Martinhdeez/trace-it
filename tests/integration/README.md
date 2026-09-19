@@ -25,7 +25,7 @@ What it does:
 The path (`demo-path.spec.ts`), with a MOCK DATA badge and an `ErrorNotice` failing every step:
 0. Before any step, as `make demo` does: load the client's workbook with `cut_off_date` 2026-09-18 and sync the ERP. A source a rule reads but that was never loaded would escalate `SOURCE_UNAVAILABLE` (B11).
 1. Sign in as the manager.
-2. The process panel shows the frozen process.
+2. The process opens the manager inbox; its Console link opens the panel with the frozen process.
 3. Upload two text PDFs on the same order and run: both end ESCALAR with "Same order as: <the other>" (`DUPLICATE_PO` in the golden).
 4. Upload a scan and run: it ends ESCALAR with `MISSING_DATA`.
 5. The review queue lists the three.
@@ -37,8 +37,8 @@ turns it on.
 
 Debug a failure: `cd tests/integration && npx playwright show-trace test-results/<test>/trace.zip`.
 
-CI runs it on every PR into `dev` and every push to `dev` and `main` (`e2e-integration` job in
-`.github/workflows/ci.yml`), with the OCR weights cached. The deploy needs it green.
+The manually dispatched CI workflow runs it in the `e2e-integration` job in
+`.github/workflows/ci.yml`, with the OCR weights cached. The deploy needs it green.
 
 A console change that moves or rewords what a step reads updates that step in the same PR, and
 the PR is not merged while this job is red. A step is fixed in `dev` only, never in a PR into
