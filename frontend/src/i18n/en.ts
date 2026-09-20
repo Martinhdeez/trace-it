@@ -2,10 +2,6 @@ import type { Messages } from '.'
 
 export const en: Messages = {
   brand: 'trace.it',
-  pitch: {
-    showLogo: 'Show the Traceit logo',
-    openProcesses: 'Open processes',
-  },
   calendar: {
     invoice: 'pending document',
     invoices: 'pending documents',

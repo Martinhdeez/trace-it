@@ -1,6 +1,5 @@
 import { Navigate, Outlet, Route, Routes, useParams } from 'react-router'
 import { AppShell } from './components/shell/AppShell'
-import { ProcessEntrance } from './components/shell/ProcessEntrance'
 import { ErrorNotice } from './components/shell/Notice'
 import { Inbox } from './routes/Inbox'
 import { Instances } from './routes/Instances'
@@ -57,14 +56,12 @@ export default function App() {
 function Console() {
   const { user, identityError } = useSession()
   return (
-    <ProcessEntrance>
-      <AppShell>
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          <MailNotifications />
-          {user ? <Outlet /> : identityError ? <ErrorNotice error={identityError} /> : null}
-        </div>
-      </AppShell>
-    </ProcessEntrance>
+    <AppShell>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <MailNotifications />
+        {user ? <Outlet /> : identityError ? <ErrorNotice error={identityError} /> : null}
+      </div>
+    </AppShell>
   )
 }
 

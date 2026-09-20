@@ -1,10 +1,6 @@
 /** Keys are English, like the rest of the code. Only the strings are Spanish. */
 export const es = {
   brand: 'trace.it',
-  pitch: {
-    showLogo: 'Mostrar el logo de Traceit',
-    openProcesses: 'Abrir procesos',
-  },
   calendar: {
     invoice: 'documento pendiente',
     invoices: 'documentos pendientes',
