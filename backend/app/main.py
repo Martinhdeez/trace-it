@@ -27,6 +27,7 @@ from app.features.rules import service as rules_service
 from app.features.rules.router import router as rules_router
 from app.features.sources.router import router as sources_router
 from app.features.traces.router import router as traces_router
+from app.features.treasury.router import router as treasury_router
 from app.features.use_cases.router import router as use_cases_router
 from app.features.users.dependencies import current_user
 from app.features.users.router import router as users_router
@@ -109,6 +110,7 @@ for router in (
     learning_router,
     alerts_router,
     proposals_router,
+    treasury_router,
 ):
     app.include_router(router)
 

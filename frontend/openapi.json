@@ -8610,6 +8610,64 @@
         }
       }
     },
+    "/processes/{process_id}/treasury/preview": {
+      "post": {
+        "tags": [
+          "treasury"
+        ],
+        "summary": "Preview a deterministic, read-only payment plan",
+        "description": "Plans current final decisions with the approved invoice payable outcome. The preview uses recorded instance and execution snapshots; it never executes or persists payments.",
+        "operationId": "previewTreasuryPlan",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "process_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Process Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TreasuryPlanIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TreasuryPlanOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/ocr/config": {
       "get": {
         "tags": [
@@ -18526,6 +18584,484 @@
         ],
         "title": "TokenStats",
         "description": "LLM calls grouped by one key: a model, a role, a rule, a norm rule or a use case."
+      },
+      "TreasuryExclusion": {
+        "properties": {
+          "instance_id": {
+            "type": "integer",
+            "title": "Instance Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "decision_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Id"
+          },
+          "reason_code": {
+            "type": "string",
+            "title": "Reason Code"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "instance_id",
+          "name",
+          "reason_code",
+          "reason"
+        ],
+        "title": "TreasuryExclusion"
+      },
+      "TreasuryPlanIn": {
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of"
+          },
+          "weekly_budget": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,16}|(?=[\\d.]{1,19}0*$)\\d{0,16}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Weekly Budget"
+          },
+          "horizon_weeks": {
+            "type": "integer",
+            "maximum": 52.0,
+            "minimum": 1.0,
+            "title": "Horizon Weeks",
+            "default": 52
+          },
+          "default_payment_terms_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3650.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Payment Terms Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "weekly_budget"
+        ],
+        "title": "TreasuryPlanIn"
+      },
+      "TreasuryPlanOut": {
+        "properties": {
+          "process_id": {
+            "type": "integer",
+            "title": "Process Id"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of"
+          },
+          "weekly_budget": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Weekly Budget"
+          },
+          "horizon_weeks": {
+            "type": "integer",
+            "title": "Horizon Weeks"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/TreasuryRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "weeks": {
+            "items": {
+              "$ref": "#/components/schemas/TreasuryWeek"
+            },
+            "type": "array",
+            "title": "Weeks"
+          },
+          "suppliers": {
+            "items": {
+              "$ref": "#/components/schemas/TreasurySupplier"
+            },
+            "type": "array",
+            "title": "Suppliers"
+          },
+          "exclusions": {
+            "items": {
+              "$ref": "#/components/schemas/TreasuryExclusion"
+            },
+            "type": "array",
+            "title": "Exclusions"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/TreasuryTotals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "process_id",
+          "as_of",
+          "weekly_budget",
+          "horizon_weeks",
+          "currency",
+          "rows",
+          "weeks",
+          "suppliers",
+          "exclusions",
+          "totals"
+        ],
+        "title": "TreasuryPlanOut"
+      },
+      "TreasuryProvenance": {
+        "properties": {
+          "decision_id": {
+            "type": "integer",
+            "title": "Decision Id"
+          },
+          "decision_author": {
+            "type": "string",
+            "title": "Decision Author"
+          },
+          "decision_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Decision At"
+          },
+          "execution_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Id"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          },
+          "rules_hash": {
+            "type": "string",
+            "title": "Rules Hash"
+          },
+          "source_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "amount_source": {
+            "type": "string",
+            "title": "Amount Source"
+          },
+          "vendor_source": {
+            "type": "string",
+            "title": "Vendor Source"
+          },
+          "due_date_source": {
+            "type": "string",
+            "title": "Due Date Source"
+          },
+          "currency_source": {
+            "type": "string",
+            "title": "Currency Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision_id",
+          "decision_author",
+          "decision_at",
+          "rules_hash",
+          "amount_source",
+          "vendor_source",
+          "due_date_source",
+          "currency_source"
+        ],
+        "title": "TreasuryProvenance"
+      },
+      "TreasuryRow": {
+        "properties": {
+          "row_id": {
+            "type": "string",
+            "title": "Row Id"
+          },
+          "instance_id": {
+            "type": "integer",
+            "title": "Instance Id"
+          },
+          "decision_id": {
+            "type": "integer",
+            "title": "Decision Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "vendor": {
+            "type": "string",
+            "title": "Vendor"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Due Date"
+          },
+          "week_index": {
+            "type": "integer",
+            "title": "Week Index"
+          },
+          "week_start": {
+            "type": "string",
+            "format": "date",
+            "title": "Week Start"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/TreasuryProvenance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row_id",
+          "instance_id",
+          "decision_id",
+          "name",
+          "vendor",
+          "amount",
+          "currency",
+          "due_date",
+          "week_index",
+          "week_start",
+          "provenance"
+        ],
+        "title": "TreasuryRow"
+      },
+      "TreasurySupplier": {
+        "properties": {
+          "vendor": {
+            "type": "string",
+            "title": "Vendor"
+          },
+          "invoice_count": {
+            "type": "integer",
+            "title": "Invoice Count"
+          },
+          "scheduled_count": {
+            "type": "integer",
+            "title": "Scheduled Count"
+          },
+          "scheduled_amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Scheduled Amount"
+          },
+          "backlog_count": {
+            "type": "integer",
+            "title": "Backlog Count"
+          },
+          "backlog_amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Backlog Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vendor",
+          "invoice_count",
+          "scheduled_count",
+          "scheduled_amount",
+          "backlog_count",
+          "backlog_amount"
+        ],
+        "title": "TreasurySupplier"
+      },
+      "TreasuryTotals": {
+        "properties": {
+          "scheduled_count": {
+            "type": "integer",
+            "title": "Scheduled Count"
+          },
+          "scheduled_amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Scheduled Amount"
+          },
+          "backlog_count": {
+            "type": "integer",
+            "title": "Backlog Count"
+          },
+          "backlog_amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Backlog Amount"
+          },
+          "excluded_count": {
+            "type": "integer",
+            "title": "Excluded Count"
+          },
+          "excluded_amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Excluded Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scheduled_count",
+          "scheduled_amount",
+          "backlog_count",
+          "backlog_amount",
+          "excluded_count",
+          "excluded_amount"
+        ],
+        "title": "TreasuryTotals"
+      },
+      "TreasuryWeek": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "title": "End"
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total"
+          },
+          "remaining_budget": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Remaining Budget"
+          },
+          "row_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Row Ids"
+          },
+          "backlog_count": {
+            "type": "integer",
+            "title": "Backlog Count"
+          },
+          "backlog_amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Backlog Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "start",
+          "end",
+          "total",
+          "remaining_budget",
+          "row_ids",
+          "backlog_count",
+          "backlog_amount"
+        ],
+        "title": "TreasuryWeek"
       },
       "UsageActivity": {
         "properties": {

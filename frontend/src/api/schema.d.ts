@@ -2101,6 +2101,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/processes/{process_id}/treasury/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview a deterministic, read-only payment plan
+         * @description Plans current final decisions with the approved invoice payable outcome. The preview uses recorded instance and execution snapshots; it never executes or persists payments.
+         */
+        post: operations["previewTreasuryPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ocr/config": {
         parameters: {
             query?: never;
@@ -5940,6 +5960,184 @@ export interface components {
             unpriced_requests: number;
             /** Traces */
             traces?: string | null;
+        };
+        /** TreasuryExclusion */
+        TreasuryExclusion: {
+            /** Instance Id */
+            instance_id: number;
+            /** Name */
+            name: string;
+            /** Decision Id */
+            decision_id?: number | null;
+            /** Reason Code */
+            reason_code: string;
+            /** Reason */
+            reason: string;
+            /** Amount */
+            amount?: string | null;
+            /** Currency */
+            currency?: string | null;
+            /** Due Date */
+            due_date?: string | null;
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+        /** TreasuryPlanIn */
+        TreasuryPlanIn: {
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /** Weekly Budget */
+            weekly_budget: number | string;
+            /**
+             * Horizon Weeks
+             * @default 52
+             */
+            horizon_weeks: number;
+            /** Default Payment Terms Days */
+            default_payment_terms_days?: number | null;
+        };
+        /** TreasuryPlanOut */
+        TreasuryPlanOut: {
+            /** Process Id */
+            process_id: number;
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /** Weekly Budget */
+            weekly_budget: string;
+            /** Horizon Weeks */
+            horizon_weeks: number;
+            /** Currency */
+            currency: string;
+            /** Rows */
+            rows: components["schemas"]["TreasuryRow"][];
+            /** Weeks */
+            weeks: components["schemas"]["TreasuryWeek"][];
+            /** Suppliers */
+            suppliers: components["schemas"]["TreasurySupplier"][];
+            /** Exclusions */
+            exclusions: components["schemas"]["TreasuryExclusion"][];
+            totals: components["schemas"]["TreasuryTotals"];
+        };
+        /** TreasuryProvenance */
+        TreasuryProvenance: {
+            /** Decision Id */
+            decision_id: number;
+            /** Decision Author */
+            decision_author: string;
+            /**
+             * Decision At
+             * Format: date-time
+             */
+            decision_at: string;
+            /** Execution Id */
+            execution_id?: number | null;
+            /** Version Id */
+            version_id?: number | null;
+            /** Rules Hash */
+            rules_hash: string;
+            /** Source Ids */
+            source_ids?: number[];
+            /** Amount Source */
+            amount_source: string;
+            /** Vendor Source */
+            vendor_source: string;
+            /** Due Date Source */
+            due_date_source: string;
+            /** Currency Source */
+            currency_source: string;
+        };
+        /** TreasuryRow */
+        TreasuryRow: {
+            /** Row Id */
+            row_id: string;
+            /** Instance Id */
+            instance_id: number;
+            /** Decision Id */
+            decision_id: number;
+            /** Name */
+            name: string;
+            /** Vendor */
+            vendor: string;
+            /** Amount */
+            amount: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            /** Week Index */
+            week_index: number;
+            /**
+             * Week Start
+             * Format: date
+             */
+            week_start: string;
+            provenance: components["schemas"]["TreasuryProvenance"];
+        };
+        /** TreasurySupplier */
+        TreasurySupplier: {
+            /** Vendor */
+            vendor: string;
+            /** Invoice Count */
+            invoice_count: number;
+            /** Scheduled Count */
+            scheduled_count: number;
+            /** Scheduled Amount */
+            scheduled_amount: string;
+            /** Backlog Count */
+            backlog_count: number;
+            /** Backlog Amount */
+            backlog_amount: string;
+        };
+        /** TreasuryTotals */
+        TreasuryTotals: {
+            /** Scheduled Count */
+            scheduled_count: number;
+            /** Scheduled Amount */
+            scheduled_amount: string;
+            /** Backlog Count */
+            backlog_count: number;
+            /** Backlog Amount */
+            backlog_amount: string;
+            /** Excluded Count */
+            excluded_count: number;
+            /** Excluded Amount */
+            excluded_amount: string;
+        };
+        /** TreasuryWeek */
+        TreasuryWeek: {
+            /** Index */
+            index: number;
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Total */
+            total: string;
+            /** Remaining Budget */
+            remaining_budget: string;
+            /** Row Ids */
+            row_ids: string[];
+            /** Backlog Count */
+            backlog_count: number;
+            /** Backlog Amount */
+            backlog_amount: string;
         };
         /** UsageActivity */
         UsageActivity: {
@@ -10853,6 +11051,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    previewTreasuryPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TreasuryPlanIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TreasuryPlanOut"];
+                };
             };
             /** @description Validation Error */
             422: {

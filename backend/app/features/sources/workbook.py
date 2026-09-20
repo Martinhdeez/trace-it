@@ -18,6 +18,7 @@ TABLES = {
             "company_name": "supplier_name",
             "nif": "supplier_tax_id",
             "iban": "authorized_iban",
+            "payment_terms_days": "payment_terms_days",
         },
     ),
     "purchase_orders": (
@@ -29,6 +30,8 @@ TABLES = {
             "total_amount": "expected_gross_amount",
             "status": "state",
             "order_date": "ordered_on",
+            "due_date": "due_date",
+            "payment_terms_days": "payment_terms_days",
         },
     ),
 }
@@ -42,6 +45,13 @@ def workbook_sources(result):
         name, mapping = TABLES[record["role"]]
         fields = record["fields"]
         row = {key: fields.get(field, {}).get("value") for key, field in mapping.items()}
+        # Optional payment terms are retained only when a workbook explicitly records them;
+        # historical snapshots keep their previous canonical shape.
+        row = {
+            key: value
+            for key, value in row.items()
+            if value is not None or key not in {"due_date", "payment_terms_days"}
+        }
         required = (
             ("id", "nif", "iban")
             if name == "suppliers"

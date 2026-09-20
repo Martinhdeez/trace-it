@@ -94,6 +94,7 @@ in `.artifacts/archive/`.
 | [0035](detail/0035-learn-from-resolved-escalations.md) | Let the reviewer agent learn a resolved escalation by amending the rule that escalated it | accepted | A |
 | [0036](detail/0036-route-all-process-changes-through-reviewed-drafts.md) | Route every agent-authored process change through a reviewed draft | accepted | E |
 | [0037](detail/0037-review-and-publish-chat-authored-connectors.md) | Review and publish chat-authored connectors | accepted | E |
+| [0038](detail/0038-read-only-treasury-planning.md) | Plan payments from recorded decisions without executing them | accepted | A, C |
 
 ### Glossary
 - **Rule finding:** the result of one rule on one instance (`fires`, `reason`).

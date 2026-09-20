@@ -27,6 +27,7 @@ export const paths = {
   reviewCase: (processId: number | string, instanceId: number | string) =>
     `/processes/${processId}/review?i=${instanceId}`,
   metrics: (id: number | string) => `/processes/${id}/metrics`,
+  treasury: (id: number | string) => `/processes/${id}/treasury`,
   processSettings: (id: number | string) => `/processes/${id}/settings`,
   rules: (id: number | string) => `/processes/${id}/definition/manual`,
   rule: (processId: number | string, ruleId: number | string) =>

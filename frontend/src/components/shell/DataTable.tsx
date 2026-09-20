@@ -41,6 +41,7 @@ export function DataTable<T extends { id: string }>({
           <tr
             key={row.id}
             tabIndex={onRowClick ? 0 : undefined}
+            aria-selected={onRowClick && selectedId === row.id ? true : undefined}
             onClick={() => onRowClick?.(row)}
             onKeyDown={(event) => {
               if (!onRowClick) return

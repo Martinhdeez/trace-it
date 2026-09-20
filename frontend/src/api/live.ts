@@ -38,6 +38,8 @@ import type {
   SourceOut,
   Suggestion,
   SyncResult,
+  TreasuryPlan,
+  TreasuryPlanRequest,
   UseCaseDetail,
   UseCaseOut,
   User,
@@ -205,6 +207,9 @@ export const liveClient: ApiClient = {
   },
   syncSource: (processId, name) =>
     post<SyncResult>(`/processes/${processId}/sources/${encodeURIComponent(name)}/sync`),
+
+  treasuryPreview: (processId, body: TreasuryPlanRequest) =>
+    post<TreasuryPlan>(`/processes/${processId}/treasury/preview`, body),
 
   listUseCases: () => get<UseCaseOut[]>('/use-cases'),
   getUseCase: (id) => get<UseCaseDetail>(`/use-cases/${id}`),

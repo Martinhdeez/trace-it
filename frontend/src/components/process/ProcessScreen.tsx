@@ -76,7 +76,7 @@ export function ProcessTabs({ processId, activeTab }: { processId: number; activ
                     : 'border-transparent text-muted hover:text-ink',
                 )}
               >
-                {tab.label}
+                {typeof tab.label === 'function' ? tab.label() : tab.label}
                 {count ? <CountChip>{count}</CountChip> : null}
               </Link>
             )

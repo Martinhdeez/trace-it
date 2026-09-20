@@ -125,6 +125,16 @@ export type SourceOut = Schemas['SourceOut']
 export type SourceDetail = Schemas['SourceDetail']
 export type SyncResult = Schemas['SyncResult']
 
+/** Read-only planning types are generated from the backend OpenAPI contract. */
+export type TreasuryPlanRequest = Schemas['TreasuryPlanIn']
+export type TreasuryInvoice = Schemas['TreasuryRow']
+export type TreasuryProvenance = Schemas['TreasuryProvenance']
+export type TreasuryWeek = Schemas['TreasuryWeek']
+export type TreasurySupplier = Schemas['TreasurySupplier']
+export type TreasuryExcluded = Schemas['TreasuryExclusion']
+export type TreasuryTotals = Schemas['TreasuryTotals']
+export type TreasuryPlan = Schemas['TreasuryPlanOut']
+
 /** Reported after each file of a batch has been uploaded (and re-extracted when it was stale). */
 /** One step of a batch upload: a file starts being read, or its reading comes back. */
 export type UploadProgress = {
@@ -375,6 +385,8 @@ export interface ApiClient {
   /** Excel of suppliers / orders / parameters. The cut-off date is required, there is no default. */
   uploadWorkbook(processId: number, file: File, cutOffDate: string): Promise<WorkbookUpload>
   syncSource(processId: number, name: string): Promise<SyncResult>
+  /** Calculates a bounded cash plan from approved payment decisions, without writes. */
+  treasuryPreview(processId: number, body: TreasuryPlanRequest): Promise<TreasuryPlan>
 
   listUseCases(): Promise<UseCaseOut[]>
   /** One use case with its agents and the model each one runs. */
