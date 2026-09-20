@@ -841,7 +841,7 @@ async def _export(
         json.dumps(
             {"file_id": i.name, "result": exported[i.id][0]}
             | (extra.get(i.id) or {"reason": exported[i.id][1] or "NO_FINDING"})
-            | ({"trace_url": outcomes_file.trace_url(process_id, i.id)} if trace or full else {}),
+            | ({"trace_url": outcomes_file.trace_url(process_id, i.name)} if trace or full else {}),
             ensure_ascii=False,
         )
         for i in instances
