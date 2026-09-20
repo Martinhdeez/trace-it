@@ -31,7 +31,6 @@ engine.
 
 ## See it in action
 
-| Invoice queue | Document review |
 |---|---|
 | [![](docs/img/invoice-review-queue.png)](docs/img/invoice-review-queue.png) | [![](docs/img/invoice-document-review.png)](docs/img/invoice-document-review.png) |
 | [![](docs/img/invoice-decision-evidence.png)](docs/img/invoice-decision-evidence.png) | [![](docs/img/hiring-screening-dashboard.png)](docs/img/hiring-screening-dashboard.png) |
