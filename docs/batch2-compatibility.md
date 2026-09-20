@@ -51,7 +51,13 @@ workbook, as the `rates` source: `currency`, `eur_per_unit`, `as_of`, `valid_unt
 `as_of`..`valid_until` covers the invoice's own date — the rate in force when the
 invoice was issued, never the nearest row and never a clock. A currency may hold
 several rows with non-overlapping windows: a rate change is a new row, never an edit,
-like every other source here. No rate is ever inferred from an order or an ERP amount;
+like every other source here. The table as delivered carries one window per currency,
+the 2026 financial year, because that is the granularity of the fixings we can cite; a
+monthly or quarterly table is a change to `rates.json`, not to the rule, which already
+picks by window. `tolerance_pct` is 0, so the comparison holds to the norm's own cent:
+every published rate reproduces its order exactly (USD 0.92, CHF 1.05, GBP 1.17,
+BRL 0.16129, JPY 0.00617, MXN 0.05). No rate is ever inferred from an order or an ERP
+amount;
 the reason string carries the whole multiplication, the window and the reference, so a
 reader can redo the sum and see which rate applied.
 

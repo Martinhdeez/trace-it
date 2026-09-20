@@ -6,6 +6,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.common.exceptions import ConflictError
 from app.core import events
+from app.core.config import settings
 from app.features.ingestion.errors import InvalidDocumentError
 from app.features.ingestion.model import File
 from app.features.ingestion.process_extraction import payment_context
@@ -65,16 +66,13 @@ def workbook_sources(result):
     return tables
 
 
-async def pack_rates(session, process_id):
-    """The published exchange rates of the pack (`<pack>/rates.json`): a reference table the
-    manager keeps beside the workbook, loaded with it so a rule never reads a live market."""
-    from app.features.sources.service import process_pack
-
-    pack = await process_pack(session, process_id)
-    path = pack.with_suffix("") / "rates.json" if pack else None
-    if path is None or not path.is_file():
-        return []
-    return json.loads(path.read_text(encoding="utf-8"))
+def pack_rates():
+    """The published exchange rates (`processes/invoice-payment/rates.json`): a reference
+    table the manager keeps beside the workbook, loaded with it so that a rule converting a
+    foreign invoice reads a published figure and never a live market. This adapter is the
+    invoice pack's own (`payment_context` below), so it reads the invoice pack's file."""
+    path = settings.processes_dir / "invoice-payment" / "rates.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else []
 
 
 async def load_workbook(session, process_id, user_id, result, content, cut_off_date=None):
@@ -87,7 +85,7 @@ async def load_workbook(session, process_id, user_id, result, content, cut_off_d
     tables = workbook_sources(result)
     if cut_off_date is not None:
         tables["parameters"] = [{"cut_off_date": cut_off_date.isoformat()}]
-    if rates := await pack_rates(session, process_id):
+    if rates := pack_rates():
         tables["rates"] = rates
     await session.execute(
         insert(File)
