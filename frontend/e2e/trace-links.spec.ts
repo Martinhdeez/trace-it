@@ -3,7 +3,8 @@ import { expect, test, type Page } from '@playwright/test'
 const filename = 'factura á + #&?.pdf'
 
 async function fixture(page: Page) {
-  const state = { id: 21, missing: false, requested: [] as number[], searches: [] as string[] }
+  const state = { id: 21, missing: false, requested: [] as number[], searches: [] as string[], errors: [] as string[] }
+  page.on('pageerror', (error) => state.errors.push(error.message))
   const process = {
     id: 1, name: 'Trace links fixture', description: '', symbols: [],
     decision_types: [
@@ -37,7 +38,7 @@ async function fixture(page: Page) {
       const id = Number(instance[1])
       state.requested.push(id)
       body = { id, process_id: 1, name: filename, status: 'DECIDED', decision: 'PAGAR',
-        decisions: [], reviews: [], symbols: {}, values: {}, review_pending: false }
+        decisions: [], reviews: [], events: [], symbols: {}, values: {}, review_pending: false }
     }
     await route.fulfill({ json: body })
   })
@@ -56,6 +57,7 @@ test('exported document link opens the latest exact case after its ID changes', 
   await expect(page.getByRole('link', { name: 'Ver traza →' })).toHaveAttribute('href', /instances\?i=501$/)
   expect(state.requested).toEqual([21, 501])
   await expect(page).toHaveURL(new RegExp('file='))
+  expect(state.errors).toEqual([])
 })
 
 test('missing document shows a notice instead of another case', async ({ page }) => {
@@ -65,6 +67,7 @@ test('missing document shows a notice instead of another case', async ({ page })
   await expect(page.getByText('Documento no encontrado', { exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Ver traza →' })).toHaveCount(0)
   expect(state.requested).toEqual([])
+  expect(state.errors).toEqual([])
 })
 
 test('existing numeric case links remain supported', async ({ page }) => {
@@ -72,4 +75,5 @@ test('existing numeric case links remain supported', async ({ page }) => {
   await page.goto('processes/1/review?i=21')
   await expect(page.getByRole('link', { name: 'Ver traza →' })).toHaveAttribute('href', /instances\?i=21$/)
   expect(state.searches).toEqual([])
+  expect(state.errors).toEqual([])
 })
