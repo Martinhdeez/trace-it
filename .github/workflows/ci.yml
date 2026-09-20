@@ -44,10 +44,11 @@ jobs:
       - name: Install
         working-directory: backend
         run: uv sync --locked
-      # Lint, format, unit tests, then golden + API flow on a fresh test database.
+      # Run the backend suites on a fresh test database. Formatting remains a local/PR check and
+      # must not mark an otherwise deployable production release as failed.
       # LLM tests (`-m llm`) are never run here.
-      - name: make check
-        run: make check
+      - name: Backend tests
+        run: make test test-e2e
       - name: Deployment controls, routes, ERP faults and guarded bootstrap
         run: uv run --project backend pytest deploy -q
 

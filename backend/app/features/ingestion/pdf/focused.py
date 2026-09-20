@@ -10,6 +10,7 @@ from PIL import Image
 
 from app.common.normalization import fold
 from app.core import events
+from app.features.ingestion.documents import as_pdf
 from app.features.ingestion.ocr.bands import flatten_periodic_bands
 
 from .committee import independent_reader
@@ -62,7 +63,7 @@ def region_for(name, field, readers, page_size):
 
 
 def render_region(content, page, box, settings, dpi=600):
-    with PDF_LOCK, pymupdf.open(stream=content, filetype="pdf") as document:
+    with PDF_LOCK, pymupdf.open(stream=as_pdf(content, settings), filetype="pdf") as document:
         rect = pymupdf.Rect(box)
         scale = min(
             dpi / 72,

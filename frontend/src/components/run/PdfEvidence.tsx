@@ -132,13 +132,13 @@ export function PdfEvidence({
       link.click()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch {
-      setDownloadError('Could not download the original PDF. Please try again.')
+      setDownloadError('Could not download the original document. Please try again.')
     }
   }
 
   return (
     <section
-      aria-label="PDF reading evidence"
+      aria-label="Document reading evidence"
       className="flex h-full min-h-0 min-w-0 flex-1 flex-col"
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-hairline px-3 py-2 text-[12px]">
@@ -206,7 +206,7 @@ export function PdfEvidence({
           <button aria-label="Rotate page" onClick={() => setRotation((rotation + 90) % 360)}>
             <RotateCw size={16} />
           </button>
-          <button aria-label="Download original PDF" onClick={download}>
+          <button aria-label="Download original document" onClick={download}>
             <Download size={16} />
           </button>
         </div>
@@ -292,11 +292,11 @@ export function PdfEvidence({
           <div
             ref={scroller}
             className="min-h-0 flex-1 overflow-auto bg-canvas p-5"
-            aria-label="Original PDF page"
+            aria-label="Document page"
           >
             {pageImage.isError ? (
               <p role="alert">
-                Could not load this PDF page.{' '}
+                Could not load this document page.{' '}
                 <button className="underline" onClick={() => pageImage.refetch()}>
                   Retry
                 </button>

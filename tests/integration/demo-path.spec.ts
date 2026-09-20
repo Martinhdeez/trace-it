@@ -127,6 +127,8 @@ async function instanceByName(request: APIRequestContext, name: string) {
 
 test('the console acts as the manager, with no login screen', async () => {
   await page.goto('/processes')
+  await page.getByRole('button', { name: 'Mostrar el logo de Traceit' }).click()
+  await page.getByRole('button', { name: 'Abrir procesos' }).click()
   await page.waitForLoadState('networkidle')
   await realAndClean()
   await expect(page).toHaveURL(/\/processes$/)
@@ -216,7 +218,8 @@ test('open the escalation detail', async () => {
 
 test('pkg 5: the detail says why it escalated, as the API does', async ({ request }) => {
   const instance = await instanceByName(request, RESOLVED)
-  await expect(page.getByText('Por qué se escaló')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Motivo de revisión' })).toBeVisible()
+  await page.getByText('Detalle del motor', { exact: true }).click()
   // Exact: the rule result below also quotes the reason.
   await expect(page.getByText(instance.reason, { exact: true })).toBeVisible()
   await realAndClean(['llm_error'])
@@ -294,7 +297,7 @@ test('trace view shows the decisions and the escalation reason', async ({ reques
   await page.getByRole('button', { name: new RegExp(RESOLVED.replace('.', '\\.')) }).click()
   await expect(page.getByText('Decisión final')).toBeVisible()
   await expect(page.getByText(NOTE).first()).toBeVisible()
-  await expect(page.getByText('histórico · 2')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Historial de decisiones 2', exact: true })).toBeVisible()
 
   // The one still escalated: its reason on screen is the one the API stored.
   const other = await instanceByName(request, ESCALATED[0])

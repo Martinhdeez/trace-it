@@ -44,9 +44,12 @@ def main() -> None:
             sql.SQL("REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM {}").format(role)
         )
         for name in names():
-            permissions = (
-                "SELECT, INSERT" if name in READ_ONLY else "SELECT, INSERT, UPDATE, DELETE"
-            )
+            if name in {"events", "mail_activity"}:
+                permissions = "SELECT, INSERT, DELETE"
+            else:
+                permissions = (
+                    "SELECT, INSERT" if name in READ_ONLY else "SELECT, INSERT, UPDATE, DELETE"
+                )
             connection.execute(
                 sql.SQL("GRANT {} ON TABLE public.{} TO {}").format(
                     sql.SQL(permissions), sql.Identifier(name), role

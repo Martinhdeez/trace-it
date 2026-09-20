@@ -18,6 +18,7 @@ from app.common.exceptions import NotFoundError
 from app.core import events
 from app.features.ingestion.cache import file_identity, fingerprint, package_version, reader_usage
 from app.features.ingestion.config import Settings
+from app.features.ingestion.documents import as_pdf, document_format
 from app.features.ingestion.ocr.budget import acquired, extraction_budget, remaining
 from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.ocr.local import LocalOCR
@@ -30,7 +31,7 @@ from app.features.ingestion.schemas import ExtractionResult, ExtractOptions, Fie
 from app.features.ingestion.store import Store
 from app.features.sources.excel import extract_workbook
 
-PIPELINE_VERSION = "invoice-v2.3.0+xlsx-v1.3"
+PIPELINE_VERSION = "invoice-v2.4.0+xlsx-v1.3"
 logger = logging.getLogger(__name__)
 
 
@@ -146,10 +147,17 @@ class ExtractionService:
                 raise ValueError("Empty file")
             if b"%PDF-" in head:
                 kind = "invoice"
+            elif head.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff")) or Path(
+                filename
+            ).suffix.lower() in {".html", ".htm"}:
+                as_pdf(temp.read_bytes(), self.settings)
+                kind = "invoice"
             elif head.startswith(b"PK\x03\x04") and Path(filename).suffix.lower() == ".xlsx":
                 kind = "workbook"
             else:
-                raise ValueError("Supported inputs: PDF and XLSX (legacy XLS is not supported)")
+                raise ValueError(
+                    "Supported inputs: PDF, JPG, PNG, HTML and XLSX (legacy XLS is not supported)"
+                )
             sha = digest.hexdigest()
             destination = self.objects / sha
             # Publish atomically without replacing an object another worker may be reading.
@@ -175,6 +183,7 @@ class ExtractionService:
             "features/ingestion/schemas.py",
             "features/ingestion/schema_fields.py",
             "features/ingestion/config.py",
+            "features/ingestion/documents.py",
         ]
         invoice = [
             "pdf/international.py",
@@ -374,6 +383,9 @@ class ExtractionService:
                 visual_models = _used_visual_models(fields, data)
                 judgment = data.get("committee", {}).get("text_judge", {})
                 data["provenance"] = {
+                    "source_format": document_format(content)
+                    if item["kind"] == "invoice"
+                    else "xlsx",
                     "cache_key": key,
                     "execution_hash": self.execution_hash,
                     "pipeline_version": PIPELINE_VERSION,
@@ -499,8 +511,9 @@ class ExtractionService:
                 span.set(cache_hit=True, cached_from_extraction_id=previous_id)
                 return result
             with self.worker_slot() as worker_wait_ms, reader_usage() as usage:
+                content = (self.objects / item["sha256"]).read_bytes()
                 readings, data, warnings, pages, metrics = extract_schema_pdf(
-                    (self.objects / item["sha256"]).read_bytes(),
+                    content,
                     options,
                     self.settings,
                     self.ocr,
@@ -536,6 +549,7 @@ class ExtractionService:
                         name: reading.model_dump() for name, reading in readings.items()
                     },
                     "provenance": {
+                        "source_format": document_format(content),
                         "cache_key": key,
                         "execution_hash": self.execution_hash,
                         "schema_mapper": config["schema_mapper"],

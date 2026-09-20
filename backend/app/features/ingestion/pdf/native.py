@@ -1,22 +1,20 @@
-import threading
-
 import pymupdf
 
 from app.common.extraction import TextLine
 from app.common.normalization import clean_text
 from app.features.ingestion.config import Settings
+from app.features.ingestion.documents import PDF_LOCK, as_pdf, document_format
 
 from .layout import reading_order, suspect_spacing, table_membership
 from .visual_risk import inspect_page
 
 # MuPDF is not thread-safe. Keep document access/rendering short and serialized;
 # OCR runs outside this lock and has its own bounded session.
-PDF_LOCK = threading.Lock()
 
 
 def native_pages(content: bytes, settings: Settings):
     pages = []
-    with PDF_LOCK, pymupdf.open(stream=content, filetype="pdf") as document:
+    with PDF_LOCK, pymupdf.open(stream=as_pdf(content, settings), filetype="pdf") as document:
         if document.needs_pass:
             raise ValueError("Password-protected PDF is unsupported")
         if not 1 <= len(document) <= settings.max_pages:
@@ -55,6 +53,7 @@ def native_pages(content: bytes, settings: Settings):
             pages.append(
                 {
                     "number": index + 1,
+                    "source_format": document_format(content),
                     "size": (page.rect.width, page.rect.height),
                     "lines": lines,
                     "image_ratio": min(1, image_area / max(1, page.rect.get_area())),
@@ -67,7 +66,7 @@ def native_pages(content: bytes, settings: Settings):
 
 
 def render(content: bytes, page_number: int, settings: Settings):
-    with PDF_LOCK, pymupdf.open(stream=content, filetype="pdf") as document:
+    with PDF_LOCK, pymupdf.open(stream=as_pdf(content, settings), filetype="pdf") as document:
         page = document[page_number - 1]
         scale = settings.ocr_dpi / 72
         area = max(1, page.rect.width * page.rect.height)

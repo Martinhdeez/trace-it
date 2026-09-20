@@ -9,7 +9,7 @@ fallbacks, and inspect usage/cost/latency through the same operator guide. The
 [500-document benchmark](benchmark-2026-09-19.md) records measured baseline quality
 and timings separately from the later Helmcode probe.
 
-The API returns as many field readings as it can from PDF and XLSX. Missing or conflicting
+The API returns as many field readings as it can from PDF, JPG/JPEG, PNG, HTML and XLSX. Missing or conflicting
 fields retain available text and alternatives, without document review states.
 NIF, IBAN and purchase order separate verified transcriptions from proposals;
 see [focused verification and measured tradeoffs](focused-verification.md).
@@ -34,6 +34,24 @@ Docker Compose mounts the downloaded root `.models` directory read-only and keep
 results and provider journals in the `ingestion_data` volume. `make reset-db` removes
 Compose volumes, including this local extraction data; PostgreSQL stores attached originals
 and evidence separately. Download weights on the host before using local OCR in Docker.
+
+## Images and HTML
+
+Images use the same configured local/API/hybrid OCR readers, verification policy and
+process field mapping as scanned PDFs. EXIF orientation is applied and transparent pixels
+are flattened onto white for reading. The original bytes and SHA-256 remain unchanged.
+
+HTML uses native text, tables and text-input values without OCR. A sanitized, paginated
+view provides stable coordinates for the existing field evidence viewer. Scripts, styles,
+hidden content and external resources are excluded; no browser or JavaScript is executed.
+Pages whose contents require JavaScript or embedded images must be supplied as PDF/JPG/PNG.
+HTML originals download as attachments with sandbox and nosniff headers. Configured semantic
+field mapping may still read the extracted text for custom process schemas.
+
+This support applies to process uploads, the console and standalone extraction/batches.
+Mail reception retains its existing PDF attachment filter. Synthetic tests cover format
+validation, OCR routing, table fields, byte-exact downloads, duplicate uploads and evidence;
+real-world image accuracy still depends on document quality and the configured readers.
 
 ## Pipeline
 
@@ -81,9 +99,11 @@ variables; Uvicorn's `--env-file` loads the root `.env`.
 
 ## Limits
 
-25 MiB per file, 40 PDF pages, 100 files per batch. XLSX: 200 MiB uncompressed, 2,000 ZIP
+25 MiB per file, 40 PDF/HTML pages, 100 files per batch. XLSX: 200 MiB uncompressed, 2,000 ZIP
 members, 500,000 cells, 25,000 rows and 100 columns per sheet. Encrypted/corrupt documents
-are rejected. Inputs are PDF and XLSX; XLS, CSV and standalone images are not supported.
+are rejected. Process documents accept PDF, JPG/JPEG, PNG and HTML/HTM. XLSX remains a reference-source
+format; XLS, CSV and other image formats are not supported. Images are limited to 18 million
+pixels before decoding. HTML is limited to 100,000 elements and 256 nesting levels.
 
 One Uvicorn process per data directory, enforced by a lock. Workers and OCR threads are
 bounded; MuPDF calls are serialized. SQLite jobs recover after restart. Cache identity
