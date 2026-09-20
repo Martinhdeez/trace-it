@@ -114,6 +114,7 @@ PLANES: dict[str, Plane] = {
     "review_draft_proposal": _AGENTS,
     "preview_process_draft": _AGENTS,
     "configure_discovery_execution": _AGENTS,
+    "backtest_process_version": _AGENTS,
     "validate_process_draft": _AGENTS,  # a version draft replayed on past cases
     "compile_process_draft": _AGENTS,
     "publish_process_draft": _AGENTS,

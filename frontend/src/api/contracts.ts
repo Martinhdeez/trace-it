@@ -322,6 +322,7 @@ export interface ApiClient {
   validateDraft(processId: number): Promise<VersionDraft>
   publishDraft(processId: number, body: PublishIn): Promise<VersionOut>
   discardDraft(processId: number, revision: number): Promise<void>
+  backtestVersion(versionId: number): Promise<ValidationReport>
   listVersions(processId: number): Promise<VersionOut[]>
   getExecution(processId: number): Promise<ExecutionOut>
   saveDraft(processId: number, body: DraftIn): Promise<VersionDraft>

@@ -54,6 +54,28 @@ async def draft(process_id: int, session: Session, user: CurrentUser) -> Version
     return out(VersionDraftOut, await service.get_draft(session, process_id))
 
 
+@router.post("/process-versions/{version_id}/backtest", operation_id="backtestProcessVersion")
+async def backtest(version_id: int, session: Session, user: CurrentUser) -> dict:
+    """Compare published rules with saved cases and the latest loaded source snapshots."""
+    manager(user)
+    row = await session.get(ProcessVersion, version_id)
+    if row is None:
+        raise NotFoundError("Process version does not exist")
+    from app.core import events
+    from app.features.versions import configuration
+
+    inputs = await execution.capture(session, row.process_id)
+    with events.span("backtest_process_version", process_id=row.process_id, author=user.name):
+        report = await service.inspect(session, row.snapshot, inputs)
+    result = {
+        **report,
+        "version_id": row.id,
+        "snapshot_hash": row.content_hash,
+        "inputs_hash": configuration.digest(inputs),
+    }
+    return {**result, "hash": configuration.digest(result)}
+
+
 @router.put("/processes/{process_id}/draft", operation_id="editProcessDraft")
 async def edit(
     process_id: int, body: DraftIn, session: Session, user: CurrentUser

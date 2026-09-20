@@ -11,6 +11,7 @@ import { useSession } from '../../state/session'
 import { Button } from '../shell/Controls'
 import { ErrorNotice, Notice } from '../shell/Notice'
 import { ExpandableText } from '../shell/ExpandableText'
+import { HistoricalCoverage } from './HistoricalCoverage'
 import { ValidationImpact } from './ValidationImpact'
 import { useDraft } from './useDraft'
 
@@ -155,6 +156,9 @@ export function VersionView({
   const queryClient = useQueryClient()
   const { isManager } = useSession()
   const { revision, pending } = useDraft(processId, isManager)
+  const backtest = useMutation({
+    mutationFn: () => api.backtestVersion(version.id),
+  })
   const [restored, setRestored] = useState(false)
   const restore = useMutation({
     mutationFn: () => api.saveDraft(processId, {
@@ -205,6 +209,26 @@ export function VersionView({
         <p className="mb-2 font-mono text-[11px] tracking-[0.12em] text-faint">IMPACTO HISTÓRICO AL PUBLICAR</p>
         <ValidationImpact processId={processId} validation={version.validation as ValidationReport} />
       </section>
+
+      {isManager ? <section className="space-y-3">
+        <h3 className="text-sm font-medium">Backtest v{version.number}</h3>
+        <p className="text-[12px] text-muted">
+          Compare this version with previous engine decisions using saved facts and the latest
+          loaded sources. Original decisions stay unchanged. OCR is not repeated.
+        </p>
+        <Button disabled={backtest.isPending} onClick={() => backtest.mutate()}>
+          {backtest.isPending ? 'Running backtest…' : 'Run backtest'}
+        </Button>
+        {backtest.isError ? <ErrorNotice error={backtest.error} /> : null}
+        {backtest.data && !backtest.isPending ? <div role="status" className="space-y-3">
+          {backtest.data.error ? <p className="text-sm text-nopagar">{backtest.data.error}</p> : <>
+            <HistoricalCoverage validation={backtest.data} />
+            {backtest.data.coverage?.total === 0
+              ? <p className="text-[12px] text-muted">No previous decisions are available to compare.</p>
+              : <ValidationImpact processId={processId} validation={backtest.data} />}
+          </>}
+        </div> : null}
+      </section> : null}
 
       {process.description ? (
         <section>

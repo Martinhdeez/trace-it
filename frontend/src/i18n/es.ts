@@ -92,6 +92,7 @@ export const es = {
     expand: 'Expandir menú',
   },
   processes: {
+    empty: 'Aún no hay procesos. Crea uno para empezar.',
     delete: 'Eliminar proceso',
     confirmDelete: '¿Eliminar este proceso y todo su historial?',
     deleting: 'Eliminando…',

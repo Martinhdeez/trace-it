@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Plus, Trash2, X } from 'lucide-react'
+import { Check, ChevronRight, Plus, Trash2, X } from 'lucide-react'
 import { api } from '../api/client'
 import { keys } from '../api/queries'
 import { Button } from '../components/shell/Controls'
@@ -26,22 +26,54 @@ export function Processes() {
 
   return (
     <main className="min-h-0 flex-1 overflow-y-auto px-5 py-8 sm:p-10 lg:p-12">
-      <h1 className="sr-only">{t('nav.processes')}</h1>
-      {processes.isError ? <ErrorNotice error={processes.error} /> : null}
-      {remove.isError ? <ErrorNotice error={remove.error} /> : null}
+      <div className="mx-auto max-w-[1040px]">
+        <header className="mb-7 flex flex-wrap items-center justify-between gap-4">
+          <h1 className="text-[24px] font-medium tracking-[-0.035em]">{t('nav.processes')}</h1>
+          <Link
+            to={paths.newProcess}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-ink px-3.5 py-2 text-[12px] font-medium text-on-ink hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+          >
+            <Plus size={14} strokeWidth={1.8} aria-hidden="true" />
+            {t('nav.newProcess')}
+          </Link>
+        </header>
+        {processes.isError ? <ErrorNotice error={processes.error} /> : null}
+        {remove.isError ? <ErrorNotice error={remove.error} /> : null}
 
-      <ul aria-label={t('nav.processes')} className="mx-auto grid max-w-[1040px] grid-cols-1 gap-6 md:grid-cols-2 lg:gap-8">
-        {processes.data?.map((process) => (
-          <li key={process.id} className="group relative min-w-0">
-            <Link
-              to={paths.process(process.id)}
-              className="flex min-h-[200px] items-center justify-center rounded-[20px] border border-hairline bg-canvas/50 px-8 py-14 text-center text-[24px] font-medium leading-tight tracking-[-0.035em] transition-colors hover:bg-canvas motion-reduce:transition-none sm:min-h-[240px] sm:text-[28px]"
-            >
-              <span className="min-w-0 break-words">{process.name}</span>
-            </Link>
-            {isManager ? (
-              confirming === process.id ? (
-                <div className="absolute inset-x-3 bottom-3 flex flex-wrap items-center justify-end gap-1.5 rounded-[12px] bg-surface p-2 shadow-lift ring-1 ring-line">
+        <ul aria-label={t('nav.processes')} className="divide-y divide-hairline border-y border-hairline">
+          {processes.data?.map((process) => (
+            <li key={process.id} className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Link
+                  to={paths.process(process.id)}
+                  className="flex min-h-20 min-w-0 flex-1 items-center justify-between gap-4 rounded-lg px-3 py-4 transition-colors hover:bg-canvas focus-visible:outline-2 focus-visible:outline-focus motion-reduce:transition-none"
+                >
+                  <div className="min-w-0">
+                    <h2 className="break-words text-[15px] font-medium leading-6 tracking-[-0.015em]">{process.name}</h2>
+                    {process.description ? (
+                      <p className="mt-0.5 line-clamp-2 max-w-[72ch] break-words text-[13px] leading-5 text-muted">{process.description}</p>
+                    ) : null}
+                  </div>
+                  <ChevronRight size={16} strokeWidth={1.6} className="shrink-0 text-muted" aria-hidden="true" />
+                </Link>
+                {isManager ? (
+                  <Button
+                    tone="ghost"
+                    aria-label={t('processes.delete')}
+                    title={t('processes.delete')}
+                    disabled={remove.isPending}
+                    onClick={() => {
+                      remove.reset()
+                      setConfirming(process.id)
+                    }}
+                    className="mr-1 min-h-9 shrink-0 px-2.5 hover:text-nopagar focus-visible:outline-2 focus-visible:outline-focus"
+                  >
+                    <Trash2 size={14} strokeWidth={1.8} />
+                  </Button>
+                ) : null}
+              </div>
+              {isManager && confirming === process.id ? (
+                <div className="mb-3 flex flex-wrap items-center justify-end gap-2 rounded-lg bg-canvas p-3">
                   <span className="text-[12px] text-muted">{t('processes.confirmDelete')}</span>
                   <Button
                     tone="ghost"
@@ -63,33 +95,14 @@ export function Processes() {
                     {remove.isPending ? t('processes.deleting') : t('common.confirm')}
                   </Button>
                 </div>
-              ) : (
-                <Button
-                  tone="ghost"
-                  aria-label={t('processes.delete')}
-                  title={t('processes.delete')}
-                  onClick={() => {
-                    remove.reset()
-                    setConfirming(process.id)
-                  }}
-                  className="absolute bottom-3 right-3 text-nopagar hover:text-nopagar [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100"
-                >
-                  <Trash2 size={14} strokeWidth={1.8} />
-                </Button>
-              )
-            ) : null}
-          </li>
-        ))}
-        <li>
-          <Link
-            to={paths.newProcess}
-            aria-label={t('nav.newProcess')}
-            className="flex h-full min-h-[200px] items-center justify-center rounded-[20px] border-2 border-dashed border-faint/45 bg-surface text-faint transition-colors hover:border-muted hover:text-ink motion-reduce:transition-none sm:min-h-[240px]"
-          >
-            <Plus size={40} strokeWidth={1.25} aria-hidden="true" />
-          </Link>
-        </li>
-      </ul>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        {processes.isSuccess && processes.data.length === 0 ? (
+          <p className="py-8 text-[13px] text-muted">{t('processes.empty')}</p>
+        ) : null}
+      </div>
     </main>
   )
 }

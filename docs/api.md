@@ -218,3 +218,14 @@ The mail worker always evaluates only its imported instances.
 - **Symbols** are stored as `{value, origin}`; `origin` says where extraction read it.
 - **Names** (`instance.name`) are the exact file names, accents included; they are the
   `file_id` of the export.
+
+### Published-version backtesting
+
+`POST /process-versions/{version_id}/backtest` requires a manager. It evaluates the
+published snapshot against cases with saved decisions and facts, using the latest
+loaded source snapshots. It returns the same coverage and impact fields as draft
+validation, plus `version_id`, `snapshot_hash`, `inputs_hash` and a report `hash`.
+It does not rerun OCR, publish a draft, or replace decisions or the version's original
+validation report. In the console, select a published version and choose **Run backtest**.
+For reproduction with the evidence captured at decision time, use the existing
+`POST /decisions/{decision_id}/replay` endpoint instead.

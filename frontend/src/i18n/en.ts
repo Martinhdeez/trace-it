@@ -93,6 +93,7 @@ export const en: Messages = {
     expand: 'Expand sidebar',
   },
   processes: {
+    empty: 'No processes yet. Create a process to get started.',
     delete: 'Delete process',
     confirmDelete: 'Delete this process and all its history?',
     deleting: 'Deleting…',

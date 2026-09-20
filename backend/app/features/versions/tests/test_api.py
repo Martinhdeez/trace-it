@@ -645,3 +645,28 @@ async def test_new_duplicate_and_changed_symbols_do_not_change_replay():
         result = (await api.post(f"/processes/{pid}/reprocess?dry_run=true")).json()
         assert result["changes"][0]["before"] == "PAY"
         assert result["changes"][0]["after"] == "CHECK"
+
+
+async def test_published_backtest_preserves_versions_and_decisions():
+    async with client() as api:
+        pid, headers, _, _ = await seed(api)
+        first = await publish(api, pid, headers)
+        await api.post(f"/processes/{pid}/run")
+        cases = (await api.get(f"/processes/{pid}/instances")).json()
+        before = [(await api.get(f"/instances/{case['id']}")).json() for case in cases]
+        await api.put(f"/processes/{pid}/draft", headers=headers, json={"rule_ids": []})
+        second = await publish(api, pid, headers)
+        result = await api.post(f"/process-versions/{second['id']}/backtest", headers=headers)
+        assert result.status_code == 200, result.text
+        report = result.json()
+        assert report["version_id"] == second["id"]
+        assert report["coverage"]["total"] == 2
+        assert report["unchanged"] == 1
+        assert len(report["changes"] + report["conflicts"]) == 1
+        after = [(await api.get(f"/instances/{case['id']}")).json() for case in cases]
+        assert [c["decisions"] for c in after] == [c["decisions"] for c in before]
+        assert (await api.get(f"/process-versions/{first['id']}")).json() == first
+        assert (await api.get(f"/process-versions/{second['id']}")).json() == second
+        assert (
+            await api.post("/process-versions/999999999/backtest", headers=headers)
+        ).status_code == 404

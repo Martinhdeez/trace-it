@@ -73,7 +73,7 @@ export function PublishDraft({
         guardados; no repite el OCR ni mide la calidad de un modelo.
       </p>
       <Button disabled={busy || blocked || compiling} onClick={() => validate.mutate()}>
-        Validar
+        {validate.isPending ? 'Validating and backtesting…' : 'Validate and backtest'}
       </Button>
       {compiling && <p role="status" className="text-[12px] text-muted">{t('reviewerAgent.compiling')}</p>}
       {compilingRules.isError && <ErrorNotice error={compilingRules.error} />}

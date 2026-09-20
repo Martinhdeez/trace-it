@@ -2204,6 +2204,72 @@
         }
       }
     },
+    "/process-versions/{version_id}/backtest": {
+      "post": {
+        "tags": [
+          "process versions"
+        ],
+        "summary": "Backtest",
+        "description": "Compare published rules with saved cases and the latest loaded source snapshots.",
+        "operationId": "backtestProcessVersion",
+        "security": [
+          {
+            "TraceItBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Backtestprocessversion"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/processes/{process_id}/draft/validate": {
       "post": {
         "tags": [

@@ -41,6 +41,7 @@ import type {
   UseCaseDetail,
   UseCaseOut,
   User,
+  ValidationReport,
   VersionDraft,
   VersionOut,
   WorkbookUpload,
@@ -127,6 +128,7 @@ export const liveClient: ApiClient = {
     post<VersionOut>(`/processes/${processId}/draft/publish`, body),
   discardDraft: (processId, revision) =>
     del(`/processes/${processId}/draft${query({ revision })}`),
+  backtestVersion: (versionId) => post<ValidationReport>(`/process-versions/${versionId}/backtest`),
   listVersions: (processId) => get<VersionOut[]>(`/processes/${processId}/versions`),
   getExecution: (processId) => get<ExecutionOut>(`/processes/${processId}/execution`),
   saveDraft: (processId, body: DraftIn) => put<VersionDraft>(`/processes/${processId}/draft`, body),

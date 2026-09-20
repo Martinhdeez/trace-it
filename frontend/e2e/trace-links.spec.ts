@@ -20,7 +20,7 @@ async function fixture(page: Page) {
     if (path === '/login') body = { id: 1, name: 'Reviewer', email: 'test@ci.invalid', role: 'manager' }
     if (path === '/processes') body = [process]
     if (path === '/processes/1') body = process
-    if (path === '/processes/1/summary') body = { queue: 0 }
+    if (path === '/processes/1/summary') body = { queue: 0, by_status: {}, by_decision: {}, instances: 3 }
     if (path?.includes('/mail-ingestion/activity')) body = { initialized: true, latest_id: 0, items: [], has_more: false }
     if (path === '/processes/1/instances') {
       state.searches.push(url.searchParams.get('q') ?? '')
@@ -75,5 +75,53 @@ test('existing numeric case links remain supported', async ({ page }) => {
   await page.goto('processes/1/review?i=21')
   await expect(page.getByRole('link', { name: 'Ver traza →' })).toHaveAttribute('href', /instances\?i=21$/)
   expect(state.searches).toEqual([])
+  expect(state.errors).toEqual([])
+})
+
+test('execution steps have a nested layout and distinct operation icons', async ({ page }) => {
+  const state = await fixture(page)
+  await page.route('**/api/instances/21/trace', route => route.fulfill({ json: {
+    id: 21, process_id: 1, decisions: [], sources_read: [],
+    pending: { waiting_for_person: false, review_pending: false, proposals: [], alerts: [] },
+    spans: [{ span_id: 'run', step: 'run_process', status: 'ok', duration_ms: 100,
+      data: {}, children: [{ span_id: 'rule', step: 'evaluate_rule', status: 'ok',
+        duration_ms: 10, data: { rule_id: 1 }, children: [] }] }],
+  } }))
+  await page.goto('processes/1/instances?i=21')
+  await page.getByRole('button', { name: /Execution trace|Traza de ejecución/ }).click()
+  const parent = page.locator('summary').filter({ hasText: 'Run process' })
+  await expect(parent).toBeVisible()
+  await parent.click()
+  const child = page.locator('summary').filter({ hasText: 'Evaluate rule' })
+  await expect(child).toBeVisible()
+  expect((await child.boundingBox())!.x).toBeGreaterThan((await parent.boundingBox())!.x)
+  await expect(parent.locator('svg').first()).toHaveClass(/lucide-play/)
+  await expect(child.locator('svg').first()).toHaveClass(/lucide-list-checks/)
+  await child.click()
+  await expect(page.getByText('rule_id', { exact: false })).toBeVisible()
+  expect(state.errors).toEqual([])
+})
+
+test('published versions can run backtests and show the impact', async ({ page }) => {
+  const state = await fixture(page)
+  await page.route('**/api/processes/1/versions', route => route.fulfill({ json: [{
+    id: 7, process_id: 1, number: 2, parent_id: null, author: 'Manager', reason: '',
+    created_at: '2026-09-20T00:00:00Z', snapshot: { process: {}, rules: [] },
+    validation: { unchanged: 0 },
+  }] }))
+  let calls = 0
+  await page.route('**/api/process-versions/7/backtest', route => {
+    calls++
+    return route.fulfill({ json: { valid: true, hash: 'test', unchanged: 1,
+      coverage: { total: 2, evaluated: 2, not_evaluable: 0, partial: 0, none: 0 },
+      changes: [{ instance_id: 21, name: 'changed.pdf', before: 'PAY', after: 'CHECK' }],
+    } })
+  })
+  await page.goto('processes/1/definition/normas')
+  await page.getByRole('button', { name: 'v2', exact: true }).click()
+  await page.getByRole('menuitemradio').click()
+  await page.getByRole('button', { name: 'Run backtest', exact: true }).click()
+  await expect(page.getByText('PAY → CHECK · 1')).toBeVisible()
+  expect(calls).toBe(1)
   expect(state.errors).toEqual([])
 })

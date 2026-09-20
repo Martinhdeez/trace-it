@@ -1,5 +1,5 @@
 import { useId, useState, type ReactNode } from 'react'
-import { Activity, CheckCircle2, ChevronDown, ClipboardList, Database, FileCode2, FileSearch, History, ListChecks, ListTree, XCircle, type LucideIcon } from 'lucide-react'
+import { Activity, CornerDownRight, FileUp, Play, Circle, CheckCircle2, ChevronDown, ClipboardList, Database, FileCode2, FileSearch, History, ListChecks, ListTree, XCircle, type LucideIcon } from 'lucide-react'
 import type {
   InstanceDetail,
   InstanceTrace,
@@ -405,17 +405,34 @@ function PendingBlock({ trace }: { trace: InstanceTrace }) {
 /** One span and, one level down each, the spans it started. */
 function SpanBlock({ span }: { span: SpanNode }) {
   const duration = span.duration_ms == null ? '—' : formatMs(span.duration_ms)
+  const Icon = span.status === 'error' ? XCircle
+    : span.step.includes('upload') ? FileUp
+    : span.step.includes('run') ? Play
+    : span.step.includes('rule') ? ListChecks
+    : span.step.includes('source') ? Database
+    : span.step.includes('extract') ? FileSearch
+    : CornerDownRight
   return (
-    <Block title={humanize(span.step)} icon={Activity} meta={`${span.status} / ${duration}`}>
+    <details className="ml-4 min-w-0 border-l border-line pl-3 sm:ml-5 [&[open]>summary>.span-chevron]:rotate-180">
+      <summary className="flex cursor-pointer list-none items-center gap-2 py-2.5 pr-4 text-[12px] hover:bg-canvas/60 [&::-webkit-details-marker]:hidden">
+        <Icon size={14} className={cn('shrink-0 text-muted', span.status === 'error' && 'text-nopagar')} />
+        <span className="min-w-0 flex-1 break-words">{humanize(span.step)}</span>
+        <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted">
+          <Circle size={6} className={cn('fill-current', span.status === 'ok' ? 'text-pagar' : span.status === 'error' ? 'text-nopagar' : 'text-faint')} />
+          {span.status}
+        </span>
+        <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">{duration}</span>
+        <ChevronDown size={12} className="span-chevron shrink-0 text-faint" />
+      </summary>
       {span.data && Object.keys(span.data).length ? (
-        <div className="px-4 py-3">
+        <div className="pb-3 pr-4">
           <JsonHighlight value={span.data} className="max-h-80 rounded-lg" />
         </div>
       ) : null}
       {span.children.map((child) => (
         <SpanBlock key={child.span_id} span={child} />
       ))}
-    </Block>
+    </details>
   )
 }
 
