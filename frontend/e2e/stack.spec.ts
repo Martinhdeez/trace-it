@@ -119,7 +119,7 @@ test('production assets and navigation stay inside the deployment prefix', async
     }
   })
   await page.goto('')
-  await expect(page.getByRole('main')).toContainText('La consola escribe la norma')
+  await expect(page.getByRole('main')).toContainText('Cuéntale qué tiene que decidir.')
   await page.getByRole('link', { name: 'Abrir la consola' }).first().click()
   await expect(page).toHaveURL(/\/nexia\/trace-it\/processes$/)
   await page.reload()
