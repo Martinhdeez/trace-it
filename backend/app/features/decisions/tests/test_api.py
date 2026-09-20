@@ -9,6 +9,7 @@ import json
 import uuid
 from collections.abc import Iterator
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from httpx import AsyncClient
@@ -275,13 +276,10 @@ async def test_export_trace_adds_the_console_link(fake_sandbox: None) -> None:
         assert r.status_code == 200, r.text
         lines = [json.loads(line) for line in r.text.splitlines()]
         assert all(sorted(line) == ["file_id", "reason", "result", "trace_url"] for line in lines)
-        instances = {
-            i["name"]: i["id"] for i in (await api.get(f"/processes/{process_id}/instances")).json()
-        }
-        assert lines[0]["trace_url"] == (
-            f"{settings.console_base_url}/processes/{process_id}"
-            f"/review?i={instances[lines[0]['file_id']]}"
-        )
+        for line in lines:
+            link = urlsplit(line["trace_url"])
+            assert link.path.endswith(f"/processes/{process_id}/review")
+            assert parse_qs(link.query) == {"file": [line["file_id"]]}
 
 
 @contextlib.contextmanager
