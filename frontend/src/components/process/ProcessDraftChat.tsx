@@ -445,46 +445,59 @@ export function ProcessDraftChat({
 
   if (!current) {
     return (
-      <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6', className)}>
-        {error ? <ErrorNotice error={error} /> : null}
-        {openProposals.data?.length ? <PendingProposals proposals={openProposals.data} /> : null}
-        <EmptyState
-          icon={MessageSquareText}
-          title={processId == null ? 'Crea el proceso hablando' : 'Revisa el proceso hablando'}
-          action={
-            <Button tone="primary" disabled={start.isPending} onClick={() => start.mutate()}>
-              {start.isPending ? 'Abriendo…' : 'Empezar conversación'}
-            </Button>
-          }
-        >
-          Describe qué debe decidir, adjunta sus fuentes y responde las preguntas. Nada se aplica
-          hasta que revises el resultado y pulses Publicar.
-        </EmptyState>
-        {processId == null && candidates.length ? (
-          <div className="mx-auto max-w-xl px-2 pb-2">
-            <NestedCard label="borradores guardados">
-              <ul className="divide-y divide-hairline">
-                {candidates.map((item) => (
-                  <li key={item.id}>
-                    <Link
-                      to={paths.newProcessDraft(item.id)}
-                      className="flex items-center justify-between gap-3 px-3.5 py-3 hover:bg-well"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-[13px] text-ink">
-                          {item.name || `Borrador ${item.id}`}
+      <div
+        className={cn(
+          'grid min-h-0 flex-1',
+          processId != null && 'lg:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.85fr)]',
+          className,
+        )}
+      >
+        <div className="min-h-0 overflow-y-auto px-4 py-6 sm:px-6">
+          {error ? <ErrorNotice error={error} /> : null}
+          {openProposals.data?.length ? <PendingProposals proposals={openProposals.data} /> : null}
+          <EmptyState
+            icon={MessageSquareText}
+            title={processId == null ? 'Crea el proceso hablando' : 'Revisa el proceso hablando'}
+            action={
+              <Button tone="primary" disabled={start.isPending} onClick={() => start.mutate()}>
+                {start.isPending ? 'Abriendo…' : 'Empezar conversación'}
+              </Button>
+            }
+          >
+            Describe qué debe decidir, adjunta sus fuentes y responde las preguntas. Nada se aplica
+            hasta que revises el resultado y pulses Publicar.
+          </EmptyState>
+          {processId == null && candidates.length ? (
+            <div className="mx-auto max-w-xl px-2 pb-2">
+              <NestedCard label="borradores guardados">
+                <ul className="divide-y divide-hairline">
+                  {candidates.map((item) => (
+                    <li key={item.id}>
+                      <Link
+                        to={paths.newProcessDraft(item.id)}
+                        className="flex items-center justify-between gap-3 px-3.5 py-3 hover:bg-well"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-[13px] text-ink">
+                            {item.name || `Borrador ${item.id}`}
+                          </span>
+                          <span className="mt-0.5 block font-mono text-[10px] text-faint">
+                            conversación {item.id} · revisión {item.revision}
+                          </span>
                         </span>
-                        <span className="mt-0.5 block font-mono text-[10px] text-faint">
-                          conversación {item.id} · revisión {item.revision}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-[12px] text-muted">Continuar</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </NestedCard>
-          </div>
+                        <span className="shrink-0 text-[12px] text-muted">Continuar</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </NestedCard>
+            </div>
+          ) : null}
+        </div>
+        {processId != null ? (
+          <aside className="min-h-0 overflow-y-auto border-t border-hairline px-5 py-5 lg:border-l lg:border-t-0">
+            <CurrentRules processId={processId} />
+          </aside>
         ) : null}
       </div>
     )
@@ -639,6 +652,8 @@ export function ProcessDraftChat({
               sigue disponible para cambios puntuales.
             </p>
           ) : null}
+
+          {processId != null ? <CurrentRules processId={processId} /> : null}
 
           {openProposals.data?.length ? <PendingProposals proposals={openProposals.data} /> : null}
 
@@ -795,6 +810,45 @@ export function ProcessDraftChat({
         </div>
       </aside>
     </div>
+  )
+}
+
+/** Read the live rules independently of the conversation's baseline or proposed changes. */
+function CurrentRules({ processId }: { processId: number }) {
+  const rules = useQuery({
+    queryKey: keys.rules(processId, 'active'),
+    queryFn: () => api.listRules(processId, 'active'),
+  })
+
+  return (
+    <section aria-label="Current rules" className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[15px] font-medium text-ink">{t('trace.rules')}</h2>
+        {rules.data ? <span className="font-mono text-[11px] text-faint">{rules.data.length}</span> : null}
+      </div>
+      {rules.isPending ? (
+        <p className="text-[12px] text-muted">{t('common.loading')}</p>
+      ) : rules.error ? (
+        <ErrorNotice error={rules.error} />
+      ) : rules.data?.length ? (
+        <ul className="space-y-2">
+          {rules.data.map((rule) => (
+            <li key={rule.id} className="rounded-[14px] bg-surface px-3.5 py-3 ring-1 ring-line">
+              <div className="flex items-start justify-between gap-3">
+                <Link to={paths.rule(processId, rule.id)} className="text-[13px] font-medium text-ink hover:underline">
+                  {rule.summary || rule.text}
+                </Link>
+                <span className="shrink-0 text-[11px] text-pagar">{t('ruleStatus.active')}</span>
+              </div>
+              {rule.summary ? <p className="mt-1 text-[12px] leading-5 text-muted">{rule.text}</p> : null}
+              <p className="mt-1 font-mono text-[10px] text-faint">{rule.decision}</p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[12px] text-muted">{t('common.empty')}</p>
+      )}
+    </section>
   )
 }
 
