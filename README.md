@@ -33,7 +33,6 @@ engine.
 
 | Invoice queue | Document review |
 |---|---|
-| [![Invoices waiting for review](docs/img/invoice-review-queue.png)](docs/img/invoice-review-queue.png) | [![Invoice document with extracted fields and review controls](docs/img/invoice-document-review.png)](docs/img/invoice-document-review.png) |
-| Decision evidence | Another process, same engine |
-| [![Completed invoice decision with its symbols and evidence](docs/img/invoice-decision-evidence.png)](docs/img/invoice-decision-evidence.png) | [![Hiring screening process dashboard](docs/img/hiring-screening-dashboard.png)](docs/img/hiring-screening-dashboard.png) |
+| [![](docs/img/invoice-review-queue.png)](docs/img/invoice-review-queue.png) | [![](docs/img/invoice-document-review.png)](docs/img/invoice-document-review.png) |
+| [![](docs/img/invoice-decision-evidence.png)](docs/img/invoice-decision-evidence.png) | [![](docs/img/hiring-screening-dashboard.png)](docs/img/hiring-screening-dashboard.png) |
 
