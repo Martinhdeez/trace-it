@@ -24,6 +24,7 @@ import type {
 import { families, keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
 import { paths } from '../../lib/paths'
+import { ruleLabel } from '../../lib/process'
 import { Button, Select, Textarea } from '../shell/Controls'
 import { EmptyState, ErrorNotice, Notice } from '../shell/Notice'
 import { Markdown } from '../shell/Markdown'
@@ -831,17 +832,17 @@ function CurrentRules({ processId }: { processId: number }) {
       ) : rules.error ? (
         <ErrorNotice error={rules.error} />
       ) : rules.data?.length ? (
-        <ul className="space-y-2">
+        <ul className="divide-y divide-hairline">
           {rules.data.map((rule) => (
-            <li key={rule.id} className="rounded-[14px] bg-surface px-3.5 py-3 ring-1 ring-line">
-              <div className="flex items-start justify-between gap-3">
-                <Link to={paths.rule(processId, rule.id)} className="text-[13px] font-medium text-ink hover:underline">
-                  {rule.summary || rule.text}
-                </Link>
-                <span className="shrink-0 text-[11px] text-pagar">{t('ruleStatus.active')}</span>
-              </div>
-              {rule.summary ? <p className="mt-1 text-[12px] leading-5 text-muted">{rule.text}</p> : null}
-              <p className="mt-1 font-mono text-[10px] text-faint">{rule.decision}</p>
+            <li key={rule.id} className="flex h-9 items-center gap-2">
+              <Link
+                to={paths.rule(processId, rule.id)}
+                title={rule.text}
+                className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink hover:text-ink"
+              >
+                {ruleLabel(rule)}
+              </Link>
+              <span className="shrink-0 text-[11px] text-pagar">{t('ruleStatus.active')}</span>
             </li>
           ))}
         </ul>

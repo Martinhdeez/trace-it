@@ -69,7 +69,8 @@ for (const conversation of ['none', 'empty', 'proposed'] as const) {
     await page.goto('processes/6/chat')
     const rules = page.getByRole('region', { name: 'Current rules', exact: true })
     await expect(rules.getByRole('link', { name: activeRule.summary })).toBeVisible()
-    await expect(rules).toContainText(activeRule.text)
+    await expect(rules).not.toContainText(activeRule.text)
+    await expect(rules.getByRole('link', { name: activeRule.summary })).toHaveAttribute('title', activeRule.text)
     await expect(rules).toContainText('Activa')
     await expect(rules.getByRole('link', { name: activeRule.summary })).toHaveAttribute(
       'href', /\/processes\/6\/rules\/42$/,
