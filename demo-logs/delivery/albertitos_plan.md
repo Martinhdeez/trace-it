@@ -8,9 +8,14 @@ y un motor determinista decide cada factura como `PAGAR`, `NO_PAGAR` o `ESCALAR`
   cambia) y explican casos escalados. Decidir cuesta **0 tokens**, y la decisión se puede repetir y auditar.
 - **De la norma original (las 6 frases de `Norma_Pagos_v3`) a las decisiones: 471/471** facturas con
   texto iguales a nuestra referencia del lote 1, en **3 de 3 ejecuciones**, sin ninguna regla escrita a mano.
-- **Lote 1 entregado: 500/500 archivos**, **443 `PAGAR` / 36 `NO_PAGAR` / 21 `ESCALAR`**, con las
-  reglas congeladas y la referencia en **471/471**. Los 29 escaneos pasan por OCR: 10 `PAGAR` y 19
-  `ESCALAR` por dato ausente, sin confirmar o que no cuadra (ADR 0025).
+- **Lote 1 entregado: 500/500 archivos**, **436 `PAGAR` / 36 `NO_PAGAR` / 28 `ESCALAR`** (los
+  números del `outcomes.jsonl` que se entrega), con las reglas congeladas y la referencia en
+  **471/471**. De los 28 escalados, 26 son escaneos cuyos campos el lector no extrajo
+  (`MISSING_DATA`) y 2 son una duda real de negocio: el mismo pedido en dos facturas
+  (`RULE_MATCH`). Los 471 PDF con texto quedan en 433 / 36 / 2 y una auditoría independiente
+  coincide con los 471. En esa ejecución el lector de escaneos agotó la cuota diaria de su
+  proveedor (HTTP 429), así que siete escaneos que en ejecuciones anteriores se confirmaban
+  acabaron en `MISSING_DATA` (ADR 0025).
 - **Todo paso deja un span** en nuestra base de datos (la auditoría, con el prompt exacto de cada
   llamada al modelo) y el mismo span va a OpenTelemetry.
 - **Si cae el proveedor LLM**, cada agente pasa al siguiente modelo de su cadena; si caen todos, falla
@@ -116,7 +121,7 @@ ERP del reto con su latencia y sus fallos, Helmcode con concurrencia 5; medido e
 | Tokens por regla / por norma completa | **~12,4k** / **~149k** (106,1k entrada + 42,4k salida, 24 llamadas) | `GET /processes/1/metrics` |
 | Tokens por sugerencia del asistente | ~3,7k | 3 casos |
 | Ingesta por la API de subida, con OCR | PDF con texto **25 ms**; escaneo **1,2 s** (mediana); 500 archivos en 74,4 s, pico **2,6 GB** | Un cliente, caché en frío, OCR local |
-| Lote 1 entregado | **500/500** exportados: **443 / 36 / 21**; subidas con OCR, sync del ERP y motor en 353 s | `make check-outcomes`, referencia 471/471 |
+| Lote 1 entregado | **500/500** exportados: **436 / 36 / 28** (el `outcomes.jsonl` entregado); subidas con OCR, sync del ERP y motor en 353 s | `make check-outcomes`, referencia 471/471 |
 | Sync del ERP | **516 filas, 26 páginas, 5,4 s** (mediana de 3), 2-3 `ORA-00600` reintentados, 1 login | Span `sync_source` |
 | Calidad desde la norma original | **471/471** en 3 de 3 ejecuciones (0,9, 2,0 y 2,3 min) | `make eval-norm` contra nuestra referencia |
 
@@ -128,7 +133,8 @@ tokens/mes ≈ normas_cambiadas × (6,2k + reglas × (5,0k + 7,4k × intentos))
 ```
 
 Ejemplo con volúmenes supuestos (no medidos): 10.000 facturas/mes, dos normas de 11 reglas y el
-asistente abierto en cada escalada (6,2 %, 620 casos): ≈ 2,6M tokens/mes, el 88 % del asistente
+asistente abierto en cada escalada (6,2 % como cota superior; la entrega fue 5,6 %; 620 casos):
+≈ 2,6M tokens/mes, el 88 % del asistente
 opcional. Helmcode es tarifa plana. Con precios públicos de Claude Opus 5 (5 $/25 $ por millón),
 una norma entera cuesta ~1,59 $ y el mes del ejemplo ~30 $. El motor cuesta 0 $ en cualquier caso.
 
@@ -273,15 +279,16 @@ fuente caída (`SOURCE_UNAVAILABLE: <fuente>`) cuando las reglas que sí corrier
 
 **Por qué (medido).**
 
-- Lote 1: **500/500** archivos exportados, **443 PAGAR / 36 NO_PAGAR / 21 ESCALAR**.
-- 29 escaneos: 10 `PAGAR` / 0 `NO_PAGAR` / 19 `ESCALAR` (8 `MISSING_DATA`, 7 `UNVERIFIED_DATA`,
-  4 `SCAN_REVIEW`).
+- Lote 1 entregado: **500/500** archivos exportados, **436 PAGAR / 36 NO_PAGAR / 28 ESCALAR**.
+- 29 escaneos: 3 `PAGAR` / 0 `NO_PAGAR` / 26 `ESCALAR`, todos `MISSING_DATA`. Los 471 PDF con
+  texto: 433 / 36 / 2, y los 2 escalados son el mismo pedido en dos facturas.
 - 50.000 facturas, todas las reglas agotan su tiempo: 47.100 `ESCALAR` con `RULE_ERROR`, ninguna
   pagada por error.
 - ERP parado antes de un run: la factura limpia y la ya pagada van a `ESCALAR`
   `SOURCE_UNAVAILABLE: erp`; los rechazos por IBAN y fecha siguen en `NO_PAGAR`.
 
-**Coste.** Una persona revisa 21 de 500 archivos (4,2 %), algunos por fallos nuestros.
+**Coste.** Una persona revisa 28 de 500 archivos (**5,6 %**); 26 de ellos por un límite nuestro
+(un escaneo que el lector no extrajo) y sólo 2 por una duda real de negocio.
 
 ```mermaid
 flowchart LR

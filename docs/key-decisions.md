@@ -45,7 +45,7 @@ flowchart LR
 | | Decision | Rubric | Claim |
 |---|---|---|---|
 | ![A](https://img.shields.io/badge/-A-2563eb?style=for-the-badge) | [The LLM writes code; it never decides](adr/A-llm-writes-code-never-decides.md) | Product, architecture and ADRs (35) | Agents compile the norm to tested code once; the engine decides 500 invoices in 0.44 s with 0 tokens; golden 471/471 |
-| ![B](https://img.shields.io/badge/-B-d97706?style=for-the-badge) | [When in doubt, ESCALAR](adr/B-when-in-doubt-escalate.md) | Quality of execution (10) | One decision per file: 443 `PAGAR` / 36 `NO_PAGAR` / 21 `ESCALAR`, each escalation with its reason code |
+| ![B](https://img.shields.io/badge/-B-d97706?style=for-the-badge) | [When in doubt, ESCALAR](adr/B-when-in-doubt-escalate.md) | Quality of execution (10) | One decision per file: 436 `PAGAR` / 36 `NO_PAGAR` / 28 `ESCALAR` in the delivered `outcomes.jsonl`, each escalation with its reason code |
 | ![C](https://img.shields.io/badge/-C-7c3aed?style=for-the-badge) | [Full traceability in three planes](adr/C-traceability-in-three-planes.md) | Traceability and observability (20) | Our own spans in Postgres are the audit; three dashboards show errors, retries, pending work and cost per plane |
 | ![D](https://img.shields.io/badge/-D-059669?style=for-the-badge) | [Cost per norm, not per invoice; scale by measured limits](adr/D-cost-per-norm-scale-by-measure.md) | Scale and cost (25) | Tokens are spent per norm and per first scan read, never per decision; each scaling step has a measured trigger |
 | ![E](https://img.shields.io/badge/-E-db2777?style=for-the-badge) | [Change without code, recover without loss](adr/E-change-without-code-recover-without-loss.md) | Resilience (10) and bonus (10) | Atomic versions the manager publishes, append-only history, fallback chains, stale-decision alerts |
@@ -73,11 +73,12 @@ proposals ([0032](adr/detail/0032-single-manager-without-login.md),
 
 - **Chosen over:** a `REVIEW` state outside the export; counting a failed rule as "did not
   fire"; deciding scans like text PDFs; reading an old ERP snapshot when the ERP is down.
-- **Proof:** batch 1: 500 files, **443 / 36 / 21**; the 21 are 8 `MISSING_DATA`, 7
-  `UNVERIFIED_DATA`, 4 `SCAN_REVIEW` and 2 duplicate orders (re-measured). 29 scans: 10
-  `PAGAR`, 0 `NO_PAGAR` (re-measured). ERP down or never loaded: `SOURCE_UNAVAILABLE`
-  (tests, re-run).
-- **Accepted:** a person reviews 4.2 % of the files, some for our own limits.
+- **Proof:** batch 1, the delivered run (`delivery/outcomes.jsonl`): 500 files,
+  **436 / 36 / 28**; the 28 are 26 `MISSING_DATA` (scans whose fields the reader did not
+  extract) and 2 `RULE_MATCH` (the same purchase order on two invoices, a business doubt).
+  29 scans: 3 `PAGAR`, 0 `NO_PAGAR`, 26 `ESCALAR`; the 471 text PDFs: 433 / 36 / 2. ERP
+  down or never loaded: `SOURCE_UNAVAILABLE` (tests, re-run).
+- **Accepted:** a person reviews 5.6 % of the files (28/500), most of them for our own limits.
 - **See it:** Revisión, the queue with reason codes and explained options.
 
 ## C. Full traceability in three planes
@@ -117,7 +118,7 @@ proposals ([0032](adr/detail/0032-single-manager-without-login.md),
 |---|---|---|
 | 471/471 golden; 723 unit tests pass (2 skipped), 11 e2e pass | re-run | `make check` on `dev` |
 | 500 invoices in 0.42-0.49 s (4 rule workers), 0.84 s (1) | re-measured | `bench_scale.py engine`, `capacity`, Apple M4 Pro, copy of the delivery database |
-| 443 / 36 / 21 and the escalation causes | re-measured | Same dry-run reprocess: 500 unchanged |
+| 436 / 36 / 28 and the escalation causes | counted on the delivered `delivery/outcomes.jsonl` | `python3 -c` over the 500 lines; same dry-run reprocess leaves the 500 unchanged |
 | 3,414 spans, 5.0 MB `events`, 24 MB database | re-measured | Postgres on the same copy |
 | 149k tokens per norm, 85-103 s | reported | [scale-and-cost.md](scale-and-cost.md) §2, §6 (needs LLM keys and spends tokens) |
 | 214,734 tokens by plane | reported | [observability-dashboards.md](observability-dashboards.md) |

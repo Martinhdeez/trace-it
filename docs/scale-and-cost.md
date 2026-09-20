@@ -309,9 +309,12 @@ invoices are ≈ 70k records a month, 0.7 % of the free tier.
 C_people = I × e × t_case × rate_manager + H_ops × rate_engineer
 ```
 
-`e` is the escalation rate (batch 1: 31 / 500 = 6.2 %, 29 of them scans without OCR; with OCR
-all 29 got symbols, so `e` falls toward 0.4 % plus genuine doubts if those symbols are right), `t_case` minutes per case,
-`H_ops` engineer hours a month (backups, upgrades, norm changes).
+`e` is the escalation rate. In the delivered run (`delivery/outcomes.jsonl`) it is
+28 / 500 = **5.6 %**, and 26 of those 28 are scans whose fields the reader did not extract;
+only 2 are a genuine business doubt, so `e` falls toward 0.4 % when every scan is read.
+An earlier run without OCR gave 31 / 500 = 6.2 %. `t_case` is minutes per case and `H_ops`
+engineer hours a month (backups, upgrades, norm changes). The worked example below keeps
+6.2 % as a conservative upper bound.
 
 ### Worked example (10,000 invoices a month, 2 norm changes; assumptions marked)
 
