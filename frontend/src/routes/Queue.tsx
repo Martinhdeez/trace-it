@@ -8,6 +8,7 @@ import type {
   AlertOut,
   DecisionProposalPayload,
   InstanceDetail,
+  InstanceOut,
   ProcessDetail,
   Proposal,
   ProposalOutcome,
@@ -34,6 +35,20 @@ const REVIEW_TAB = 'review'
 export function Queue() {
   const processId = Number(useParams().processId)
   const [params, setParams] = useSearchParams()
+  // Exported links use a document name: a demo reset recreates its numeric instance ID.
+  const fileName = params.get('file')
+  const linkedInstances = useQuery({
+    queryKey: keys.instances(processId, { q: fileName ?? '' }),
+    queryFn: () => api.listInstances(processId, { q: fileName! }),
+    enabled: fileName !== null,
+  })
+  // The API search is a substring match; only an exact name may satisfy a trace link.
+  // Like export, use the most recent instance when a filename was uploaded more than once.
+  const linkedInstance = linkedInstances.data
+    ?.filter((item) => item.name === fileName)
+    .reduce<InstanceOut | undefined>(
+      (latest, item) => !latest || item.id > latest.id ? item : latest, undefined,
+    )
 
   const process = useQuery({
     queryKey: keys.process(processId),
@@ -71,13 +86,16 @@ export function Queue() {
   const items = queued.filter((item) =>
     tab === REVIEW_TAB ? item.review_pending : item.decision === tab && !item.review_pending,
   )
-  const selectedId = params.get('i') ? Number(params.get('i')) : undefined
+  const selectedId = fileName !== null
+    ? linkedInstance?.id
+    : params.get('i') ? Number(params.get('i')) : undefined
   const showAlerts = tab === ALERTS_TAB
   // reviewer-agent FE-3 (docs/reviewer-agent.md): a resolved case leaves the list but stays
   // open through `?i=` (after resolving, or from the Panel), so "Sugerir regla" can follow.
   // If you are merging a newer version from Carlos, keep his UI and make sure a selected
   // case outside the list still opens.
-  const current = items.find((item) => item.id === selectedId) ?? (selectedId ? undefined : items[0])
+  const current = items.find((item) => item.id === selectedId)
+    ?? (fileName !== null || selectedId ? undefined : items[0])
   const caseId = showAlerts ? undefined : (current?.id ?? selectedId)
   const alert = openAlerts.find((item) => item.id === selectedId) ?? openAlerts[0]
   const nothing = showAlerts
@@ -102,7 +120,15 @@ export function Queue() {
         {escalated.isError ? <ErrorNotice error={escalated.error} /> : null}
         {alerts.isError ? <ErrorNotice error={alerts.error} /> : null}
 
-        {nothing ? (
+        {fileName !== null && linkedInstances.isPending ? (
+          <TerminalLoader verbs={['Buscando el documento']} />
+        ) : fileName !== null && linkedInstances.isError ? (
+          <ErrorNotice error={linkedInstances.error} />
+        ) : fileName !== null && !linkedInstance ? (
+          <Notice tone="warning" title="Documento no encontrado">
+            No hay ningún documento llamado {fileName} en este proceso.
+          </Notice>
+        ) : nothing ? (
           <section className="rounded-[16px] bg-surface ring-1 ring-line">
             {showAlerts ? (
               <EmptyState icon={CheckCircle2} title="Sin alertas">
@@ -185,7 +211,9 @@ export function Queue() {
               instanceId={caseId}
               name={current?.name}
               currentDecision={current?.decision}
-              onSettled={() => setParams({ tipo: tab, i: String(caseId) })}
+              onSettled={() => setParams(fileName !== null
+                ? { tipo: tab, file: fileName }
+                : { tipo: tab, i: String(caseId) })}
             />
           ) : null}
         </div>
