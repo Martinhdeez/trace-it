@@ -17,8 +17,6 @@ test('process rows show only pending human reviews and open their inbox', async 
     await route.fulfill({ json: body })
   })
   await page.goto('processes')
-  await page.getByRole('button', { name: /Mostrar el logo|Show.*logo/ }).click()
-  await page.getByRole('button', { name: /Abrir procesos|Open processes/ }).click()
   const list = page.getByRole('main').getByRole('list')
   const invoices = list.getByRole('link', { name: /Invoices/ })
   await expect(invoices.getByLabel(/3 (pending reviews|revisiones pendientes)/)).toBeVisible()
