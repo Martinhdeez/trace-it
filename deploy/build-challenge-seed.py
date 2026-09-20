@@ -119,6 +119,11 @@ def build(root, base_seed, readings, cache):
     original = next(
         b for b in seed["rule_baselines"] if b["process_name"] == "Invoice payment"
     )
+    seed["rule_baselines"] = [
+        baseline
+        for baseline in seed["rule_baselines"]
+        if baseline["process_name"] != "Invoice payment - batch 2"
+    ]
     first_id = original["process_id"]
     original["extraction_settings"] = cache["extraction_settings"][
         original["process_name"]
@@ -132,13 +137,12 @@ def build(root, base_seed, readings, cache):
     )["sources"]
     schemas["erp"]["sync_before_run"] = False
     original["source_schemas"] = schemas
-    second_id = (
-        -2
-    )  # Resolved by process name transactionally at reset, never a stored DB ID.
-    second_name = "Invoice payment - batch 2"
-    clone = {**deepcopy(original), "process_id": second_id, "process_name": second_name}
-    seed["rule_baselines"].append(clone)
-    seed["examples"] = [e for e in seed["examples"] if e["process_id"] != first_id]
+    seed["examples"] = [
+        example
+        for example in seed["examples"]
+        if example["process_name"]
+        not in {"Invoice payment", "Invoice payment - batch 2"}
+    ]
     by_name = {r["name"]: r for r in readings}
     if len(by_name) != len(readings):
         raise ValueError("Duplicate saved readings")
@@ -149,16 +153,14 @@ def build(root, base_seed, readings, cache):
         batches=[],
         reference_files=[],
     )
-    for number, folder, count, pid, name, tables in (
+    for number, folder, count, tables in (
         (
             1,
             "facturas",
             500,
-            first_id,
-            original["process_name"],
             reference_sources(root)[0],
         ),
-        (2, "facturas_primin", 40, second_id, second_name, reference_sources(root)[1]),
+        (2, "facturas_primin", 40, reference_sources(root)[1]),
     ):
         documents = {}
         for pdf in sorted((root / folder).glob("*.pdf")):
@@ -185,8 +187,8 @@ def build(root, base_seed, readings, cache):
             text = reading.get("values", {}).get("free_text") or ""
             seed["examples"].append(
                 {
-                    "process_id": pid,
-                    "process_name": name,
+                    "process_id": first_id,
+                    "process_name": original["process_name"],
                     "name": pdf.name,
                     "symbols": reading["symbols"],
                     "hash": digest,
@@ -207,15 +209,13 @@ def build(root, base_seed, readings, cache):
             raise ValueError("Incomplete original repository batch")
         batch = {
             "number": number,
-            "process_id": pid,
-            "process_name": name,
+            "process_id": first_id,
+            "process_name": original["process_name"],
             "count": count,
             "documents": documents,
             "sources": tables,
             "erp_count": len(tables["erp"]),
         }
-        if number == 2:
-            batch["clone_from"] = first_id
         seed["batches"].append(batch)
     for name in [
         "FINAL_v7_DEFINITIVO_ahorasi.xlsx",

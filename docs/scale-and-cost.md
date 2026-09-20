@@ -36,7 +36,7 @@ explain local/API/hybrid operation and Helmcode's account-dependent costs.
 | Database | PostgreSQL 16.15 in Docker (VM: 14 CPUs, 7.75 GB), databases `trace_bench` (section 2) and `trace_scale` (sections 3-5) |
 | Sandbox | One `python -I -S -B` subprocess per rule per run, over all instances at once (ADR 0005), 10 s limit per rule |
 | ERP | The challenge's `alberto_erp.py` on :8009, with its built-in latency and faults |
-| LLMs | Helmcode `deepseek-v4-flash` for every role, fallbacks `glm5.3` / `qwen3.6` (ADR 0019), `TRACE_COMPILE_CONCURRENCY=5`; one local probe with Ollama `llama3.1:8b-instruct-q4_K_M` |
+| LLMs | Vercel AI Gateway `zai/glm-5.3` for every role, with Helmcode `deepseek-v4-flash` / `qwen3.6` fallbacks (ADR 0019), `TRACE_COMPILE_CONCURRENCY=5`; one local probe with Ollama `llama3.1:8b-instruct-q4_K_M` |
 | OCR | Local ONNX readers, 98 MB of weights (`.models/`), CPU only, `TRACEPAY_WORKERS=2`, `TRACEPAY_OCR_THREADS=4` (defaults) |
 | Data | Batch 1: 500 PDFs (471 with a text layer, 29 scans), the challenge workbook, 516 ERP rows; synthetic copies for 5k-50k |
 
