@@ -21,6 +21,7 @@ async def run(seed):
     from app.features.ingestion.model import Instance
     from app.features.processes.model import Process
     from app.features.sources.model import Source
+    from app.features.traces.breakdown import breakdown
     from app.features.versions import configuration, execution
     from app.features.versions import service as versions
     from app.features.versions.model import Execution
@@ -264,11 +265,22 @@ async def run(seed):
                             unchanged=len(phases[0]) - len(changed),
                             **stats,
                         )
+                # Read the same audit aggregates as the console after actual evaluation.
+                # Restored OCR history retains its original timestamps and cost snapshots.
+                measured = await breakdown(session, process.id)
                 output.append(
                     {
                         "process_id": process.id,
                         "name": name,
                         "count": len(all_cases),
+                        "metrics": {
+                            "source": "persisted_audit_traces",
+                            "scope": "all_history",
+                            "planes": [
+                                group.model_dump(mode="json")
+                                for group in measured.groups
+                            ],
+                        },
                         "outcomes": dict(Counter(c["result"] for c in all_cases)),
                         "cases": all_cases,
                     }

@@ -1,17 +1,13 @@
 import type {
   Plane,
-  SpanNode,
   UsageActivity,
   UsageBreakdown,
   UsageFilters,
   UsageGroup,
   UsageTotals,
-} from '../../api/contracts'
-import { sumUsage } from './flow'
-import { planes } from './usage'
-
-// Set false to open Metrics with the live API. The on-screen toggle overrides this in the URL.
-export const HARDCODED_METRICS = true
+} from '../../src/api/contracts'
+import { sumUsage } from '../../src/components/metrics/flow'
+import { planes } from '../../src/components/metrics/usage'
 
 // Illustrative monthly budgets, not provider tariffs or measured infrastructure charges.
 // Execution has infrastructure cost, but never model tokens.
@@ -116,6 +112,7 @@ export function demoBreakdown(processId: number, filters: UsageFilters): UsageBr
           cost_status: 'known',
           rule_id: null,
           instance_id: null,
+          imported_spans: 0,
           spans: 1,
           requests: plane === 'execution' ? 0 : 1,
           known_cost_usd: Number((cost * weight).toFixed(6)),
@@ -196,32 +193,4 @@ export function demoBreakdown(processId: number, filters: UsageFilters): UsageBr
     offset,
     limit: 25,
   }
-}
-
-export function demoTrace(item: UsageActivity): SpanNode[] {
-  return [
-    {
-      id: item.id,
-      span_id: item.span_id,
-      trace_id: item.trace_id,
-      parent_id: null,
-      step: item.step,
-      status: item.status,
-      started_at: item.started_at,
-      duration_ms: item.duration_ms,
-      instance_id: null,
-      process_id: null,
-      rule_id: null,
-      norm_rule_id: null,
-      children: [],
-      data: {
-        example: true,
-        model: item.model,
-        provider: item.provider,
-        input_tokens: item.input_tokens,
-        output_tokens: item.output_tokens,
-        cost_usd: item.known_cost_usd,
-      },
-    },
-  ]
 }

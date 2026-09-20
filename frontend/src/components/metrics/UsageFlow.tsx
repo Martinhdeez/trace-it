@@ -18,12 +18,10 @@ function name(node: FlowNode): string {
 export function UsageFlow({
   data,
   measure,
-  hardcoded = false,
   onDrill,
 }: {
   data: UsageBreakdown
   measure: Measure
-  hardcoded?: boolean
   onDrill: (plane: Plane, module?: string) => void
 }) {
   const [grouping, setGrouping] = useState<FlowGrouping>('tasks')
@@ -109,13 +107,32 @@ export function UsageFlow({
           {formatted(graph.total.totals, measure)}
         </p>
         <p className="text-xs text-muted">
-          {label(measure === 'cost' ? (hardcoded ? 'demoSpend' : 'apiSpend') : measure)}
+          {label(measure === 'cost' ? 'apiSpend' : measure)}
         </p>
         {measure === 'cost' && graph.total.totals.unpriced_requests > 0 && (
           <span className="text-xs text-escalar">
             {number(graph.total.totals.unpriced_requests)} {label('unknown')}
           </span>
         )}
+      </div>
+      <div className="mx-5 mt-4 space-y-2 rounded-lg bg-canvas p-3 text-xs text-muted sm:mx-6">
+        <p>{label('recordedSource')}</p>
+        <p>
+          {number(graph.total.totals.requests - graph.total.totals.unpriced_requests)} /{' '}
+          {number(graph.total.totals.requests)} {label('pricedCoverage')}
+        </p>
+        {graph.total.totals.imported_spans > 0 && (
+          <p>{number(graph.total.totals.imported_spans)} {label('importedHistory')}</p>
+        )}
+        <details>
+          <summary className="cursor-pointer">{label('methodology')}</summary>
+          <div className="mt-2 space-y-2">
+            <p>{label('costNote')}</p>
+            <p>{label('inputNote')}</p>
+            <p>{label('timeNote')}</p>
+            <p>{label('engineNote')}</p>
+          </div>
+        </details>
       </div>
       {measure === 'cost' &&
         graph.leaves.filter((node) => node.totals.known_cost_usd > 0).length === 1 && (
@@ -273,9 +290,7 @@ export function UsageFlow({
         <span>
           {label(
             measure === 'cost'
-              ? hardcoded
-                ? 'demoInfrastructure'
-                : 'infraMissing'
+              ? 'infraMissing'
               : measure === 'time'
                 ? 'timeNote'
                 : 'tokenNote',

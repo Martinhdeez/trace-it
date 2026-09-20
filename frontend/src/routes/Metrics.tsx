@@ -6,7 +6,6 @@ import { api } from '../api/client'
 import type { Plane, UsageGroup, UsageTotals, UsageBreakdown } from '../api/contracts'
 import { keys } from '../api/queries'
 import { UsageFlow } from '../components/metrics/UsageFlow'
-import { demoBreakdown, HARDCODED_METRICS } from '../components/metrics/demo'
 import { UsageActivity } from '../components/metrics/UsageActivity'
 import { UsageTimeline } from '../components/metrics/UsageTimeline'
 import {
@@ -36,7 +35,6 @@ export function Metrics() {
   const processId = Number(useParams().processId)
   // The URL preserves drill-down on reload and supports browser back/forward.
   const [params, setParams] = useSearchParams()
-  const hardcoded = params.has('hardcoded') ? params.get('hardcoded') === 'true' : HARDCODED_METRICS
   const planeParam = params.get('plane')
   const plane = planes.includes(planeParam as Plane) ? (planeParam as Plane) : undefined
   const module = plane ? (params.get('module') ?? undefined) : undefined
@@ -44,7 +42,7 @@ export function Metrics() {
   const measure: Measure = measures.includes(measureParam as Measure)
     ? (measureParam as Measure)
     : 'cost'
-  const requestedPeriod = params.get('period') ?? 'thisMonth'
+  const requestedPeriod = params.get('period') ?? 'all'
   const period =
     Object.hasOwn(windows, requestedPeriod) || requestedPeriod === 'all'
       ? requestedPeriod
@@ -74,9 +72,8 @@ export function Metrics() {
     through !== undefined && Number.isSafeInteger(through) && through >= 0 ? through : undefined
   const filters = { plane, module, since, until, offset, through_id }
   const usage = useQuery({
-    queryKey: ['usage-breakdown', hardcoded, processId, filters],
-    queryFn: () =>
-      hardcoded ? demoBreakdown(processId, filters) : api.usageBreakdown(processId, filters),
+    queryKey: ['usage-breakdown', processId, filters],
+    queryFn: () => api.usageBreakdown(processId, filters),
   })
   const process = useQuery({
     queryKey: keys.process(processId),
@@ -126,33 +123,6 @@ export function Metrics() {
               <h1 className="text-xl font-medium tracking-tight">{label('title')}</h1>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div role="group" aria-label={label('dataSource')}>
-                <SegmentedRail value={String(hardcoded)}>
-                  {[false, true].map((example) => (
-                    <button
-                      key={String(example)}
-                      data-active={hardcoded === example || undefined}
-                      aria-pressed={hardcoded === example}
-                      onClick={() =>
-                        navigate({
-                          hardcoded: String(example),
-                          plane: undefined,
-                          module: undefined,
-                          through_id: undefined,
-                          since: undefined,
-                          until: snapshot,
-                        })
-                      }
-                      className={cn(
-                        SEGMENT_ITEM,
-                        hardcoded === example ? 'text-ink' : 'text-muted hover:text-ink',
-                      )}
-                    >
-                      {label(example ? 'exampleData' : 'realData')}
-                    </button>
-                  ))}
-                </SegmentedRail>
-              </div>
               <select
                 aria-label={label('period')}
                 value={period}
@@ -182,11 +152,6 @@ export function Metrics() {
               </Button>
             </div>
           </header>
-          {hardcoded && (
-            <p className="mt-3 text-xs text-escalar" role="status">
-              {label('demoNotice')}
-            </p>
-          )}
           <nav
             aria-label={label('overview')}
             className="mb-5 mt-6 flex flex-wrap items-center gap-2 text-[13px]"
@@ -272,10 +237,9 @@ export function Metrics() {
                 </div>
                 {!plane && (
                   <UsageFlow
-                    key={`${hardcoded}-${since}-${until}`}
+                    key={`${since}-${until}`}
                     data={data}
                     measure={measure}
-                    hardcoded={hardcoded}
                     onDrill={(nextPlane, nextModule) =>
                       navigate({ plane: nextPlane, module: nextModule })
                     }
@@ -475,7 +439,7 @@ export function Metrics() {
                         <details className="mt-3 text-xs text-muted">
                           <summary className="cursor-pointer">{label('methodology')}</summary>
                           <div className="mt-2 max-w-3xl space-y-2">
-                            <p>{label(hardcoded ? 'demoNotice' : 'costNote')}</p>
+                            <p>{label('costNote')}</p>
                             <p>{label('inputNote')}</p>
                             <p>{label('timeNote')}</p>
                             <p>{label('evolutionHint')}</p>
@@ -484,9 +448,8 @@ export function Metrics() {
                         </details>
                         {module && (
                           <UsageActivity
-                            key={`${hardcoded}-${plane}-${module}-${since}-${until}`}
+                            key={`${plane}-${module}-${since}-${until}`}
                             data={data}
-                            hardcoded={hardcoded}
                             onPage={(next) => navigate({ offset: String(next) })}
                           />
                         )}

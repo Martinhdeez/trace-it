@@ -5274,6 +5274,37 @@ export interface components {
             lifecycle: components["schemas"]["SpanOut"][];
             runtime: components["schemas"]["RuleRuntime"];
         };
+        /**
+         * RunCost
+         * @description Recorded API usage within this run; excludes prior ingestion and compilation.
+         */
+        RunCost: {
+            /**
+             * Known Cost Usd
+             * @default 0
+             */
+            known_cost_usd: number;
+            /**
+             * Requests
+             * @default 0
+             */
+            requests: number;
+            /**
+             * Unpriced Requests
+             * @default 0
+             */
+            unpriced_requests: number;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+        };
         /** RunDecisionOut */
         RunDecisionOut: {
             /** Decision Id */
@@ -5352,6 +5383,7 @@ export interface components {
             };
             /** Trace Id */
             trace_id: string | null;
+            cost?: components["schemas"]["RunCost"] | null;
             /** Decisions */
             decisions: components["schemas"]["RunDecisionOut"][];
         };
@@ -5425,6 +5457,7 @@ export interface components {
             };
             /** Trace Id */
             trace_id: string | null;
+            cost?: components["schemas"]["RunCost"] | null;
         };
         /** RunSummary */
         RunSummary: {
@@ -5969,6 +6002,11 @@ export interface components {
              */
             spans: number;
             /**
+             * Imported Spans
+             * @default 0
+             */
+            imported_spans: number;
+            /**
              * Errors
              * @default 0
              */
@@ -6092,6 +6130,11 @@ export interface components {
              */
             spans: number;
             /**
+             * Imported Spans
+             * @default 0
+             */
+            imported_spans: number;
+            /**
              * Errors
              * @default 0
              */
@@ -6159,6 +6202,11 @@ export interface components {
              * @default 0
              */
             spans: number;
+            /**
+             * Imported Spans
+             * @default 0
+             */
+            imported_spans: number;
             /**
              * Errors
              * @default 0
@@ -6230,6 +6278,11 @@ export interface components {
              * @default 0
              */
             spans: number;
+            /**
+             * Imported Spans
+             * @default 0
+             */
+            imported_spans: number;
             /**
              * Errors
              * @default 0

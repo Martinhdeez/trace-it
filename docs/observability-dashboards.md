@@ -102,7 +102,7 @@ unpriced amounts never receive fabricated flow widths or a zero-percent label. A
 explains when only one branch has priced usage; token and time views also show activity
 without a tariff. Scope is the current process, not
 a cross-process product total. Infrastructure spending is not recorded; the cost total is
-explicitly labelled as API spend and excludes hardware/deployment until a source is available.
+explicitly labelled as API cost at recorded rates and excludes hardware/deployment until a source is available.
 The existing plane cards, distribution and history charts remain under **Detail and evolution**. Selecting a plane shows modules; selecting a module shows its
 models/providers and individual operations, with access to each full trace. The shared
 segmented control switches cost, tokens and active time. Detailed tables and accounting
@@ -136,7 +136,7 @@ Accounting rules:
   buckets for histories longer than 90 days. The chart fills inactive intervals with zero.
   An interval can be selected to inspect the operations contributing to it.
 - Filters use `since <= started_at < until`, with explicit timezones. The console offers
-  the current calendar month (default, in the browser timezone), 24 hours, 7 days, 30 days and all history. It freezes `until` and the last event ID (`through_id`) while drilling down and
+  all history (default), the current calendar month (in the browser timezone), 24 hours, 7 days and 30 days. It freezes `until` and the last event ID (`through_id`) while drilling down and
   paginating, so late-finishing operations cannot shift the pages; Refresh takes a new snapshot. Scope and metric selection persist in the URL.
 
 Tests: `backend/app/features/traces/tests/test_breakdown.py` verifies reconciliation,
@@ -146,13 +146,18 @@ trace details, history selection, metric switching, mobile layout and empty/erro
 with deterministic API fixtures.
 
 
-### Example data
+### Measurement provenance
 
-`frontend/src/components/metrics/demo.ts` contains `HARDCODED_METRICS` (currently `true`).
-Set it to `false` to default to the real API. The existing segmented control also switches
-Example/Live; `?hardcoded=true|false` persists the selection, including reload and drill-down.
-The example includes explicitly fictional API, compute and storage budgets. Its notice
-stays visible at every level, and it never writes records or requests real metrics/traces.
-Dated deterministic samples feed the Sankey, history, modules, models, pagination and
-synthetic trace details. Switching sources resets scope and snapshot IDs so sample data
-cannot mix with live totals. All real spending limitations still apply in Live mode.
+The screen always uses the audit API. Old `hardcoded` URL parameters are ignored; no
+example toggle or production fixture remains. Synthetic values are confined to browser
+test fixtures under `frontend/e2e/fixtures/`.
+
+`imported_spans` counts records marked `cached_replay` by the seed restore. These are
+original measurements with their original timestamps and saved token/cost data, not
+new provider calls. They remain part of historical totals and are identified in the
+summary and individual operations. Journal replays are distinct: those represent a
+new cache lookup and contribute no new model usage.
+
+Pricing coverage is `(requests - unpriced_requests) / requests`, displayed as counts.
+Recorded tariff costs are estimates, not provider invoices. No recorded activity is
+shown explicitly instead of presenting an empty group as a measured zero-cost operation.

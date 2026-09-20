@@ -223,6 +223,13 @@ saved application readings, never from hand-reviewed delivery outcomes. It also 
 41 of the 44 hiring CVs. `cv-002.pdf`, `cv-021.pdf` and `cv-024.pdf` stay out of the seed as
 one live `INTERVIEW`, `REJECT` and `REVIEW` upload.
 
+The seed run report includes `metrics.planes` read from the same audit breakdown as the
+console, across all history. Restored OCR traces retain their original dates, durations,
+tokens and price snapshots. `imported_spans` identifies these historical measurements;
+restoring them does not incur the cost again. Engine timings come from the new execution.
+No compilation calls or missing tariffs are fabricated. A process with no recorded agent
+activity should show no recorded activity, rather than a fictional compilation bill.
+
 Both invoice batches belong to `Invoice payment`. The seed first runs the 500 invoices with
 v1 and the original 516-entry ERP. It then appends the updated suppliers, orders, ERP and
 cut-off snapshots, records v2 with the same rules, runs the 40 new invoices, and reprocesses

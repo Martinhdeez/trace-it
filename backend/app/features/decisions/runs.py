@@ -5,17 +5,17 @@ An `executions` row is written by every run and every non-dry reprocess; its dec
 the engine's outcome for every instance it evaluated. Nothing here writes.
 """
 
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import NotFoundError
 from app.core.events import Event
 from app.features.decisions.model import ENGINE, Decision
-from app.features.decisions.schemas import RunDecisionOut, RunDetail, RunOut
+from app.features.decisions.schemas import RunCost, RunDecisionOut, RunDetail, RunOut
 from app.features.ingestion.model import Instance
 from app.features.processes.service import get as get_process
 from app.features.versions.model import Execution, ProcessVersion
@@ -44,6 +44,44 @@ def outcomes(rows: list, snapshot: dict) -> dict[str, Any]:
     }
 
 
+async def _costs(session: AsyncSession, roots: dict[int, Event]) -> dict[int, RunCost]:
+    # Import here: trace schemas also reference decision schemas.
+    from app.features.traces.breakdown import FIELDS, aggregate, usage
+
+    if not roots:
+        return {}
+    data = func.jsonb_build_object(*[v for key in FIELDS for v in (key, Event.data[key])])
+    children = defaultdict(list)
+    rows = await session.execute(
+        select(
+            Event.span_id,
+            Event.parent_id,
+            Event.step,
+            Event.status,
+            Event.duration_ms,
+            data.label("data"),
+        ).where(Event.trace_id.in_({root.trace_id for root in roots.values()}))
+    )
+    for row in rows.mappings():
+        children[row["parent_id"]].append(dict(row))
+    result = {}
+    for execution_id, root in roots.items():
+        # Only descendants of this run. A shared outer trace can contain other runs
+        # or ingestion; neither belongs to this execution's marginal API cost.
+        pending = list(children[root.span_id])
+        seen = {root.span_id}
+        items = []
+        while pending:
+            row = pending.pop()
+            if row["span_id"] in seen:
+                continue
+            seen.add(row["span_id"])
+            items.append(usage(row, None))
+            pending.extend(children[row["span_id"]])
+        result[execution_id] = RunCost(**aggregate(items))
+    return result
+
+
 async def _runs(session: AsyncSession, executions: list[Execution]) -> list[RunOut]:
     ids = [e.id for e in executions]
     spans = {
@@ -54,6 +92,7 @@ async def _runs(session: AsyncSession, executions: list[Execution]) -> list[RunO
             )
         )
     }
+    costs = await _costs(session, spans)
     written = Counter(
         await session.scalars(
             select(Decision.execution_id).where(
@@ -102,6 +141,7 @@ async def _runs(session: AsyncSession, executions: list[Execution]) -> list[RunO
                 escalation_reasons=data["escalations"],
                 down_sources=data.get("down_sources") or {},
                 trace_id=span.trace_id if span else None,
+                cost=costs.get(execution.id),
             )
         )
     return out

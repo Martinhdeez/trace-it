@@ -6,6 +6,7 @@ import { build } from 'vite'
 // in backend/app/features/traces/tests/test_breakdown.py.
 const zero = {
   spans: 0,
+  imported_spans: 0,
   errors: 0,
   requests: 0,
   replays: 0,
@@ -22,6 +23,7 @@ const zero = {
 const agent = {
   ...zero,
   spans: 26,
+  imported_spans: 3,
   requests: 26,
   input_tokens: 2600,
   output_tokens: 520,
@@ -261,7 +263,7 @@ test('evolution switches metric, selects intervals and handles mobile, empty and
 
 test('monthly Sankey exposes task and model paths with accessible navigation', async ({ page }) => {
   const state = await fixture(page)
-  await page.goto('processes/1/metrics?hardcoded=false')
+  await page.goto('processes/1/metrics?period=thisMonth')
   const graph = page.getByRole('region', { name: 'Mapa de consumo', exact: true })
   await expect(page.getByRole('combobox', { name: 'Período' })).toHaveValue('thisMonth')
   const monthStart = await page.evaluate(() => new Date(2026, 0, 1).toISOString())
@@ -459,49 +461,14 @@ test('Sankey conserves each measure across areas, tasks and shared models', asyn
   expect(result.many).toEqual({ leaves: 8, total: 24, remaining: 18, leafTotal: 24, crossings: 0 })
 })
 
-test('example toggle keeps the full drill-down synthetic and false uses the live API', async ({
-  page,
-}) => {
+test('metrics always use audit data, including old example links', async ({ page }) => {
   const state = await fixture(page)
-  const metricRequests: string[] = []
-  page.on('request', (request) => {
-    if (/\/api\/(processes\/1\/metrics\/breakdown|traces\/)/.test(request.url()))
-      metricRequests.push(request.url())
-  })
-  await page.goto('processes/1/metrics?hardcoded=true')
-  await expect(page.getByRole('status').filter({ hasText: 'Datos ficticios de ejemplo' })).toBeVisible()
-  const graph = page.getByRole('region', { name: 'Mapa de consumo', exact: true })
-  await expect(graph.locator('svg path.pointer-events-none')).toHaveCount(9)
-  await expect(graph.getByRole('button', { name: /^Ejecución:/ })).not.toHaveAttribute(
-    'aria-label',
-    /0,00 US/,
-  )
-  await graph.getByRole('button', { name: /^Compilador de reglas:/ }).click()
-  await expect(page.getByRole('heading', { name: 'Operaciones individuales' })).toBeVisible()
-  await page
-    .getByRole('button', { name: /^Inspeccionar operación #/ })
-    .first()
-    .click()
-  await page.getByRole('button', { name: 'Traza completa', exact: true }).click()
-  await expect(page.locator('pre')).toContainText('"example": true')
-  expect(metricRequests).toEqual([])
-  const source = page.getByRole('group', { name: 'Origen de los datos' })
-  await source.getByRole('button', { name: 'Reales', exact: true }).click()
-  await expect(page).toHaveURL(/hardcoded=false/)
-  await expect(graph.getByTestId('flow-total')).toContainText('2,50')
-  expect(state.requests.at(-1)?.searchParams.has('through_id')).toBe(false)
-  await expect(page.getByRole('status').filter({ hasText: 'Datos ficticios de ejemplo' })).not.toBeVisible()
-  await page.reload()
-  await expect(source.getByRole('button', { name: 'Reales', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
-  await source.getByRole('button', { name: 'Ejemplo', exact: true }).click()
-  await expect(graph.locator('svg path.pointer-events-none')).toHaveCount(9)
-  await graph.getByRole('button', { name: 'Modelos', exact: true }).click()
-  await expect(graph.getByRole('button', { name: /^Qwen 3.6:/ })).toBeVisible()
-  await graph.getByRole('button', { name: /^Qwen 3.6:/ }).click()
-  await expect(
-    graph.getByRole('region', { name: 'Reparto por tarea' }).getByRole('button'),
-  ).toHaveCount(4)
+  for (const query of ['', '?hardcoded=true']) {
+    await page.goto(`processes/1/metrics${query}`)
+    await expect(page.getByTestId('flow-total')).toContainText('2,50')
+    await expect(page.getByRole('group', { name: 'Origen de los datos' })).toHaveCount(0)
+    expect(state.requests.at(-1)?.searchParams.has('since')).toBe(false)
+    await expect(page.getByText('25 / 26 peticiones con precio registrado')).toBeVisible()
+    await expect(page.getByText('3 operaciones restauradas', { exact: false })).toBeVisible()
+  }
 })

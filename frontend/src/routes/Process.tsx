@@ -1,3 +1,4 @@
+import { RunCost } from '../components/run/RunCost'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -578,6 +579,7 @@ function Runs({
                     <p className="text-[13px] text-ink">
                       {item.decided} decisiones · v{item.version_number}
                     </p>
+                    <RunCost cost={item.cost} />
                     <p className="truncate text-[12px] text-muted">
                       {runSplit(item) || 'Sin salidas'}
                       {item.author ? ` · ${item.author}` : ''}

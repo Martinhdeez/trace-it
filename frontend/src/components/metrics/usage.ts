@@ -40,6 +40,7 @@ export function value(row: UsageTotals, measure: Measure) {
       : row.self_ms
 }
 export function formatted(row: UsageTotals, measure: Measure) {
+  if (!row.spans) return label('noRecordedActivity')
   if (measure === 'cost') {
     if (!row.known_cost_usd && row.unpriced_requests) return label('unknownOnly')
     return `${money(row.known_cost_usd)}${row.unpriced_requests ? ` (${label('partial')})` : ''}`

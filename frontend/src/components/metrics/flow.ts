@@ -27,6 +27,7 @@ export function sumUsage(rows: UsageTotals[]): UsageTotals {
     ...Object.fromEntries(
       [
         'spans',
+        'imported_spans',
         'errors',
         'requests',
         'replays',

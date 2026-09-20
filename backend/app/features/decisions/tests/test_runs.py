@@ -146,3 +146,87 @@ async def test_mutations_need_a_manager() -> None:
         # Reads stay open.
         for url in (f"/processes/{pid}/runs", f"/processes/{pid}/summary", "/processes"):
             assert (await anonymous("GET", url)).status_code == 200, url
+
+
+async def test_run_cost_counts_only_its_descendants_and_excludes_replays() -> None:
+    import uuid
+
+    from sqlalchemy import delete, select
+
+    from app.core.events import Event
+
+    async with client() as api:
+        process_id, _ = await create_process(api, "manager")
+        await api.post(f"/processes/{process_id}/run")
+        [run] = (await api.get(f"/processes/{process_id}/runs")).json()
+        assert run["cost"] == {
+            "known_cost_usd": 0,
+            "requests": 0,
+            "unpriced_requests": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+        }
+        async with session_factory() as session:
+            root = await session.scalar(
+                select(Event).where(
+                    Event.trace_id == run["trace_id"],
+                    Event.step == "run_process",
+                )
+            )
+            parent = uuid.uuid4().hex[:16]
+            priced = {
+                "requests": 2,
+                "cost_status": "known",
+                "cost_usd": 0.25,
+                "input_tokens": 100,
+                "output_tokens": 20,
+            }
+            for step, parent_id, span_id, data in [
+                ("review_decision", root.span_id, parent, priced),
+                ("llm_run", parent, uuid.uuid4().hex[:16], priced),
+                (
+                    "provider_call",
+                    parent,
+                    uuid.uuid4().hex[:16],
+                    {"network_attempted": True, "cost_status": "unknown"},
+                ),
+                (
+                    "provider_call",
+                    parent,
+                    uuid.uuid4().hex[:16],
+                    {**priced, "outcome": "replay", "network_attempted": False},
+                ),
+                # A sibling in the same trace is earlier work, not part of this run.
+                ("llm_run", None, uuid.uuid4().hex[:16], priced),
+            ]:
+                session.add(
+                    Event(
+                        trace_id=root.trace_id,
+                        span_id=span_id,
+                        parent_id=parent_id,
+                        step=step,
+                        status="ok",
+                        started_at=root.started_at,
+                        process_id=process_id,
+                        duration_ms=1,
+                        data=data,
+                    )
+                )
+            root_id = root.id
+            await session.commit()
+        expected = {
+            "known_cost_usd": 0.25,
+            "requests": 3,
+            "unpriced_requests": 1,
+            "input_tokens": 100,
+            "output_tokens": 20,
+        }
+        detail = (await api.get(f"/runs/{run['id']}")).json()
+        assert detail["cost"] == expected
+        [listed] = (await api.get(f"/processes/{process_id}/runs")).json()
+        assert listed["cost"] == expected
+        # Old executions without an audit root are unknown, never a measured zero.
+        async with session_factory() as session:
+            await session.execute(delete(Event).where(Event.id == root_id))
+            await session.commit()
+        assert (await api.get(f"/runs/{run['id']}")).json()["cost"] is None

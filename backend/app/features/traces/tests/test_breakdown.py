@@ -68,6 +68,28 @@ def test_only_network_calls_and_llm_runs_contribute_usage():
     assert aggregate([provider, agent])["known_cost_usd"] == 0.5
 
 
+def test_restored_measurements_keep_usage_and_identify_original_history():
+    imported = usage(
+        row(
+            "provider_call",
+            network_attempted=True,
+            cached_replay=True,
+            input_tokens=100,
+            output_tokens=20,
+            cost_usd=0.25,
+            cost_status="known",
+        ),
+        50,
+    )
+    live = usage(row(requests=1, cost_status="unknown"), 10)
+    assert imported.imported_spans == 1
+    assert imported.requests == 1 and imported.known_cost_usd == 0.25
+    total = aggregate([imported, live])
+    assert total["spans"] == 2 and total["imported_spans"] == 1
+    assert total["requests"] == 2 and total["unpriced_requests"] == 1
+    assert total["self_ms"] == 60
+
+
 async def test_breakdown_reconciles_all_levels_and_paginates_one_snapshot():
     async with client() as api:
         process_id, _ = await create_process(api, "manager")
@@ -87,6 +109,7 @@ async def test_breakdown_reconciles_all_levels_and_paginates_one_snapshot():
                 provider="vendor",
                 operation="ocr",
                 network_attempted=True,
+                cached_replay=True,
                 **data,
             ),
             # Cross-plane child overlaps the provider: subtract their union from the parent.
@@ -166,6 +189,7 @@ async def test_breakdown_reconciles_all_levels_and_paginates_one_snapshot():
         assert overview["totals"] is None
         planes = {r["plane"]: r for r in overview["groups"]}
         assert planes["ingestion"]["known_cost_usd"] == 0.25
+        assert planes["ingestion"]["imported_spans"] == 1
         assert planes["ingestion"]["self_ms"] == 750  # parent 200 + network 500 + replay 50
         assert planes["ingestion"]["input_tokens"] == 100
         assert planes["ingestion"]["replays"] == 1

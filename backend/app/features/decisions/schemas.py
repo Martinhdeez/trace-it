@@ -152,6 +152,16 @@ class ReprocessSummary(BaseModel):
     down_sources: dict[str, str] = {}  # as in RunSummary; omitted when none
 
 
+class RunCost(BaseModel):
+    """Recorded API usage within this run; excludes prior ingestion and compilation."""
+
+    known_cost_usd: float = 0
+    requests: int = 0
+    unpriced_requests: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
 class RunOut(BaseModel):
     """One stored execution (a run or a reprocess), read back from its row and its span."""
 
@@ -171,6 +181,7 @@ class RunOut(BaseModel):
     escalation_reasons: dict[str, int] = Field(examples=[{"SOURCE_UNAVAILABLE": 3}])
     down_sources: dict[str, str] = {}
     trace_id: str | None  # `GET /traces/{trace_id}`
+    cost: RunCost | None = None  # None when the run has no recorded trace
 
 
 class RunDecisionOut(BaseModel):

@@ -42,6 +42,7 @@ FIELDS = (
     "cached_tokens",
     "cost_usd",
     "cost_status",
+    "cached_replay",
 )
 ADDITIVE = tuple(k for k in UsageTotals.model_fields if k not in {"p50_ms", "p95_ms"})
 
@@ -81,6 +82,7 @@ def usage(row: dict, own_ms: float | None) -> UsageTotals:
     priced = data.get("cost_status") in {"known", "included"}
     return UsageTotals(
         spans=1,
+        imported_spans=int(data.get("cached_replay") is True),
         errors=int(row["status"] == "error"),
         requests=requests,
         replays=int(provider and data.get("outcome") == "replay"),

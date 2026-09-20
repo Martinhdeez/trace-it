@@ -371,6 +371,7 @@ class UsageTotals(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     spans: int = 0
+    imported_spans: int = 0  # original measurements restored by the seed, not new calls
     errors: int = 0
     requests: int = 0
     replays: int = 0

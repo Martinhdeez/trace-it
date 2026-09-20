@@ -1,3 +1,4 @@
+import { RunCost } from '../components/run/RunCost'
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -125,6 +126,7 @@ export function Instances() {
             }
           >
             {run.data.decided} decisiones
+            <RunCost cost={run.data.cost} detail />
           </Notice>
         </div>
       ) : null}

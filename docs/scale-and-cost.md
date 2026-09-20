@@ -426,6 +426,31 @@ do not change. A new process or use case is a pack (ADR 0007).
 Trigger for a new reader: a use case asks for it, or ≥ 5 % of a month's files arrive in a type
 we escalate as unreadable (ingestion plane: `extraction` warnings by `reader`).
 
+## Reading the live metrics
+
+The Metrics screen always reads the process audit API and defaults to all history, including
+original OCR measurements restored by the seed. The imported-operation count identifies
+that history; its cost is not a new deployment charge. Select a shorter period to examine
+recent activity, then drill into an operation and its full trace to inspect the original
+usage and saved tariff. The seed run report includes the same per-plane aggregates.
+
+Tokens and durations are measurements. The displayed API cost is an estimate calculated
+from each call's saved token rates, not a provider invoice. Pricing coverage reports priced
+requests divided by recorded requests. Unknown prices are excluded and marked as partial,
+not zero. Hardware, monthly subscriptions and unrecorded historical calls are excluded.
+The engine spends no model tokens. Its accumulated active time is work across operations,
+not batch wall time or a throughput prediction; use the benchmarks above for capacity.
+
+### Cost per run
+
+The run history and run detail show marginal API cost for that execution. `RunOut.cost`
+sums recorded usage only from descendants of its `run_process` or `reprocess` span,
+including optional decision review. Prior document reading and rule compilation are not
+allocated again to each rerun. Journal replays contribute no additional usage; unpriced
+requests make the result partial. Runs without an audit root return `cost: null`, not zero.
+The deterministic engine itself makes no model calls. This is API cost at saved tariffs,
+not total operating cost; compute and subscriptions remain outside this figure.
+
 ## Related
 
 ADR 0002, 0004, 0005, 0007, 0011, 0013, 0016, 0017, 0018, 0019, 0020, 0021;

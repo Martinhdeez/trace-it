@@ -16943,6 +16943,38 @@
         "title": "RuleTrace",
         "description": "How a rule was produced and how it behaves."
       },
+      "RunCost": {
+        "properties": {
+          "known_cost_usd": {
+            "type": "number",
+            "title": "Known Cost Usd",
+            "default": 0
+          },
+          "requests": {
+            "type": "integer",
+            "title": "Requests",
+            "default": 0
+          },
+          "unpriced_requests": {
+            "type": "integer",
+            "title": "Unpriced Requests",
+            "default": 0
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens",
+            "default": 0
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "RunCost",
+        "description": "Recorded API usage within this run; excludes prior ingestion and compilation."
+      },
       "RunDecisionOut": {
         "properties": {
           "decision_id": {
@@ -17113,6 +17145,16 @@
               }
             ],
             "title": "Trace Id"
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunCost"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "decisions": {
             "items": {
@@ -17297,6 +17339,16 @@
               }
             ],
             "title": "Trace Id"
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunCost"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -18603,6 +18655,11 @@
             "title": "Spans",
             "default": 0
           },
+          "imported_spans": {
+            "type": "integer",
+            "title": "Imported Spans",
+            "default": 0
+          },
           "errors": {
             "type": "integer",
             "title": "Errors",
@@ -18770,6 +18827,7 @@
         "type": "object",
         "required": [
           "spans",
+          "imported_spans",
           "errors",
           "requests",
           "replays",
@@ -18927,6 +18985,11 @@
             "title": "Spans",
             "default": 0
           },
+          "imported_spans": {
+            "type": "integer",
+            "title": "Imported Spans",
+            "default": 0
+          },
           "errors": {
             "type": "integer",
             "title": "Errors",
@@ -19011,6 +19074,7 @@
         "type": "object",
         "required": [
           "spans",
+          "imported_spans",
           "errors",
           "requests",
           "replays",
@@ -19033,6 +19097,11 @@
           "spans": {
             "type": "integer",
             "title": "Spans",
+            "default": 0
+          },
+          "imported_spans": {
+            "type": "integer",
+            "title": "Imported Spans",
             "default": 0
           },
           "errors": {
@@ -19151,6 +19220,7 @@
         "type": "object",
         "required": [
           "spans",
+          "imported_spans",
           "errors",
           "requests",
           "replays",
@@ -19176,6 +19246,11 @@
           "spans": {
             "type": "integer",
             "title": "Spans",
+            "default": 0
+          },
+          "imported_spans": {
+            "type": "integer",
+            "title": "Imported Spans",
             "default": 0
           },
           "errors": {
@@ -19254,6 +19329,7 @@
         "type": "object",
         "required": [
           "spans",
+          "imported_spans",
           "errors",
           "requests",
           "replays",

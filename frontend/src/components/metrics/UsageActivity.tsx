@@ -9,15 +9,12 @@ import { cn } from '../../lib/cn'
 import { Button } from '../shell/Controls'
 import { ErrorNotice } from '../shell/Notice'
 import { dateTime, duration, formatted, label, moduleName, number } from './usage'
-import { demoTrace } from './demo'
 
 export function UsageActivity({
   data,
-  hardcoded = false,
   onPage,
 }: {
   data: UsageBreakdown
-  hardcoded?: boolean
   onPage: (offset: number) => void
 }) {
   const [selected, setSelected] = useState<number | null>(null)
@@ -63,6 +60,9 @@ export function UsageActivity({
                     title={label(row.status === 'error' ? 'failure' : 'success')}
                   />
                   {dateTime(row.started_at)}
+                  {row.imported_spans > 0 && (
+                    <span className="block text-muted">{label('originalMeasurement')}</span>
+                  )}
                 </td>
                 <td className="max-w-48 break-words px-3 py-3">
                   {row.model ?? moduleName(row.step)}
@@ -118,7 +118,6 @@ export function UsageActivity({
         <Operation
           key={item.id}
           item={item}
-          hardcoded={hardcoded}
           processId={data.process_id}
           onClose={() => setSelected(null)}
         />
@@ -129,19 +128,17 @@ export function UsageActivity({
 
 function Operation({
   item,
-  hardcoded,
   processId,
   onClose,
 }: {
   item: Activity
-  hardcoded: boolean
   processId: number
   onClose: () => void
 }) {
   const [showTrace, setShowTrace] = useState(false)
   const trace = useQuery({
-    queryKey: ['usage-trace', hardcoded, item.trace_id],
-    queryFn: () => (hardcoded ? demoTrace(item) : api.traceSpans(item.trace_id)),
+    queryKey: ['usage-trace', item.trace_id],
+    queryFn: () => api.traceSpans(item.trace_id),
     enabled: showTrace,
   })
   return (
