@@ -150,6 +150,7 @@ export function Segmented<T extends string>({
             key={option.value}
             type="button"
             data-active={active || undefined}
+            aria-pressed={active}
             onClick={() => onChange(option.value)}
             className={cn(SEGMENT_ITEM, active ? 'text-ink' : 'text-muted hover:text-ink')}
           >

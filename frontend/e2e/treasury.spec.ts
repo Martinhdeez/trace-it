@@ -8,14 +8,15 @@ async function fixture(page: Page) {
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url())
     const apiMarker = url.pathname.indexOf('/api')
+    if (apiMarker < 0) return route.continue()
     const path = apiMarker >= 0 ? url.pathname.slice(apiMarker + 4) : url.pathname
-    if (!['/login', '/health', '/processes', '/processes/1', '/processes/1/summary', '/processes/1/treasury/preview'].includes(path) && !path.includes('/mail-ingestion/activity')) return route.continue()
-    let body: unknown = {}
+    if (!['/login', '/health', '/processes', '/processes/1', '/processes/1/summary', '/processes/1/queue', '/processes/1/sources', '/processes/1/rules', '/processes/1/instances', '/processes/1/treasury/preview'].includes(path) && !path.includes('/mail-ingestion/activity')) return route.continue()
+    let body: unknown = []
     if (path === '/login') body = { id: 1, email: 'treasury@test.invalid', name: 'Treasury reviewer', role: 'manager' }
     if (path === '/health') body = { status: 'ok' }
     if (path === '/processes') body = [{ id: 1, name: 'Treasury fixture', description: '', decision_types: [], symbols: [] }]
     if (path === '/processes/1') body = { id: 1, name: 'Treasury fixture', description: '', decision_types: [], symbols: [] }
-    if (path === '/processes/1/summary') body = { queue: 0 }
+    if (path === '/processes/1/summary') body = { queue: 0, by_status: { PENDING: 0 }, by_decision: {} }
     if (path.includes('/mail-ingestion/activity')) body = { initialized: true, latest_id: 0, items: [], has_more: false }
     if (path === '/processes/1/treasury/preview') {
       if (state.delay) await new Promise((resolve) => setTimeout(resolve, 350))
@@ -56,7 +57,14 @@ async function fixture(page: Page) {
 
 test('treasury previews approved payments, keeps evidence links, and invalidates stale drafts', async ({ page }) => {
   await fixture(page)
-  await page.goto('processes/1/treasury')
+  await page.goto('processes/1')
+  await page.getByRole('button', { name: 'Historial', exact: true }).click()
+  await expect(page).toHaveURL(/vista=historial/)
+  await page.getByRole('button', { name: 'Plan de pagos', exact: true }).click()
+  await expect(page).toHaveURL(/vista=pagos/)
+  await expect(page.getByRole('button', { name: /^Te esperan/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Historial', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Plan de pagos', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('heading', { name: 'Plan de pagos', exact: true })).toBeVisible()
   await page.getByLabel('Inicio del plan').fill('2026-09-21')
   await page.getByLabel('Presupuesto semanal').fill('2500.00')
@@ -131,12 +139,17 @@ test('treasury remains readable on a narrow viewport and captures review artifac
   const artifactDir = resolve(process.cwd(), '../.artifacts/treasury')
   mkdirSync(artifactDir, { recursive: true })
   await page.screenshot({ path: resolve(artifactDir, 'desktop.png'), fullPage: true })
-  await page.locator('main').evaluate((element) => element.scrollTo(0, element.scrollHeight))
+  await page.getByTestId('inbox-content').evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await page.screenshot({ path: resolve(artifactDir, 'desktop-detail.png'), fullPage: false })
   await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByTestId('inbox-content').evaluate((element) => element.scrollTo(0, 0))
+  await expect(page).toHaveURL(/vista=pagos/)
+  await expect(page.getByRole('button', { name: /^Te esperan/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Historial', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Plan de pagos', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('heading', { name: 'Plan de pagos', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.body.scrollWidth)).toBeLessThanOrEqual(390)
   await page.screenshot({ path: resolve(artifactDir, 'mobile.png'), fullPage: true })
-  await page.locator('main').evaluate((element) => element.scrollTo(0, element.scrollHeight))
+  await page.getByTestId('inbox-content').evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await page.screenshot({ path: resolve(artifactDir, 'mobile-detail.png'), fullPage: false })
 })

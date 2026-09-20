@@ -1,11 +1,9 @@
 import { useState } from 'react'
 import { AlertCircle, ArrowUpRight, CalendarDays, Download, FileSpreadsheet, WalletCards } from 'lucide-react'
-import { Link, useParams } from 'react-router'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router'
+import { useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { TreasuryInvoice, TreasuryPlan, TreasuryPlanRequest, TreasuryWeek } from '../api/contracts'
-import { keys } from '../api/queries'
-import { ProcessScreen } from '../components/process/ProcessScreen'
 import { Button, Field, Input, SegmentedRail, SEGMENT_ITEM } from '../components/shell/Controls'
 import { DataTable, type Column } from '../components/shell/DataTable'
 import { EmptyState, ErrorNotice, Notice } from '../components/shell/Notice'
@@ -55,8 +53,7 @@ function reasonLabel(code: string, detail: string) {
   return label === key ? detail : label
 }
 
-export function Treasury() {
-  const processId = Number(useParams().processId)
+export function Treasury({ processId }: { processId: number }) {
   const [asOf, setAsOf] = useState('')
   const [weeklyBudget, setWeeklyBudget] = useState('')
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(8)
@@ -64,10 +61,6 @@ export function Treasury() {
   const [selectedWeek, setSelectedWeek] = useState(0)
   const [downloaded, setDownloaded] = useState(false)
 
-  const process = useQuery({
-    queryKey: keys.process(processId),
-    queryFn: () => api.getProcess(processId),
-  })
   const preview = useMutation({
     mutationFn: ({ body, key }: { body: TreasuryPlanRequest; key: string }) =>
       api.treasuryPreview(processId, body).then((plan) => ({ plan, key, processId })),
@@ -143,16 +136,7 @@ export function Treasury() {
   }
 
   return (
-    <ProcessScreen
-      processId={processId}
-      activeTab="treasury"
-      crumbs={[
-        { label: t('nav.processes'), to: paths.processes },
-        { label: process.data?.name ?? '…', to: paths.process(processId) },
-        { label: t('treasury.title') },
-      ]}
-    >
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-12 pt-5 sm:px-6">
+    <section aria-label={t('treasury.title')}>
         <div className="mx-auto max-w-6xl">
           <header className="flex flex-wrap items-end justify-between gap-5 border-b border-hairline pb-5">
             <div className="max-w-2xl">
@@ -257,8 +241,7 @@ export function Treasury() {
           ) : null}
           {plan?.exclusions.length ? <div className="mt-7"><ExcludedRows rows={plan.exclusions} processId={processId} /></div> : null}
         </div>
-      </main>
-    </ProcessScreen>
+    </section>
   )
 }
 

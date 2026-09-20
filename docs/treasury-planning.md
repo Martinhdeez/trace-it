@@ -1,6 +1,6 @@
 # Treasury planning
 
-Open a process's Treasury tab to distribute approved invoices across a weekly budget.
+Open Payment plan beside Waiting for you and History in the process inbox to distribute approved invoices across a weekly budget.
 Enter a start date and budget, select a horizon, and generate a preview. Select a week
 to inspect its invoices; each invoice links back to its decision evidence. The supplier
 summary and exclusions explain what was scheduled and what still needs attention.

@@ -21,6 +21,8 @@ import { NestedCard } from '../components/shell/Well'
 import { cn } from '../lib/cn'
 import { formatRunDate, humanize } from '../lib/format'
 import { paths } from '../lib/paths'
+import { Treasury } from './Treasury'
+import { t } from '../i18n'
 import { useSession } from '../state/session'
 import {
   dayKey,
@@ -33,7 +35,7 @@ import {
   type Triage,
 } from '../lib/urgency'
 
-type View = 'pendientes' | 'historial'
+type View = 'pendientes' | 'historial' | 'pagos'
 
 /** How long a dropped document stays highlighted in the list. */
 const FRESH_MS = 9_000
@@ -47,7 +49,7 @@ const FRESH_MS = 9_000
 export function Inbox() {
   const processId = Number(useParams().processId)
   const [params, setParams] = useSearchParams()
-  const view: View = params.get('vista') === 'historial' ? 'historial' : 'pendientes'
+  const view: View = params.get('vista') === 'pagos' ? 'pagos' : params.get('vista') === 'historial' ? 'historial' : 'pendientes'
   const day = params.get('dia')
   const selectedId = params.get('i') ? Number(params.get('i')) : undefined
 
@@ -132,14 +134,15 @@ export function Inbox() {
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-10 pt-4 sm:px-6">
+      <div data-testid="inbox-content" className="min-h-0 flex-1 overflow-y-auto px-4 pb-10 pt-4 sm:px-6">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <Segmented
             value={view}
-            onChange={(next) => update({ vista: next === 'historial' ? next : null, i: null, dia: null })}
+            onChange={(next) => update({ vista: next === 'pendientes' ? null : next, i: null, dia: null })}
             options={[
               { value: 'pendientes', label: 'Te esperan', count: cases.length },
               { value: 'historial', label: 'Historial' },
+              { value: 'pagos', label: t('treasury.title') },
             ]}
           />
           {view === 'pendientes' && today.cutOff ? (
@@ -153,7 +156,7 @@ export function Inbox() {
         {process.isError ? <ErrorNotice error={process.error} /> : null}
         {queue.isError ? <ErrorNotice error={queue.error} /> : null}
 
-        {view === 'pendientes' ? (
+        {view === 'pagos' ? <Treasury key={processId} processId={processId} /> : view === 'pendientes' ? (
           <div className="grid max-w-[1120px] gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0">
               {day ? (
