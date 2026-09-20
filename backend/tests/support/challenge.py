@@ -7,6 +7,7 @@ the rules see what a real source connector would give them. Nothing here imports
 import ast
 import csv
 import io
+import json
 import re
 import unicodedata
 import zlib
@@ -22,6 +23,10 @@ CHALLENGE = REPO / ".context" / "500-sombras-de-alberto"
 INVOICES = CHALLENGE / "facturas"
 WORKBOOK = CHALLENGE / "FINAL_v7_DEFINITIVO_ahorasi.xlsx"
 ERP_SERVER = CHALLENGE / "alberto_erp.py"
+# The published exchange rates the pack carries, the same rows the workbook load stores.
+RATES = json.loads(
+    (REPO / "processes" / "invoice-payment" / "rates.json").read_text(encoding="utf-8")
+)
 
 # Batch 1 arrived on Friday 18 Sep 2026. No invoice may be dated after it (norm rule 4).
 CUT_OFF = "2026-09-18"
@@ -91,4 +96,5 @@ def sources() -> dict[str, list[dict[str, Any]]]:
             for r in erp_entries()
         ],
         "parameters": [{"cut_off_date": CUT_OFF}],
+        "rates": RATES,
     }
