@@ -1,5 +1,7 @@
 """Load invoice reference tables from the ingestion reader into immutable snapshots."""
 
+import json
+
 from sqlalchemy.dialects.postgresql import insert
 
 from app.common.exceptions import ConflictError
@@ -63,6 +65,18 @@ def workbook_sources(result):
     return tables
 
 
+async def pack_rates(session, process_id):
+    """The published exchange rates of the pack (`<pack>/rates.json`): a reference table the
+    manager keeps beside the workbook, loaded with it so a rule never reads a live market."""
+    from app.features.sources.service import process_pack
+
+    pack = await process_pack(session, process_id)
+    path = pack.with_suffix("") / "rates.json" if pack else None
+    if path is None or not path.is_file():
+        return []
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 async def load_workbook(session, process_id, user_id, result, content, cut_off_date=None):
     from app.features.versions.service import lock
 
@@ -73,6 +87,8 @@ async def load_workbook(session, process_id, user_id, result, content, cut_off_d
     tables = workbook_sources(result)
     if cut_off_date is not None:
         tables["parameters"] = [{"cut_off_date": cut_off_date.isoformat()}]
+    if rates := await pack_rates(session, process_id):
+        tables["rates"] = rates
     await session.execute(
         insert(File)
         .values(
