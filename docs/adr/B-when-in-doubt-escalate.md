@@ -38,20 +38,24 @@ table. A person resolves the escalation in the console, as a new row.
 
 | Claim | Number | Reproduce |
 |---|---|---|
-| One decision per file | Batch 1: 500 files, **443 `PAGAR` / 36 `NO_PAGAR` / 21 `ESCALAR`**, golden 471/471 | Re-decided for this ADR with `tools/bench_scale.py engine` on the delivery database: 500 unchanged; `make test-e2e` |
-| Every escalation says why | The 21: 8 `MISSING_DATA`, 7 `UNVERIFIED_DATA`, 4 `SCAN_REVIEW` (19 scans), 2 duplicate purchase order (doubt) | The `reprocess` span's `failures` and `escalations`; `GET /processes/{id}/metrics/execution` |
-| Scans never rejected on an OCR reading | 29 scans: 10 `PAGAR`, 0 `NO_PAGAR`, 19 `ESCALAR` | Same run; `decisions/tests/test_engine.py::test_a_scan_the_rules_would_reject_escalates_naming_the_rule` |
+| One decision per file | Batch 1, the delivered run (`delivery/outcomes.jsonl`): 500 files, **436 `PAGAR` / 36 `NO_PAGAR` / 28 `ESCALAR`**, golden 471/471 | Counted on the delivered file; re-decided for this ADR with `tools/bench_scale.py engine` on the delivery database: 500 unchanged; `make test-e2e` |
+| Every escalation says why | The 28: 26 `MISSING_DATA` (all of them scans) and 2 `RULE_MATCH`, the same purchase order on two invoices (a business doubt) | Counted on `delivery/outcomes.jsonl`; also the `reprocess` span's `failures` and `escalations`; `GET /processes/{id}/metrics/execution` |
+| Scans never rejected on an OCR reading | 29 scans: 3 `PAGAR`, 0 `NO_PAGAR`, 26 `ESCALAR` | Same run; `decisions/tests/test_engine.py::test_a_scan_the_rules_would_reject_escalates_naming_the_rule` |
 | A broken rule never pays | 50,000 invoices with every rule timing out: 47,100 `ESCALAR` `RULE_ERROR`, 0 paid | [scale-and-cost.md](../scale-and-cost.md) §3, reported; `test_engine.py::test_a_failing_rule_escalates_with_the_error` |
 | A down source only affects what needs it | ERP down: the clean invoice and the already-paid one escalate `SOURCE_UNAVAILABLE: erp`; IBAN and date rejections stay `NO_PAGAR` | `decisions/tests/test_live_sources.py::test_erp_down_escalates_only_what_depends_on_it` |
 | A never-loaded source is not an empty table | No workbook loaded: the invoice escalates instead of failing the supplier check | `test_live_sources.py::test_a_source_never_loaded_escalates_instead_of_reading_empty` |
 
-With Helmcode as the OCR reader the batch gave 444 / 36 / 20: one scan confirmed that had
-escalated (reported by the team, not reproduced here).
+A separate run with a better OCR reader gave 443 / 36 / 21, and one with Helmcode 444 / 36 / 20:
+more scans confirmed, fewer escalations. Neither was the run we shipped, so the numbers above
+are the ones in `delivery/outcomes.jsonl`. In the delivered run the scan reader hit its
+provider's daily quota (HTTP 429), so seven scans it had corroborated earlier ended
+`MISSING_DATA` instead of `PAGAR`.
 
 ## Trade-offs accepted
 
-- A person reviews 21 of 500 files (4.2 %). Some are our own limits (a scan we could not
-  confirm), not business doubts.
+- A person reviews 28 of 500 files (5.6 %). 26 of them are our own limits (a scan whose
+  fields the reader did not extract), not business doubts; only 2 are a real doubt.
+  An independent audit agreed with all 471 text-layer invoices.
 - In `outcomes.jsonl` both look the same: `ESCALAR`. The reason code, in the trace and the
   queue, tells them apart.
 

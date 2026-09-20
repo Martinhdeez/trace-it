@@ -66,6 +66,11 @@ With the cumulative references and all 540 documents in the duplicate population
 | New 40 | 23 | 5 | 12 |
 | Combined | 466 | 41 | 33 |
 
+The "Original 500" row is the state of the database this evaluation ran on, not the
+delivered file. The shipped `delivery/outcomes.jsonl` is **436 / 36 / 28**: its run hit the
+scan reader's daily quota, so seven scans corroborated here ended `MISSING_DATA` instead of
+`PAGAR`. The batch-2 conclusions below are unaffected — they are about the 40 new documents.
+
 The intended historical change is `factura_4635.pdf`: updating sources alone changes
 PAGAR to NO_PAGAR because the ERP now includes a paid entry. Adding the new PDF
 `2026-08-22_P010.pdf` introduces a duplicate purchase order, so both escalate. This is a

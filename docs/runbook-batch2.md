@@ -281,7 +281,7 @@ Every write was also sent without `-H "$MANAGER"` (401) and as an operator (403)
 |---|---:|---|
 | 1. `make setup` (host equivalent: migrations 0012 -> 0015, pack load) | 1.9 s | The pack load failed: `A different process draft already exists`. Discarding the draft of `Invoice payment` (1 s) fixed it; now in step 1 |
 | 1. `make load-frozen MANAGER_ID=1` | 3 s | Failed: `The draft failed validation` (8 `MISSING_EXISTING_REQUIRED`, the known blocker). v1 stays published |
-| 1b / 1c. Summary, export batch 1 | 0.1 s / 1.2 s | 500 DECIDED; 443 / 36 / 21, `OK` |
+| 1b / 1c. Summary, export batch 1 | 0.1 s / 1.2 s | 500 DECIDED; 443 / 36 / 21 in this rehearsal (the delivered run is 436 / 36 / 28), `OK` |
 | 1d. Compiler token limit | 0.2 s | As written the `PUT` sent invalid JSON (quotes); fixed. `draft 2 compiler 16000` |
 | 2. `make backup` | 0.6 s | 6.7 MB. `make backup` alone dumps the database named `trace`; now in step 2 |
 | 3. Name checks | 0.01 s | 10, no shared name |
