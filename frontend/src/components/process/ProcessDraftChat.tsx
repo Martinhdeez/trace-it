@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowUp,
   Check,
-  ChevronRight,
   FileUp,
   MessageSquareText,
   Paperclip,
@@ -157,13 +156,23 @@ function reviewItems(plan: DiscoveryPlan): ReviewItem[] {
   ]
 }
 
-function openSessions(
+function conversations(
   sessions: DiscoverySessionSummary[],
   processId: number | undefined,
 ): DiscoverySessionSummary[] {
+  if (processId == null) {
+    return sessions.filter(
+      (item) => item.published_process_id == null && item.process_id == null,
+    )
+  }
   return sessions.filter(
-    (item) => item.published_process_id == null && item.process_id === (processId ?? null),
+    (item) => item.process_id === processId || item.published_process_id === processId,
   )
+}
+
+function conversationLabel(item: DiscoverySessionSummary): string {
+  const status = item.published_process_id == null ? 'En curso' : 'Publicada'
+  return `${status} · ${item.name || `Conversación ${item.id}`}`
 }
 
 function draftIdFromSearch(params: URLSearchParams): number | null {
@@ -226,7 +235,7 @@ export function ProcessDraftChat({
     queryFn: () => api.listDiscoverySessions(),
   })
   const candidates = useMemo(
-    () => openSessions(sessions.data ?? [], processId),
+    () => conversations(sessions.data ?? [], processId),
     [processId, sessions.data],
   )
 
@@ -492,18 +501,51 @@ export function ProcessDraftChat({
 
   if (current.published_process_id != null) {
     return (
-      <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6', className)}>
-        <Notice
-          title="Proceso publicado"
-          action={
-            <Button onClick={() => navigate(paths.process(current.published_process_id as number))}>
-              Abrir proceso
-              <ChevronRight size={12} />
+      <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
+        <header className="flex items-center justify-between gap-3 border-b border-hairline px-5 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-medium text-ink">
+              {current.plan.name || processName || 'Proceso publicado'}
+            </p>
+            <p className="font-mono text-[10px] text-faint">
+              conversación {current.id} · publicada · solo lectura
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select
+              aria-label="Historial de conversaciones"
+              value={current.id}
+              onChange={(event) => selectDraft(Number(event.target.value))}
+              className="w-56 py-1"
+            >
+              {candidates.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {conversationLabel(item)}
+                </option>
+              ))}
+            </Select>
+            <Button tone="ghost" disabled={start.isPending} onClick={() => start.mutate()}>
+              Nueva
             </Button>
-          }
-        >
-          La versión aprobada ya está en vigor. La conversación queda guardada en el historial.
-        </Notice>
+          </div>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          <Notice title="Conversación publicada">
+            Este es el chat que creó o modificó el proceso. Se conserva como historial y ya no se
+            puede editar.
+          </Notice>
+          <ol className="mx-auto mt-5 max-w-4xl space-y-4">
+            {messages.map((message, index) => (
+              <li
+                key={`${index}:${message.text}`}
+                className={cn('flex', message.role === 'user' ? 'justify-end' : 'justify-start')}
+              >
+                <ProcessDraftMessage message={message} />
+              </li>
+            ))}
+          </ol>
+          {error ? <div className="mx-auto mt-4 max-w-4xl"><ErrorNotice error={error} /></div> : null}
+        </div>
       </div>
     )
   }
@@ -526,16 +568,16 @@ export function ProcessDraftChat({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {candidates.length > 1 ? (
+            {candidates.length ? (
               <Select
-                aria-label="Conversación"
+                aria-label="Historial de conversaciones"
                 value={current.id}
                 onChange={(event) => selectDraft(Number(event.target.value))}
-                className="w-40 py-1"
+                className="w-56 py-1"
               >
                 {candidates.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.name || `Borrador ${item.id}`}
+                    {conversationLabel(item)}
                   </option>
                 ))}
               </Select>
