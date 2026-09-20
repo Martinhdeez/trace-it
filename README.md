@@ -1,99 +1,62 @@
 # trace-it
 
-Configurable decision processes with compiled rules, document evidence and an audit trail.
-Built for the MAISA track of the "500 Sombras de Alberto" hackathon (ETSIT UPM, 18-20
-September 2026): 500 supplier invoices, a chaotic workbook and a 2009 ERP, decided as
-`PAGAR`, `NO_PAGAR` or `ESCALAR`. No LLM ever decides: agents write the rules' code, a
-deterministic engine runs it, and every decision keeps its evidence, rule versions and
-latency.
+Turn operating policy into deterministic decision processes, with reliable ingestion of
+any document and AI-augmented decision-making under human control.
 
-**Production API**: [interactive documentation](https://gex-dashboard.hopto.org/nexia/trace-it/api/docs)
-and the [complete API guide](docs/production-api.md). One Bearer token covers the business
-API and audited, application-scoped database administration.
+Describe a process in plain language, provide documents in any format, and connect its data
+sources. trace-it reads the material and proposes the outcomes, inputs, source bindings, and
+rules that make the process explicit. A manager reviews the proposal, then publishes it as a
+versioned process definition.
 
-**Run the demo** (Docker, [uv](https://docs.astral.sh/uv/), OCR keys in `.env`; see
-[Run it](#run-it)):
+AI helps formalize the process, extract evidence, explain exceptions, and propose changes.
+Agents write and test the rule code. A deterministic engine applies it to every case. When
+data is missing, rules conflict, or a rule cannot be evaluated, the case goes to a person.
+Their resolution can produce a proposed rule change for the manager to review, preview
+against past decisions, and publish. No LLM decides, and history is never rewritten.
 
-```bash
-make setup                             # Postgres + API in Docker, invoice pack loaded
-make activate MANAGER_ID=1             # publish the hand-written rules (1: seeded manager)
-make erp                               # the challenge ERP, in another terminal
-make demo                              # 500 invoices -> output/outcomes.jsonl
-make trace-decision FILE=scan_002.pdf  # follow one decision: evidence, versions, latency
-```
-
-**Why it is built this way**: [five key decisions](docs/key-decisions.md), one page with a diagram each. **Demo script
-for the jury**: [docs/defense.md](docs/defense.md).
+[Open the live demo](https://gex-dashboard.hopto.org/nexia/trace-it/) ·
+[Browse the API](https://gex-dashboard.hopto.org/nexia/trace-it/api/docs)
 
 ## How it works
 
-1. A **process pack** (`processes/invoice-payment.json`) declares the decision types with
-   their priorities, the symbols to extract from each document and the rules in plain
-   language. It is configuration, not code; a second pack (`travel-expenses.json`) runs on
-   the same application.
-2. **Ingestion** reads each PDF (native text, OCR, vision) and the workbook; the ERP is
-   read through a fault-tolerant HTTP connector into versioned snapshots.
-3. **Rules become Python** through two agents: a tester writes tests from the rule text
-   alone, and a coder iterates until its code passes them (disputes are settled by the
-   tester from the text). A manager publishes rule changes as a new process version,
-   after they are replayed over past decisions. The invoice rules also ship hand-written,
-   so the process runs without any model.
-4. The **engine** runs every active rule in a sandbox; the highest-priority decision type
-   that fired wins, the default applies when none does, and a rule that cannot be evaluated
-   escalates the case to a person with the reason. Every instance ends with a decision.
-5. **People** resolve escalated cases and approve rule changes. Before a rule is activated
-   or retired, it is replayed over every past decision and the impact is shown; history is
-   never rewritten.
+1. **Describe.** A manager explains the process and provides policies, examples, documents
+   in any format, and data sources.
+2. **Formalize.** Agents propose a process definition with decision types, symbols, source
+   bindings, and plain-language rules. The manager reviews every part.
+3. **Publish.** Agents compile the rules to tested Python. The manager previews their effect
+   on past cases and publishes one complete version.
+4. **Run.** The engine evaluates each case in a sandbox and records the result, evidence,
+   rule versions, and source snapshots. Uncertain cases go to a person.
+5. **Improve.** Human resolutions and new evidence can become proposed process changes.
+   Nothing changes until a manager reviews and publishes a new version.
 
-The historical text-layer baseline for batch 1 gave `PAGAR 433 / NO_PAGAR 36 /
-ESCALAR 31`, identical to an independently built reference on all 471 text
-invoices, in one second of engine time. OCR can change the scan outcomes.
+The first process pack handles the invoice-payment challenge from "500 Sombras de Alberto".
+The same application also runs hiring screening and other process packs without changing the
+engine.
 
-## Run it
+## See it in action
 
-For the complete OCR setup (both local model downloads, Gemini/Jev keys, Docker,
-Windows/Linux/macOS commands and the production API corpus run), start with the
-[OCR and ingestion setup guide](docs/ingestion/setup.md). `make demo` uploads
-the workbook and all PDFs through that production API, so scans run through OCR.
+| Invoice queue | Document review |
+|---|---|
+| [![Invoices waiting for review](docs/img/invoice-review-queue.png)](docs/img/invoice-review-queue.png) | [![Invoice document with extracted fields and review controls](docs/img/invoice-document-review.png)](docs/img/invoice-document-review.png) |
+| Decision evidence | Another process, same engine |
+| [![Completed invoice decision with its symbols and evidence](docs/img/invoice-decision-evidence.png)](docs/img/invoice-decision-evidence.png) | [![Hiring screening process dashboard](docs/img/hiring-screening-dashboard.png)](docs/img/hiring-screening-dashboard.png) |
 
-```bash
-make setup                      # OCR weights + check, Postgres + API in Docker, pack loaded
-make activate MANAGER_ID=1      # publish the rules; before it, runs answer 409
-make erp                        # the challenge ERP bridge, in another terminal
-make demo                       # 500 invoices -> output/outcomes.jsonl (+ detail.json)
-```
+## What stays under human control
 
-`make setup` downloads the pinned OCR weights and checks the `verified` OCR profile
-(`make ocr-check`: it needs the Gemini/Jev keys in `.env`). Ports taken?
-`DB_PORT=5442 BACKEND_PORT=8030 ERP_PORT=8031 make setup`, then `ERP_PORT=8031 make erp`
-and `BACKEND_PORT=8030 make demo`. API docs at <http://localhost:8000/docs>; identify with `POST /login`
-and the `X-User-Id` header. A local smoke run with no Gemini or Jev calls is
-`make demo DEMO_ARGS="--limit 5 --local-only"`, with `TRACEPAY_OCR_PROFILE=experimental`
-in `.env`; it still needs the local OCR weights for scanned files. For local development without Docker, from `backend/`:
+- Agents may propose process definitions, rule code, tests, and later changes.
+- A manager decides what becomes active and resolves escalated cases.
+- The engine alone decides routine cases from the published rules and immutable source
+  snapshots.
+- Every decision keeps its evidence and exact rule version. New versions never alter old
+  decisions.
 
-```bash
-uv sync --locked
-uv run alembic upgrade head
-uv run python -m app.features.ingestion.tools.download_models   # OCR weights, once
-uv run uvicorn app.main:app --env-file ../.env --host 127.0.0.1 --port 8000 --workers 1
-```
+## Repository map
 
-Native PDF and Excel reading need no OCR weights. The full OCR committee uses
-`GEMINI_API_KEY` for images and `TYPESAFE_API_KEY` for text-candidate selection;
-both are optional for local-only extraction. Rule agents have separate provider
-configuration (the invoice use case currently uses `HELMCODE_API_KEY`). The
-hand-written rules run without agent keys. See `.env.example` and the setup guide.
+- `backend/app/features/` contains the API by domain feature.
+- `frontend/` contains the manager console.
+- `processes/` contains versionable process packs and their rules.
+- `docs/adr/` records the architectural decisions.
 
-## Read more
-
-- [Team guide](docs/team-guide.md): git flow, layout, running and testing
-- [Conventions](docs/CONVENTIONS.md): language, naming, contracts
-- [Key decisions](docs/key-decisions.md): the five choices that shape trace-it, and what we gave up
-- [Process packs](processes/README.md), [invoice rules](docs/invoice-payment-rules.md),
-  [ERP connector](docs/sources-http.md), [ingestion](docs/ingestion/README.md),
-  [frontend](frontend/README.md)
-- [Contributing](CONTRIBUTING.md)
-- [Mail ingestion](docs/mail-ingestion.md): process gathering email, local tests and disabled deployment.
-
-The challenge data lives in the `.context/500-sombras-de-alberto` submodule and is never
-modified. Credentials, model weights and local results stay out of Git.
+Start with [the five key decisions](docs/key-decisions.md) for the architecture, or read the
+[process-pack guide](processes/README.md) to define another process.
