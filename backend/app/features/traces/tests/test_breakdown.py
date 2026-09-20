@@ -298,3 +298,24 @@ async def test_breakdown_reconciles_all_levels_and_paginates_one_snapshot():
         ):
             assert (await api.get(url, params=params)).status_code == 422
         assert (await api.get("/processes/999999999/metrics/breakdown")).status_code == 404
+
+
+def test_reference_estimate_never_reprices_known_cost_or_cache_replay():
+    data = dict(
+        provider="helmcode",
+        model="qwen3.6",
+        input_tokens=1000,
+        output_tokens=100,
+        cached_tokens=100,
+        network_attempted=True,
+    )
+    estimate = usage(row("provider_call", **data), 1)
+    assert abs(estimate.estimated_cost_usd - 0.0001953) < 1e-12
+    assert estimate.estimated_requests == estimate.unpriced_requests == 1
+    assert estimate.known_cost_usd == 0
+    known = usage(row("provider_call", **data, cost_status="known", cost_usd=0.3), 1)
+    assert known.estimated_cost_usd == 0 and known.known_cost_usd == 0.3
+    replay = usage(row("provider_call", **{**data, "network_attempted": False}), 1)
+    assert replay.estimated_cost_usd == 0 and replay.estimated_requests == 0
+    missing = usage(row("provider_call", provider="helmcode", network_attempted=True), 1)
+    assert missing.estimated_requests == 0 and missing.unpriced_requests == 1

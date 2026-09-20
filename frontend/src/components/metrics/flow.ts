@@ -35,6 +35,8 @@ export function sumUsage(rows: UsageTotals[]): UsageTotals {
         'output_tokens',
         'cached_tokens',
         'known_cost_usd',
+        'estimated_cost_usd',
+        'estimated_requests',
         'unpriced_requests',
         'timed_spans',
         'self_ms',

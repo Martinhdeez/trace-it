@@ -379,6 +379,8 @@ class UsageTotals(BaseModel):
     output_tokens: int = 0
     cached_tokens: int = 0
     known_cost_usd: float = 0
+    estimated_cost_usd: float = 0  # reference estimate, not confirmed provider pricing
+    estimated_requests: int = 0  # subset of unpriced_requests with a reference estimate
     unpriced_requests: int = 0
     timed_spans: int = 0
     self_ms: float = 0  # cumulative duration minus the union of direct child intervals

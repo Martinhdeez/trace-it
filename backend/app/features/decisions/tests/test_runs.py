@@ -160,6 +160,8 @@ async def test_run_cost_counts_only_its_descendants_and_excludes_replays() -> No
         await api.post(f"/processes/{process_id}/run")
         [run] = (await api.get(f"/processes/{process_id}/runs")).json()
         assert run["cost"] == {
+            "estimated_cost_usd": 0,
+            "estimated_requests": 0,
             "known_cost_usd": 0,
             "requests": 0,
             "unpriced_requests": 0,
@@ -215,6 +217,8 @@ async def test_run_cost_counts_only_its_descendants_and_excludes_replays() -> No
             root_id = root.id
             await session.commit()
         expected = {
+            "estimated_cost_usd": 0,
+            "estimated_requests": 0,
             "known_cost_usd": 0.25,
             "requests": 3,
             "unpriced_requests": 1,

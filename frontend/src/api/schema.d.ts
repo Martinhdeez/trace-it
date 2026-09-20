@@ -5285,6 +5285,16 @@ export interface components {
              */
             known_cost_usd: number;
             /**
+             * Estimated Cost Usd
+             * @default 0
+             */
+            estimated_cost_usd: number;
+            /**
+             * Estimated Requests
+             * @default 0
+             */
+            estimated_requests: number;
+            /**
              * Requests
              * @default 0
              */
@@ -6042,6 +6052,16 @@ export interface components {
              */
             known_cost_usd: number;
             /**
+             * Estimated Cost Usd
+             * @default 0
+             */
+            estimated_cost_usd: number;
+            /**
+             * Estimated Requests
+             * @default 0
+             */
+            estimated_requests: number;
+            /**
              * Unpriced Requests
              * @default 0
              */
@@ -6170,6 +6190,16 @@ export interface components {
              */
             known_cost_usd: number;
             /**
+             * Estimated Cost Usd
+             * @default 0
+             */
+            estimated_cost_usd: number;
+            /**
+             * Estimated Requests
+             * @default 0
+             */
+            estimated_requests: number;
+            /**
              * Unpriced Requests
              * @default 0
              */
@@ -6242,6 +6272,16 @@ export interface components {
              * @default 0
              */
             known_cost_usd: number;
+            /**
+             * Estimated Cost Usd
+             * @default 0
+             */
+            estimated_cost_usd: number;
+            /**
+             * Estimated Requests
+             * @default 0
+             */
+            estimated_requests: number;
             /**
              * Unpriced Requests
              * @default 0
@@ -6318,6 +6358,16 @@ export interface components {
              * @default 0
              */
             known_cost_usd: number;
+            /**
+             * Estimated Cost Usd
+             * @default 0
+             */
+            estimated_cost_usd: number;
+            /**
+             * Estimated Requests
+             * @default 0
+             */
+            estimated_requests: number;
             /**
              * Unpriced Requests
              * @default 0

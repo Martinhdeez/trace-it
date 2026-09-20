@@ -156,6 +156,8 @@ class RunCost(BaseModel):
     """Recorded API usage within this run; excludes prior ingestion and compilation."""
 
     known_cost_usd: float = 0
+    estimated_cost_usd: float = 0  # reference estimate, not confirmed provider pricing
+    estimated_requests: int = 0  # subset of unpriced_requests with a reference estimate
     requests: int = 0
     unpriced_requests: int = 0
     input_tokens: int = 0

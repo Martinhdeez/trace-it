@@ -5,7 +5,7 @@ import { getLocale, t } from '../../i18n'
 import { cn } from '../../lib/cn'
 import { Button, SegmentedRail, SEGMENT_ITEM } from '../shell/Controls'
 import { sumUsage, usageFlow, type FlowGrouping, type FlowNode } from './flow'
-import { colors, formatted, label, moduleName, number, value, type Measure } from './usage'
+import { colors, formatted, label, moduleName, money, number, value, type Measure } from './usage'
 
 function name(node: FlowNode): string {
   if (node.kind === 'total') return label('flowTotal')
@@ -37,7 +37,7 @@ export function UsageFlow({
     node.kind === 'total' ||
     node.rows.some((row) => active.rows.includes(row))
   const percent = (node: FlowNode) => {
-    if (measure === 'cost' && node.totals.unpriced_requests && !node.totals.known_cost_usd)
+    if (measure === 'cost' && node.totals.unpriced_requests && !value(node.totals, 'cost'))
       return ''
     const total = value(graph.total.totals, measure)
     if (total <= 0) return ''
@@ -107,7 +107,7 @@ export function UsageFlow({
           {formatted(graph.total.totals, measure)}
         </p>
         <p className="text-xs text-muted">
-          {label(measure === 'cost' ? 'apiSpend' : measure)}
+          {label(measure === 'cost' ? (graph.total.totals.estimated_requests ? 'estimatedSpend' : 'apiSpend') : measure)}
         </p>
         {measure === 'cost' && graph.total.totals.unpriced_requests > 0 && (
           <span className="text-xs text-escalar">
@@ -117,6 +117,13 @@ export function UsageFlow({
       </div>
       <div className="mx-5 mt-4 space-y-2 rounded-lg bg-canvas p-3 text-xs text-muted sm:mx-6">
         <p>{label('recordedSource')}</p>
+        {graph.total.totals.estimated_requests > 0 && (
+          <div className="space-y-1">
+            <p>{label('recordedCost')}: {money(graph.total.totals.known_cost_usd)} · {label('referenceCost')}: {money(graph.total.totals.estimated_cost_usd)}</p>
+            <p>{number(graph.total.totals.estimated_requests)} {label('estimatedRequests')}</p>
+            <p>{label('referenceNote')} <a className="underline" href="https://api-docs.deepseek.com/quick_start/pricing/" target="_blank" rel="noreferrer">DeepSeek pricing</a></p>
+          </div>
+        )}
         <p>
           {number(graph.total.totals.requests - graph.total.totals.unpriced_requests)} /{' '}
           {number(graph.total.totals.requests)} {label('pricedCoverage')}
@@ -135,7 +142,7 @@ export function UsageFlow({
         </details>
       </div>
       {measure === 'cost' &&
-        graph.leaves.filter((node) => node.totals.known_cost_usd > 0).length === 1 && (
+        graph.leaves.filter((node) => value(node.totals, 'cost') > 0).length === 1 && (
           <p className="mt-3 px-5 text-xs text-muted sm:px-6">{label('singleCostPath')}</p>
         )}
       {data.flow.length === 0 ? (

@@ -113,6 +113,8 @@ export function demoBreakdown(processId: number, filters: UsageFilters): UsageBr
           rule_id: null,
           instance_id: null,
           imported_spans: 0,
+          estimated_cost_usd: 0,
+          estimated_requests: 0,
           spans: 1,
           requests: plane === 'execution' ? 0 : 1,
           known_cost_usd: Number((cost * weight).toFixed(6)),

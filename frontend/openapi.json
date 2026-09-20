@@ -16950,6 +16950,16 @@
             "title": "Known Cost Usd",
             "default": 0
           },
+          "estimated_cost_usd": {
+            "type": "number",
+            "title": "Estimated Cost Usd",
+            "default": 0
+          },
+          "estimated_requests": {
+            "type": "integer",
+            "title": "Estimated Requests",
+            "default": 0
+          },
           "requests": {
             "type": "integer",
             "title": "Requests",
@@ -18695,6 +18705,16 @@
             "title": "Known Cost Usd",
             "default": 0
           },
+          "estimated_cost_usd": {
+            "type": "number",
+            "title": "Estimated Cost Usd",
+            "default": 0
+          },
+          "estimated_requests": {
+            "type": "integer",
+            "title": "Estimated Requests",
+            "default": 0
+          },
           "unpriced_requests": {
             "type": "integer",
             "title": "Unpriced Requests",
@@ -18835,6 +18855,8 @@
           "output_tokens",
           "cached_tokens",
           "known_cost_usd",
+          "estimated_cost_usd",
+          "estimated_requests",
           "unpriced_requests",
           "timed_spans",
           "self_ms",
@@ -19025,6 +19047,16 @@
             "title": "Known Cost Usd",
             "default": 0
           },
+          "estimated_cost_usd": {
+            "type": "number",
+            "title": "Estimated Cost Usd",
+            "default": 0
+          },
+          "estimated_requests": {
+            "type": "integer",
+            "title": "Estimated Requests",
+            "default": 0
+          },
           "unpriced_requests": {
             "type": "integer",
             "title": "Unpriced Requests",
@@ -19082,6 +19114,8 @@
           "output_tokens",
           "cached_tokens",
           "known_cost_usd",
+          "estimated_cost_usd",
+          "estimated_requests",
           "unpriced_requests",
           "timed_spans",
           "self_ms",
@@ -19137,6 +19171,16 @@
           "known_cost_usd": {
             "type": "number",
             "title": "Known Cost Usd",
+            "default": 0
+          },
+          "estimated_cost_usd": {
+            "type": "number",
+            "title": "Estimated Cost Usd",
+            "default": 0
+          },
+          "estimated_requests": {
+            "type": "integer",
+            "title": "Estimated Requests",
             "default": 0
           },
           "unpriced_requests": {
@@ -19228,6 +19272,8 @@
           "output_tokens",
           "cached_tokens",
           "known_cost_usd",
+          "estimated_cost_usd",
+          "estimated_requests",
           "unpriced_requests",
           "timed_spans",
           "self_ms",
@@ -19288,6 +19334,16 @@
             "title": "Known Cost Usd",
             "default": 0
           },
+          "estimated_cost_usd": {
+            "type": "number",
+            "title": "Estimated Cost Usd",
+            "default": 0
+          },
+          "estimated_requests": {
+            "type": "integer",
+            "title": "Estimated Requests",
+            "default": 0
+          },
           "unpriced_requests": {
             "type": "integer",
             "title": "Unpriced Requests",
@@ -19337,6 +19393,8 @@
           "output_tokens",
           "cached_tokens",
           "known_cost_usd",
+          "estimated_cost_usd",
+          "estimated_requests",
           "unpriced_requests",
           "timed_spans",
           "self_ms",

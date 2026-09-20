@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.events import Event
 from app.features.processes.service import get as get_process
+from app.features.traces.estimates import reference_cost
 from app.features.traces.schemas import (
     Plane,
     UsageActivity,
@@ -80,6 +81,7 @@ def usage(row: dict, own_ms: float | None) -> UsageTotals:
     billable = row["step"] == "llm_run" or (provider and data.get("network_attempted") is True)
     requests = (1 if provider else data.get("requests") or 0) if billable else 0
     priced = data.get("cost_status") in {"known", "included"}
+    estimate = reference_cost(data) if billable and not priced else None
     return UsageTotals(
         spans=1,
         imported_spans=int(data.get("cached_replay") is True),
@@ -91,6 +93,8 @@ def usage(row: dict, own_ms: float | None) -> UsageTotals:
         cached_tokens=(data.get("cached_tokens") or 0) if billable else 0,
         known_cost_usd=(data.get("cost_usd") or 0) if billable and priced else 0,
         unpriced_requests=requests if not priced else 0,
+        estimated_cost_usd=estimate if estimate is not None else 0,
+        estimated_requests=requests if estimate is not None else 0,
         timed_spans=int(own_ms is not None),
         self_ms=own_ms or 0,
         p50_ms=row["duration_ms"],
@@ -100,9 +104,10 @@ def usage(row: dict, own_ms: float | None) -> UsageTotals:
 
 def aggregate(items: list[UsageTotals]) -> dict[str, Any]:
     result = {key: sum(getattr(item, key) for item in items) for key in ADDITIVE}
-    result["known_cost_usd"] = float(
-        sum((Decimal(str(item.known_cost_usd)) for item in items), Decimal(0))
-    )
+    for field in ("known_cost_usd", "estimated_cost_usd"):
+        result[field] = float(
+            sum((Decimal(str(getattr(item, field))) for item in items), Decimal(0))
+        )
     durations = sorted(item.p50_ms for item in items if item.p50_ms is not None)
     result["p50_ms"] = _quantile(durations, 0.5) if durations else None
     result["p95_ms"] = _quantile(durations, 0.95) if durations else None

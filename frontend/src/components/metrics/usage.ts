@@ -34,7 +34,7 @@ export function money(value: number): string {
 }
 export function value(row: UsageTotals, measure: Measure) {
   return measure === 'cost'
-    ? row.known_cost_usd
+    ? row.known_cost_usd + (row.estimated_cost_usd ?? 0)
     : measure === 'tokens'
       ? row.input_tokens + row.output_tokens
       : row.self_ms
@@ -42,8 +42,10 @@ export function value(row: UsageTotals, measure: Measure) {
 export function formatted(row: UsageTotals, measure: Measure) {
   if (!row.spans) return label('noRecordedActivity')
   if (measure === 'cost') {
-    if (!row.known_cost_usd && row.unpriced_requests) return label('unknownOnly')
-    return `${money(row.known_cost_usd)}${row.unpriced_requests ? ` (${label('partial')})` : ''}`
+    const total = value(row, 'cost')
+    const missing = row.unpriced_requests - (row.estimated_requests ?? 0)
+    if (!total && missing && !row.estimated_requests) return label('unknownOnly')
+    return `${money(total)}${row.estimated_requests ? ` (${label('estimated')})` : ''}${missing > 0 ? ` (${label('partial')})` : ''}`
   }
   if (measure === 'time') return row.timed_spans ? duration(row.self_ms) : '—'
   return number(value(row, measure))
