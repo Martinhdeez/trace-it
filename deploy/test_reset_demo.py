@@ -32,15 +32,17 @@ def test_restored_database_reset_and_failure_recovery(tmp_path):
     with psycopg.connect(url, row_factory=dict_row, autocommit=True) as db:
 
         def preserved():
-            return {
+            result = {
                 table: db.execute(f'SELECT * FROM "{table}" ORDER BY 1').fetchall()
-                for table in (
-                    "users",
-                    "sources",
-                    "agent_configs",
-                    "symbols",
-                )
+                for table in ("users", "agent_configs")
             }
+            for table in ("sources", "symbols"):
+                result[table] = db.execute(
+                    f'''SELECT owned.* FROM "{table}" owned
+                        JOIN processes p ON p.id=owned.process_id
+                        WHERE p.name!='Invoice payment - batch 2' ORDER BY 1'''
+                ).fetchall()
+            return result
 
         def assert_initial_rules():
             for baseline in seed["rule_baselines"]:

@@ -12,8 +12,8 @@ const CELLS = 42
 const ease = [0.23, 1, 0.32, 1] as const
 
 /**
- * One month of pending invoices, grouped by due date. Heat weighs time (70%),
- * volume (20%, saturated at six invoices) and the existing large-amount flag (10%).
+ * One month of pending documents, grouped by due date. Heat weighs time (70%),
+ * volume (20%, saturated at six documents) and the existing large-amount flag (10%).
  * This only presents the queue; it never changes its order or an engine decision.
  */
 export function MiniCalendar({

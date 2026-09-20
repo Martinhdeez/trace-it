@@ -35,12 +35,12 @@ import {
 
 type View = 'pendientes' | 'historial'
 
-/** How long a dropped invoice stays highlighted in the list. */
+/** How long a dropped document stays highlighted in the list. */
 const FRESH_MS = 9_000
 
 /**
- * The process as its manager sees it: the invoices that wait for them, most urgent first,
- * a calendar of due dates, and the history of what was decided. Dropping invoices on the
+ * The process as its manager sees it: documents that wait for them, most urgent first,
+ * a calendar of due dates, and the history of what was decided. Dropping documents on the
  * page reads and decides them; those that need a person land in the list, in their place.
  * Everything else (definition, runs, the review console, settings) is one click away.
  */
@@ -226,7 +226,7 @@ export function Inbox() {
           >
             <div className="text-center">
               <Upload size={26} strokeWidth={1.4} className="mx-auto text-focus" />
-              <p className="mt-3 text-[18px] font-medium tracking-[-0.03em]">Suelta las facturas</p>
+              <p className="mt-3 text-[18px] font-medium tracking-[-0.03em]">Suelta los documentos</p>
               <p className="mt-1 text-[13px] text-muted">
                 Se leen y se deciden ahora. Las que te necesiten entran en tu lista.
               </p>
@@ -519,7 +519,7 @@ function NoRules({ processId, drop }: { processId: number; drop: ReturnType<type
 /** The backend refuses a run with nothing published; say what to do about it. */
 function runFailure(error: unknown): unknown {
   if (error instanceof ApiError && error.status === 409 && /publish an approved/i.test(error.message)) {
-    return new ApiError(error.status, error.code, 'Publica una versión desde la Consola antes de procesar facturas')
+    return new ApiError(error.status, error.code, 'Publica una versión desde la Consola antes de procesar documentos')
   }
   return error
 }
@@ -597,7 +597,7 @@ function UploadButton({ disabled, onFiles }: { disabled: boolean; onFiles: (file
     <>
       <Button tone="soft" disabled={disabled} onClick={() => input.current?.click()}>
         <Upload size={12} strokeWidth={1.75} />
-        {disabled ? 'Procesando…' : 'Subir facturas'}
+        {disabled ? 'Procesando…' : 'Subir documentos'}
       </Button>
       <FileInput ref={input} onFiles={onFiles} />
     </>
@@ -627,7 +627,7 @@ function FileInput({
   )
 }
 
-/** Every decided invoice, newest decision first, searchable and filtered by outcome. */
+/** Every decided document, newest decision first, searchable and filtered by outcome. */
 function History({
   items,
   error,
@@ -666,7 +666,7 @@ function History({
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Proveedor, número o archivo"
+            placeholder="Nombre o archivo"
             className="pl-8"
           />
         </label>
@@ -689,7 +689,7 @@ function History({
           <table className="w-full min-w-[560px] text-left text-[13px]">
             <thead className="border-b border-hairline text-[11px] text-faint">
               <tr>
-                <th className="px-4 py-2 font-normal">Factura</th>
+                <th className="px-4 py-2 font-normal">Documento</th>
                 <th className="px-4 py-2 text-right font-normal">Importe</th>
                 <th className="px-4 py-2 font-normal">Decisión</th>
                 <th className="hidden px-4 py-2 font-normal md:table-cell">Motivo</th>

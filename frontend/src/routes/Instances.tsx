@@ -49,6 +49,10 @@ export function Instances() {
     queryKey: keys.summary(processId),
     queryFn: () => api.summary(processId),
   })
+  const versions = useQuery({
+    queryKey: keys.versions(processId),
+    queryFn: () => api.listVersions(processId),
+  })
 
   const rows = useMemo(() => {
     if (!runId) return instances.data ?? []
@@ -174,7 +178,12 @@ export function Instances() {
             </div>
           }
         />
-        <TracePane instance={detail.data} trace={trace.data} schema={process.data?.symbols} />
+        <TracePane
+          instance={detail.data}
+          trace={trace.data}
+          schema={process.data?.symbols}
+          versions={versions.data}
+        />
       </div>
       )}
     </ProcessScreen>

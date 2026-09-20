@@ -24,7 +24,7 @@ const EXTRA: Flag[] = ['large', 'reviewer', 'unread']
 
 /**
  * The manager's work, most urgent first. Rows animate to their place when the list
- * changes, so a dropped invoice is seen arriving and taking its position.
+ * changes, so a dropped document is seen arriving and taking its position.
  */
 export function CaseList({
   cases,

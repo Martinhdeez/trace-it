@@ -67,7 +67,7 @@ export function CaseDetail({
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden rounded-[20px] bg-surface shadow-pop ring-1 ring-line">
-      {/* The invoice itself, open beside the decision: reviewing is reading. */}
+      {/* The document itself, open beside the decision: reviewing is reading. */}
       <div className="hidden min-h-0 min-w-0 flex-1 flex-col border-r border-hairline bg-canvas md:flex">
         <DocumentPane instanceId={item.id} name={item.name} embedded />
       </div>
@@ -140,7 +140,7 @@ export function CaseDetail({
           disabled={!instance.data}
         >
           <FileText size={12} strokeWidth={1.75} />
-          Ver la factura
+          Ver el documento
         </Button>
 
         {waiting ? (

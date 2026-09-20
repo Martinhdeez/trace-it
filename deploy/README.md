@@ -223,12 +223,12 @@ saved application readings, never from hand-reviewed delivery outcomes. It also 
 41 of the 44 hiring CVs. `cv-002.pdf`, `cv-021.pdf` and `cv-024.pdf` stay out of the seed as
 one live `INTERVIEW`, `REJECT` and `REVIEW` upload.
 
-The initial invoice process uses its original 516-entry ERP. A separate
-`Invoice payment - batch 2` process uses the 556-entry updated ERP, plus the new supplier
-and order CSVs. Each explicit reset appends fresh, pinned source snapshots. Automatic live
-ERP synchronization is disabled in these two demo versions so a later decision cannot
-silently replace the initial scenario with the updated one. Manual source changes remain
-possible for a demo, and the next explicit reset restores the pinned scenarios.
+Both invoice batches belong to `Invoice payment`. The seed first runs the 500 invoices with
+v1 and the original 516-entry ERP. It then appends the updated suppliers, orders, ERP and
+cut-off snapshots, records v2 with the same rules, runs the 40 new invoices, and reprocesses
+the first 500. Automatic live ERP synchronization is disabled in these demo versions so a
+later decision cannot silently replace the pinned scenario. Manual source changes remain
+possible for a demo, and the next explicit reset restores the same history.
 Hiring follows the same pattern: an explicit reset restores the 23-row criminal-records snapshot
 without contacting the service. Normal runs still use the published connector. An exact,
 case-insensitive full-name match rejects the candidate; `cv-001.pdf` (Ana Molina) is the
