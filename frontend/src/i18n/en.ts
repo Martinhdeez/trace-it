@@ -93,6 +93,8 @@ export const en: Messages = {
     expand: 'Expand sidebar',
   },
   processes: {
+    pendingOne: 'pending review',
+    pendingMany: 'pending reviews',
     empty: 'No processes yet. Create a process to get started.',
     delete: 'Delete process',
     confirmDelete: 'Delete this process and all its history?',

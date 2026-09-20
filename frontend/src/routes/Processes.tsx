@@ -54,6 +54,7 @@ export function Processes() {
                       <p className="mt-0.5 line-clamp-2 max-w-[72ch] break-words text-[13px] leading-5 text-muted">{process.description}</p>
                     ) : null}
                   </div>
+                  <PendingCount processId={process.id} />
                   <ChevronRight size={16} strokeWidth={1.6} className="shrink-0 text-muted" aria-hidden="true" />
                 </Link>
                 {isManager ? (
@@ -104,5 +105,26 @@ export function Processes() {
         ) : null}
       </div>
     </main>
+  )
+}
+
+function PendingCount({ processId }: { processId: number }) {
+  const summary = useQuery({
+    queryKey: keys.summary(processId),
+    queryFn: () => api.summary(processId),
+    refetchInterval: 30_000,
+  })
+  const count = summary.data?.queue ?? 0
+  if (count === 0) return null
+
+  const label = `${count} ${t(count === 1 ? 'processes.pendingOne' : 'processes.pendingMany')}`
+  return (
+    <span
+      aria-label={label}
+      title={label}
+      className="ml-auto inline-flex min-w-6 shrink-0 items-center justify-center rounded-full bg-escalar-soft px-2 py-0.5 text-[12px] font-medium tabular-nums text-escalar"
+    >
+      {count}
+    </span>
   )
 }

@@ -92,6 +92,8 @@ export const es = {
     expand: 'Expandir menú',
   },
   processes: {
+    pendingOne: 'revisión pendiente',
+    pendingMany: 'revisiones pendientes',
     empty: 'Aún no hay procesos. Crea uno para empezar.',
     delete: 'Eliminar proceso',
     confirmDelete: '¿Eliminar este proceso y todo su historial?',
