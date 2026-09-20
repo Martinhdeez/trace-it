@@ -1327,7 +1327,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Store a PDF and its reading evidence as an instance of a process */
+        /** Store a PDF, JPG, PNG or HTML document with its reading evidence */
         post: operations["uploadProcessDocument"];
         delete?: never;
         options?: never;
@@ -1427,7 +1427,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The file the instance was made from, byte for byte (usually a PDF) */
+        /** The file the instance was made from, byte for byte (PDF, JPG, PNG or HTML) */
         get: operations["getInstanceFile"];
         put?: never;
         post?: never;
@@ -2580,7 +2580,7 @@ export interface components {
         Body_extractDocument: {
             /**
              * File
-             * @description Original PDF or XLSX; business fields are read from its contents.
+             * @description PDF, JPG, PNG, HTML or XLSX; fields are read from the contents.
              */
             file: string;
             /**
@@ -2608,7 +2608,7 @@ export interface components {
         Body_submitDocumentBatch: {
             /**
              * Files
-             * @description Original PDF or XLSX; business fields are read from its contents.
+             * @description PDF, JPG, PNG, HTML or XLSX; fields are read from the contents.
              */
             files: string[];
             /**
@@ -9735,6 +9735,9 @@ export interface operations {
                 };
                 content: {
                     "application/pdf": unknown;
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                    "text/html": unknown;
                 };
             };
             /** @description Validation Error */

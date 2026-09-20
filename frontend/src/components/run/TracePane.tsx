@@ -6,6 +6,7 @@ import type {
   SpanNode,
   SymbolIO,
   SymbolReading,
+  VersionOut,
 } from '../../api/contracts'
 import { Link } from 'react-router'
 import { formatMs, formatRunDate, humanize } from '../../lib/format'
@@ -29,11 +30,13 @@ export function TracePane({
   instance,
   trace,
   schema,
+  versions,
 }: {
   instance: InstanceDetail | undefined
   trace: InstanceTrace | undefined
   /** The process's symbols: which are required, and which hold a whole transcript. */
   schema?: SymbolIO[]
+  versions?: VersionOut[]
 }) {
   const [document, setDocument] = useState<{ instanceId: number; symbol?: string } | null>(null)
   if (!instance) {
@@ -189,7 +192,7 @@ export function TracePane({
                   {symbol.origin?.match(/^(document|scan):/) ? (
                     <button
                       type="button"
-                      aria-label={`View ${name} in original PDF`}
+                      aria-label={`View ${name} in original document`}
                       onClick={() => setDocument({ instanceId: instance.id, symbol: name })}
                       className={cn(
                         'inline-flex items-center gap-1.5 text-left text-[12px] text-ocr underline decoration-ocr/30 underline-offset-4 hover:decoration-ocr',
@@ -285,17 +288,27 @@ export function TracePane({
         </Block>
 
         {instance.decisions.length > 1 ? (
-        <Block title={t('trace.history')} count={instance.decisions.length} icon={History}>
+        <Block
+          title={t('trace.history')}
+          count={instance.decisions.length}
+          icon={History}
+          openByDefault
+        >
           <ul className="divide-y divide-hairline">
-            {instance.decisions.map((decision) => (
-              <li key={decision.id} className="flex items-baseline gap-2 px-3 py-2">
-                <StatusBadge value={decision.decision} />
-                <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted">
-                  {decision.reason}
-                </span>
-                <span className="shrink-0 text-[10.5px] text-faint">{decision.author}</span>
-              </li>
-            ))}
+            {instance.decisions.map((decision) => {
+              const version = versions?.find((item) => item.id === decision.version_id)
+              return (
+                <li key={decision.id} className="flex items-baseline gap-2 px-3 py-2">
+                  <StatusBadge value={decision.decision} />
+                  <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted">
+                    {decision.reason || 'Sin incidencias'}
+                  </span>
+                  <span className="shrink-0 font-mono text-[10.5px] text-faint">
+                    {version ? `v${version.number}` : 'versión desconocida'} · {formatRunDate(decision.created_at)}
+                  </span>
+                </li>
+              )
+            })}
           </ul>
         </Block>
         ) : null}

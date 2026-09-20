@@ -1,4 +1,4 @@
-# albertitos_plan — trace-it
+# albertitos_plan · trace-it
 
 **MAISA track · 500 Sombras de Alberto** (ETSIT UPM, 18-20 sep 2026). trace-it es un sistema de
 decisiones configurable: la norma de Alberto, en lenguaje natural, se compila a código verificado
@@ -25,18 +25,19 @@ de 2009, con una norma que cambia (v4 el sábado, un dato el domingo). Necesita 
 que no fallen en silencio, la razón de cada una y cambiar la norma sin programar.
 
 **Formato: un backend** (FastAPI + PostgreSQL, API REST y una consola web para el manager; Makefile
-para operar lotes). No es un chat ni un agente que decide: el filtro es binario y cada decisión tiene
-que poder repetirse en una auditoría. El dominio vive en un *process pack* declarativo
-(`processes/invoice-payment.json`: tipos de decisión con prioridad, símbolos, reglas, conectores; ADR
-0007). Un segundo pack (`travel-expenses`) carga con el mismo código: la factura es configuración.
+para operar lotes). La validación es binaria y cada decisión tiene que poder repetirse en una
+auditoría, así que descartamos el chat y el agente que decide por su cuenta. El dominio vive en un
+*process pack* declarativo (`processes/invoice-payment.json`: tipos de decisión con prioridad,
+símbolos, reglas, conectores; ADR 0007), y un segundo pack (`travel-expenses`) carga con el mismo
+código sin tocar una línea.
 
 ### 1.2 Componentes y flujo
 
 ![Arquitectura de trace-it](architecture.svg)
 
-Hay **dos tiempos**. En el *cambio de norma* trabajan los agentes, se gastan tokens y se tarda
-alrededor de 1,5 minutos. En la *decisión* sólo corre código: milisegundos y 0 tokens. Lo que produce
-un LLM y alimenta al motor (código de reglas, símbolos) se calcula una vez, se guarda y se reutiliza.
+En el *cambio de norma* trabajan los agentes, se gastan tokens y se tarda entre 85 y 103 s, mientras
+que en la *decisión* sólo corre código, con milisegundos y 0 tokens, porque lo que produce un LLM y
+alimenta al motor (código de reglas, símbolos) se calcula una vez, se guarda y se reutiliza.
 
 | Componente | Qué hace | Estado que deja |
 |---|---|---|
@@ -207,7 +208,7 @@ flowchart LR
 | **A** | El LLM escribe código; nunca decide | Producto y arquitectura (35) |
 | **B** | Ante la duda, `ESCALAR` | Validación y calidad |
 | **C** | Trazabilidad completa en tres planos | Trazabilidad (20) |
-| **D** | Coste por norma, no por factura; escalar por límites medidos | Escala y coste (25) |
+| **D** | Coste por cambio de norma; escalar por límites medidos | Escala y coste (25) |
 | **E** | Cambiar sin código, recuperarse sin perder nada | Resiliencia (10) y bonus (10) |
 
 ### ADR-A · El LLM escribe código; nunca decide
@@ -233,9 +234,9 @@ un sandbox y decide cada factura. Ningún LLM corre por factura.
   **471/471** contra la referencia en 3 de 3 ejecuciones.
 - De la norma a las reglas activas: 85-103 s y unos 149k tokens (unos 12,4k por regla).
 
-**Coste.** Un error de lectura del normalizador llega igual al tester y al coder; la red externa es la
-evaluación contra la referencia. Con `temperature = 0` las ejecuciones aún varían, así que las reglas
-entregadas están congeladas.
+**Coste.** Un error de lectura del normalizador llega igual al tester y al coder, y lo único que lo
+detecta fuera de ese circuito es la evaluación contra la referencia. Con `temperature = 0` las
+ejecuciones aún varían, así que las reglas entregadas están congeladas.
 
 ```mermaid
 flowchart LR
@@ -265,15 +266,14 @@ fuente caída (`SOURCE_UNAVAILABLE: <fuente>`) cuando las reglas que sí corrier
 
 | Opción | Por qué no / coste |
 |---|---|
-| Un estado interno `REVIEW` | Un run puede acabar sin nada que exportar; pasó cuando un límite del sandbox tumbó todas las reglas |
+| Un estado interno `REVIEW` | Un run puede acabar sin nada que exportar; pasó cuando un límite del sandbox hizo fallar todas las reglas |
 | Una regla que falla cuenta como "no disparó" | Siempre hay resultado, pero paga justo cuando se rompió el código que lo habría parado |
 | Decidir los escaneos como los PDF con texto | Una mala lectura del OCR se convierte en `NO_PAGAR` (5 de 29 escaneos antes del ADR 0025) |
 | **Escalar con el motivo (elegida)** | En el export, un fallo nuestro se ve igual que una duda de negocio; el código de motivo los distingue |
 
 **Por qué (medido).**
 
-- Lote 1: **500/500** archivos exportados, **443 PAGAR / 36 NO_PAGAR / 21 ESCALAR**; referencia
-  **471/471**.
+- Lote 1: **500/500** archivos exportados, **443 PAGAR / 36 NO_PAGAR / 21 ESCALAR**.
 - 29 escaneos: 10 `PAGAR` / 0 `NO_PAGAR` / 19 `ESCALAR` (8 `MISSING_DATA`, 7 `UNVERIFIED_DATA`,
   4 `SCAN_REVIEW`).
 - 50.000 facturas, todas las reglas agotan su tiempo: 47.100 `ESCALAR` con `RULE_ERROR`, ninguna
@@ -328,8 +328,8 @@ OpenTelemetry, agrupados en tres planos: ingesta, agentes y ejecución.
   4,9-8,6 kB por fila.
 - Unos 7 spans por factura, de 571-954 B cada uno.
 
-**Coste.** Postgres crece unos 25 kB por factura. Si el proceso muere a mitad de una traza, se pierden
-los spans aún sin escribir.
+**Coste.** Postgres crece unos 25 kB por factura, y si el proceso muere a mitad de una traza se
+pierden los spans que aún no se habían escrito.
 
 Seguir una decisión: `GET /instances/{id}/trace`, o `make trace-decision FILE=scan_002.pdf`.
 
@@ -358,7 +358,7 @@ flowchart LR
 
 Detalle: ADR 0018, 0022 (evidencia OCR).
 
-### ADR-D · Coste por norma, no por factura; escalar por límites medidos
+### ADR-D · Coste por cambio de norma; escalar por límites medidos
 
 **Problema.** El coste y el rendimiento tienen que aguantar desde 500 facturas hasta una empresa real.
 
@@ -374,12 +374,11 @@ con el LLM remoto, y dar un paso de escalado sólo cuando salta un disparador le
 
 **Por qué (medido salvo lo marcado).**
 
-- `tokens/mes = cambios de norma × 150k + escaladas consultadas × 3,7k`; las facturas suman 0.
-  10.000 facturas y 2 normas al mes: unos 2,6M tokens (estimado).
-- Motor: 500 facturas en 0,8 s. Techo: 8.000 por proceso, donde la regla de pedido duplicado tarda
-  9,4 s de su límite de 10 s. El arreglo, simulado: 50.000 en 31 s.
-- El cuello de botella es el OCR: 1,2 s por escaneo frente a 25 ms por PDF con texto, pico de 2,6 GB.
-- Una VM cuesta unos 10 € al mes (estimado); las personas son el 76 % del coste mensual.
+- `tokens/mes = cambios de norma × 150k + escaladas consultadas × 3,7k`, y las facturas suman 0.
+- El techo por proceso son unas 8.000 facturas, donde la regla de pedido duplicado agota su límite de
+  10 s; indexar `others` lo sube a 50.000 en 31 s (simulado).
+- El paso más lento de todo el recorrido es el OCR de los escaneos, con las medidas de la tabla 1.5.
+- Una VM cuesta unos 10 € al mes (estimado) y las personas son el 76 % del coste mensual.
 
 **Plan.** Cuatro escenarios: una VM, infraestructura propia, nube gestionada y aislado con LLM local.
 Pasos horizontales H1-H10, cada uno con su disparador (población ≥ 3.000: indexar `others`; cola de
@@ -428,7 +427,7 @@ antiguo no se usa, la fuente queda marcada como caída y las facturas que la nec
   cambios. Recompilada y publicada: 38 alertas de decisiones obsoletas en 1,1 s.
 - `kill -9` tras 68 de 500 subidas: la repetición acabó con 500 instancias, sin duplicados. Una
   copia restaurada coincide en el md5 de las 503 decisiones.
-- ERP caído antes de un run: la sync se rindió a los 15,4 s, no se usó ningún snapshot antiguo y
+- ERP caído antes de un run: la sync abandonó a los 15,4 s, no se usó ningún snapshot antiguo y
   `/health/planes` marcó la ingesta `degraded` (`sources down: 2:erp`).
 
 **En la práctica.** #77 añadió al pack en vivo, como configuración, un control de IBAN casi igual

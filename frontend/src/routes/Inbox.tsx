@@ -107,7 +107,7 @@ export function Inbox() {
       event.preventDefault()
       depth.current = 0
       setDragging(false)
-      const files = [...event.dataTransfer.files].filter((file) => /\.pdf$/i.test(file.name))
+      const files = [...event.dataTransfer.files].filter((file) => /\.(pdf|jpe?g|png|html?)$/i.test(file.name))
       if (files.length) {
         update({ vista: null, dia: null })
         drop.start(files)
@@ -618,7 +618,7 @@ function FileInput({
     <input
       ref={ref}
       type="file"
-      accept="application/pdf,.pdf"
+      accept=".pdf,.jpg,.jpeg,.png,.html,.htm,application/pdf,image/jpeg,image/png,text/html"
       multiple
       hidden
       onChange={(event) => {

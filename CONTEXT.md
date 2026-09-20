@@ -15,6 +15,12 @@ The complete behavior proposed or published for a process: its decision types, s
 rules, source contracts, extraction hints, reviewer settings and guidance.
 _Avoid_: Rules, when referring to the whole configuration.
 
+**Batch**:
+A named cohort of instances received or run together. Different batches remain part of the
+same process when they use the same decision policy. A later batch may run against newer
+source snapshots and an existing batch may then be reprocessed without becoming a new process.
+_Avoid_: Process, when referring only to a delivery of documents.
+
 **Evidence asset**:
 An uploaded file or connected record set that the agent may inspect when proposing a process
 change. An evidence asset is not authoritative until a manager accepts a source binding or

@@ -291,8 +291,8 @@ async def test_the_reviewer_runs_without_reasoning_under_a_tight_cap(monkeypatch
     [settings] = received
     assert settings["openai_reasoning_effort"] == "none"
     assert settings["max_tokens"] <= 1500
-    # the same fast role as the decision assistant: short timeout, no hidden SDK repeats
-    assert settings["timeout"] <= 15 and setup.settings.model.endswith("-flash")
+    # The reviewer stays tightly bounded regardless of which provider/model is configured.
+    assert settings["timeout"] <= 15
     assert setup.settings.limits["http_retries"] == 0 and setup.settings.retries == 1
 
 

@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
+import { resolve } from 'node:path'
+import { build } from 'vite'
 
 // Browser interaction fixtures; accounting and time reconciliation use real PostgreSQL
 // in backend/app/features/traces/tests/test_breakdown.py.
@@ -293,10 +295,20 @@ test('monthly Sankey exposes task and model paths with accessible navigation', a
 test('Sankey conserves each measure across areas, tasks and shared models', async ({ page }) => {
   await fixture(page)
   await page.goto('processes/1/metrics?hardcoded=false')
+  // Bundle the real functions for this browser check: production never serves /src/*.ts.
+  const built = await build({
+    configFile: false, logLevel: 'silent',
+    build: {
+      write: false,
+      lib: { entry: resolve('e2e/fixtures/metrics-entry.ts'), name: 'metricsTest', formats: ['iife'] },
+    },
+  })
+  const output = (Array.isArray(built) ? built[0] : built).output
+  const chunk = output.find((item) => item.type === 'chunk')!
+  await page.addScriptTag({ content: chunk.code })
   const result = await page.evaluate(
-    async ({ zero }) => {
-      const path = '/src/components/metrics/flow.ts'
-      const { usageFlow } = await import(path)
+    ({ zero }) => {
+      const { usageFlow, demoBreakdown } = window.metricsTest
       const rows = [
         {
           ...zero,
@@ -407,8 +419,6 @@ test('Sankey conserves each measure across areas, tasks and shared models', asyn
         'cost',
         'tasks',
       )
-      const demoPath = '/src/components/metrics/demo.ts'
-      const { demoBreakdown } = await import(demoPath)
       const demo = demoBreakdown(1, {
         since: '2026-09-01T00:00:00Z',
         until: '2026-09-20T00:00:00Z',
@@ -459,7 +469,7 @@ test('example toggle keeps the full drill-down synthetic and false uses the live
       metricRequests.push(request.url())
   })
   await page.goto('processes/1/metrics?hardcoded=true')
-  await expect(page.getByText('Datos ficticios de ejemplo', { exact: false })).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'Datos ficticios de ejemplo' })).toBeVisible()
   const graph = page.getByRole('region', { name: 'Mapa de consumo', exact: true })
   await expect(graph.locator('svg path.pointer-events-none')).toHaveCount(9)
   await expect(graph.getByRole('button', { name: /^Ejecución:/ })).not.toHaveAttribute(
@@ -480,7 +490,7 @@ test('example toggle keeps the full drill-down synthetic and false uses the live
   await expect(page).toHaveURL(/hardcoded=false/)
   await expect(graph.getByTestId('flow-total')).toContainText('2,50')
   expect(state.requests.at(-1)?.searchParams.has('through_id')).toBe(false)
-  await expect(page.getByText('Datos ficticios de ejemplo', { exact: false })).not.toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'Datos ficticios de ejemplo' })).not.toBeVisible()
   await page.reload()
   await expect(source.getByRole('button', { name: 'Reales', exact: true })).toHaveAttribute(
     'aria-pressed',

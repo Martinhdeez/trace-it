@@ -178,7 +178,7 @@ function Collect({
           {queue.length ? 'Añadir más documentos' : 'Arrastra aquí el lote'}
         </span>
         <span className="text-[11px] text-faint">
-          PDF. Clic para elegir.
+          PDF, JPG, PNG o HTML. Clic para elegir.
         </span>
       </button>
       <input
@@ -186,7 +186,7 @@ function Collect({
         type="file"
         multiple
         hidden
-        accept="application/pdf,.pdf"
+        accept=".pdf,.jpg,.jpeg,.png,.html,.htm,application/pdf,image/jpeg,image/png,text/html"
         onChange={(event) => {
           const files = [...(event.target.files ?? [])]
           if (files.length) onFiles(files)

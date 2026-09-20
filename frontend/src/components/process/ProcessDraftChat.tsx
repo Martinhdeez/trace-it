@@ -30,6 +30,8 @@ import { TerminalLoader } from '../shell/TerminalLoader'
 import { NestedCard } from '../shell/Well'
 import { FileChip, revokePreview, toPreview, type FilePreview } from './FileChip'
 import { ValidationImpact } from './ValidationImpact'
+import { RulesPane } from './RulesPane'
+import { VersionChip, VersionView } from './ProcessVersions'
 import { t } from '../../i18n'
 
 type Attachment = FilePreview & { file: File }
@@ -454,46 +456,59 @@ export function ProcessDraftChat({
 
   if (!current) {
     return (
-      <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6', className)}>
-        {error ? <ErrorNotice error={error} /> : null}
-        {openProposals.data?.length ? <PendingProposals proposals={openProposals.data} /> : null}
-        <EmptyState
-          icon={MessageSquareText}
-          title={processId == null ? 'Crea el proceso hablando' : 'Revisa el proceso hablando'}
-          action={
-            <Button tone="primary" disabled={start.isPending} onClick={() => start.mutate()}>
-              {start.isPending ? 'Abriendo…' : 'Empezar conversación'}
-            </Button>
-          }
-        >
-          Describe qué debe decidir, adjunta sus fuentes y responde las preguntas. Nada se aplica
-          hasta que revises el resultado y pulses Publicar.
-        </EmptyState>
-        {processId == null && candidates.length ? (
-          <div className="mx-auto max-w-xl px-2 pb-2">
-            <NestedCard label="borradores guardados">
-              <ul className="divide-y divide-hairline">
-                {candidates.map((item) => (
-                  <li key={item.id}>
-                    <Link
-                      to={paths.newProcessDraft(item.id)}
-                      className="flex items-center justify-between gap-3 px-3.5 py-3 hover:bg-well"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-[13px] text-ink">
-                          {item.name || `Borrador ${item.id}`}
+      <div
+        className={cn(
+          'grid min-h-0 flex-1',
+          processId != null && 'lg:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.85fr)]',
+          className,
+        )}
+      >
+        <div className="min-h-0 overflow-y-auto px-4 py-6 sm:px-6">
+          {error ? <ErrorNotice error={error} /> : null}
+          {openProposals.data?.length ? <PendingProposals proposals={openProposals.data} /> : null}
+          <EmptyState
+            icon={MessageSquareText}
+            title={processId == null ? 'Crea el proceso hablando' : 'Revisa el proceso hablando'}
+            action={
+              <Button tone="primary" disabled={start.isPending} onClick={() => start.mutate()}>
+                {start.isPending ? 'Abriendo…' : 'Empezar conversación'}
+              </Button>
+            }
+          >
+            Describe qué debe decidir, adjunta sus fuentes y responde las preguntas. Nada se aplica
+            hasta que revises el resultado y pulses Publicar.
+          </EmptyState>
+          {processId == null && candidates.length ? (
+            <div className="mx-auto max-w-xl px-2 pb-2">
+              <NestedCard label="borradores guardados">
+                <ul className="divide-y divide-hairline">
+                  {candidates.map((item) => (
+                    <li key={item.id}>
+                      <Link
+                        to={paths.newProcessDraft(item.id)}
+                        className="flex items-center justify-between gap-3 px-3.5 py-3 hover:bg-well"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-[13px] text-ink">
+                            {item.name || `Borrador ${item.id}`}
+                          </span>
+                          <span className="mt-0.5 block font-mono text-[10px] text-faint">
+                            conversación {item.id} · revisión {item.revision}
+                          </span>
                         </span>
-                        <span className="mt-0.5 block font-mono text-[10px] text-faint">
-                          conversación {item.id} · revisión {item.revision}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-[12px] text-muted">Continuar</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </NestedCard>
-          </div>
+                        <span className="shrink-0 text-[12px] text-muted">Continuar</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </NestedCard>
+            </div>
+          ) : null}
+        </div>
+        {processId != null ? (
+          <aside className="min-h-0 overflow-y-auto border-t border-hairline px-5 py-5 lg:border-l lg:border-t-0">
+            <ProcessRules processId={processId} />
+          </aside>
         ) : null}
       </div>
     )
@@ -682,6 +697,8 @@ export function ProcessDraftChat({
             </p>
           ) : null}
 
+          {processId != null ? <ProcessRules processId={processId} /> : null}
+
           {openProposals.data?.length ? <PendingProposals proposals={openProposals.data} /> : null}
 
           {processId != null && blockedByVersionDraft ? (
@@ -837,6 +854,66 @@ export function ProcessDraftChat({
         </div>
       </aside>
     </div>
+  )
+}
+
+/** The same rule workspace as the manual editor, independent of the chat's proposals. */
+function ProcessRules({ processId }: { processId: number }) {
+  const process = useQuery({
+    queryKey: keys.process(processId),
+    queryFn: () => api.getProcess(processId),
+  })
+  const rules = useQuery({
+    queryKey: keys.rules(processId),
+    queryFn: () => api.listRules(processId),
+    refetchInterval: (query) =>
+      query.state.data?.some((rule) => rule.status === 'compiling') ? 2_000 : false,
+  })
+  const versions = useQuery({
+    queryKey: keys.versions(processId),
+    queryFn: () => api.listVersions(processId),
+  })
+  const findings = useQuery({
+    queryKey: keys.findings(processId),
+    queryFn: () => api.listFindings(processId),
+  })
+  const history = [...(versions.data ?? [])].sort((a, b) => b.number - a.number)
+  const latestVersion = history[0]
+  const [viewing, setViewing] = useState<number | null>(null)
+  const viewed = history.find((version) => version.id === viewing)
+  const error = rules.error ?? process.error ?? versions.error ?? findings.error
+
+  return (
+    <section aria-label="Process rules">
+      <div className="mb-3 flex justify-end">
+        <VersionChip
+          versions={history}
+          selected={viewed ?? latestVersion}
+          onSelect={(version) => setViewing(version.id)}
+          findings={findings.data ?? []}
+        />
+      </div>
+      {error ? (
+        <ErrorNotice error={error} />
+      ) : rules.isPending || process.isPending ? (
+        <p className="text-[12px] text-muted">{t('common.loading')}</p>
+      ) : viewed && latestVersion ? (
+        <VersionView
+          key={viewed.id}
+          processId={processId}
+          version={viewed}
+          current={latestVersion}
+          rules={rules.data ?? []}
+          onBack={() => setViewing(null)}
+        />
+      ) : (
+        <RulesPane
+          processId={processId}
+          rules={rules.data ?? []}
+          outcomes={process.data?.decision_types.map((outcome) => outcome.name) ?? []}
+        />
+      )}
+    </section>
   )
 }
 

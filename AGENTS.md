@@ -46,3 +46,26 @@ make reset-db   # only for a database older than migration 0001
 ```
 
 Details: `docs/team-guide.md`. Why things are the way they are: `docs/adr/README.md`.
+
+## Production database access
+
+The production database admin API is available through the Trace-it API. Keep the bearer
+token out of Git and shared logs. Read it into an environment variable when needed:
+
+```bash
+export TRACE_API_BASE='https://gex-dashboard.hopto.org/nexia/trace-it/api'
+read -rs TRACE_API_TOKEN
+export TRACE_API_TOKEN
+
+curl --fail-with-body "$TRACE_API_BASE/db/tables" \
+  -H "Authorization: Bearer $TRACE_API_TOKEN"
+
+# Inspect the active chat/assistant model.
+curl --fail-with-body --get "$TRACE_API_BASE/db/tables/agent_configs/rows" \
+  -H "Authorization: Bearer $TRACE_API_TOKEN" \
+  --data-urlencode 'filters={"role":"assistant","active":true}' \
+  --data-urlencode 'limit=50'
+```
+
+The database API supports exact JSON equality filters. Prefer the business API for normal
+changes. Direct database writes are administrative overrides and require an audit reason.

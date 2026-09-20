@@ -1,7 +1,10 @@
 """Route incomplete document readings through local, visual and textual experts."""
 
+from collections import defaultdict
+
 from app.core import events
 from app.features.ingestion.config import Settings
+from app.features.ingestion.documents import document_format
 from app.features.ingestion.ocr.judge import TextJudge
 from app.features.ingestion.ocr.local import LocalOCR
 from app.features.ingestion.ocr.vision import VisionFallback
@@ -14,6 +17,46 @@ from .native import native_pages, render
 from .visual_risk import block_conflicts
 
 
+def invoice_lines(pages):
+    """Keep HTML table labels and values on one row for the invoice label reader."""
+    output = []
+    for page in pages:
+        if page.get("source_format") != "html":
+            output.extend(page["lines"])
+            continue
+        rows = defaultdict(list)
+        for line in page["lines"]:
+            if line.table:
+                rows[(line.table.id, line.table.row)].append(line)
+        emitted = set()
+        for line in page["lines"]:
+            if not line.table:
+                output.append(line)
+                continue
+            key = (line.table.id, line.table.row)
+            if key in emitted:
+                continue
+            emitted.add(key)
+            cells = sorted(rows[key], key=lambda item: (item.table.column, item.bbox[1]))
+            output.append(
+                line.model_copy(
+                    update={
+                        "id": f"{key[0]}:row:{key[1]}",
+                        "raw": " ".join(cell.raw for cell in cells),
+                        "text": " ".join(cell.text for cell in cells),
+                        "bbox": [
+                            min(cell.bbox[0] for cell in cells),
+                            min(cell.bbox[1] for cell in cells),
+                            max(cell.bbox[2] for cell in cells),
+                            max(cell.bbox[3] for cell in cells),
+                        ],
+                        "table": None,
+                    }
+                )
+            )
+    return output
+
+
 def extract_pdf(
     content: bytes,
     options: ExtractOptions,
@@ -22,10 +65,12 @@ def extract_pdf(
     vlm: VisionFallback,
     judge=None,
 ):
+    if document_format(content) == "html":
+        options = options.model_copy(update={"focused_verification": False, "verify_fields": []})
     with events.span("native_text") as span:
         pages = native_pages(content, settings)
         span.set(pages=len(pages))
-    readers = {"native": [line for page in pages for line in page["lines"]]}
+    readers = {"native": invoice_lines(pages)}
     fields, _ = parse_invoice(readers["native"], settings.ocr_min_confidence)
     warnings, page_reports, images = [], [], {}
     metrics = {
@@ -62,7 +107,7 @@ def extract_pdf(
         warnings.extend(
             {"code": code, "page": number, "stage": "native"} for code in page.get("warnings", [])
         )
-        needs_ocr = (
+        needs_ocr = page.get("source_format", "pdf") != "html" and (
             chars < 40
             or text.count("\ufffd") / max(1, chars) > 0.02
             or (page["image_ratio"] > 0.5 and bool(set(unresolved(fields)) - {"currency"}))
@@ -106,8 +151,8 @@ def extract_pdf(
         page_reports.append(report)
 
     fields, decisions, _ = reconcile(readers, settings.ocr_min_confidence)
-    vision_enabled = options.vlm is True or (
-        options.vlm is None and getattr(vlm, "configured", False)
+    vision_enabled = document_format(content) != "html" and (
+        options.vlm is True or (options.vlm is None and getattr(vlm, "configured", False))
     )
     # Native missing currency does not justify guessing with a model. On scanned
     # pages any unresolved field, including currency, can trigger image inspection.

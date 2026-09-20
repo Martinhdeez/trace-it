@@ -35,7 +35,7 @@ def create_router(
         request: Request,
         file: Annotated[
             UploadFile,
-            File(description="Original PDF or XLSX; business fields are read from its contents."),
+            File(description="PDF, JPG, PNG, HTML or XLSX; fields are read from the contents."),
         ],
         ocr: Annotated[
             bool, Form(description="Allow local OCR for pages without reliable text.")
@@ -88,7 +88,7 @@ def create_router(
         request: Request,
         files: Annotated[
             list[UploadFile],
-            File(description="Original PDF or XLSX; business fields are read from its contents."),
+            File(description="PDF, JPG, PNG, HTML or XLSX; fields are read from the contents."),
         ],
         ocr: Annotated[
             bool, Form(description="Allow local OCR for pages without reliable text.")
