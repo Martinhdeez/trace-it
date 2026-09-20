@@ -9,6 +9,7 @@ import unicodedata
 from collections import Counter
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from app.core.config import settings
 
@@ -28,9 +29,10 @@ ENGINE_CODES = (
 MAX_TEXT = 200  # a longer value is a page of text (`free_text`), not evidence for a line
 
 
-def trace_url(process_id: int, instance_id: int) -> str:
-    """The console screen that opens this case's trace: Revisión on that instance."""
-    return f"{settings.console_base_url}/processes/{process_id}/review?i={instance_id}"
+def trace_url(process_id: int, file_id: str) -> str:
+    """Resolve the exported document in its process, even after a demo reset changes IDs."""
+    base = settings.console_base_url.rstrip("/")
+    return f"{base}/processes/{process_id}/review?{urlencode({'file': file_id})}"
 
 
 def _short(value: Any) -> str:
