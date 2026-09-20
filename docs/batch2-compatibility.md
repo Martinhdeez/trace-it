@@ -45,8 +45,11 @@ add up, or an account the master never approved — because the engine takes the
 highest-priority rule that fired and ESCALAR outranks NO_PAGAR, so an unconditional
 currency rule would turn those refusals into reviews.
 
-Rates come from `processes/invoice-payment/rates.json` and are loaded beside the
-workbook, as the `rates` source: `currency`, `eur_per_unit`, `as_of`, `valid_until`,
+Rates are a source of truth, not something a rule looks up over the network: the engine
+stays pure and the rate a decision used stays in its snapshot (ADR 0038, which also says
+how a rates connector would replace the hand-filled table without a code change). They
+come from `processes/invoice-payment/rates.json`, loaded beside the workbook as the
+`rates` source: `currency`, `eur_per_unit`, `as_of`, `valid_until`,
 `tolerance_pct` and a named published `reference`. The rule uses the row whose
 `as_of`..`valid_until` covers the invoice's own date — the rate in force when the
 invoice was issued, never the nearest row and never a clock. A currency may hold
