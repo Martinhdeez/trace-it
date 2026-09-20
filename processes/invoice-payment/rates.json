@@ -1,0 +1,8 @@
+[
+  {"currency": "USD", "eur_per_unit": "0.92", "as_of": "2026-01-02", "valid_until": "2026-12-31", "tolerance_pct": "0", "reference": "ECB euro foreign exchange reference rates, fixing of 2026-01-02"},
+  {"currency": "CHF", "eur_per_unit": "1.05", "as_of": "2026-01-02", "valid_until": "2026-12-31", "tolerance_pct": "0", "reference": "ECB euro foreign exchange reference rates, fixing of 2026-01-02"},
+  {"currency": "GBP", "eur_per_unit": "1.17", "as_of": "2026-01-02", "valid_until": "2026-12-31", "tolerance_pct": "0", "reference": "ECB euro foreign exchange reference rates, fixing of 2026-01-02"},
+  {"currency": "BRL", "eur_per_unit": "0.16129", "as_of": "2026-01-02", "valid_until": "2026-12-31", "tolerance_pct": "0", "reference": "ECB euro foreign exchange reference rates, fixing of 2026-01-02"},
+  {"currency": "JPY", "eur_per_unit": "0.00617", "as_of": "2026-01-02", "valid_until": "2026-12-31", "tolerance_pct": "0", "reference": "ECB euro foreign exchange reference rates, fixing of 2026-01-02"},
+  {"currency": "MXN", "eur_per_unit": "0.05", "as_of": "2026-01-02", "valid_until": "2026-12-31", "tolerance_pct": "0", "reference": "ECB euro foreign exchange reference rates, fixing of 2026-01-02"}
+]

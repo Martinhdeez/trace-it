@@ -143,11 +143,13 @@ def restore_rules(db, baselines):
             raise ValueError("Rule baseline does not match the installed process")
         snapshot = deepcopy(row["snapshot"])
         if baseline.get("extraction_settings"):
-            snapshot["execution"]["extraction"] = deepcopy(
+            snapshot.setdefault("execution", {})["extraction"] = deepcopy(
                 baseline["extraction_settings"]
             )
         if baseline.get("source_schemas"):
             snapshot.setdefault("source_schemas", {}).update(baseline["source_schemas"])
+        if baseline.get("connectors"):
+            snapshot.setdefault("connectors", {}).update(baseline["connectors"])
         db.execute("DELETE FROM process_drafts WHERE process_id=%s", (pid,))
         db.execute("UPDATE processes SET active_version_id=NULL WHERE id=%s", (pid,))
         db.execute("DELETE FROM process_versions WHERE process_id=%s", (pid,))
@@ -291,14 +293,17 @@ def validate_seed(seed):
         batches = seed["batches"]
         if len(batches) != 2 or [b["count"] for b in batches] != [500, 40]:
             raise ValueError("The challenge requires batches of 500 and 40 PDFs")
-        if len({b["process_id"] for b in batches}) != 2:
-            raise ValueError("Each batch requires its own process and ERP")
+        if len({b["process_id"] for b in batches}) != 1:
+            raise ValueError("Both invoice batches must belong to one process")
+        batch_names = [set(batch["documents"]) for batch in batches]
+        if batch_names[0] & batch_names[1]:
+            raise ValueError("Invoice batches must not share document names")
         for batch in batches:
             pid = batch["process_id"]
-            if counts.get(pid) != batch["count"]:
-                raise ValueError("Incomplete challenge batch")
             actual = {
-                e["name"]: e["hash"] for e in seed["examples"] if e["process_id"] == pid
+                e["name"]: e["hash"]
+                for e in seed["examples"]
+                if e["process_id"] == pid and e["name"] in batch["documents"]
             }
             if len(actual) != batch["count"] or actual != batch["documents"]:
                 raise ValueError(
@@ -309,8 +314,39 @@ def validate_seed(seed):
                 raise ValueError("Missing challenge reference sources")
             if len(tables["erp"]) != batch["erp_count"]:
                 raise ValueError("Wrong ERP snapshot for challenge batch")
+        invoice_pid = batches[0]["process_id"]
+        if counts.get(invoice_pid) != sum(batch["count"] for batch in batches):
+            raise ValueError("Incomplete challenge population")
         if [b["erp_count"] for b in batches] != [516, 556]:
             raise ValueError("Expected original and updated ERP snapshots")
+        hiring = seed.get("hiring")
+        if hiring:
+            if hiring["count"] != 41 or len(hiring["documents"]) != 41:
+                raise ValueError("Hiring seed requires exactly 41 cached CVs")
+            if hiring["withheld"] != ["cv-002.pdf", "cv-021.pdf", "cv-024.pdf"]:
+                raise ValueError(
+                    "Hiring seed must withhold one interview, reject and review"
+                )
+            actual = {
+                e["name"]: e["hash"]
+                for e in seed["examples"]
+                if e["process_id"] == hiring["process_id"]
+            }
+            if actual != hiring["documents"]:
+                raise ValueError("Hiring names and PDF hashes must match the manifest")
+            if hiring["source"] != "criminal_records" or hiring["erp_count"] != len(
+                hiring["source_rows"]
+            ):
+                raise ValueError("Hiring criminal-records snapshot is incomplete")
+            ana = next(
+                e
+                for e in seed["examples"]
+                if e["process_id"] == hiring["process_id"] and e["name"] == "cv-001.pdf"
+            )
+            if ana.get("expected") != "REJECT" or ana.get("expected_reasons") != [
+                "CRIMINAL_RECORD_MATCH"
+            ]:
+                raise ValueError("Ana Molina must be rejected by the ERP match")
         if not re.fullmatch(r"[0-9a-f]{40}", seed["challenge_commit"]):
             raise ValueError("A pinned challenge commit is required")
         for item in seed["reference_files"]:
@@ -323,68 +359,6 @@ def validate_seed(seed):
                 raise ValueError("Reference file checksum mismatch")
 
 
-def prepare_challenge(db, seed):
-    """Resolve the named batch-2 clone inside the reset transaction; IDs stay monotonic."""
-    if seed["version"] != 4:
-        return seed
-    seed = deepcopy(seed)
-    for batch in seed["batches"]:
-        if "clone_from" not in batch:
-            continue
-        old_id = batch["process_id"]
-        process = db.execute(
-            "SELECT id FROM processes WHERE name=%s", (batch["process_name"],)
-        ).fetchone()
-        if process is None:
-            pid = db.execute(
-                """INSERT INTO processes (name,use_case_id,decision_review)
-                   SELECT %s,use_case_id,decision_review FROM processes WHERE id=%s RETURNING id""",
-                (batch["process_name"], batch["clone_from"]),
-            ).fetchone()["id"]
-            for table, columns in (
-                ("symbols", "name,type,description,required,extraction"),
-                ("decision_types", "name,priority,is_default,requires_human"),
-            ):
-                db.execute(
-                    sql.SQL(
-                        "INSERT INTO {} (process_id,{}) SELECT %s,{} FROM {} WHERE process_id=%s"
-                    ).format(
-                        sql.Identifier(table),
-                        sql.SQL(columns),
-                        sql.SQL(columns),
-                        sql.Identifier(table),
-                    ),
-                    (pid, batch["clone_from"]),
-                )
-            original = db.execute(
-                "SELECT v.snapshot FROM processes p JOIN process_versions v ON v.id=p.active_version_id WHERE p.id=%s",
-                (batch["clone_from"],),
-            ).fetchone()["snapshot"]
-            original["process"].update(id=pid, name=batch["process_name"])
-            original["process"].pop("gathering_email", None)
-            vid = db.execute(
-                """INSERT INTO process_versions(process_id,number,snapshot,validation,content_hash,author,reason)
-                   VALUES (%s,1,%s,%s,%s,'demo-seed','Create isolated challenge batch') RETURNING id""",
-                (
-                    pid,
-                    Jsonb(original),
-                    Jsonb({"valid": True}),
-                    hashlib.sha256(
-                        json.dumps(original, sort_keys=True).encode()
-                    ).hexdigest(),
-                ),
-            ).fetchone()["id"]
-            db.execute(
-                "UPDATE processes SET active_version_id=%s WHERE id=%s", (vid, pid)
-            )
-        else:
-            pid = process["id"]
-        for item in [*seed["examples"], *seed["rule_baselines"], *seed["batches"]]:
-            if item["process_id"] == old_id:
-                item["process_id"] = pid
-    return seed
-
-
 def restore_challenge_sources(db, seed):
     if seed["version"] != 4:
         return
@@ -393,7 +367,9 @@ def restore_challenge_sources(db, seed):
             "INSERT INTO files(hash,name,content,text) VALUES (%s,%s,%s,'') ON CONFLICT(hash) DO NOTHING",
             (item["hash"], item["name"], base64.b64decode(item["content"])),
         )
-    for batch in seed["batches"]:
+    # The runner adds batch 2 after deciding batch 1, so each execution captures the
+    # source state that Alberto had actually supplied at that point.
+    for batch in seed["batches"][:1]:
         for name, rows in batch["sources"].items():
             db.execute(
                 "INSERT INTO sources(process_id,name,origin,rows) VALUES (%s,%s,%s,%s)",
@@ -404,6 +380,45 @@ def restore_challenge_sources(db, seed):
                     Jsonb(rows),
                 ),
             )
+    if hiring := seed.get("hiring"):
+        db.execute(
+            "INSERT INTO sources(process_id,name,origin,rows) VALUES (%s,%s,%s,%s)",
+            (
+                hiring["process_id"],
+                hiring["source"],
+                "hiring-seed:criminal-records",
+                Jsonb(hiring["source_rows"]),
+            ),
+        )
+
+
+def remove_legacy_batch_process(db):
+    """Remove the process clone created by older challenge seeds."""
+    row = db.execute(
+        "SELECT id FROM processes WHERE name='Invoice payment - batch 2'"
+    ).fetchone()
+    if row is None:
+        return
+    pid = row["id"]
+    if db.execute("SELECT 1 FROM mail_accounts WHERE process_id=%s", (pid,)).fetchone():
+        raise ValueError(
+            "Legacy batch-2 process has a mail account; remove it manually"
+        )
+    db.execute("UPDATE processes SET active_version_id=NULL WHERE id=%s", (pid,))
+    for table in (
+        "process_drafts",
+        "process_versions",
+        "sources",
+        "rules",
+        "norm_rules",
+        "symbols",
+        "decision_types",
+    ):
+        db.execute(
+            sql.SQL("DELETE FROM {} WHERE process_id=%s").format(sql.Identifier(table)),
+            (pid,),
+        )
+    db.execute("DELETE FROM processes WHERE id=%s", (pid,))
 
 
 def reset(db, seed, data_dir):
@@ -439,7 +454,6 @@ def reset(db, seed, data_dir):
                             sql.Identifier(table)
                         )
                     )
-                seed = prepare_challenge(db, seed)
                 for item in seed["examples"]:
                     process = db.execute(
                         "SELECT name FROM processes WHERE id=%s", (item["process_id"],)
@@ -454,6 +468,7 @@ def reset(db, seed, data_dir):
                 for table in RUNTIME_TABLES:
                     # No CASCADE or sequence reset: unknown FKs fail safely and IDs stay monotonic.
                     db.execute(sql.SQL("DELETE FROM {}").format(sql.Identifier(table)))
+                remove_legacy_batch_process(db)
                 rule_counts = restore_rules(db, seed["rule_baselines"])
                 # Keep original reference workbooks and every file explicitly used by a source.
                 db.execute("""DELETE FROM files WHERE hash NOT IN (SELECT origin FROM sources)

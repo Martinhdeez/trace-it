@@ -27,10 +27,46 @@ full-scan review policy remains in place. Explicit impossible native dates remai
 business evidence and reach the invalid-date rule. Missing printed currency remains
 optional for the 175 original documents that omit it.
 
-An explicit non-EUR invoice requires review until a conversion policy is adopted.
-The order-total rule skips incomparable currencies; arithmetic within the document
-still runs. No exchange rate is inferred from an order or ERP amount. This is a
-conservative development policy, not a claim about an as-yet-unsupplied norm v4.
+## The currency policy
+
+Money is only compared inside one currency. An invoice is refused only for what fails
+in its own currency: its internal arithmetic (`total` against `base + vat_amount`), its
+VAT against its own printed rate, its IBAN against the master, a duplicate purchase
+order, an ERP entry already paid. Anything uncertain about the currency escalates; it
+never refuses and never pays.
+
+The order-total rule (R07) and the VAT rule (R08) therefore stand down on an invoice
+with an explicitly printed currency other than EUR. The currency rule (R18) takes over
+and escalates when the printed code is not a three-letter currency code, when no
+published rate covers the invoice's date, when the conversion falls outside tolerance,
+or when the VAT does not match the rate printed on the invoice. It deliberately stays
+silent when the invoice is already refusable on its own data — a total that does not
+add up, or an account the master never approved — because the engine takes the
+highest-priority rule that fired and ESCALAR outranks NO_PAGAR, so an unconditional
+currency rule would turn those refusals into reviews.
+
+Rates are a source of truth, not something a rule looks up over the network: the engine
+stays pure and the rate a decision used stays in its snapshot (ADR 0038, which also says
+how a rates connector would replace the hand-filled table without a code change). They
+come from `processes/invoice-payment/rates.json`, loaded beside the workbook as the
+`rates` source: `currency`, `eur_per_unit`, `as_of`, `valid_until`,
+`tolerance_pct` and a named published `reference`. The rule uses the row whose
+`as_of`..`valid_until` covers the invoice's own date — the rate in force when the
+invoice was issued, never the nearest row and never a clock. A currency may hold
+several rows with non-overlapping windows: a rate change is a new row, never an edit,
+like every other source here. The table as delivered carries one window per currency,
+the 2026 financial year, because that is the granularity of the fixings we can cite; a
+monthly or quarterly table is a change to `rates.json`, not to the rule, which already
+picks by window. `tolerance_pct` is 0, so the comparison holds to the norm's own cent:
+every published rate reproduces its order exactly (USD 0.92, CHF 1.05, GBP 1.17,
+BRL 0.16129, JPY 0.00617, MXN 0.05). No rate is ever inferred from an order or an ERP
+amount;
+the reason string carries the whole multiplication, the window and the reference, so a
+reader can redo the sum and see which rate applied.
+
+This is a conservative development policy, not a claim about an as-yet-unsupplied norm
+v4. It applies to the adapted development pack only; the frozen delivery snapshot is
+unchanged.
 
 ## Cumulative references and ERP
 

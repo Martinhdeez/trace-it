@@ -1,0 +1,20 @@
+%%MediaBox 0 0 595 842
+%%Font F1 Helvetica
+BT
+/F1 18 Tf
+72 780 Td
+(Robotic parcel inspection) Tj
+/F1 12 Tf
+0 -36 Td
+(Object detected: false) Tj
+0 -24 Td
+(Inspection confidence: 95) Tj
+0 -24 Td
+(Safe to handle: true) Tj
+0 -24 Td
+(Grasp clear: true) Tj
+0 -24 Td
+(Orientation acceptable: true) Tj
+0 -24 Td
+(Reorientation possible: true) Tj
+ET

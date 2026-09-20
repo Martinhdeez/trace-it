@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.common.exceptions import NotFoundError
 from app.common.extraction import TextLine
+from app.features.ingestion.documents import as_pdf
 
 from .native import PDF_LOCK, render
 
@@ -169,7 +170,7 @@ def normalized(boxes, page_rect, *, ocr_padding=False):
 def locate_document(content, result, ocr=None, settings=None):
     """Ground saved quotes. Optional local OCR only supplies geometry, never new values."""
     lines = [TextLine.model_validate(line) for line in result.data.get("lines", [])]
-    with PDF_LOCK, pymupdf.open(stream=content, filetype="pdf") as document:
+    with PDF_LOCK, pymupdf.open(stream=as_pdf(content, settings), filetype="pdf") as document:
         page_info = [
             {"number": i + 1, "width": p.rect.width, "height": p.rect.height}
             for i, p in enumerate(document)
@@ -233,8 +234,8 @@ def locate_document(content, result, ocr=None, settings=None):
     return output
 
 
-def render_page(content, page_number):
-    with PDF_LOCK, pymupdf.open(stream=content, filetype="pdf") as document:
+def render_page(content, page_number, settings=None):
+    with PDF_LOCK, pymupdf.open(stream=as_pdf(content, settings), filetype="pdf") as document:
         if page_number < 1 or page_number > len(document):
             raise NotFoundError("Document page not found")
         page = document[page_number - 1]

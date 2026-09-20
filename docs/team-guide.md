@@ -72,12 +72,12 @@ A **use case** is what the app is used for (e.g. "Invoice payment"): its `descri
 | `PUT /use-cases/{id}/agents/{role}` | manager | Body `{config, note}`: a new version, active from now on |
 | `POST /agent-configs/{id}/activate` | manager | Activate an existing version: rollback, or adopt one loaded from the pack |
 
-**When a provider fails** (ADR 0019): a role's `fallback_models` are tried in order when the model before answers 5xx, 429 (after the SDK's two retries), times out (`timeout_seconds`) or refuses the connection. An answer a validator rejects never switches models. The `llm_run` span holds `chain`, `failed_attempts` (`[{model, error}]`) and `model`, the one that answered. When every model fails the run is a 502 and the rule stays a `draft` with the error; it cannot be published, so the published version keeps deciding (ADR 0031, atomic publication, supersedes the `blocked` behaviour of ADR 0020). The invoice use case starts every role on `deepseek-v4-flash` and falls back to `glm5.3` / `qwen3.6`. To see it: `make demo-llm-down` sends the normalizer's primary model to an unreachable address (`OPENAI_BASE_URL=http://127.0.0.1:9/v1`) and prints the span:
+**When a provider fails** (ADR 0019): a role's `fallback_models` are tried in order when the model before answers 5xx, 429 (after the SDK's two retries), times out (`timeout_seconds`) or refuses the connection. An answer a validator rejects never switches models. The `llm_run` span holds `chain`, `failed_attempts` (`[{model, error}]`) and `model`, the one that answered. When every model fails the run is a 502 and the rule stays a `draft` with the error; it cannot be published, so the published version keeps deciding (ADR 0031, atomic publication, supersedes the `blocked` behaviour of ADR 0020). The invoice use case starts every role on Vercel AI Gateway's `zai/glm-5.3` and falls back to Helmcode `deepseek-v4-flash` / `qwen3.6`. To see it: `make demo-llm-down` sends the normalizer's primary model to an unreachable address (`OPENAI_BASE_URL=http://127.0.0.1:9/v1`) and prints the span:
 
 ```
-chain: ["deepseek-v4-flash", "glm5.3", "qwen3.6"]
-failed_attempts: [{"model": "deepseek-v4-flash", "error": "ModelAPIError: Connection error."}]
-model: "glm5.3"
+chain: ["zai/glm-5.3", "deepseek-v4-flash", "qwen3.6"]
+failed_attempts: [{"model": "zai/glm-5.3", "error": "ModelAPIError: Connection error."}]
+model: "deepseek-v4-flash"
 ```
 
 The [learning flow](learning.md) analyzes past cases on demand and prepares deterministic norms or subjective review guidance. A manager approves each validated norm before adoption. Preparation never enters the live rule-creation path.
@@ -105,7 +105,7 @@ benchmark and golden-reference tools also need `pdftotext` (poppler).
 | `make backup` | `pg_dump` of the live database into `backups/` (`DB_CONTAINER`, `DB_NAME`) |
 | `make export-batch FILES=<dir> OUT=<file>` | Outcomes of the instances named like the PDFs of `<dir>` only, then checked: one line per file, valid results (`docs/runbook-batch2.md`) |
 | `make check-outcomes OUT=<file> FILES=<dir>` | Only the check, for a file already written |
-| `make delivery` | Exports both batches into `delivery/outcomes.jsonl` and `delivery/outcomes_lote2.jsonl` (with the trace fields when the export CLI has `--trace`) and checks both against the hackathon contract. `DELIVERY_PACK`, `B1`, `L2`, `OUT1`, `OUT2` override the pack, the batches and the outputs (`delivery/README.md`) |
+| `make delivery` | Exports both batches into `delivery/outcomes.jsonl` and `delivery/outcomes_lote2.jsonl` (with the trace fields) and checks both against the hackathon contract. `DELIVERY_PACK`, `B1`, `L2`, `OUT1`, `OUT2` override the pack, the batches and the outputs (`delivery/README.md`) |
 | `make compile` | Compiles the draft rules with the two agents (needs LLM keys); compiling never publishes, `make activate` does |
 | `make demo` | Uploads workbook and 500 PDFs through the production API, syncs the ERP, runs decisions and exports `output/outcomes.jsonl` (`tools/README.md`). Requires the backend and ERP running, plus downloaded OCR weights for scans |
 | `make demo DEMO_ARGS="--limit 5 --local-only"` | Small API run with local OCR and no Gemini/Jev requests; use a fresh database for comparable results |
@@ -134,7 +134,7 @@ The console: `cd frontend && npm install && npm run dev`, then http://127.0.0.1:
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` | LLM providers. Only `make compile`, `make eval-compiler` and the assistant need them |
 | `TRACE_ERP_USER`, `TRACE_ERP_PASSWORD`, `TRACE_ERP_URL` | The ERP connector, named in `processes/invoice-payment/sources.json`. Docker sets the URL to `host.docker.internal:${ERP_PORT:-8009}` |
 | `TRACE_HEALTH_*` | `GET /health/planes` thresholds: window, error rates, p95 per plane, and `TRACE_HEALTH_MIN_SPANS` (default 5): below it a plane is `ok`, "not enough data" |
-| `TRACE_COMPILER_MODEL`, `TRACE_TESTER_MODEL`, `TRACE_ASSISTANT_MODEL` | One model per agent role, `provider:model` (any PydanticAI provider, or `helmcode:<model>` with `HELMCODE_API_KEY`). Default `helmcode:deepseek-v4-flash` for every role, with `TRACE_FALLBACK_MODELS` (`helmcode:glm5.3`, `helmcode:qwen3.6`) for roles the use case does not set (`app/core/config.py`) |
+| `TRACE_COMPILER_MODEL`, `TRACE_TESTER_MODEL`, `TRACE_ASSISTANT_MODEL` | One model per agent role, `provider:model` (any PydanticAI provider, `helmcode:<model>` with `HELMCODE_API_KEY`, or `vercel:<provider/model>` with `AI_GATEWAY_API_KEY`). Default `vercel:zai/glm-5.3` for every role, with `TRACE_FALLBACK_MODELS` (`helmcode:deepseek-v4-flash`, `helmcode:qwen3.6`) for roles the use case does not set (`app/core/config.py`) |
 | `TRACE_AUTO_ACTIVATE_MAX_CHANGE` | Share of past decisions a compiled rule may change and still activate by itself (default 0.05) |
 | `TRACE_DECISION_WORKERS` | Rule sandbox subprocesses evaluated concurrently (default 4) |
 | `TRACE_DATABASE_URL` | Set by Docker; the Makefile overrides it for tests |

@@ -2,7 +2,7 @@ import type { DecisionType, InstanceOut } from '../api/contracts'
 
 /**
  * Why a case waiting on the manager goes first. The inbox sorts by what a person would
- * look at first: invoices already past their due date, then those about to be, then the
+ * look at first: documents already past their due date, then those about to be, then the
  * big ones. The due date is the issue date plus the legal default term (Ley 3/2004).
  * Plain arithmetic on the list; the engine never sees any of it.
  */
@@ -135,9 +135,9 @@ export function severity(flags: Flag[]): 'high' | 'medium' | 'low' {
 
 /** Engine codes a manager should not have to decode. */
 const CAUSES: Record<string, string> = {
-  MISSING_DATA: 'Faltan datos en la factura',
+  MISSING_DATA: 'Faltan datos en el documento',
   UNVERIFIED_DATA: 'Datos leídos sin confirmar',
-  SCAN_REVIEW: 'Factura escaneada: revisar la lectura',
+  SCAN_REVIEW: 'Documento escaneado: revisar la lectura',
   RULE_ERROR: 'Una regla no pudo evaluarse',
   RULE_CONFLICT: 'Dos reglas no se ponen de acuerdo',
   SOURCE_UNAVAILABLE: 'Una fuente de datos no respondió',

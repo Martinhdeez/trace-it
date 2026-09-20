@@ -1,27 +1,26 @@
-import { useState } from 'react'
-import { AnimatePresence, motion } from 'motion/react'
-import { AlertTriangle, CheckCircle2, ChevronDown, FileSearch, XCircle } from 'lucide-react'
+import { useId, useState, type ReactNode } from 'react'
+import { Activity, CheckCircle2, ChevronDown, ClipboardList, Database, FileCode2, FileSearch, History, ListChecks, ListTree, XCircle, type LucideIcon } from 'lucide-react'
 import type {
   InstanceDetail,
   InstanceTrace,
   SpanNode,
   SymbolIO,
   SymbolReading,
+  VersionOut,
 } from '../../api/contracts'
 import { Link } from 'react-router'
-import { formatMs, formatRunDate } from '../../lib/format'
+import { formatMs, formatRunDate, humanize } from '../../lib/format'
 import { ALERTS_TAB, paths } from '../../lib/paths'
 import { cn } from '../../lib/cn'
 import { t } from '../../i18n'
-import { label, tone } from '../../lib/status'
+import { label } from '../../lib/status'
 import { JsonHighlight } from '../../lib/jsonHighlight'
 import { symbolLabel } from '../../lib/symbols'
 import { ExpandableText } from '../shell/ExpandableText'
 import { EmptyState } from '../shell/Notice'
 import { StatusBadge } from '../shell/StatusBadge'
 import { DocumentPopup } from './DocumentPopup'
-
-const ease = [0.23, 1, 0.32, 1] as const
+import { SenderContact } from './SenderContact'
 
 /**
  * Why this instance ended where it did: the decision, the result of every rule
@@ -31,11 +30,13 @@ export function TracePane({
   instance,
   trace,
   schema,
+  versions,
 }: {
   instance: InstanceDetail | undefined
   trace: InstanceTrace | undefined
   /** The process's symbols: which are required, and which hold a whole transcript. */
   schema?: SymbolIO[]
+  versions?: VersionOut[]
 }) {
   const [document, setDocument] = useState<{ instanceId: number; symbol?: string } | null>(null)
   if (!instance) {
@@ -69,7 +70,7 @@ export function TracePane({
       ? CheckCircle2
       : current === 'NO_PAGAR' || current === 'RECHAZAR'
         ? XCircle
-        : AlertTriangle
+        : ClipboardList
 
   return (
     <aside className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pb-4 sm:px-6 lg:h-full lg:overflow-y-auto">
@@ -90,7 +91,7 @@ export function TracePane({
               'grid h-10 w-10 shrink-0 place-items-center rounded-[12px]',
               (current === 'PAGAR' || current === 'APROBAR') && 'bg-pagar-soft text-pagar',
               (current === 'NO_PAGAR' || current === 'RECHAZAR') && 'bg-nopagar-soft text-nopagar',
-              (current === 'ESCALAR' || current === 'PENDING') && 'bg-escalar-soft text-escalar',
+              (current === 'ESCALAR' || current === 'PENDING') && 'bg-canvas text-ink',
             )}
           >
             <DecisionIcon size={19} strokeWidth={1.8} />
@@ -102,7 +103,7 @@ export function TracePane({
                 'mt-1 text-[26px] font-medium leading-none tracking-[-0.045em]',
                 (current === 'PAGAR' || current === 'APROBAR') && 'text-pagar',
                 (current === 'NO_PAGAR' || current === 'RECHAZAR') && 'text-nopagar',
-                (current === 'ESCALAR' || current === 'PENDING') && 'text-escalar',
+                (current === 'ESCALAR' || current === 'PENDING') && 'text-ink',
               )}
             >
               {shown}
@@ -134,29 +135,34 @@ export function TracePane({
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-[820px]">
+      <div className="mx-auto mt-6 w-full max-w-[820px]">
+        <div className="mb-3">
+          <h3 className="text-[14px] font-medium">{t('trace.technicalDetails')}</h3>
+          <p className="mt-1 text-[12px] text-muted">{t('trace.technicalHint')}</p>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
         {results.length ? (
-        <Block title={`reglas · ${results.length}`} openByDefault>
+        <Block title={t('trace.rules')} count={results.length} icon={ListChecks}>
           <ul className="divide-y divide-hairline">
             {results.map((outcome) => (
-              <li key={outcome.rule_id} className="px-3 py-2">
+              <li key={outcome.rule_id} className="px-4 py-3">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-[12px] text-ink">{outcome.rule_summary || outcome.rule_text || `Regla ${outcome.rule_id}`}</span>
                   <span
                     className={cn(
-                      'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px]',
+                      'shrink-0 rounded-md px-2 py-1 text-[10px]',
                       outcome.fires === null && 'bg-nopagar-soft text-nopagar',
-                      outcome.fires === true && tone('ESCALAR'),
+                      outcome.fires === true && 'bg-well text-ink',
                       outcome.fires === false && 'text-faint',
                     )}
                   >
-                    {outcome.fires === null ? 'error' : outcome.fires ? 'salta' : 'ok'}
+                    {t(outcome.fires === null ? 'trace.error' : outcome.fires ? 'trace.fired' : 'trace.notFired')}
                   </span>
                 </div>
                 {outcome.fires !== false ? (
                   <p
                     className={cn(
-                      'mt-0.5 font-mono text-[11px]',
+                      'mt-1 break-words font-mono text-[11px] leading-5',
                       outcome.fires === null ? 'text-nopagar' : 'text-muted',
                     )}
                   >
@@ -169,7 +175,7 @@ export function TracePane({
         </Block>
         ) : null}
 
-        <Block title={`símbolos · ${symbols.length}`}>
+        <Block title={t('trace.symbols')} count={symbols.length} icon={ListTree}>
         {symbols.length === 0 ? (
           <p className="px-3 py-3 text-[12px] text-muted">
             Nadie ha extraído los símbolos de esta instancia todavía.
@@ -177,19 +183,19 @@ export function TracePane({
         ) : (
           <ul className="divide-y divide-hairline">
             {symbols.map(([name, symbol]) => {
-              const value =
-                symbol.value === null || symbol.value === undefined ? null : String(symbol.value)
-              const long = value != null && value.length > LONG_VALUE
+              const structured = structuredValue(symbol.value)
+              const value = symbol.value == null ? null : String(symbol.value)
+              const long = structured !== null || (value != null && value.length > LONG_VALUE)
               return (
-              <li key={name} className="px-3 py-1.5">
+              <li key={name} className="px-4 py-3">
                 <div className="flex items-baseline justify-between gap-3">
                   {symbol.origin?.match(/^(document|scan):/) ? (
                     <button
                       type="button"
-                      aria-label={`View ${name} in original PDF`}
+                      aria-label={`View ${name} in original document`}
                       onClick={() => setDocument({ instanceId: instance.id, symbol: name })}
                       className={cn(
-                        'inline-flex items-center gap-1.5 text-left font-mono text-[11px] text-ocr underline decoration-ocr/30 underline-offset-4 hover:decoration-ocr',
+                        'inline-flex items-center gap-1.5 text-left text-[12px] text-ocr underline decoration-ocr/30 underline-offset-4 hover:decoration-ocr',
                         long ? 'min-w-0' : 'max-w-[55%] shrink-0',
                       )}
                     >
@@ -199,7 +205,7 @@ export function TracePane({
                   ) : (
                     <span
                       className={cn(
-                        'break-words font-mono text-[11px] text-muted',
+                        'break-words text-[12px] text-muted',
                         long ? 'min-w-0' : 'max-w-[55%] shrink-0',
                       )}
                     >
@@ -218,9 +224,11 @@ export function TracePane({
                     </span>
                   )}
                 </div>
-                {long ? (
+                {structured !== null ? (
+                  <JsonHighlight value={structured} className="mt-2 max-h-72 rounded-lg" />
+                ) : long ? (
                   <ExpandableText
-                    text={readable(value)}
+                    text={readable(value ?? '')}
                     className="mt-1 rounded-[8px] bg-canvas px-2.5 py-1.5 font-mono text-[11px] leading-5 text-ink"
                   />
                 ) : null}
@@ -240,21 +248,30 @@ export function TracePane({
             still waits on this case. If merging a newer version from Carlos, keep his UI and preserve:
             trace.sources_read rows and trace.pending links to Revisión with ?i=<instance>. */}
         {trace?.sources_read.length ? (
-          <Block title={`${t('trace.sourcesRead')} · ${trace.sources_read.length}`}>
+          <Block title={t('trace.sourcesRead')} count={trace.sources_read.length} icon={Database}>
             <ul className="divide-y divide-hairline">
               {trace.sources_read.map((source) => (
-                <li key={source.source} className="flex items-baseline gap-2 px-3 py-2">
-                  <span className="font-mono text-[11px] text-ink">{source.source}</span>
-                  <span className={cn('font-mono text-[10px]', source.status === 'ok' ? 'text-faint' : 'text-nopagar')}>
-                    {source.status}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted">
-                    {source.requests} {t('trace.requests')} · {source.retries} {t('trace.retries')} ·{' '}
-                    {source.rate_limited} {t('trace.rateLimited')} · {source.timeouts} {t('trace.timeouts')}
-                  </span>
-                  <span className="shrink-0 text-[10.5px] text-faint">
-                    {source.duration_ms == null ? '—' : formatMs(source.duration_ms)}
-                  </span>
+                <li key={source.source} className="px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="min-w-0 flex-1 break-words text-[12px] font-medium text-ink">{source.source}</span>
+                    <span className={cn('rounded-md px-2 py-0.5 text-[10px]', source.status === 'ok' ? 'bg-canvas text-muted' : 'bg-nopagar-soft text-nopagar')}>
+                      {t(source.status === 'ok' ? 'trace.sourceOk' : 'trace.sourceError')}
+                    </span>
+                    <span className="text-[11px] tabular-nums text-muted">
+                      {source.duration_ms == null ? '—' : formatMs(source.duration_ms)}
+                    </span>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {[
+                      ['requests', source.requests], ['retries', source.retries],
+                      ['rateLimited', source.rate_limited], ['timeouts', source.timeouts],
+                    ].map(([key, value]) => (
+                      <div key={key}>
+                        <dt className="text-[10.5px] text-muted">{t(`trace.${key}`)}</dt>
+                        <dd className="mt-0.5 text-[13px] tabular-nums text-ink">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
                 </li>
               ))}
             </ul>
@@ -263,31 +280,58 @@ export function TracePane({
 
         {trace ? <PendingBlock trace={trace} /> : null}
 
-        <Block title={`traza · ${trace?.spans.length ?? 0} pasos`}>
+        <Block title={t('trace.steps')} count={trace?.spans.length ?? 0} icon={Activity}>
+          {!trace?.spans.length ? <p className="px-4 py-3 text-[12px] text-muted">{t('trace.noSteps')}</p> : null}
           {(trace?.spans ?? []).map((span) => (
             <SpanBlock key={span.span_id} span={span} />
           ))}
         </Block>
 
         {instance.decisions.length > 1 ? (
-        <Block title={`histórico · ${instance.decisions.length}`}>
+        <Block
+          title={t('trace.history')}
+          count={instance.decisions.length}
+          icon={History}
+          openByDefault
+        >
           <ul className="divide-y divide-hairline">
-            {instance.decisions.map((decision) => (
-              <li key={decision.id} className="flex items-baseline gap-2 px-3 py-2">
-                <StatusBadge value={decision.decision} />
-                <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted">
-                  {decision.reason}
-                </span>
-                <span className="shrink-0 text-[10.5px] text-faint">{decision.author}</span>
-              </li>
-            ))}
+            {instance.decisions.map((decision) => {
+              const version = versions?.find((item) => item.id === decision.version_id)
+              return (
+                <li key={decision.id} className="flex items-baseline gap-2 px-3 py-2">
+                  <StatusBadge value={decision.decision} />
+                  <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted">
+                    {decision.reason || 'Sin incidencias'}
+                  </span>
+                  <span className="shrink-0 font-mono text-[10.5px] text-faint">
+                    {version ? `v${version.number}` : 'versión desconocida'} · {formatRunDate(decision.created_at)}
+                  </span>
+                </li>
+              )
+            })}
           </ul>
         </Block>
         ) : null}
 
-        <Block title="línea de la exportación">
-          <JsonHighlight value={{ file_id: instance.name, result: trace?.exported_decision ?? null }} />
+        <Block title={t('trace.export')} icon={FileCode2}>
+          <div className="px-4 py-3">
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-3 text-[12px]">
+              <dt className="text-muted">{t('trace.file')}</dt>
+              <dd className="break-all text-ink">{instance.name}</dd>
+              <dt className="text-muted">{t('trace.result')}</dt>
+              <dd>{trace?.exported_decision ? <StatusBadge value={trace.exported_decision} /> : <span className="text-muted">{t('trace.noExport')}</span>}</dd>
+            </dl>
+            <details className="group mt-4 border-t border-hairline pt-3">
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11.5px] text-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+                <ChevronDown size={12} className="group-open:rotate-180" />
+                {t('trace.viewJson')}
+              </summary>
+              <JsonHighlight className="mt-2 max-h-60 rounded-lg" value={{ file_id: instance.name, result: trace?.exported_decision ?? null }} />
+            </details>
+          </div>
         </Block>
+        </div>
+        <div className="mt-5"><SenderContact instance={instance} /></div>
       </div>
     </aside>
   )
@@ -339,7 +383,7 @@ function PendingBlock({ trace }: { trace: InstanceTrace }) {
     })),
   ]
   return (
-    <Block title={`${t('trace.pending')} · ${rows.length}`} openByDefault={rows.length > 0}>
+    <Block title={t('trace.pending')} count={rows.length} icon={ClipboardList} openByDefault={rows.length > 0}>
       {rows.length === 0 ? (
         <p className="px-3 py-3 text-[12px] text-muted">{t('trace.nothingPending')}</p>
       ) : (
@@ -362,13 +406,11 @@ function PendingBlock({ trace }: { trace: InstanceTrace }) {
 function SpanBlock({ span }: { span: SpanNode }) {
   const duration = span.duration_ms == null ? '—' : formatMs(span.duration_ms)
   return (
-    <Block title={`${span.step} · ${span.status} · ${duration}`}>
-      {span.data ? (
-        <p className="break-words px-3 py-2 text-[11.5px] text-muted">
-          {Object.entries(span.data)
-            .map(([key, value]) => `${key} ${typeof value === 'object' ? JSON.stringify(value) : String(value)}`)
-            .join(' · ')}
-        </p>
+    <Block title={humanize(span.step)} icon={Activity} meta={`${span.status} / ${duration}`}>
+      {span.data && Object.keys(span.data).length ? (
+        <div className="px-4 py-3">
+          <JsonHighlight value={span.data} className="max-h-80 rounded-lg" />
+        </div>
       ) : null}
       {span.children.map((child) => (
         <SpanBlock key={child.span_id} span={child} />
@@ -388,41 +430,55 @@ function DecisionStat({ label: text, value }: { label: string; value: number }) 
 
 function Block({
   title,
+  count,
+  icon: Icon,
+  meta,
   children,
   openByDefault,
 }: {
   title: string
-  children: React.ReactNode
+  count?: number
+  icon: LucideIcon
+  meta?: string
+  children: ReactNode
   openByDefault?: boolean
 }) {
   const [open, setOpen] = useState(Boolean(openByDefault))
+  const id = useId()
   return (
-    <div className="mt-2 overflow-hidden rounded-[16px] ring-1 ring-line">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between px-3 py-2 text-left"
-      >
-        <span className="font-mono text-[11px] text-faint">{title}</span>
-        <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.18, ease }}>
-          <ChevronDown size={14} strokeWidth={1.5} className="text-muted" />
-        </motion.span>
-      </button>
-      <AnimatePresence initial={false}>
-        {open ? (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease }}
-            className="overflow-hidden"
-          >
-            {children}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-    </div>
+    <section className="min-w-0 border-b border-hairline last:border-b-0">
+      <h4>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => setOpen((value) => !value)}
+          className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-canvas/60"
+        >
+          <Icon size={16} strokeWidth={1.6} className="shrink-0 text-muted" />
+          <span className="min-w-0 flex-1 text-[13px] font-medium text-ink">{title}</span>
+          {count != null ? <span className="min-w-6 rounded-md bg-canvas px-1.5 py-0.5 text-center text-[11px] tabular-nums text-muted">{count}</span> : null}
+          {meta ? <span className="text-right text-[10.5px] text-muted">{meta}</span> : null}
+          <ChevronDown size={14} strokeWidth={1.5} className={cn('shrink-0 text-muted transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
+        </button>
+      </h4>
+      <div id={id} hidden={!open} className="min-w-0 border-t border-hairline bg-canvas/25">
+        {open ? children : null}
+      </div>
+    </section>
   )
+}
+
+/** Structured readings sometimes arrive as a JSON string; preserve their shape for display. */
+function structuredValue(value: unknown): object | null {
+  if (value !== null && typeof value === 'object') return value
+  if (typeof value !== 'string' || !/^\s*[[{]/.test(value)) return null
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return parsed !== null && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
 }
 
 /** Past this, a value is a passage: it goes under its name, two lines until opened. */

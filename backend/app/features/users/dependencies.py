@@ -9,13 +9,13 @@ from app.core.database import Session
 from app.features.users.model import User
 
 
-# Bearer callers always use the reserved manager. Browser identity stays behind Basic auth.
+# Bearer callers always use the reserved manager. The public demo browser selects its identity.
 async def current_user(
     session: Session,
     authenticated: BearerIdentity,
     x_user_id: Annotated[int | None, Header()] = None,
 ) -> User:
-    """Resolve the API manager or the Basic-authenticated browser's chosen user."""
+    """Resolve the API manager or the demo browser's chosen user."""
     if authenticated:
         user = await session.scalar(select(User).where(User.email == API_USER_EMAIL))
         if user is None or user.role != "manager":

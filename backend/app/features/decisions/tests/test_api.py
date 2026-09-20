@@ -4,16 +4,22 @@ Ingestion and extraction do not exist yet, so the instances, sources and compile
 inserted directly. The sandbox is faked except where a test says otherwise.
 """
 
+import contextlib
 import json
 import uuid
+from collections.abc import Iterator
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import update
+from sqlalchemy import event, update
 
+from app.core.config import settings
+from app.core.database import engine as db_engine
 from app.core.database import session_factory
 from app.features.agents import sandbox
+from app.features.decisions import service
 from app.features.ingestion.model import File, Instance
 from app.features.processes.model import DecisionType, Symbol
 from app.features.rules.model import Rule
@@ -248,6 +254,94 @@ async def test_resolve_rejects_a_decision_not_in_the_process(fake_sandbox: None)
         )
         assert r.status_code == 409, r.text
         assert r.json()["code"] == "conflict"
+
+
+async def test_export_without_trace_keeps_its_fields(fake_sandbox: None) -> None:
+    async with client() as api:
+        process_id, _ = await create_process(api, "manager")
+        await api.post(f"/processes/{process_id}/run")
+
+        r = await api.get(f"/processes/{process_id}/export")
+        assert r.status_code == 200, r.text
+        lines = [json.loads(line) for line in r.text.splitlines()]
+        assert lines and all(sorted(line) == ["file_id", "reason", "result"] for line in lines)
+
+
+async def test_export_trace_adds_the_console_link(fake_sandbox: None) -> None:
+    async with client() as api:
+        process_id, _ = await create_process(api, "manager")
+        await api.post(f"/processes/{process_id}/run")
+
+        r = await api.get(f"/processes/{process_id}/export", params={"trace": "true"})
+        assert r.status_code == 200, r.text
+        lines = [json.loads(line) for line in r.text.splitlines()]
+        assert all(sorted(line) == ["file_id", "reason", "result", "trace_url"] for line in lines)
+        for line in lines:
+            link = urlsplit(line["trace_url"])
+            assert link.path.endswith(f"/processes/{process_id}/review")
+            assert parse_qs(link.query) == {"file": [line["file_id"]]}
+
+
+@contextlib.contextmanager
+def count_queries() -> Iterator[list[str]]:
+    """Every statement the database runs, to catch one query per exported instance."""
+    seen: list[str] = []
+
+    def before(conn: Any, cursor: Any, statement: str, *rest: Any) -> None:
+        seen.append(statement)
+
+    event.listen(db_engine.sync_engine, "before_cursor_execute", before)
+    try:
+        yield seen
+    finally:
+        event.remove(db_engine.sync_engine, "before_cursor_execute", before)
+
+
+async def test_export_full_writes_the_trace_inline(fake_sandbox: None) -> None:
+    """`full`: the whole trace of the decision on the line itself, from stored rows only."""
+    async with client() as api:
+        process_id, headers = await create_process(api, "manager")
+        await api.post(f"/processes/{process_id}/run")
+        escalated = (await api.get(f"/processes/{process_id}/queue")).json()[0]
+        await api.post(
+            f"/instances/{escalated['id']}/resolve",
+            json={"decision": "NO_PAGAR", "reason": "El IBAN no lo confirma el proveedor"},
+            headers=headers,
+        )
+
+        r = await api.get(f"/processes/{process_id}/export", params={"full": "true"})
+        assert r.status_code == 200, r.text
+        lines = [json.loads(line) for line in r.text.splitlines()]
+        # One object per line, the two keys the verifier reads first, the link last.
+        assert all(list(line)[:2] == ["file_id", "result"] for line in lines)
+        assert all(list(line)[-1] == "trace_url" for line in lines)
+        by_name = {line["file_id"]: line for line in lines}
+
+        # A case a person resolved carries her decision, her justification and her name.
+        resolved = by_name[escalated["name"]]
+        assert resolved["result"] == "NO_PAGAR"
+        assert resolved["decided_by"] == "person"
+        assert resolved["reason"] == "El IBAN no lo confirma el proveedor"
+
+        # An engine case carries the rules that fired, its version and its evidence.
+        automatic = by_name["FA-1016_papelería.pdf"]
+        assert automatic["decided_by"] == "engine"
+        assert automatic["reason_code"] == "RULE_MATCH"
+        assert [rule["result"] for rule in automatic["rules_fired"]] == ["NO_PAGAR"]
+        assert automatic["process_version"] == 1
+        assert automatic["rules_hash"] and automatic["decided_at"].endswith("Z")
+        assert {e["symbol"] for e in automatic["evidence"]} >= {"iban", "purchase_order"}
+        assert "latency_ms" not in automatic  # not stored per instance: never written empty
+        assert automatic["trace_url"].startswith(settings.console_base_url)
+
+        # A second instance costs no extra query: the trace is read for the whole batch.
+        pair = {"factura_1217.pdf", "FA-1016_papelería.pdf"}
+        async with session_factory() as session:
+            with count_queries() as two:
+                await service.export(session, process_id, pair, full=True)
+            with count_queries() as one:
+                await service.export(session, process_id, {"factura_1217.pdf"}, full=True)
+        assert len(two) == len(one)
 
 
 async def test_export_a_duplicate_name_gives_a_single_line(fake_sandbox: None) -> None:

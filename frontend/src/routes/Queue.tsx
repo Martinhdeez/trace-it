@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, FileText } from 'lucide-react'
+import { CheckCircle2, ChevronDown, FileSearch, FileText } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import { families, keys } from '../api/queries'
 import type {
   AlertOut,
   DecisionProposalPayload,
   InstanceDetail,
+  InstanceOut,
   ProcessDetail,
   Proposal,
   ProposalOutcome,
@@ -19,6 +20,7 @@ import { Button, Field, Segmented, Select, Textarea } from '../components/shell/
 import { Empty, EmptyState, ErrorNotice, Notice } from '../components/shell/Notice'
 import { StatusBadge } from '../components/shell/StatusBadge'
 import { TerminalLoader } from '../components/shell/TerminalLoader'
+import { SenderContact } from '../components/run/SenderContact'
 import { cn } from '../lib/cn'
 import { t } from '../i18n'
 import { ALERTS_TAB, paths } from '../lib/paths'
@@ -33,6 +35,20 @@ const REVIEW_TAB = 'review'
 export function Queue() {
   const processId = Number(useParams().processId)
   const [params, setParams] = useSearchParams()
+  // Exported links use a document name: a demo reset recreates its numeric instance ID.
+  const fileName = params.get('file')
+  const linkedInstances = useQuery({
+    queryKey: keys.instances(processId, { q: fileName ?? '' }),
+    queryFn: () => api.listInstances(processId, { q: fileName! }),
+    enabled: fileName !== null,
+  })
+  // The API search is a substring match; only an exact name may satisfy a trace link.
+  // Like export, use the most recent instance when a filename was uploaded more than once.
+  const linkedInstance = linkedInstances.data
+    ?.filter((item) => item.name === fileName)
+    .reduce<InstanceOut | undefined>(
+      (latest, item) => !latest || item.id > latest.id ? item : latest, undefined,
+    )
 
   const process = useQuery({
     queryKey: keys.process(processId),
@@ -70,13 +86,16 @@ export function Queue() {
   const items = queued.filter((item) =>
     tab === REVIEW_TAB ? item.review_pending : item.decision === tab && !item.review_pending,
   )
-  const selectedId = params.get('i') ? Number(params.get('i')) : undefined
+  const selectedId = fileName !== null
+    ? linkedInstance?.id
+    : params.get('i') ? Number(params.get('i')) : undefined
   const showAlerts = tab === ALERTS_TAB
   // reviewer-agent FE-3 (docs/reviewer-agent.md): a resolved case leaves the list but stays
   // open through `?i=` (after resolving, or from the Panel), so "Sugerir regla" can follow.
   // If you are merging a newer version from Carlos, keep his UI and make sure a selected
   // case outside the list still opens.
-  const current = items.find((item) => item.id === selectedId) ?? (selectedId ? undefined : items[0])
+  const current = items.find((item) => item.id === selectedId)
+    ?? (fileName !== null || selectedId ? undefined : items[0])
   const caseId = showAlerts ? undefined : (current?.id ?? selectedId)
   const alert = openAlerts.find((item) => item.id === selectedId) ?? openAlerts[0]
   const nothing = showAlerts
@@ -101,7 +120,15 @@ export function Queue() {
         {escalated.isError ? <ErrorNotice error={escalated.error} /> : null}
         {alerts.isError ? <ErrorNotice error={alerts.error} /> : null}
 
-        {nothing ? (
+        {fileName !== null && linkedInstances.isPending ? (
+          <TerminalLoader verbs={['Buscando el documento']} />
+        ) : fileName !== null && linkedInstances.isError ? (
+          <ErrorNotice error={linkedInstances.error} />
+        ) : fileName !== null && !linkedInstance ? (
+          <Notice tone="warning" title="Documento no encontrado">
+            No hay ningún documento llamado {fileName} en este proceso.
+          </Notice>
+        ) : nothing ? (
           <section className="rounded-[16px] bg-surface ring-1 ring-line">
             {showAlerts ? (
               <EmptyState icon={CheckCircle2} title="Sin alertas">
@@ -184,7 +211,9 @@ export function Queue() {
               instanceId={caseId}
               name={current?.name}
               currentDecision={current?.decision}
-              onSettled={() => setParams({ tipo: tab, i: String(caseId) })}
+              onSettled={() => setParams(fileName !== null
+                ? { tipo: tab, file: fileName }
+                : { tipo: tab, i: String(caseId) })}
             />
           ) : null}
         </div>
@@ -314,7 +343,11 @@ function Resolve({
         </div>
         {shownDecision ? (
           <p className="mt-1.5">
-            <StatusBadge value={shownDecision} decisionTypes={process.decision_types} />
+            <StatusBadge
+              value={shownDecision}
+              decisionTypes={process.decision_types}
+              className={process.decision_types.some((type) => type.name === shownDecision && type.requires_human) ? 'bg-canvas text-muted' : undefined}
+            />
           </p>
         ) : null}
         <div className="mt-3">
@@ -362,7 +395,7 @@ function Resolve({
                   ))}
                 </Select>
               </Field>
-              <Field label="Motivo" hint="Queda en el histórico junto a tu nombre.">
+              <Field label={t('reviewUi.optionalReason')} hint={t('reviewUi.reasonHint')}>
                 <Textarea
                   rows={1}
                   value={note}
@@ -403,6 +436,9 @@ function Resolve({
           </div>
         </>
       )}
+      {instance.data ? (
+        <div className="px-4"><SenderContact instance={instance.data} /></div>
+      ) : null}
     </div>
   )
 }
@@ -450,7 +486,7 @@ function explain(reason: string, fired: RuleResult[]): string[] {
 }
 
 /**
- * What the engine said, in a sentence per reason and the raw reason as a chip, and, when
+ * What the engine said, in a sentence per reason and an expandable technical detail, and, when
  * there was one, what the reviewer thought. Reads the engine's decision, so a resolved case
  * still says why it escalated. reviewer-agent FE-2: if you are merging a newer version from
  * Carlos, keep his UI and make sure it still explains with templates only (no LLM) and keeps
@@ -462,32 +498,55 @@ function WhyEscalated({ instance }: { instance: InstanceDetail }) {
   const results = (engine?.results ?? []) as RuleResult[]
   const fired = results.filter((result) => result.fires === true)
   const review = instance.reviews.at(-1)
+  const fields = reason.match(/^(MISSING_DATA|UNVERIFIED_DATA):\s*(.+)$/s)
+  const missing = fields?.[2].split(',').map((field) => field.trim()).filter(Boolean) ?? []
 
   return (
-    <Notice tone="warning" title="Por qué se escaló">
-      {reason ? (
-        <>
-          <ul className="list-disc space-y-0.5 pl-4">
+    <section className="border-t border-hairline pt-4">
+      <div className="flex items-start gap-3">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-canvas text-muted">
+          <FileSearch size={16} strokeWidth={1.6} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[13px] font-medium text-ink">
+            {fields ? t(fields[1] === 'MISSING_DATA' ? 'reviewUi.missingFields' : 'reviewUi.unverifiedFields') : t('reviewUi.reviewReason')}
+          </h3>
+          {fields ? (
+            <>
+              <p className="mt-1 text-[12px] leading-5 text-muted">{t('reviewUi.missingHint')}</p>
+              <ul className="mt-3 flex flex-wrap gap-1.5">
+                {missing.map((field) => (
+                  <li key={field} className="rounded-md border border-hairline bg-canvas/60 px-2 py-1 text-[11.5px] text-ink">
+                    {symbolNames(field)}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : reason ? (
+          <ul className="mt-1 space-y-1.5 text-[12.5px] leading-5 text-muted">
             {explain(reason, fired).map((line) => (
-              <li key={line}>{line}</li>
+              <li key={line} className="break-words">{line}</li>
             ))}
           </ul>
-          <p className="mt-1.5">
-            <span className="rounded-full bg-canvas px-2 py-1 font-mono text-[10px] text-muted ring-1 ring-line">
-              {reason}
-            </span>
-          </p>
-        </>
-      ) : (
-        <p>El motor no dejó un motivo.</p>
-      )}
+          ) : <p className="mt-1 text-[12px] text-muted">El motor no dejó un motivo.</p>}
+        </div>
+      </div>
+      {reason ? (
+        <details className="group mt-4 border-t border-hairline pt-3">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11.5px] text-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+            <ChevronDown size={12} className="transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+            {t('reviewUi.technicalReason')}
+          </summary>
+          <pre className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-canvas p-3 font-mono text-[11px] leading-5 text-muted">{reason}</pre>
+        </details>
+      ) : null}
       {instance.review_pending && review ? (
-        <p className="mt-1">
+        <p className="mt-3 border-t border-hairline pt-3 text-[12px] leading-5 text-muted">
           Revisor ({t(`reviewStatus.${review.status}`)}): {review.recommendation ?? '—'}
           {review.reasoning ? `. ${review.reasoning}` : ''}
         </p>
       ) : null}
-    </Notice>
+    </section>
   )
 }
 

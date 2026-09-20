@@ -44,6 +44,8 @@ import type {
   VersionDraft,
   VersionOut,
   WorkbookUpload,
+  UsageBreakdown,
+  SpanNode,
 } from './contracts'
 import { BASE, del, get, getText, post, put, query, upload } from './http'
 
@@ -115,6 +117,9 @@ export const liveClient: ApiClient = {
   planeMetrics: <P extends Plane>(processId: number, plane: P) =>
     get<PlaneMetrics[P]>(`/processes/${processId}/metrics/${plane}`),
   processMetrics: (processId) => get<ProcessMetrics>(`/processes/${processId}/metrics`),
+  usageBreakdown: (processId, filters) =>
+    get<UsageBreakdown>(`/processes/${processId}/metrics/breakdown${query(filters)}`),
+  traceSpans: (traceId) => get<SpanNode[]>(`/traces/${encodeURIComponent(traceId)}`),
   planesHealth: () => get<PlaneHealth[]>('/health/planes'),
   getDraft: (processId) => get<VersionDraft>(`/processes/${processId}/draft`),
   validateDraft: (processId) => post<VersionDraft>(`/processes/${processId}/draft/validate`),
@@ -136,6 +141,7 @@ export const liveClient: ApiClient = {
   getInstance: (id) => get<InstanceDetail>(`/instances/${id}`),
   getDocument: (instanceId) => get<ExtractionResult>(`/instances/${instanceId}/document`),
   getTrace: (instanceId) => get<InstanceTrace>(`/instances/${instanceId}/trace`),
+  getAuditTrace: (traceId) => get<SpanNode[]>(`/traces/${traceId}`),
   fileUrl: (instanceId) => `${BASE}/instances/${instanceId}/file`,
   queue: (processId) => get<InstanceOut[]>(`/processes/${processId}/queue`),
   suggestion: (instanceId) => get<Suggestion>(`/instances/${instanceId}/suggestion`),

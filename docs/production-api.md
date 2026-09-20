@@ -7,7 +7,9 @@
 - This guide: https://gex-dashboard.hopto.org/nexia/trace-it/api/guide
 - Base URL: https://gex-dashboard.hopto.org/nexia/trace-it/api
 
-The documentation is public. Reading or modifying production data requires credentials.
+The demo console, business API and documentation are public. Browser actions use the
+automatically selected user. The token below supplies an API manager identity and is
+required for database administration.
 In Swagger, click **Authorize**, enter the API token (without the word `Bearer`), then use
 **Try it out**. Ask the deployment owner for the token; it is not published in this guide.
 Swagger does not persist authorization after a page reload.
@@ -35,10 +37,11 @@ service token, limited to a single assigned process. Never configure the worker 
 administrative token. See [mail-ingestion.md](mail-ingestion.md) for gathering settings,
 read-only IMAP, recovery and disabled installation.
 
-Existing browser access continues to use HTTP Basic at the proxy, with `X-User-Id` for
-application actions. The database administration API ALWAYS requires Bearer, even for a
-caller with valid Basic credentials. Incorrect or disabled Bearer tokens return 401 and
-never fall back to browser identity. With no configured token, Bearer access is disabled.
+Browser access opens without HTTP Basic credentials, with `X-User-Id` for application
+actions. This is a public demonstration, and that header is not secure authentication.
+The database administration API ALWAYS requires Bearer. Incorrect or disabled Bearer tokens
+return 401 and never fall back to browser identity. With no configured token, Bearer access
+is disabled.
 
 Use HTTPS. The production owner chose a short shared token; anyone who knows or guesses
 it can read and change this application's data. The token is not protection from its own
@@ -182,7 +185,7 @@ The backend runs as a non-root container with a read-only root filesystem, dropp
 capabilities, no Docker socket or host project mounts, a read-only OCR model mount, and a
 Trace-it-only data volume. PostgreSQL is not published to the host network. The API token
 has no meaning on other applications, Caddy administration, the ERP login, SSH or Docker.
-The proxy only accepts Bearer for Trace-it's `/api/` path; the web interface remains Basic.
+The backend validates Bearer tokens on Trace-it's `/api/` path; the web interface is public.
 Public docs contain the contract and examples, not production records or credentials.
 
 When Bearer access is enabled, caller-selected local/compatible model URLs must match the
@@ -203,7 +206,7 @@ database, build both production images with their Git revision labels, back up p
 run Alembic with the database owner, provision the restricted runtime role using
 `python -m app.features.database_api.provision` with `TRACE_APP_DATABASE_PASSWORD` supplied
 privately, then set `TRACE_DATABASE_USER=trace_app` and `TRACE_DATABASE_PASSWORD` in private
-Compose configuration. Recreate backend/frontend, verify `/ready`, Basic browser access,
+Compose configuration. Recreate backend/frontend, verify `/ready`, credential-free browser access,
 Bearer reads/writes and rejection tests. Preserve the previous image identifiers for code
 rollback. Never restore an older database automatically. A token rotation requires backend
 recreation, not only a container restart.

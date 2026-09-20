@@ -3,12 +3,12 @@ import type { ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'motion/react'
-import mark from '../../assets/trace-mark-clear.png'
 import { api } from '../../api/client'
 import { keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
 import { ErrorNotice } from './Notice'
 import { SystemStatus } from './SystemStatus'
+import { TraceMark } from './TraceMark'
 import { t } from '../../i18n'
 import { paths, processFromPath } from '../../lib/paths'
 import { useAppState } from '../../state/app'
@@ -53,17 +53,19 @@ function NavItem({
  */
 export function Sidebar({
   collapsed = false,
+  activeProcessId,
   onNavigate,
   onToggleCollapse,
 }: {
   collapsed?: boolean
+  activeProcessId?: number
   onNavigate?: () => void
   onToggleCollapse?: () => void
 }) {
   const { setPaletteOpen } = useAppState()
   const { user } = useSession()
   const location = useLocation()
-  const activeId = processFromPath(location.pathname)
+  const activeId = activeProcessId ?? processFromPath(location.pathname)
 
   const processes = useQuery({ queryKey: keys.processes, queryFn: () => api.listProcesses() })
 
@@ -81,12 +83,7 @@ export function Sidebar({
         )}
       >
         <Link to={paths.landing} onClick={onNavigate} className="flex items-center gap-1.5">
-          <img
-            src={mark}
-            alt=""
-            draggable={false}
-            className="h-6 w-6 shrink-0 select-none object-contain"
-          />
+          <TraceMark className="h-6 w-6" />
           {!collapsed ? (
             <motion.p
               initial={{ opacity: 0, x: -6 }}

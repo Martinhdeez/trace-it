@@ -91,21 +91,17 @@ export-batch:  # FILES=<folder of PDFs> OUT=<file>: outcomes of those files only
 check-outcomes:  # OUT=<file> FILES=<folder of PDFs>: one line per file, valid results
 	cd backend && uv run python -m app.cli check-outcomes $(abspath $(OUT)) --files $(abspath $(FILES))
 
-# The three files the hackathon expects in delivery/ (delivery/README.md). Overridable:
+# The two outcome files the hackathon expects in delivery/ (delivery/README.md). Overridable:
 # DELIVERY_PACK=<pack.json> B1=<batch 1 PDFs> L2=<batch 2 PDFs> OUT1=<file> OUT2=<file>.
-# Exports with the trace fields when the export CLI has --trace; without it, the minimal
-# file_id/result export, and it says so. Both files are then checked; a bad one fails.
+# Both are exported with the trace fields, then checked; a bad one fails.
 DELIVERY_PACK ?= $(FROZEN)
 B1 ?= .context/500-sombras-de-alberto/facturas
 L2 ?= .context/lote_2_sorpresa/facturas
 OUT1 ?= delivery/outcomes.jsonl
 OUT2 ?= delivery/outcomes_lote2.jsonl
 delivery:
-	@cd backend && uv run python -m app.cli export --help | grep -q -- --trace \
-		|| echo "note: the export CLI has no --trace flag yet; writing the minimal export"
-	trace=$$(cd backend && uv run python -m app.cli export --help | grep -o -- '--trace' | head -1); \
-	cd backend && uv run python -m app.cli export $(DELIVERY_PACK) --files $(abspath $(B1)) --output $(abspath $(OUT1)) $$trace \
-		&& uv run python -m app.cli export $(DELIVERY_PACK) --files $(abspath $(L2)) --output $(abspath $(OUT2)) $$trace
+	cd backend && uv run python -m app.cli export $(DELIVERY_PACK) --files $(abspath $(B1)) --output $(abspath $(OUT1)) --trace \
+		&& uv run python -m app.cli export $(DELIVERY_PACK) --files $(abspath $(L2)) --output $(abspath $(OUT2)) --trace
 	python3 tools/check_delivery.py $(OUT1) --files $(B1)
 	python3 tools/check_delivery.py $(OUT2) --files $(L2)
 

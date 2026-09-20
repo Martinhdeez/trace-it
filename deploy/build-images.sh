@@ -9,10 +9,14 @@ build() {
   local component=$1
   local dockerfile=$2
   local attempt
+  local source_hash
+  source_hash=$(python3 deploy/component-hash.py "$component")
 
   for ((attempt = 1; attempt <= attempts; attempt++)); do
     if docker build \
       --build-arg "REVISION=$revision" \
+      --build-arg "SOURCE_HASH=$source_hash" \
+      --build-arg "CRIMINAL_HASH=$(python3 deploy/component-hash.py criminal)" \
       -f "$dockerfile" \
       -t "trace-it-$component:ci" \
       .; then

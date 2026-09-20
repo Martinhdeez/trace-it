@@ -9,6 +9,8 @@ RUN npm run lint && npm run build -- --base=/nexia/trace-it/
 
 FROM nginxinc/nginx-unprivileged:1.28-alpine
 ARG REVISION=local
+ARG SOURCE_HASH
+LABEL org.trace-it.source-hash=$SOURCE_HASH
 LABEL org.opencontainers.image.source="https://github.com/Martinhdeez/trace-it" \
       org.opencontainers.image.revision=$REVISION
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf

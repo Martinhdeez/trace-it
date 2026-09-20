@@ -16,7 +16,6 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL,
-    httpCredentials: { username: 'ci', password: 'ci-only-password' },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

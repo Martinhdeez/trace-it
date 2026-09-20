@@ -1254,7 +1254,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** outcomes.jsonl, one line per instance */
+        /**
+         * outcomes.jsonl, one line per instance
+         * @description `file_id` and `result` come first on every line. `trace=true` adds a `trace_url`: the console screen with that case's trace. `full=true` writes the whole trace inline (`reason_code`, `reason`, `decided_by`, `decided_at`, `process_version`, `rules_hash`, `rules_fired`, `evidence`, `sources_read`, `trace_id`, `trace_url`), leaving out what has no data; a person's later resolution is then the exported one.
+         */
         get: operations["exportOutcomes"];
         put?: never;
         post?: never;
@@ -1324,7 +1327,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Store a PDF and its reading evidence as an instance of a process */
+        /** Store a PDF, JPG, PNG or HTML document with its reading evidence */
         post: operations["uploadProcessDocument"];
         delete?: never;
         options?: never;
@@ -1424,7 +1427,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The file the instance was made from, byte for byte (usually a PDF) */
+        /** The file the instance was made from, byte for byte (PDF, JPG, PNG or HTML) */
         get: operations["getInstanceFile"];
         put?: never;
         post?: never;
@@ -1584,6 +1587,26 @@ export interface paths {
         put?: never;
         /** Activate an existing version (rollback, or adopt one loaded from the pack) */
         post: operations["activateAgentConfig"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/processes/{process_id}/metrics/breakdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Usage by plane, module and model, with history and individual operations
+         * @description Drill down with plane, then module. Tokens and USD count llm_run and network provider_call spans only; journal replays never count as new usage. self_ms subtracts the union of direct child intervals, including cross-plane children. It measures cumulative work, not wall-clock elapsed time. p50/p95 are inclusive operation durations. Timeline buckets attribute each operation to its start time. Reuse the returned until and through_id values for stable pagination, even when in-flight operations finish after the snapshot.
+         */
+        get: operations["getUsageBreakdown"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2537,7 +2560,7 @@ export interface components {
         Body_extractDocument: {
             /**
              * File
-             * @description Original PDF or XLSX; business fields are read from its contents.
+             * @description PDF, JPG, PNG, HTML or XLSX; fields are read from the contents.
              */
             file: string;
             /**
@@ -2565,7 +2588,7 @@ export interface components {
         Body_submitDocumentBatch: {
             /**
              * Files
-             * @description Original PDF or XLSX; business fields are read from its contents.
+             * @description PDF, JPG, PNG, HTML or XLSX; fields are read from the contents.
              */
             files: string[];
             /**
@@ -5918,6 +5941,330 @@ export interface components {
             /** Traces */
             traces?: string | null;
         };
+        /** UsageActivity */
+        UsageActivity: {
+            /**
+             * Spans
+             * @default 0
+             */
+            spans: number;
+            /**
+             * Errors
+             * @default 0
+             */
+            errors: number;
+            /**
+             * Requests
+             * @default 0
+             */
+            requests: number;
+            /**
+             * Replays
+             * @default 0
+             */
+            replays: number;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /**
+             * Cached Tokens
+             * @default 0
+             */
+            cached_tokens: number;
+            /**
+             * Known Cost Usd
+             * @default 0
+             */
+            known_cost_usd: number;
+            /**
+             * Unpriced Requests
+             * @default 0
+             */
+            unpriced_requests: number;
+            /**
+             * Timed Spans
+             * @default 0
+             */
+            timed_spans: number;
+            /**
+             * Self Ms
+             * @default 0
+             */
+            self_ms: number;
+            /** P50 Ms */
+            p50_ms: number | null;
+            /** P95 Ms */
+            p95_ms: number | null;
+            /** Id */
+            id: number;
+            /** Span Id */
+            span_id: string;
+            /** Trace Id */
+            trace_id: string;
+            /** Step */
+            step: string;
+            /** Status */
+            status: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Model */
+            model: string | null;
+            /** Provider */
+            provider: string | null;
+            /** Cost Status */
+            cost_status: string | null;
+            /** Rule Id */
+            rule_id: number | null;
+            /** Instance Id */
+            instance_id: number | null;
+        };
+        /** UsageBreakdown */
+        UsageBreakdown: {
+            /** Process Id */
+            process_id: number;
+            /** Through Id */
+            through_id: number;
+            plane: components["schemas"]["Plane"] | null;
+            /** Module */
+            module: string | null;
+            /** Since */
+            since: string | null;
+            /**
+             * Until
+             * Format: date-time
+             */
+            until: string;
+            /** Bucket Seconds */
+            bucket_seconds: number;
+            totals: components["schemas"]["UsageTotals"] | null;
+            /** Groups */
+            groups: components["schemas"]["UsageGroup"][];
+            /** Flow */
+            flow: components["schemas"]["UsageGroup"][];
+            /** Series */
+            series: components["schemas"]["UsageBucket"][];
+            /** Activity */
+            activity: components["schemas"]["UsageActivity"][];
+            /** Activity Total */
+            activity_total: number;
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+        };
+        /** UsageBucket */
+        UsageBucket: {
+            /**
+             * Spans
+             * @default 0
+             */
+            spans: number;
+            /**
+             * Errors
+             * @default 0
+             */
+            errors: number;
+            /**
+             * Requests
+             * @default 0
+             */
+            requests: number;
+            /**
+             * Replays
+             * @default 0
+             */
+            replays: number;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /**
+             * Cached Tokens
+             * @default 0
+             */
+            cached_tokens: number;
+            /**
+             * Known Cost Usd
+             * @default 0
+             */
+            known_cost_usd: number;
+            /**
+             * Unpriced Requests
+             * @default 0
+             */
+            unpriced_requests: number;
+            /**
+             * Timed Spans
+             * @default 0
+             */
+            timed_spans: number;
+            /**
+             * Self Ms
+             * @default 0
+             */
+            self_ms: number;
+            /** P50 Ms */
+            p50_ms: number | null;
+            /** P95 Ms */
+            p95_ms: number | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            plane: components["schemas"]["Plane"];
+        };
+        /** UsageGroup */
+        UsageGroup: {
+            /**
+             * Spans
+             * @default 0
+             */
+            spans: number;
+            /**
+             * Errors
+             * @default 0
+             */
+            errors: number;
+            /**
+             * Requests
+             * @default 0
+             */
+            requests: number;
+            /**
+             * Replays
+             * @default 0
+             */
+            replays: number;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /**
+             * Cached Tokens
+             * @default 0
+             */
+            cached_tokens: number;
+            /**
+             * Known Cost Usd
+             * @default 0
+             */
+            known_cost_usd: number;
+            /**
+             * Unpriced Requests
+             * @default 0
+             */
+            unpriced_requests: number;
+            /**
+             * Timed Spans
+             * @default 0
+             */
+            timed_spans: number;
+            /**
+             * Self Ms
+             * @default 0
+             */
+            self_ms: number;
+            /** P50 Ms */
+            p50_ms: number | null;
+            /** P95 Ms */
+            p95_ms: number | null;
+            /** Key */
+            key: string;
+            plane: components["schemas"]["Plane"];
+            /** Module */
+            module: string | null;
+            /** Model */
+            model: string | null;
+            /** Provider */
+            provider: string | null;
+        };
+        /** UsageTotals */
+        UsageTotals: {
+            /**
+             * Spans
+             * @default 0
+             */
+            spans: number;
+            /**
+             * Errors
+             * @default 0
+             */
+            errors: number;
+            /**
+             * Requests
+             * @default 0
+             */
+            requests: number;
+            /**
+             * Replays
+             * @default 0
+             */
+            replays: number;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /**
+             * Cached Tokens
+             * @default 0
+             */
+            cached_tokens: number;
+            /**
+             * Known Cost Usd
+             * @default 0
+             */
+            known_cost_usd: number;
+            /**
+             * Unpriced Requests
+             * @default 0
+             */
+            unpriced_requests: number;
+            /**
+             * Timed Spans
+             * @default 0
+             */
+            timed_spans: number;
+            /**
+             * Self Ms
+             * @default 0
+             */
+            self_ms: number;
+            /** P50 Ms */
+            p50_ms: number | null;
+            /** P95 Ms */
+            p95_ms: number | null;
+        };
         /** UseCaseDetail */
         UseCaseDetail: {
             /** Id */
@@ -8805,7 +9152,10 @@ export interface operations {
     };
     exportOutcomes: {
         parameters: {
-            query?: never;
+            query?: {
+                trace?: boolean;
+                full?: boolean;
+            };
             header?: never;
             path: {
                 process_id: number;
@@ -9187,6 +9537,9 @@ export interface operations {
                 };
                 content: {
                     "application/pdf": unknown;
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                    "text/html": unknown;
                 };
             };
             /** @description Validation Error */
@@ -9499,6 +9852,45 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getUsageBreakdown: {
+        parameters: {
+            query?: {
+                plane?: components["schemas"]["Plane"] | null;
+                module?: string | null;
+                since?: string | null;
+                until?: string | null;
+                offset?: number;
+                limit?: number;
+                through_id?: number | null;
+            };
+            header?: never;
+            path: {
+                process_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageBreakdown"];
+                };
             };
             /** @description Validation Error */
             422: {

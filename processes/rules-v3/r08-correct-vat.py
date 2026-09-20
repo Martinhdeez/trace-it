@@ -53,6 +53,8 @@ def passes():
 
 def evaluate(instance, sources, others):
     """The VAT on the invoice is the VAT its own numbers imply."""
+    if text(instance.get("currency")).upper() not in ("", "EUR"):
+        return passes()  # foreign VAT is R18's: its own arithmetic never refuses a payment
     if empty(instance.get("base")) or empty(instance.get("vat_rate")):
         return passes()
     if empty(instance.get("vat_amount")):

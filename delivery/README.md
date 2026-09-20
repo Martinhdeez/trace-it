@@ -44,8 +44,27 @@ with no line. It prints the count per result, and warns without failing about ex
 
 ## The optional trace fields
 
-`make delivery` asks the export for the trace fields when the CLI supports them (`--trace`);
-without that flag it writes the minimal `file_id`/`result` export and says so. They carry, per
-invoice, why the result is what it is: the decision's reason, the rules that fired and the
-process version that decided it, so a line can be followed back to its evidence through
-`make trace-decision FILE=<file_id>`. The verifier ignores them.
+`make delivery` exports with `--trace`, so every line also carries why the result is what it
+is: the decision's reason, the rules that fired and the process version that decided it, so a
+line can be followed back to its evidence through `make trace-decision FILE=<file_id>`. The
+verifier ignores them.
+
+Each `trace_url` identifies a document by its exact `file_id` within the process. The console
+resolves the latest instance with that name, matching export's duplicate-name policy, so
+recreating demo instances no longer invalidates these links. The link opens the current stored
+case, not an archived execution: a document that has been removed shows "Documento no
+encontrado", and it never selects another case silently. Existing numeric `?i=` links still
+work while their original instance exists.
+
+## The two batches are two process versions
+
+Each line's `rules_hash` identifies the version that decided it. `outcomes.jsonl` is the rule
+set frozen on 2026-09-19 for batch 1, untouched because a decision already taken is never
+rewritten; `outcomes_lote2.jsonl` is the version published for batch 2, which adds the currency
+policy the foreign invoices of that batch made necessary. Each of its lines carries the whole
+trace (`export --full`), so the rule that decided, the rate applied and the arithmetic behind
+it can be read without opening the console.
+
+Each batch is decided in its own process, as it was for the original delivery, so the
+duplicate-order check compares a batch with itself and an invoice is never escalated for
+repeating the order of an invoice from the other batch.

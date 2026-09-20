@@ -32,15 +32,17 @@ def seed():
         "reference_files": [],
         "rule_baselines": [],
     }
-    for pid, count, erp_count in [(1, 500, 516), (-2, 40, 556)]:
+    for batch_number, count, erp_count in [(1, 500, 516), (2, 40, 556)]:
+        pid = 1
         documents = {}
-        result["rule_baselines"].append(
-            {"process_id": pid, "rules": [{"code": None}], "norm_rules": []}
-        )
+        if batch_number == 1:
+            result["rule_baselines"].append(
+                {"process_id": pid, "rules": [{"code": None}], "norm_rules": []}
+            )
         for n in range(count):
-            content = f"%PDF-1.4 {pid} {n}".encode()
+            content = f"%PDF-1.4 {batch_number} {n}".encode()
             digest = hashlib.sha256(content).hexdigest()
-            name = f"{pid}_{n}.pdf"
+            name = f"{batch_number}_{n}.pdf"
             documents[name] = digest
             result["examples"].append(
                 {
@@ -54,6 +56,7 @@ def seed():
             )
         result["batches"].append(
             {
+                "number": batch_number,
                 "process_id": pid,
                 "count": count,
                 "erp_count": erp_count,
@@ -88,7 +91,7 @@ def test_reject_corrupt_challenge(seed, corruption):
     elif corruption == "name":
         seed["examples"][0]["name"] = "unexpected.pdf"
     else:
-        seed["batches"][1]["process_id"] = 1
+        seed["batches"][1]["process_id"] = 2
     with pytest.raises(ValueError):
         reset.validate_seed(seed)
 

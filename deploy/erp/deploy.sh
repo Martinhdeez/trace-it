@@ -27,6 +27,15 @@ docker login ghcr.io --username "$actor" --password-stdin >/dev/null
 export TRACE_ERP_IMAGE="ghcr.io/martinhdeez/trace-it/erp@$digest"
 docker pull "$TRACE_ERP_IMAGE" >/dev/null
 [[ $(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$TRACE_ERP_IMAGE") == "$revision" ]]
+# Revision labels change on every commit; compare the actual versioned build inputs.
+previous_image=$(sed -n 's/^TRACE_ERP_IMAGE=//p' erp/current.env)
+previous_hash=$(docker image inspect --format '{{index .Config.Labels "org.trace-it.source-hash"}}' "$previous_image")
+candidate_hash=$(docker image inspect --format '{{index .Config.Labels "org.trace-it.source-hash"}}' "$TRACE_ERP_IMAGE")
+[[ "$candidate_hash" =~ ^[0-9a-f]{64}$ ]]
+if [[ "$previous_hash" =~ ^[0-9a-f]{64}$ && "$previous_hash" == "$candidate_hash" ]]; then
+  echo 'ERP inputs unchanged; keeping its running image.'
+  exit 0
+fi
 # Probe the exact candidate before replacing the live ERP. No shared network or ports.
 canary=$(docker run -d --network none --read-only --cap-drop ALL \
   --security-opt no-new-privileges --memory 128m --cpus 0.25 --pids-limit 64 \

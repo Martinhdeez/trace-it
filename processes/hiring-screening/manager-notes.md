@@ -55,4 +55,7 @@ crib sheet. Nothing here is read by the platform on its own.
 - `applicant_history`: one row per earlier applicant, key `email`. Columns: `email`,
   `last_applied_on`, `last_outcome`, `do_not_rehire`, `note`.
 - `parameters`: one row, `screening_date`.
-- The workbook is authoritative for all three. There is no ERP or other system behind it.
+- The workbook is authoritative for all three.
+- Before each normal run, synchronize `criminal_records` from the supplied legacy registry.
+  If a candidate's normalized full name matches any registry row, reject the candidate with
+  reason `CRIMINAL_RECORD_MATCH` and the registry's `record_id`.
