@@ -18,3 +18,7 @@ rewritten, while `outcomes_lote2.jsonl` is the version published for batch 2, wh
 the currency policy the foreign invoices of that batch made necessary. Each of its lines
 carries the whole trace (`export --full`), so the rule that decided, the rate applied and
 the arithmetic behind it can be read without opening the console.
+
+Each batch is decided in its own process, as it was for the original delivery, so the
+duplicate-order check compares a batch with itself and an invoice is never escalated for
+repeating the order of an invoice from the other batch.
