@@ -125,7 +125,12 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
     client, process_id, _, erp_id = payment_api
     sources = await load_sources(client, process_id)
     assert sources.status_code == 201, sources.text
-    assert {s["name"] for s in sources.json()["sources"]} == {"suppliers", "orders", "parameters"}
+    assert {s["name"] for s in sources.json()["sources"]} == {
+        "suppliers",
+        "orders",
+        "parameters",
+        "rates",  # the published exchange rates travel with the workbook
+    }
     content = pdf_bytes(VALID)
     upload = await client.post(
         f"/processes/{process_id}/files", files={"file": ("invoice.pdf", content)}
@@ -158,6 +163,7 @@ async def test_upload_to_decision_to_export_uses_document_values_and_real_rules(
         "suppliers",
         "orders",
         "parameters",
+        "rates",
     }
     source_rows = (await client.get(f"/processes/{process_id}/sources/orders")).json()
     assert source_rows["data"][0]["purchase_order"] == "PO-2026-0703"
@@ -270,14 +276,14 @@ async def test_workbook_validation_is_atomic_and_never_overwrites_erp(payment_ap
         snapshots = list(
             await session.scalars(select(Source).where(Source.process_id == process_id))
         )
-        assert len(snapshots) == 4
+        assert len(snapshots) == 5  # erp + suppliers, orders, parameters and rates
         assert next(s for s in snapshots if s.name == "erp").id == erp_id
     assert (await load_sources(client, process_id)).status_code == 201
     async with session_factory() as session:
         snapshots = list(
             await session.scalars(select(Source).where(Source.process_id == process_id))
         )
-        assert len(snapshots) == 7
+        assert len(snapshots) == 9
 
 
 async def test_workbook_without_a_cut_off_date_is_refused(payment_api):
