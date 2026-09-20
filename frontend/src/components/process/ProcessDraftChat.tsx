@@ -24,7 +24,6 @@ import type {
 import { families, keys } from '../../api/queries'
 import { cn } from '../../lib/cn'
 import { paths } from '../../lib/paths'
-import { ruleLabel } from '../../lib/process'
 import { Button, Select, Textarea } from '../shell/Controls'
 import { EmptyState, ErrorNotice, Notice } from '../shell/Notice'
 import { Markdown } from '../shell/Markdown'
@@ -32,6 +31,8 @@ import { TerminalLoader } from '../shell/TerminalLoader'
 import { NestedCard } from '../shell/Well'
 import { FileChip, revokePreview, toPreview, type FilePreview } from './FileChip'
 import { ValidationImpact } from './ValidationImpact'
+import { RulesPane } from './RulesPane'
+import { VersionChip, VersionView } from './ProcessVersions'
 import { t } from '../../i18n'
 
 type Attachment = FilePreview & { file: File }
@@ -497,7 +498,7 @@ export function ProcessDraftChat({
         </div>
         {processId != null ? (
           <aside className="min-h-0 overflow-y-auto border-t border-hairline px-5 py-5 lg:border-l lg:border-t-0">
-            <CurrentRules processId={processId} />
+            <ProcessRules processId={processId} />
           </aside>
         ) : null}
       </div>
@@ -654,7 +655,7 @@ export function ProcessDraftChat({
             </p>
           ) : null}
 
-          {processId != null ? <CurrentRules processId={processId} /> : null}
+          {processId != null ? <ProcessRules processId={processId} /> : null}
 
           {openProposals.data?.length ? <PendingProposals proposals={openProposals.data} /> : null}
 
@@ -814,40 +815,61 @@ export function ProcessDraftChat({
   )
 }
 
-/** Read the live rules independently of the conversation's baseline or proposed changes. */
-function CurrentRules({ processId }: { processId: number }) {
-  const rules = useQuery({
-    queryKey: keys.rules(processId, 'active'),
-    queryFn: () => api.listRules(processId, 'active'),
+/** The same rule workspace as the manual editor, independent of the chat's proposals. */
+function ProcessRules({ processId }: { processId: number }) {
+  const process = useQuery({
+    queryKey: keys.process(processId),
+    queryFn: () => api.getProcess(processId),
   })
+  const rules = useQuery({
+    queryKey: keys.rules(processId),
+    queryFn: () => api.listRules(processId),
+    refetchInterval: (query) =>
+      query.state.data?.some((rule) => rule.status === 'compiling') ? 2_000 : false,
+  })
+  const versions = useQuery({
+    queryKey: keys.versions(processId),
+    queryFn: () => api.listVersions(processId),
+  })
+  const findings = useQuery({
+    queryKey: keys.findings(processId),
+    queryFn: () => api.listFindings(processId),
+  })
+  const history = [...(versions.data ?? [])].sort((a, b) => b.number - a.number)
+  const latestVersion = history[0]
+  const [viewing, setViewing] = useState<number | null>(null)
+  const viewed = history.find((version) => version.id === viewing)
+  const error = rules.error ?? process.error ?? versions.error ?? findings.error
 
   return (
-    <section aria-label="Current rules" className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[15px] font-medium text-ink">{t('trace.rules')}</h2>
-        {rules.data ? <span className="font-mono text-[11px] text-faint">{rules.data.length}</span> : null}
+    <section aria-label="Process rules">
+      <div className="mb-3 flex justify-end">
+        <VersionChip
+          versions={history}
+          selected={viewed ?? latestVersion}
+          onSelect={(version) => setViewing(version.id)}
+          findings={findings.data ?? []}
+        />
       </div>
-      {rules.isPending ? (
+      {error ? (
+        <ErrorNotice error={error} />
+      ) : rules.isPending || process.isPending ? (
         <p className="text-[12px] text-muted">{t('common.loading')}</p>
-      ) : rules.error ? (
-        <ErrorNotice error={rules.error} />
-      ) : rules.data?.length ? (
-        <ul className="divide-y divide-hairline">
-          {rules.data.map((rule) => (
-            <li key={rule.id} className="flex h-9 items-center gap-2">
-              <Link
-                to={paths.rule(processId, rule.id)}
-                title={rule.text}
-                className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink hover:text-ink"
-              >
-                {ruleLabel(rule)}
-              </Link>
-              <span className="shrink-0 text-[11px] text-pagar">{t('ruleStatus.active')}</span>
-            </li>
-          ))}
-        </ul>
+      ) : viewed && latestVersion ? (
+        <VersionView
+          key={viewed.id}
+          processId={processId}
+          version={viewed}
+          current={latestVersion}
+          rules={rules.data ?? []}
+          onBack={() => setViewing(null)}
+        />
       ) : (
-        <p className="text-[12px] text-muted">{t('common.empty')}</p>
+        <RulesPane
+          processId={processId}
+          rules={rules.data ?? []}
+          outcomes={process.data?.decision_types.map((outcome) => outcome.name) ?? []}
+        />
       )}
     </section>
   )
