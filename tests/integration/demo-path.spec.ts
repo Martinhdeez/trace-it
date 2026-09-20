@@ -127,8 +127,6 @@ async function instanceByName(request: APIRequestContext, name: string) {
 
 test('the console acts as the manager, with no login screen', async () => {
   await page.goto('/processes')
-  await page.getByRole('button', { name: 'Mostrar el logo de Traceit' }).click()
-  await page.getByRole('button', { name: 'Abrir procesos' }).click()
   await page.waitForLoadState('networkidle')
   await realAndClean()
   await expect(page).toHaveURL(/\/processes$/)
